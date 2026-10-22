@@ -460,6 +460,20 @@ fn call_completion<'a>(
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
+/// A call, drawn as its function provides, else as a call.
+fn call_projection<W: Host>() -> Partial<W> {
+    let call = crate::display::fold::folding(crate::display::runtime_partial(call_display));
+    crate::display::runtime_partial(move |input| {
+        input
+            .value?
+            .field(FUNCTION)
+            .and_then(|function| function.as_cell())
+            .and_then(|function| input.projection_for(function))
+            .and_then(|projection| projection(input))
+            .or_else(|| call(input))
+    })
+}
+
 fn call_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -693,7 +707,7 @@ fn functions() -> ForeignFunctions {
 
 pub fn library<W: Host>() -> Library<W> {
     let (control_names, control_functions, control) = control::contribution();
-    let (number_names, number_functions, numbers) = numbers::contribution();
+    let (number_names, number_functions, operators, numbers) = numbers::contribution();
     name::library_named(
         ID,
         "grap",
@@ -746,19 +760,33 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(number_names),
         functions().merge(control_functions).merge(number_functions),
     )
+    // Grap's kinds draw as they provide, a call as its function does, else
+    // as a call: control's forms and the operators provide theirs.
+    .with_projections_for(
+        [
+            (kind::CALL, call_projection()),
+            (
+                kind::LAMBDA,
+                crate::display::runtime_partial(lambda_display),
+            ),
+            (
+                kind::CLOSURE,
+                crate::display::runtime_partial(closure_display),
+            ),
+            (
+                kind::VALUE_WRAPPER,
+                crate::display::runtime_partial(value_display),
+            ),
+        ]
+        .into_iter()
+        .chain(control)
+        .chain(operators),
+    )
     .with_projection(
-        // Calls, lambdas, and value wrappers follow evaluator precedence,
-        // but ordinary partial failures still try the next projection.
-        // Control and arithmetic read as themselves before calls in
-        // general, and a number takes its operators as typing.
+        // A number takes its operators as typing.
         crate::display::compose_partials([
-            control,
             numbers,
             crate::display::runtime_partial(evaluate_display),
-            crate::display::fold::folding(crate::display::runtime_partial(call_display)),
-            crate::display::runtime_partial(lambda_display),
-            crate::display::runtime_partial(closure_display),
-            crate::display::runtime_partial(value_display),
             crate::display::runtime_partial(ffi_display),
             crate::display::runtime_partial(program_display),
             crate::display::runtime_partial(notebook::display),

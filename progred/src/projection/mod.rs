@@ -37,6 +37,7 @@ use std::rc::Rc;
 /// [`crate::display::host`].
 pub(crate) type Layout = crate::display::host::Layout<crate::Editor>;
 pub(crate) type Partial = crate::display::host::Partial<crate::Editor>;
+pub(crate) type Provided = crate::display::host::Provided<crate::Editor>;
 
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
@@ -44,6 +45,8 @@ pub(crate) type Partial = crate::display::host::Partial<crate::Editor>;
 pub struct Projection {
     partial: Partial,
     entry: Option<Partial>,
+    /// The projections cells provide, for every input drawn with this.
+    provided: Provided,
 }
 
 impl Default for Projection {
@@ -51,6 +54,7 @@ impl Default for Projection {
         Self {
             partial: crate::display::runtime_partial(|_| None),
             entry: None,
+            provided: Provided::default(),
         }
     }
 }
@@ -60,7 +64,13 @@ impl Projection {
         Self {
             partial: crate::display::compose_partials(partials),
             entry: None,
+            provided: Provided::default(),
         }
+    }
+
+    /// With `provided` lent to every input it draws.
+    pub fn with_provided(self, provided: Provided) -> Self {
+        Self { provided, ..self }
     }
 
     /// The composed partials, without the entry.
@@ -82,6 +92,7 @@ impl Projection {
         Self {
             partial: self.partial.clone(),
             entry: None,
+            provided: self.provided.clone(),
         }
     }
 
@@ -916,6 +927,7 @@ fn prepare_value(
         .map(|partial| Projection {
             partial: partial.clone(),
             entry: None,
+            provided: projection.provided.clone(),
         })
         .or_else(|| {
             (projection.entry.is_some() && value.and_then(grap::RuntimeValue::as_cell).is_none())
@@ -1098,6 +1110,7 @@ fn value_layout(
             state,
         },
         default_projection: default_projection.clone(),
+        provided: projection.provided.clone(),
         value,
         scale_factor: cx.styles.scale,
         writable,

@@ -66,6 +66,9 @@ impl Definitions {
 pub struct Library<World, Hover> {
     pub definitions: Definitions,
     pub projection: Option<Partial<World, Hover>>,
+    /// The projections this library's cells provide for the records they
+    /// identify: a kind's for records of it, a function's for calls of it.
+    pub provided: Vec<(gid::CellId, Partial<World, Hover>)>,
     pub completions: Option<CompletionProvider>,
 }
 
@@ -74,6 +77,7 @@ impl<World, Hover> Clone for Library<World, Hover> {
         Self {
             definitions: self.definitions.clone(),
             projection: self.projection.clone(),
+            provided: self.provided.clone(),
             completions: self.completions.clone(),
         }
     }
@@ -90,6 +94,7 @@ impl<World, Hover> Library<World, Hover> {
         Self {
             definitions,
             projection: None,
+            provided: Vec::new(),
             completions: None,
         }
     }
@@ -107,6 +112,15 @@ impl<World, Hover> Library<World, Hover> {
 
     pub fn with_projection(mut self, projection: Partial<World, Hover>) -> Self {
         self.projection = Some(projection);
+        self
+    }
+
+    /// Also draws the records each cell identifies with its projection.
+    pub fn with_projections_for(
+        mut self,
+        provided: impl IntoIterator<Item = (gid::CellId, Partial<World, Hover>)>,
+    ) -> Self {
+        self.provided.extend(provided);
         self
     }
 
@@ -135,6 +149,7 @@ impl Libraries {
     ) -> (
         Self,
         Vec<(gid::CellId, Partial<World, Hover>)>,
+        Vec<(gid::CellId, gid::CellId, Partial<World, Hover>)>,
         Vec<(gid::CellId, CompletionProvider)>,
     ) {
         let mut unique: Vec<(gid::CellId, Library<World, Hover>)> = Vec::new();
@@ -146,12 +161,18 @@ impl Libraries {
             }
         }
         unique.into_iter().fold(
-            (Self::default(), Vec::new(), Vec::new()),
-            |(mut libraries, mut projections, mut completions), (id, library)| {
+            (Self::default(), Vec::new(), Vec::new(), Vec::new()),
+            |(mut libraries, mut projections, mut provided, mut completions), (id, library)| {
                 libraries.insert(id, library.definitions);
                 projections.extend(library.projection.map(|projection| (id, projection)));
+                provided.extend(
+                    library
+                        .provided
+                        .into_iter()
+                        .map(|(cell, projection)| (id, cell, projection)),
+                );
                 completions.extend(library.completions.map(|provider| (id, provider)));
-                (libraries, projections, completions)
+                (libraries, projections, provided, completions)
             },
         )
     }

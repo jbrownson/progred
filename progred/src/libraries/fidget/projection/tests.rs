@@ -163,6 +163,7 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
     assert!(
         field(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
+            provided: Default::default(),
             pending: Some(Pending::Field),
             ..projection_input(&Names, &complete)
         })
@@ -205,20 +206,24 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
             [(LEFT, number(1.0)), (RIGHT, number(2.0))],
         );
         let runtime = ::grap::RuntimeValue::from(&call);
-        (library.projection.as_ref().unwrap())(
-            &projection_input(&Names, &call).with_value(Some(&runtime)),
+        // What the function provides for calls of it.
+        let Some((_, operator)) = library.provided.iter().find(|(cell, _)| *cell == function)
+        else {
+            return false;
+        };
+        operator(&projection_input(&Names, &call).with_value(Some(&runtime))).is_some_and(
+            |layout| {
+                let Recorded::Alternatives(options) = layout.record().content().clone() else {
+                    return false;
+                };
+                let Recorded::Row { children, .. } = options[0].content() else {
+                    return false;
+                };
+                matches!(&inspect(&(unshared(&children[0]))),
+                    ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(LEFT)]
+                )
+            },
         )
-        .is_some_and(|layout| {
-            let Recorded::Alternatives(options) = layout.record().content().clone() else {
-                return false;
-            };
-            let Recorded::Row { children, .. } = options[0].content() else {
-                return false;
-            };
-            matches!(&inspect(&(unshared(&children[0]))),
-                ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(LEFT)]
-            )
-        })
     };
     for function in [SUM, SUBTRACT, MULTIPLY, DIVIDE] {
         assert!(reads_infix(function), "{function:?} reads infix");

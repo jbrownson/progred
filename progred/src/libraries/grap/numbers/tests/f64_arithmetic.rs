@@ -281,10 +281,11 @@ fn binary_notation_wraps_before_its_operator() {
 fn every_numeric_operator_reads_infix() {
     use crate::libraries::{f32, u64};
     let infix = |library: &Library<crate::Editor>, call: Value| {
-        let layout = (library.projection.as_ref().unwrap())(&projection_input(
-            &NoEval,
-            &RuntimeValue::from(&call),
-        ))
+        // A call drawn as its kind provides, and so as its operator does.
+        let layout = crate::display::by_kind()(&crate::display::ProjectionInput {
+            provided: crate::display::Provided::new(library.provided.clone()),
+            ..projection_input(&NoEval, &RuntimeValue::from(&call))
+        })
         .expect("a call projects");
         let Some(children) = infix_children(&layout) else {
             return false;

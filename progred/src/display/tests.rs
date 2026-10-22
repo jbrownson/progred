@@ -52,6 +52,7 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
 fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
     projection(&ProjectionInput {
         default_projection: partial(|_| None),
+        provided: Default::default(),
         env: &NoEval,
         value: Some(&Value::record([]).into()),
         scale_factor: 1.0,

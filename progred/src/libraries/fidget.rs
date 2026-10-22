@@ -1107,6 +1107,15 @@ pub fn library<W: Host>() -> Library<W> {
         .into_iter()
         .filter_map(|(cell, symbol)| Some((cell, representation::Precedence::of_symbol(symbol)?)))
         .collect();
+    // Calls of each infix operator draw infix.
+    let operator = {
+        let infix = infix.clone();
+        crate::display::runtime_partial(move |input| representation::infix_display(&infix, input))
+    };
+    let operators: Vec<_> = infix
+        .iter()
+        .map(|(cell, _)| (*cell, operator.clone()))
+        .collect();
     name::library_named(
         ID,
         "fidget",
@@ -1202,8 +1211,8 @@ pub fn library<W: Host>() -> Library<W> {
             ),
         ]),
     )
+    .with_projections_for(operators)
     .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(move |input| representation::infix_display(&infix, input)),
         crate::display::runtime_partial(projection::field),
         crate::display::runtime_partial(move |input| display(input, &renderer)),
         crate::display::runtime_partial(mesh::display),

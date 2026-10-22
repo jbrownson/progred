@@ -18,7 +18,7 @@ fn doc_of(cells: Cells) -> Document {
 fn document_definitions_shadow_library_calls_including_non_callable_values() {
     let function = new_cell_id();
     let library = new_cell_id();
-    let (libraries, _, _) = Libraries::from_contributions([(
+    let (libraries, _, _, _) = Libraries::from_contributions([(
         library,
         crate::library::Library::<(), ()>::new(crate::library::Definitions::from_parts(
             Cells::new(),

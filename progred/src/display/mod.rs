@@ -439,6 +439,8 @@ pub struct ProjectionInput<'a, World, Hover, V = Value> {
     /// The composed default for child projections. Clone and compose it
     /// explicitly when choosing a local override or a subtree scope.
     pub default_projection: Partial<World, Hover>,
+    /// The projections cells provide, from the libraries shown here.
+    pub provided: Provided<World, Hover>,
     /// `None` is a missing location, distinct from every stored GID value.
     pub value: Option<&'a V>,
     /// Physical pixels per logical display unit for this projection pass.
@@ -487,6 +489,7 @@ impl<'a, World, Hover, V> ProjectionInput<'a, World, Hover, V> {
         ProjectionInput {
             env: self.env,
             default_projection: self.default_projection.clone(),
+            provided: self.provided.clone(),
             value,
             scale_factor: self.scale_factor,
             writable: self.writable,
@@ -502,6 +505,49 @@ impl<'a, World, Hover, V> ProjectionInput<'a, World, Hover, V> {
     pub(crate) fn site(&self) -> crate::editing::Site {
         (self.occurrence)()
     }
+
+    /// The projection `cell` provides for the records it identifies.
+    pub fn projection_for(&self, cell: CellId) -> Option<&Partial<World, Hover>> {
+        self.provided.0.get(&cell)
+    }
+}
+
+/// The projections cells provide for the records they identify: a kind's
+/// for the records that say they're of it, a function's for calls of it.
+/// Each cell's is its libraries' composed in load order.
+pub struct Provided<World, Hover>(Rc<std::collections::HashMap<CellId, Partial<World, Hover>>>);
+
+impl<World, Hover> Clone for Provided<World, Hover> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<World, Hover> Default for Provided<World, Hover> {
+    fn default() -> Self {
+        Self(Rc::default())
+    }
+}
+
+impl<World: 'static, Hover: 'static> Provided<World, Hover> {
+    pub fn new(provided: impl IntoIterator<Item = (CellId, Partial<World, Hover>)>) -> Self {
+        let mut by_cell = std::collections::HashMap::<CellId, Vec<_>>::new();
+        for (cell, partial) in provided {
+            by_cell.entry(cell).or_default().push(partial);
+        }
+        Self(Rc::new(
+            by_cell
+                .into_iter()
+                .map(|(cell, partials)| (cell, compose_partials(partials)))
+                .collect(),
+        ))
+    }
+}
+
+/// A record drawn as its kind provides, when the record says what kind of
+/// thing it is and that kind provides a projection.
+pub fn by_kind<World: 'static, Hover: 'static>() -> Partial<World, Hover> {
+    runtime_partial(|input| (input.projection_for(input.value?.kind()?)?)(input))
 }
 
 pub fn runtime_partial<World, Hover>(

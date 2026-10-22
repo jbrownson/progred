@@ -170,6 +170,7 @@ pub fn projection_input<'a, V>(env: &'a dyn Env, value: &'a V) -> ProjectionInpu
     ProjectionInput {
         env,
         default_projection: crate::display::runtime_partial(|_| None),
+        provided: Default::default(),
         value: Some(value),
         scale_factor: 1.0,
         writable: true,

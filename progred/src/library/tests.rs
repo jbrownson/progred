@@ -47,7 +47,7 @@ fn library_definitions_and_projections_compose_in_order() {
     left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
     let mut right_cells = Cells::new();
     right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
-    let (libraries, projections, _) = Libraries::from_contributions([
+    let (libraries, projections, _, _) = Libraries::from_contributions([
         (
             LEFT_LIBRARY,
             crate::test_support::library(
@@ -113,7 +113,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     let name = crate::libraries::name::record("shared", []);
     let mut cells = Cells::new();
     cells.set_value(SHARED_FUNCTION, name.clone());
-    let (libraries, _, _) = Libraries::from_contributions([(
+    let (libraries, _, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
         crate::test_support::library(
             LEFT_LIBRARY,
@@ -231,7 +231,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
         ForeignFunctions::default(),
     )
     .with_projection(right_projection.clone());
-    let (libraries, projections, providers) = Libraries::from_contributions([
+    let (libraries, projections, _, providers) = Libraries::from_contributions([
         (LEFT_LIBRARY, old),
         (RIGHT_LIBRARY, right),
         (LEFT_LIBRARY, replacement),
@@ -268,7 +268,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
 
 #[test]
 fn library_descriptions_are_ordinary_cells() {
-    let (libraries, _, _) = Libraries::from_contributions([(
+    let (libraries, _, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
         crate::libraries::name::named_library::<crate::Editor>(
             LEFT_LIBRARY,
@@ -291,7 +291,7 @@ fn library_descriptions_are_ordinary_cells() {
 
 #[test]
 fn unnamed_native_definitions_have_an_empty_description() {
-    let (libraries, _, _) = Libraries::from_contributions([(
+    let (libraries, _, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
         Library::<crate::Editor, crate::frame::Hovered>::new(Definitions::from_parts(
             Cells::new(),
@@ -328,7 +328,7 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
         right_cells,
         ForeignFunctions::default(),
     );
-    let (mut libraries, _, _) =
+    let (mut libraries, _, _, _) =
         Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);
     let replacement = Definitions::default();
 

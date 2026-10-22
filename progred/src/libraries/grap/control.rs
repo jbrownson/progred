@@ -827,8 +827,13 @@ fn expression_list_display<W: Host>(
 
 /// What control adds to the Grap library: the names of its cells, its
 /// functions, and its projection, which goes before Grap's calls'.
-pub(super) fn contribution<W: Host>() -> (Vec<(CellId, &'static str)>, ForeignFunctions, Partial<W>)
-{
+/// Control's names, its functions, and the projections its functions
+/// provide for calls of them and its unquote kind for unquotes.
+pub(super) fn contribution<W: Host>() -> (
+    Vec<(CellId, &'static str)>,
+    ForeignFunctions,
+    Vec<(CellId, Partial<W>)>,
+) {
     let names = vec![
         (vocabulary::MATCH, "match"),
         (vocabulary::VALUE, "value"),
@@ -856,15 +861,40 @@ pub(super) fn contribution<W: Host>() -> (Vec<(CellId, &'static str)>, ForeignFu
             "missing final expression",
         ),
     ];
-    let projection = crate::display::fold::folding(crate::display::compose_partials([
-        crate::display::runtime_partial(match_display),
-        crate::display::runtime_partial(bindings_display),
-        crate::display::runtime_partial(do_display),
-        crate::display::runtime_partial(|input| expression_list_display(input, vocabulary::ALL)),
-        crate::display::runtime_partial(quote_display),
-        crate::display::runtime_partial(unquote_display),
-    ]));
-    (names, functions(), projection)
+    let folding = |partial| crate::display::fold::folding(partial);
+    let provided = vec![
+        (
+            vocabulary::MATCH,
+            folding(crate::display::runtime_partial(match_display)),
+        ),
+        (
+            vocabulary::LET,
+            folding(crate::display::runtime_partial(bindings_display)),
+        ),
+        (
+            vocabulary::WHERE,
+            folding(crate::display::runtime_partial(bindings_display)),
+        ),
+        (
+            vocabulary::DO,
+            folding(crate::display::runtime_partial(do_display)),
+        ),
+        (
+            vocabulary::ALL,
+            folding(crate::display::runtime_partial(|input| {
+                expression_list_display(input, vocabulary::ALL)
+            })),
+        ),
+        (
+            vocabulary::QUOTE,
+            folding(crate::display::runtime_partial(quote_display)),
+        ),
+        (
+            vocabulary::kind::UNQUOTE,
+            folding(crate::display::runtime_partial(unquote_display)),
+        ),
+    ];
+    (names, functions(), provided)
 }
 
 #[cfg(test)]
