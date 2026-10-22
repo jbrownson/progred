@@ -425,9 +425,12 @@ parentheses, and an empty program offers Grap's suggestions rather than the
 whole vocabulary.
 
 Grap's other root template is a notebook: a record whose `notebook` field lists
-entry cells. Each entry draws as its cell's expression, an arrow, and what it
-evaluates to, beside it or below it where there's no room. An entry whose cell
-has no definition yet draws only its expression, so a new entry shows no error.
+entry cells. The record and its list are one thing, the notebook, marked by a
+bar down its side that selects it; its entries are stops inside, numbered in
+its margin, a number selecting its entry. Each entry draws as its cell's
+expression, an arrow, and what it evaluates to, beside it or below it where
+there's no room. An entry whose cell has no definition yet draws its expression
+and arrow, with no result, so a new entry shows no error.
 Each entry evaluates at its own occurrence, so its result is memoized like a
 pane's and recomputes when a cell it reads changes, and an error in it opens to
 its callers. Entries refer to one another the standard ways: Cmd-clicking,

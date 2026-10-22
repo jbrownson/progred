@@ -60,8 +60,8 @@ Each stop draws something of its own, so selecting it looks different from
 selecting what's inside it, and every arrow press shows. Where what's inside
 would draw all of an occurrence, its projection marks it with a handle from the
 toolkit: a bar as tall as what it draws, before it, that a click on selects, as
-a notebook's record has. It always shows: structure seen only once selected
-isn't visible. Other marks serve too: a notebook numbers its entries in its
+a notebook has. It always shows: structure seen only once selected isn't
+visible. Other marks serve too: a notebook numbers its entries in its
 list's margin, and an entry shows its arrow before it has a result. A sweep
 selects each stop and checks that its box is neither the box of the stop around
 it nor of one just inside it, over the sample and a new notebook, and, ignored
@@ -74,6 +74,7 @@ landmark of its own, so arrows pass from the thing to what's inside the part,
 which keeps its own stops; a control drawn for the part itself, such as the
 hole of a definition yet to be written, still declares one there. A Grap
 parameter is a cell and its definition record as one thing, its name a stop
+inside; a notebook is its record and its list of entries, each entry a stop
 inside. The underlying data stays a view away, in Raw. Backspace landing on its
 container skips a part for the thing around it. The aim is that the domain
 views make an invalid state hard to reach and easy to leave: a parameter's

@@ -21,13 +21,14 @@ pub mod vocabulary {
 }
 
 /// A record naming a notebook draws its entries, then its other fields,
-/// after a handle of its own.
+/// after a handle of its own. The record and its list of entries are one
+/// thing, the notebook; each entry is a stop inside.
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], |[notebook]| {
         notebook?;
-        Some(crate::display::descend(
+        Some(crate::display::part(
             [Step::Key(vocabulary::NOTEBOOK)],
             Some(crate::display::first(
                 input,

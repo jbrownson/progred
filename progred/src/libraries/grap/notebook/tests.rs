@@ -272,11 +272,8 @@ fn arrows_go_into_a_notebook_from_its_whole_down_to_an_entry_s_expression() {
         driver.selection()
     };
     assert_eq!(arrow(&mut driver, NamedKey::ArrowDown), occurrence::of(&[]));
-    for stop in [
-        vec![Step::Key(NOTEBOOK)],
-        entry(&driver, 0, &[]),
-        expression(&driver, 0),
-    ] {
+    // The record and its list of entries are one thing, the notebook.
+    for stop in [entry(&driver, 0, &[]), expression(&driver, 0)] {
         assert_eq!(
             arrow(&mut driver, NamedKey::ArrowRight),
             occurrence::of(&stop)
