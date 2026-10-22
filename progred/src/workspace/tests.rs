@@ -734,3 +734,70 @@ fn a_root_of_only_the_workspace_fields_draws_an_empty_main() {
     assert!(!driver.drawn::<Step>(&[]));
     assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
 }
+
+#[test]
+fn open_library_shows_a_loaded_library_read_only_once() {
+    use crate::command::DocCommand;
+    use crate::driver::Driver;
+    use crate::libraries::presentation;
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(Value::record([(CellId::from_u128(1), Value::list([]))])),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let open = |driver: &mut Driver| {
+        driver
+            .runner
+            .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+                editor.run_doc_command(
+                    DocCommand::OpenLibrary(presentation::ID),
+                    dispatch.geometry(1.0),
+                );
+                true
+            });
+        driver.present();
+    };
+    let place = crate::location::Location::in_cell(
+        presentation::ID,
+        gid::Resolution::Library(presentation::ID),
+        Vec::new(),
+    );
+    open(&mut driver);
+    let root = driver.editor().model.doc.root.clone().unwrap();
+    let declared = declarations(Some(&root));
+    assert_eq!(declared.len(), 1);
+    assert_eq!(declared[0].side, Side::Right);
+    assert_eq!(
+        crate::test_support::value_at(&root, &declared[0].path),
+        Some(&crate::location::value(&place))
+    );
+    // The pane draws the library, its cells among it, and selects it.
+    let mut shown = crate::test_examples::pane_root(&declared[0].path);
+    shown.push(crate::occurrence::Step::jump(place.clone()));
+    assert_eq!(driver.selection(), shown);
+    let mut cells = shown.clone();
+    cells.push(crate::occurrence::Step::Key(
+        crate::library::vocabulary::CELLS,
+    ));
+    assert!(driver.drawn(&cells));
+    driver.select(&cells);
+    assert!(
+        !driver
+            .editor()
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .writable(&driver.editor().sources())
+    );
+    // Opening it again selects that pane rather than opening another.
+    driver.select(&[Step::Key(vocabulary::MAIN)]);
+    open(&mut driver);
+    assert_eq!(
+        declarations(driver.editor().model.doc.root.as_ref()).len(),
+        1
+    );
+    assert_eq!(driver.selection(), shown);
+}

@@ -35,8 +35,12 @@ Rust implementation. Reads and
 calls use the same lookup. A native definition's description is what its
 name and parameters are read from; evaluating a reference to it gives its cell,
 the function's value, and calling it invokes its implementation. An absent or non-callable result does
-not try another source. Library descriptions (currently name records) live in
-that same table under the library identities, not in a separate metadata store.
+not try another source. A library's own value lives in that same table under
+its identity, not in a separate metadata store: `{isa: loaded library, name,
+cells}`, the name it gives itself and the cells it defines, ordered by their
+names. Composing the loaded libraries writes it, so it lists what each library
+ends up defining; the editor library draws it as its name over a column of
+its cells, each by its name.
 Replacing a loaded library replaces all its contributions in place, including
 projections and completions, before those are composed.
 Explicit source-qualified paths still reach a particular definition; loaded
@@ -555,7 +559,10 @@ draws as any empty place does, ready to write; one that can't be reached, as
 after its container was deleted, draws a read-only `place not found` absent
 carrying the location. Show Panes opens a location pane on the panes
 declaration, `{steps: [panes]}`, or selects the one already open, so the panes
-can be edited as data while they show. Close Pane removes the selected pane's
+can be edited as data while they show. The Libraries menu does the same for a
+loaded library, opening a location pane at its own cell, which is read-only
+like every library value; Open Value on a cell it lists opens that cell's
+definition beside it. Close Pane removes the selected pane's
 entry. Deleting a value
 pane's root does too, but a location pane's root is the place it shows, so
 deleting it deletes that content. Opening, closing and moving panes edit these

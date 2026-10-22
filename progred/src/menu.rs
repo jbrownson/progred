@@ -42,8 +42,12 @@ fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModi
 }
 
 /// The fixed menus, then `Projections`: the presets, and an entry for each
-/// library an area can switch off.
-pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Menu> {
+/// library an area can switch off; then `Libraries`, an entry for each
+/// loaded library, when there are any.
+pub fn definition(
+    projections: impl IntoIterator<Item = gid::CellId>,
+    libraries: impl IntoIterator<Item = gid::CellId>,
+) -> Vec<Menu> {
     use crate::stack::Preset;
     use crate::workspace::{Move, Side};
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
@@ -77,7 +81,15 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
         Entry::Command(C::Doc(D::ZoomIn)),
         Entry::Command(C::Doc(D::ZoomOut)),
     ];
-    vec![
+    let libraries: Vec<_> = libraries
+        .into_iter()
+        .map(|library| Entry::Command(C::Doc(D::OpenLibrary(library))))
+        .collect();
+    let libraries = (!libraries.is_empty()).then_some(Menu {
+        label: "Libraries",
+        entries: libraries,
+    });
+    [
         Menu {
             label: "File",
             entries: file_entries,
@@ -126,11 +138,14 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 )
                 .collect(),
         },
-        Menu {
-            label: "Help",
-            entries: vec![Entry::Command(C::Doc(D::CopyVersion))],
-        },
     ]
+    .into_iter()
+    .chain(libraries)
+    .chain([Menu {
+        label: "Help",
+        entries: vec![Entry::Command(C::Doc(D::CopyVersion))],
+    }])
+    .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -305,7 +320,7 @@ pub fn shortcut(
     event: &KeyboardEvent,
     command: puri::keyboard::CommandModifier,
 ) -> Option<Command> {
-    command::shortcut(event, command, commands(&definition([])))
+    command::shortcut(event, command, commands(&definition([], [])))
 }
 
 mod view {
@@ -334,6 +349,8 @@ mod view {
         /// Each library that brings a projection, with the name its
         /// Projections entry shows.
         pub projections: Vec<(gid::CellId, String)>,
+        /// Each loaded library, with the name its Libraries entry shows.
+        pub libraries: Vec<(gid::CellId, String)>,
         pub scale: f64,
         pub width: f64,
     }
@@ -494,14 +511,19 @@ mod view {
         } else {
             &styles.disabled
         };
-        let name = match command {
-            Command::Doc(crate::command::DocCommand::Projection(library)) => description
-                .projections
-                .iter()
-                .find(|(id, _)| *id == library)
-                .map(|(_, name)| name.as_str()),
-            _ => None,
+        let (libraries, library) = match command {
+            Command::Doc(crate::command::DocCommand::Projection(library)) => {
+                (description.projections.as_slice(), Some(library))
+            }
+            Command::Doc(crate::command::DocCommand::OpenLibrary(library)) => {
+                (description.libraries.as_slice(), Some(library))
+            }
+            _ => (&[][..], None),
         };
+        let name = libraries
+            .iter()
+            .find(|(id, _)| Some(*id) == library)
+            .map(|(_, name)| name.as_str());
         let label = placed::text(tcx, name.unwrap_or(spec.label), style);
         let shortcut = placed::text(
             tcx,
@@ -655,7 +677,10 @@ mod view {
     pub fn view(tcx: &mut TextCtx, description: Description) -> View<HoverPass<Editor>> {
         let palette = description.palette;
         let styles = styles(palette);
-        let definition = definition(description.projections.iter().map(|(library, _)| *library));
+        let definition = definition(
+            description.projections.iter().map(|(library, _)| *library),
+            description.libraries.iter().map(|(library, _)| *library),
+        );
         let headings = definition
             .iter()
             .enumerate()

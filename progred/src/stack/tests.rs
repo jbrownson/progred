@@ -151,3 +151,35 @@ fn a_call_draws_as_its_function_provides_else_as_a_call() {
         Some("something else")
     );
 }
+
+#[test]
+fn each_library_s_own_cell_holds_the_library() {
+    use crate::library::vocabulary::{CELLS, kind::LIBRARY};
+    let stack = load();
+    let value = stack.libraries.resolve(presentation::ID).unwrap().1;
+    let fields = value.value().as_record().unwrap();
+    assert_eq!(::grap::isa::of(fields), Some(LIBRARY));
+    assert_eq!(
+        fields.get(&name::vocabulary::NAME).and_then(text::read),
+        Some("presentation")
+    );
+    let cells: Vec<_> = fields
+        .get(&CELLS)
+        .and_then(gid::Value::as_list)
+        .unwrap()
+        .values()
+        .map(|cell| cell.as_cell().unwrap())
+        .collect();
+    assert!(cells.contains(&presentation::vocabulary::kind::OUTLINE));
+    assert!(!cells.contains(&presentation::ID));
+    let (_, definitions) = stack
+        .libraries
+        .iter()
+        .find(|(id, _)| *id == presentation::ID)
+        .unwrap();
+    let names: Vec<_> = cells
+        .iter()
+        .map(|cell| name::read(definitions.value(*cell).unwrap()).unwrap())
+        .collect();
+    assert!(names.is_sorted(), "{names:?}");
+}

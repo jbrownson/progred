@@ -109,7 +109,7 @@ fn all_enabled() -> crate::command::Availability {
 
 #[test]
 fn arrows_walk_enabled_items_and_wrap() {
-    let menus = definition([]);
+    let menus = definition([], []);
     let mut availability = all_enabled();
     availability.undo = false;
     // Edit is [Undo, Redo]; with Undo disabled the cursor lands on
@@ -153,7 +153,7 @@ fn arrows_walk_enabled_items_and_wrap() {
 
 #[test]
 fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
-    let menus = definition([]);
+    let menus = definition([], []);
     let mut state = State::default();
     state.toggle(0);
     assert!(matches!(
@@ -192,7 +192,7 @@ fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
 
 #[test]
 fn keyboard_entry_endpoints_and_dismissal() {
-    let menus = definition([]);
+    let menus = definition([], []);
     let mut state = State::default();
     navigate(
         &mut state,
@@ -236,7 +236,7 @@ fn keyboard_entry_endpoints_and_dismissal() {
 
 #[test]
 fn a_tap_of_alt_on_its_own_enters_and_leaves_the_bar() {
-    let menus = definition([]);
+    let menus = definition([], []);
     let mut state = State::default();
     let alt = |state: &mut State, key: NamedKey, down: bool, modifiers: Modifiers| {
         let event = KeyboardEvent {
@@ -318,7 +318,7 @@ fn an_open_menu_captures_other_key_downs() {
 
 #[test]
 fn the_drawn_tree_lists_every_command_once() {
-    let definition = definition([]);
+    let definition = definition([], []);
     let commands = commands(&definition).collect::<Vec<_>>();
     assert_eq!(commands.len(), 24 + Example::ALL.len());
     for (index, command) in commands.iter().enumerate() {
@@ -328,7 +328,7 @@ fn the_drawn_tree_lists_every_command_once() {
 
 #[test]
 fn the_file_menu_carries_the_application_lifecycle() {
-    let definition = definition([]);
+    let definition = definition([], []);
     assert_eq!(
         definition.iter().map(|menu| menu.label).collect::<Vec<_>>(),
         vec!["File", "Examples", "Edit", "View", "Projections", "Help"]
@@ -351,7 +351,7 @@ fn the_file_menu_carries_the_application_lifecycle() {
 
 #[test]
 fn catalog_shortcuts_are_unique_across_the_drawn_tree() {
-    let definition = definition([]);
+    let definition = definition([], []);
     let shortcuts = commands(&definition)
         .filter_map(|command| command::spec(command).shortcut)
         .collect::<Vec<_>>();

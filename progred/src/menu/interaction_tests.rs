@@ -12,14 +12,27 @@ use ui_events::pointer::PointerEvent;
 const VIEWPORT: Size = Size::new(640.0, 720.0);
 
 fn driver(doc: Document) -> Driver {
+    driver_in(doc, VIEWPORT)
+}
+
+fn driver_in(doc: Document, viewport: Size) -> Driver {
     let mut editor = crate::test_editor(doc);
     editor.drawn_menu = true;
     editor.command_modifier = puri::keyboard::CommandModifier::Control;
-    Driver::new(editor, VIEWPORT)
+    Driver::new(editor, viewport)
 }
 
 fn empty() -> Driver {
     driver(Document::default())
+}
+
+/// The menus `driver`'s editor draws.
+fn menus(driver: &Driver) -> Vec<Menu> {
+    let stack = &driver.runner.editor.stack;
+    definition(
+        stack.switchable().map(|(library, _)| library),
+        crate::libraries::name::library_names(&stack.libraries).map(|(library, _)| library),
+    )
 }
 
 fn menu_at(driver: &Driver, point: Point) -> Option<Hover> {
@@ -192,19 +205,12 @@ fn clicking_a_command_executes_it_and_closes_the_menu() {
 
 #[test]
 fn bar_hit_height_tracks_display_scale() {
-    let mut driver = empty();
+    // Room for the largest scale, so the whole bar is found at each.
+    let mut driver = driver_in(Document::default(), VIEWPORT * 2.0);
     for scale in [1.0, 1.5, 2.0] {
-        driver.runner.refresh_frame(scale, VIEWPORT);
-        for index in 0..definition(
-            driver
-                .runner
-                .editor
-                .stack
-                .switchable()
-                .map(|(library, _)| library),
-        )
-        .len()
-        {
+        // The window keeps its logical size as the display's scale changes.
+        driver.runner.refresh_frame(scale, VIEWPORT * scale);
+        for index in 0..menus(&driver).len() {
             let point = point_for(&driver, Hover::Heading(index));
             for y in [0.5, bar_height(scale) - 0.5] {
                 assert_eq!(
@@ -228,16 +234,7 @@ fn headings_fill_the_bar_and_popup_rows_share_their_hit_width() {
     }
     driver.click_at(examples);
     let mut width = None;
-    for command in commands(
-        &definition(
-            driver
-                .runner
-                .editor
-                .stack
-                .switchable()
-                .map(|(library, _)| library),
-        )[1..2],
-    ) {
+    for command in commands(&menus(&driver)[1..2]) {
         let hover = Hover::Item(command);
         let point = point_for(&driver, hover);
         let columns: Vec<_> = (0..VIEWPORT.width as usize)
@@ -295,17 +292,10 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
         cells: Cells::new(),
     });
     let command = Command::Doc(DocCommand::Projection(color::ID));
-    let heading = definition(
-        driver
-            .runner
-            .editor
-            .stack
-            .switchable()
-            .map(|(library, _)| library),
-    )
-    .iter()
-    .position(|menu| menu.label == "Projections")
-    .unwrap();
+    let heading = menus(&driver)
+        .iter()
+        .position(|menu| menu.label == "Projections")
+        .unwrap();
     // A color draws as a swatch and its hex; only with the color library's
     // projection off is it the stored record, whose `rgb` field is drawn.
     let rgb = [gid::Step::Key(color::vocabulary::RGB)];
@@ -329,17 +319,10 @@ fn the_document_libraries_entry_switches_the_documents_own_projections() {
         crate::gid_text::parse(include_str!("../../../examples/libraries.gid")).unwrap();
     let mut driver = driver(doc);
     let command = Command::Doc(DocCommand::Projection(crate::libraries::declared::ID));
-    let heading = definition(
-        driver
-            .runner
-            .editor
-            .stack
-            .switchable()
-            .map(|(library, _)| library),
-    )
-    .iter()
-    .position(|menu| menu.label == "Projections")
-    .unwrap();
+    let heading = menus(&driver)
+        .iter()
+        .position(|menu| menu.label == "Projections")
+        .unwrap();
     // The document's fraction library stacks a fraction's parts; the stored
     // record lists them on one line.
     let stacked = |driver: &Driver| {
@@ -384,17 +367,10 @@ fn the_name_entry_switches_labels_to_identities() {
         cells: Cells::new(),
     });
     let command = Command::Doc(DocCommand::Projection(name::ID));
-    let heading = definition(
-        driver
-            .runner
-            .editor
-            .stack
-            .switchable()
-            .map(|(library, _)| library),
-    )
-    .iter()
-    .position(|menu| menu.label == "Projections")
-    .unwrap();
+    let heading = menus(&driver)
+        .iter()
+        .position(|menu| menu.label == "Projections")
+        .unwrap();
     let glyphs = |driver: &Driver| {
         crate::display::test_support::painted(&driver.painted().0)
             .map(|command| match command {
@@ -435,7 +411,7 @@ fn the_version_copies_from_the_bar_and_the_help_menu() {
     assert_eq!(driver.runner.editor.menu.open(), None);
 
     driver.runner.editor.text_clipboard = Default::default();
-    let help = definition(Vec::new()).len() - 1;
+    let help = menus(&driver).len() - 1;
     driver.click_at(point_for(&driver, Hover::Heading(help)));
     driver.click_at(point_for(
         &driver,

@@ -31,6 +31,12 @@ empty.
   and Raw and switch a library off and on from the Projections menu, and
   switch between Light, Dark and Follow System Appearance.
 
+- **The Libraries menu.** The native bar's new Libraries section, between
+  Projections and Window, was checked with `--target aarch64-apple-darwin`
+  but not run: `native_menu.rs`'s `definition` and `Menu::new` take the loaded
+  libraries' names beside the projections. Choose a library: a pane on the
+  right shows its name over its cells; choosing it again selects that pane.
+
 ## Later
 
 - **Rust 1.100, due 12 November 2026.** Move the wrappers' `update` (and

@@ -7,6 +7,22 @@ use ::grap::{Definition, ForeignFunctions};
 use gid::Cells;
 use std::rc::Rc;
 
+/// What a loaded library's own cell holds, so a pane can show it: the
+/// editor library names these.
+pub mod vocabulary {
+    use gid::CellId;
+
+    /// The cells a library defines.
+    pub const CELLS: CellId = CellId::from_u128(0xfccbc79141f24111bd0ba86b1fc775e6);
+
+    pub mod kind {
+        use gid::CellId;
+
+        /// A loaded library: `{isa: loaded library, name, cells}`.
+        pub const LIBRARY: CellId = CellId::from_u128(0x6d1ad922d3c24267ab64c33627349a19);
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Definitions {
     entries: Rc<Vec<(gid::CellId, Definition)>>,

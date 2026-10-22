@@ -86,8 +86,12 @@ struct Section {
 }
 
 /// `Projections` before the Window menu: the presets, and an entry for each
-/// library an area can switch off.
-fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>) -> Vec<Section> {
+/// library an area can switch off; then `Libraries`, an entry for each loaded
+/// library, when there are any.
+fn definition<'a>(
+    projections: impl IntoIterator<Item = (gid::CellId, &'a str)>,
+    libraries: impl IntoIterator<Item = (gid::CellId, &'a str)>,
+) -> Vec<Section> {
     use crate::workspace::{Move, Side};
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     let section = |label, entries| Section {
@@ -95,7 +99,12 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
         entries,
         windows_menu: false,
     };
-    vec![
+    let libraries: Vec<_> = libraries
+        .into_iter()
+        .map(|(library, name)| Entry::Labeled(C::Doc(D::OpenLibrary(library)), name.into()))
+        .collect();
+    let libraries = (!libraries.is_empty()).then(|| section("Libraries", libraries));
+    [
         section(
             "Progred",
             vec![
@@ -171,6 +180,10 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
                 }))
                 .collect(),
         ),
+    ]
+    .into_iter()
+    .chain(libraries)
+    .chain([
         Section {
             label: "Window",
             entries: vec![
@@ -182,7 +195,8 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
             windows_menu: true,
         },
         section("Help", vec![Entry::Command(C::Doc(D::CopyVersion))]),
-    ]
+    ])
+    .collect()
 }
 
 fn item(
@@ -352,10 +366,12 @@ pub struct Menu {
 }
 
 impl Menu {
-    /// The bar, with a `Projections` entry for each of `projections`.
+    /// The bar, with a `Projections` entry for each of `projections` and a
+    /// `Libraries` entry for each of `libraries`.
     pub fn new<'a>(
         proxy: EventLoopProxy<UserEvent>,
         projections: impl IntoIterator<Item = (gid::CellId, &'a str)>,
+        libraries: impl IntoIterator<Item = (gid::CellId, &'a str)>,
     ) -> Self {
         let mtm = MainThreadMarker::new().expect("menus are created on the main thread");
         let target = MenuTarget::new(mtm, proxy);
@@ -365,7 +381,7 @@ impl Menu {
         let mut windows = None;
         let mut services = None;
 
-        for section in definition(projections) {
+        for section in definition(projections, libraries) {
             let submenu = NSMenu::new(mtm);
             submenu.setTitle(&NSString::from_str(section.label));
             submenu.setAutoenablesItems(false);

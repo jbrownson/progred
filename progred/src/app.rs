@@ -314,7 +314,11 @@ impl App {
             #[cfg(not(target_arch = "wasm32"))]
             renderers: vec![],
             #[cfg(target_os = "macos")]
-            native_menu: native_menu::Menu::new(proxy.clone(), stack.switchable()),
+            native_menu: native_menu::Menu::new(
+                proxy.clone(),
+                stack.switchable(),
+                crate::libraries::name::library_names(&stack.libraries),
+            ),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             stack,
             #[cfg(any(target_os = "macos", target_os = "linux"))]

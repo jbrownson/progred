@@ -170,6 +170,42 @@ pub fn library_named<W: Host>(
     Library::new(Definitions::from_parts(cells, functions))
 }
 
+/// `libraries` with each one's own cell holding the library as a value,
+/// `{isa: loaded library, name, cells}`: the name it gives itself and the
+/// cells it defines, in order of their names, those without one last.
+pub(crate) fn described(libraries: Libraries) -> Libraries {
+    use crate::library::vocabulary::{CELLS, kind::LIBRARY};
+    let mut described = libraries.clone();
+    for (id, definitions) in libraries.iter() {
+        let mut cells: Vec<_> = definitions
+            .iter()
+            .map(|(cell, _)| cell)
+            .filter(|cell| *cell != id)
+            .map(|cell| {
+                let name = definitions.value(cell).and_then(read);
+                (name.is_none(), name.map(str::to_lowercase), cell)
+            })
+            .collect();
+        cells.sort();
+        let name = definitions
+            .value(id)
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&vocabulary::NAME))
+            .map(|name| (vocabulary::NAME, name.clone()));
+        let value = ::grap::isa::record(
+            LIBRARY,
+            name.into_iter().chain([(
+                CELLS,
+                Value::list(cells.into_iter().map(|(_, _, cell)| cell.into())),
+            )]),
+        );
+        let mut definitions = definitions.clone();
+        definitions.insert(id, ::grap::Definition::Value(value));
+        described.insert(id, definitions);
+    }
+    described
+}
+
 /// Each loaded library and the name it gives itself, in load order.
 pub fn library_names(libraries: &Libraries) -> impl Iterator<Item = (CellId, &str)> + '_ {
     libraries

@@ -989,6 +989,9 @@ fn project_frame(
                     .switchable()
                     .map(|(library, name)| (library, name.to_owned()))
                     .collect(),
+                libraries: crate::libraries::name::library_names(&stack.libraries)
+                    .map(|(library, name)| (library, name.to_owned()))
+                    .collect(),
                 scale,
                 width: viewport_width,
             },

@@ -4,8 +4,9 @@
 //! effects while dispatching; this library names them.
 
 use crate::display::Host;
+use crate::display::host::{Layout, ProjectionInput};
 use crate::libraries::{Library, name};
-use gid::CellId;
+use gid::{CellId, Step};
 
 pub mod path;
 pub mod selection;
@@ -57,7 +58,40 @@ pub fn library<W: Host>() -> Library<W> {
             (workspace::vocabulary::RIGHT, "right"),
             (workspace::vocabulary::LIBRARIES, "libraries"),
             (workspace::vocabulary::KEYS, "keys"),
+            (crate::library::vocabulary::kind::LIBRARY, "loaded library"),
+            (crate::library::vocabulary::CELLS, "cells"),
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_projections_for([(
+        crate::library::vocabulary::kind::LIBRARY,
+        crate::display::runtime_partial(loaded_library),
+    )])
+}
+
+/// A loaded library: its name over its cells, each by its name, a reference
+/// that opens to the cell's definition.
+fn loaded_library<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    use crate::library::vocabulary::{CELLS, kind::LIBRARY};
+    let by_name = crate::display::first(input, crate::display::runtime_partial(name::shallow_cell));
+    crate::display::structure::kind_form(input, LIBRARY, [name::vocabulary::NAME, CELLS], |_| {
+        Some(crate::display::col(
+            0,
+            8.0,
+            [
+                crate::display::descend(
+                    [Step::Key(name::vocabulary::NAME)],
+                    Some(name::projection(None)),
+                    None,
+                ),
+                crate::display::descend(
+                    [Step::Key(CELLS)],
+                    Some(crate::display::structure::list_column(4.0, Some(by_name))),
+                    None,
+                ),
+            ],
+        ))
+    })
 }

@@ -548,13 +548,19 @@ impl Editor {
         });
     }
 
-    /// Shows the workspace's panes declaration in a pane on the right, as a
-    /// location, so editing it there edits the panes; selects the pane
-    /// already showing it, if one does.
+    /// Shows the workspace's panes declaration in a pane, so editing it there
+    /// edits the panes.
     fn show_panes(&mut self) {
-        let entry = crate::location::value(&crate::location::Location::root(vec![gid::Step::Key(
+        self.show_in_pane(crate::location::Location::root(vec![gid::Step::Key(
             workspace::vocabulary::PANES,
         )]));
+    }
+
+    /// Shows `place` in a pane on the right, as a location, so the pane
+    /// draws what's there and edits it where it's writable; selects the pane
+    /// already showing it, if one does.
+    fn show_in_pane(&mut self, place: crate::location::Location<'_>) {
+        let entry = crate::location::value(&place);
         let sources = self.sources();
         let existing = [workspace::Side::Left, workspace::Side::Right]
             .into_iter()
@@ -730,6 +736,13 @@ impl Editor {
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
             DocCommand::ShowPanes => self.show_panes(),
+            DocCommand::OpenLibrary(library) => {
+                self.show_in_pane(crate::location::Location::in_cell(
+                    library,
+                    gid::Resolution::Library(library),
+                    Vec::new(),
+                ))
+            }
             DocCommand::MovePane(direction) => self.move_selected_pane(direction),
             DocCommand::Preset(preset) => {
                 let selected = self.selected_view();
@@ -777,7 +790,11 @@ impl Editor {
             Some(command) => menu::Navigation::Activate(command),
             None => menu::navigate(
                 &mut self.menu,
-                &menu::definition(self.stack.switchable().map(|(library, _)| library)),
+                &menu::definition(
+                    self.stack.switchable().map(|(library, _)| library),
+                    crate::libraries::name::library_names(&self.stack.libraries)
+                        .map(|(library, _)| library),
+                ),
                 availability,
                 event,
             ),

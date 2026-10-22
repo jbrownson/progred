@@ -144,6 +144,9 @@ pub enum DocCommand {
     /// Switch one library off, or back on, in the selected area. Menus label
     /// it with the library's name.
     Projection(gid::CellId),
+    /// Show a loaded library in a pane, read-only. Menus label it with the
+    /// library's name.
+    OpenLibrary(gid::CellId),
     // On the web, the browser's page zoom does this.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     ActualSize,
@@ -334,6 +337,7 @@ pub fn spec(command: Command) -> Spec {
             toggle("Raw", Some(Shortcut::plain(ShortcutKey::R)))
         }
         Command::Doc(DocCommand::Projection(_)) => toggle("Projection", None),
+        Command::Doc(DocCommand::OpenLibrary(_)) => item("Library", None),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::ActualSize) => {
             item("Actual Size", Some(Shortcut::plain(ShortcutKey::Digit0)))
@@ -384,7 +388,7 @@ impl Availability {
             DocCommand::Redo => self.redo,
             DocCommand::OpenPane(_) => self.open_pane,
             DocCommand::ClosePane => self.close_pane,
-            DocCommand::ShowPanes => self.show_panes,
+            DocCommand::ShowPanes | DocCommand::OpenLibrary(_) => self.show_panes,
             DocCommand::MovePane(Move::Up) => self.move_up,
             DocCommand::MovePane(Move::Down) => self.move_down,
             DocCommand::MovePane(Move::Left) => self.move_left,
