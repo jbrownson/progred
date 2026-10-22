@@ -218,9 +218,10 @@ before, a stored hole kept a shape's identifying field present, which recorded
 what the kind required when it was written. Open beside it:
 
 - **Kinds everywhere, and dispatch on them.** The owner's direction: use the
-  isa generally, not by a clever rule about where it's needed, with values
-  encoded under one primitive tag (numbers, text, booleans, colors, path
-  steps) the exception. The projection stack draws a record as its kind
+  isa generally, not by a clever rule about where it's needed. Values encoded
+  under one tag, the tag naming what the value is (numbers, text, booleans,
+  colors, path steps), keep their tags so far; whether they should say a kind
+  too is open. The projection stack draws a record as its kind
   provides first (see [projections](projections.md#projection-composition)),
   and evaluation dispatches on Grap's kinds. Fidget's previews and scenes,
   toolpath's previews and tools, and layout's stored nodes and programs say
@@ -231,8 +232,8 @@ what the kind required when it was written. Open beside it:
   - presentation's `{render: expression}` and outlines, controls, and the
     color picker's records.
   - Tagged variants: drawing commands, shapes and path elements, a cutter
-    section's `cutting` or `non-cutting`. These read as values under one tag,
-    like a boolean, so they kept their tags.
+    section's `cutting` or `non-cutting`. These are values under one tag,
+    like a boolean, so they kept their tags with the rest of those.
   - Plain records read by functions, such as points and playback settings.
 
   Declining partials allocate while they probe, about 4,300 times a frame in
