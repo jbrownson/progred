@@ -179,6 +179,7 @@ pub fn list_layout_at<W: Host>(
 pub(crate) struct Fields<W: Host> {
     leading: Vec<CellId>,
     slots: Vec<CellId>,
+    parts: Vec<CellId>,
     child: Rc<dyn Fn(CellId) -> Option<Partial<W>>>,
     label: Rc<dyn Fn(CellId) -> Option<Layout<W>>>,
     shown_empty: bool,
@@ -189,6 +190,7 @@ impl<W: Host> Default for Fields<W> {
         Self {
             leading: Vec::new(),
             slots: Vec::new(),
+            parts: Vec::new(),
             child: Rc::new(|_| None),
             label: Rc::new(|_| None),
             shown_empty: false,
@@ -206,6 +208,13 @@ impl<W: Host> Fields<W> {
     /// `keys` drawn even where the record lacks them, as slots to fill.
     pub(crate) fn slots(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
         self.slots = keys.into_iter().collect();
+        self
+    }
+
+    /// `keys`' values drawn as parts of the record ([`crate::display::part`]):
+    /// no stop of their own, their names selecting nothing.
+    pub(crate) fn parts(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
+        self.parts = keys.into_iter().collect();
         self
     }
 
@@ -324,16 +333,20 @@ impl<W: Host> Fields<W> {
         key: CellId,
     ) -> RecordField<W, W::Hover> {
         let name = (self.label)(key).unwrap_or_else(|| field_name(input.env, key));
-        // A missing field's name selects it only where it's a slot to fill.
-        let selects =
-            self.slots.contains(&key) || input.value.is_some_and(|value| value.contains_field(key));
+        let part = self.parts.contains(&key);
+        // A missing field's name selects it only where it's a slot to fill,
+        // and a part's selects nothing.
+        let selects = !part
+            && (self.slots.contains(&key)
+                || input.value.is_some_and(|value| value.contains_field(key)));
+        let child = (self.child)(key).map(|child| crate::display::first(input, child));
         RecordField {
             label: field_label(input, key, name, selects),
-            value: descend(
-                [Step::Key(key)],
-                (self.child)(key).map(|child| crate::display::first(input, child)),
-                None,
-            ),
+            value: if part {
+                crate::display::part([Step::Key(key)], child, None)
+            } else {
+                descend([Step::Key(key)], child, None)
+            },
         }
     }
 }

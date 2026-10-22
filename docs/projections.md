@@ -856,7 +856,10 @@ The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
 An absent's `call` reads as the call itself, drawn where it is: the same place
-as the call in its code. Inside a result that can be run again, such as a
+as the call in its code. The field holds where the call is, which matters only
+for what it leads to, so it's drawn as a part of the absent
+(`Fields::parts`) and the call is the stop; the callers below are drawn the
+same way. Inside a result that can be run again, such as a
 pane's render, an absent about a call also has its callers below it, shut: a
 "called from" toggle. Opened, they're found by running the result's evaluation
 again with an observer (`grap::Answering`) that watches for the call at that

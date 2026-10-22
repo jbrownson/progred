@@ -31,10 +31,12 @@ pub mod vocabulary {
 
 /// An absent value reads as its reason, then any other fields, such as a
 /// failed alternative's causes, all on red. The call it's about reads as
-/// that call, where it is.
+/// that call, where it is: where it is is part of the absent, the call a
+/// stop of its own.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
     let absent = crate::display::structure::Fields::default()
+        .parts([vocabulary::CALL])
         .child(call_field)
         .after(input, |key| key == vocabulary::ABSENT, head(input, reason));
     Some(on_red(match callers(input) {
@@ -88,10 +90,7 @@ fn callers<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                     Some(stack) => crate::display::at(
                         [gid::Step::Key(vocabulary::CALLERS)],
                         gid::Value::list(stack.iter().skip(1).map(::grap::source::value)),
-                        Some(crate::display::structure::list_column(
-                            2.0,
-                            Some(crate::display::runtime_partial(self::call)),
-                        )),
+                        Some(crate::display::runtime_partial(callers_column)),
                         None,
                     ),
                     None => crate::display::dim("not found"),
@@ -132,16 +131,33 @@ fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> 
 }
 
 /// Where a call is, drawn as the call there, so it's the same place as the
-/// call drawn in its code; a handle marks where it is apart from the
-/// call.
+/// call drawn in its code. Drawn as a part of what holds it, it's the call,
+/// one stop.
 fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let call = location(::grap::source::read(&input.value?.to_value())?)?;
-    Some(crate::display::handle(crate::display::jump(
-        [],
-        call,
-        None,
-        None,
-    )))
+    Some(crate::display::jump([], call, None, None))
+}
+
+/// The calls an absent's call was made under, one under another, each where
+/// it is as a part of the list, so each is its call.
+fn callers_column<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    let positions = input.value?.list_positions()?;
+    Some(crate::display::col(
+        0,
+        2.0,
+        positions.into_iter().map(|position| {
+            crate::display::part(
+                [gid::Step::Element(position)],
+                Some(crate::display::first(
+                    input,
+                    crate::display::runtime_partial(call),
+                )),
+                None,
+            )
+        }),
+    ))
 }
 
 /// A missing argument reads as its reason and the parameter, then the hole
@@ -180,6 +196,7 @@ fn missing_argument<W: Host>(
     );
     Some(on_red(
         crate::display::structure::Fields::default()
+            .parts([vocabulary::CALL])
             .child(call_field)
             .after(
                 input,
