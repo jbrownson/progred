@@ -565,6 +565,7 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
     Layout::new(move |builder| builder.leaf(&leaf))
 }
 
+pub use widget::handle::{handle, quiet_handle};
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
 

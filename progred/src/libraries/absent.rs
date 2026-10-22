@@ -132,10 +132,16 @@ fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> 
 }
 
 /// Where a call is, drawn as the call there, so it's the same place as the
-/// call drawn in its code.
+/// call drawn in its code; a quiet handle marks where it is apart from the
+/// call.
 fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let call = location(::grap::source::read(&input.value?.to_value())?)?;
-    Some(crate::display::jump([], call, None, None))
+    Some(crate::display::quiet_handle(crate::display::jump(
+        [],
+        call,
+        None,
+        None,
+    )))
 }
 
 /// A missing argument reads as its reason and the parameter, then the hole

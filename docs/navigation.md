@@ -55,6 +55,18 @@ fields, adds no stop, and punctuation, padding, and other inert decoration add
 no stops or lines. Empty lists stop once; empty cells offer both the reference
 and the missing contents.
 
+Each stop draws something of its own, so selecting it looks different from
+selecting what's inside it, and every arrow press shows. Where what's inside
+would draw all of an occurrence, its projection marks it with a handle from the
+toolkit: a bar as tall as what it draws, before it, that a click on selects, as
+a notebook's record has. A quiet handle keeps its place but shows only while its
+bar is hovered or the selection is on its occurrence or inside it, for one as
+common as a declaration's definition drawn as its name. Other marks serve too: a
+notebook numbers its entries in its list's margin, and an entry shows its arrow
+before it has a result. A sweep checks that no stop's box is the box of the stop
+around it, over the sample and a new notebook, and, ignored for its time, the
+larger examples.
+
 A selection on nothing drawn, such as one inside a value its projection draws
 whole, as a number draws its spelling rather than its encoding, leaves arrows
 as no selection does: the first selects the root.

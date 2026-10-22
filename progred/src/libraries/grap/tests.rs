@@ -221,14 +221,18 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                 panic!("a declaration follows the cell definition");
             };
             assert_eq!(*steps, [Step::Follow(source)]);
+            let definition =
+                projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
+                    .unwrap()
+                    .record();
+            let Recorded::Row { children, .. } = definition.content() else {
+                panic!("the compact definition is a quiet handle, then its name");
+            };
             let ProjectionCall::Descend {
                 steps,
                 projection: Some(projection),
                 ..
-            } = &inspect(
-                &(projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
-                    .unwrap()),
-            )
+            } = &inspect(&children[1])
             else {
                 panic!("the compact definition descends to its actual name");
             };

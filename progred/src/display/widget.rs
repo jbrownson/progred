@@ -17,6 +17,7 @@ pub mod delimiter;
 pub mod drawing;
 pub mod frame;
 pub mod gesture;
+pub mod handle;
 pub mod hover;
 pub mod image;
 pub mod interaction;

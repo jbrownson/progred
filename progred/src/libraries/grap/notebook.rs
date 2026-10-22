@@ -20,7 +20,8 @@ pub mod vocabulary {
     pub const NOTEBOOK: CellId = CellId::from_u128(0x30371e11863404e70052ccff54276702);
 }
 
-/// A record naming a notebook draws its entries, then its other fields.
+/// A record naming a notebook draws its entries, then its other fields,
+/// after a handle of its own.
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -35,31 +36,51 @@ pub(super) fn display<W: Host>(
             None,
         ))
     })
+    .map(crate::display::handle)
 }
 
 /// The entries as a list, one under another, so inserting between them, the
 /// hole a deleted one leaves, and the rest of a list's editing are a list's
-/// own. Enter on an entry starts another beside it; an empty notebook offers
-/// its first.
+/// own. Each is numbered in the list's margin, the number selecting it.
+/// Enter on an entry starts another beside it; an empty notebook offers its
+/// first.
 fn entries<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let positions = input.value?.list_positions()?;
+    let list = input.site();
+    let digits = positions.len().to_string().len();
     match positions.is_empty() && input.pending.is_none() {
-        true => Some(first_entry(input.site())),
+        true => Some(first_entry(list)),
         false => crate::display::structure::list_column_with(
             input,
             12.0,
             Some(crate::display::runtime_partial(entry)),
             move |at, item| match positions.iter().position(|entry| *entry == at) {
-                Some(index) => new_entry_on_enter(
-                    item,
-                    index.checked_sub(1).map(|before| positions[before].clone()),
-                    at,
-                    positions.get(index + 1).cloned(),
+                Some(index) => row(
+                    8.0,
+                    [
+                        selectable(
+                            crate::display::dim(numbered(index + 1, digits)),
+                            &list.below(&[Step::Element(at.clone())]),
+                        ),
+                        new_entry_on_enter(
+                            item,
+                            index.checked_sub(1).map(|before| positions[before].clone()),
+                            at,
+                            positions.get(index + 1).cloned(),
+                        ),
+                    ],
                 ),
                 None => item,
             },
         ),
     }
+}
+
+/// `number` as wide as `digits` digits, padded with figure spaces, so the
+/// entries it numbers line up.
+fn numbered(number: usize, digits: usize) -> String {
+    let number = number.to_string();
+    "\u{2007}".repeat(digits.saturating_sub(number.len())) + &number
 }
 
 /// A click on what an empty notebook draws starts its first entry.
@@ -122,8 +143,14 @@ fn entry_of<W: Host>(
         .as_ref()
         .map_or(Resolution::Document, |definition| definition.resolution);
     let expression = super::expression_path(input, [Step::Follow(source)]);
+    let site = input.site();
+    // An entry with nothing to evaluate yet still shows its arrow, so it
+    // reads as an entry, not as the expression it holds.
     if definition.is_none() {
-        return Some(expression);
+        return Some(row(
+            6.0,
+            [expression, selectable(crate::display::arrow(), &site)],
+        ));
     }
     let result = crate::display::at_evaluated(
         [Step::Key(
@@ -134,7 +161,6 @@ fn entry_of<W: Host>(
             .evaluate_runtime_memo(reference, ::grap::DEFAULT_FUEL, &[]),
         input.env.evaluation(reference, ::grap::DEFAULT_FUEL, &[]),
     );
-    let site = input.site();
     let (expression, arrow, result) = (
         shared(expression),
         shared(selectable(crate::display::arrow(), &site)),

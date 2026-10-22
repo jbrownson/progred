@@ -241,7 +241,8 @@ pub(crate) fn declaration_cell<W: Host>(
 }
 
 /// A declaration's definition as its name, there or not; its other fields
-/// follow. A name that isn't text declines.
+/// follow, and a quiet handle marks the definition apart from its name. A
+/// name that isn't text declines.
 fn declaration_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<&str>,
@@ -259,6 +260,7 @@ fn declaration_name<W: Host>(
             None,
         ))
     })
+    .map(crate::display::quiet_handle)
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
