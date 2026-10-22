@@ -319,15 +319,16 @@ explicit composition rather than teaching the raw structural fallback about
 Grap. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
 a text name projects as `(name)`: the usual cell parentheses surround an
-unquoted line editor for the definition that edits its `name` field
-(`LineEdit::of_field`), so the definition and its name are one stop and the
-name no occurrence of its own. Deleting it deletes the definition whole:
-Backspace empties the name, then once more deletes the definition, the place
-left a line that typing a name defines again, all one undo step. This
-contextual projection is not in the default stack. The definition's other
-fields, and one being added, follow the name as a trailing record. A name that
-isn't text declines to the ordinary projection; a missing one is its line
-editor with nothing in it.
+unquoted line editor at the real `Follow` → `name` path. The cell and its
+definition are one thing: the walk to the definition is a `part`, so the
+definition is no stop of its own and arrows go from the cell to its name.
+Backspace empties the name, then removes the name field, the parameter
+unnamed but still defined; once more lands on the parameter, and again removes
+it. A cell with no definition draws as a hole whose one offer is the name
+typed, which defines it. This contextual projection is not in the default
+stack. The definition's other fields, and one being added, follow the name as
+a trailing record. A name that isn't text declines to the ordinary projection;
+a missing one is its line editor with nothing in it.
 Ordinary cells and quoted data are unchanged; named use sites remain shallow
 references.
 Calls use a stored or inline

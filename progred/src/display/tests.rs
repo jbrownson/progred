@@ -16,6 +16,7 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
             steps: actual,
             projection,
             default_projection,
+            ..
         } => {
             assert_eq!(actual, steps);
             assert!(projection.is_some());

@@ -184,17 +184,16 @@ fn parameter<W: Host>(
 }
 
 /// A new parameter named `spelling`, then selected; with no spelling, it
-/// has no name, and its definition, which is its name's line, is selected
-/// to type one into.
+/// has no name, and its name is picked next.
 fn new_parameter(spelling: String) -> Completion {
     let named = !spelling.is_empty();
     let then = if named {
         crate::selection::at(&[], crate::selection::payload::edge())
     } else {
-        crate::selection::at(
-            &[Step::Follow(gid::Resolution::Document)],
-            crate::selection::payload::edge(),
-        )
+        crate::selection::pending_at(&[
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(name::vocabulary::NAME),
+        ])
     };
     let display = if named {
         spelling.clone()
@@ -218,8 +217,9 @@ fn new_parameter(spelling: String) -> Completion {
     }
 }
 
-/// A declaration's cell in parentheses, its name editable there; an empty
-/// name shows `computed` grey in its editor until a name is typed.
+/// A declaration's cell in parentheses, one thing with its definition, its
+/// name a stop inside editable there; an empty name shows `computed` grey in
+/// its editor until a name is typed.
 pub(crate) fn declaration_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<String>,
@@ -235,7 +235,7 @@ pub(crate) fn declaration_cell<W: Host>(
         });
     Some(selectable_bracket(
         Delim::Paren,
-        descend(
+        crate::display::part(
             [Step::Follow(source)],
             Some(crate::display::first(
                 input,
@@ -248,28 +248,70 @@ pub(crate) fn declaration_cell<W: Host>(
     ))
 }
 
-/// A declaration's definition as its name: one line that edits the
-/// definition's name field, so the definition and its name are one stop,
-/// and deleting it deletes the definition whole. Its other fields follow.
-/// Where there's no definition, typing a name writes one. A missing name
-/// shows `computed` grey until one is typed; a name that isn't text
-/// declines.
+/// A declaration's definition as its name, there or not; its other fields
+/// follow. The definition is part of its cell's stop, the name a stop
+/// inside. A name that isn't text declines.
 fn declaration_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<&str>,
 ) -> Option<Layout<W>> {
-    let line = |spelled: Option<Value>| {
-        Some(crate::display::line_edit(crate::display::LineEdit {
-            placeholder: computed.map(str::to_owned),
-            ..name::line(spelled.as_ref())?.of_field(name::vocabulary::NAME)
-        }))
-    };
     match input.value {
-        None => line(None),
+        None => Some(definition_hole()),
         Some(_) => record_form(input, [name::vocabulary::NAME], |[spelled]| {
-            line(spelled.map(|spelled| spelled.to_value()))
+            if let Some(spelled) = spelled {
+                crate::libraries::text::read(spelled.as_value())?;
+            }
+            Some(descend(
+                [Step::Key(name::vocabulary::NAME)],
+                Some(crate::display::first(
+                    input,
+                    name::projection(computed.map(str::to_owned)),
+                )),
+                None,
+            ))
         }),
     }
+}
+
+/// Where a declaration has no definition: a hole, unlike a definition with
+/// no name, which shows its computed name grey. Its one offer is the name
+/// typed, which defines the declaration; with nothing typed, the name is
+/// picked next.
+fn definition_hole<W: Host>() -> Layout<W> {
+    picker(Picker::new(
+        CompletionKind::Value,
+        ranked(std::rc::Rc::new(|request| {
+            let spelling = request.query.trim().to_owned();
+            let named = !spelling.is_empty();
+            let display = if named {
+                spelling.clone()
+            } else {
+                "no name".to_owned()
+            };
+            Some(vec![
+                Completion::new(display, move |session| {
+                    if let Some(picking) = session.pending() {
+                        let (definition, then) = if named {
+                            (
+                                name::record(&spelling, []),
+                                crate::selection::at(
+                                    &[Step::Key(name::vocabulary::NAME)],
+                                    crate::selection::payload::edge(),
+                                ),
+                            )
+                        } else {
+                            (
+                                Value::record([]),
+                                crate::selection::pending_at(&[Step::Key(name::vocabulary::NAME)]),
+                            )
+                        };
+                        picking.commit(definition, Some(then));
+                    }
+                })
+                .with_detail("name"),
+            ])
+        })),
+    ))
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {

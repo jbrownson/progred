@@ -215,31 +215,51 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             let ProjectionCall::Descend {
                 steps,
                 projection: Some(projection),
+                part,
                 ..
             } = &inspect(child)
             else {
                 panic!("a declaration follows the cell definition");
             };
             assert_eq!(*steps, [Step::Follow(source)]);
-            let definition =
-                projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
-                    .expect("a definition with a text name draws");
-            assert!(
-                matches!(inspect(&definition), ProjectionCall::Other),
-                "the compact definition is its name's line, not a walk to the name"
-            );
+            assert!(*part, "the cell and its definition are one thing");
+            let ProjectionCall::Descend {
+                steps,
+                projection: Some(projection),
+                part,
+                ..
+            } = &inspect(
+                &(projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
+                    .unwrap()),
+            )
+            else {
+                panic!("the compact definition descends to its actual name");
+            };
+            assert_eq!(*steps, [Step::Key(name::vocabulary::NAME)]);
+            assert!(!*part, "the name is a stop of its own");
             let value = env
                 .0
                 .as_record()
                 .unwrap()
                 .get(&name::vocabulary::NAME)
                 .unwrap();
+            assert!(
+                projection(&projection_input(&env, value).with_value(Some(&value.into())))
+                    .is_some()
+            );
             let line = name::editor(value).unwrap();
             assert_eq!(line.text, spelling);
             assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
             assert_eq!(
                 (line.update)("next", Some(value)),
                 Some(crate::libraries::text::value("next"))
+            );
+            assert!(
+                projection(
+                    &projection_input(&env, &Value::record([]))
+                        .with_value(Some(&Value::record([]).into()))
+                )
+                .is_none()
             );
         }
     }
@@ -1203,10 +1223,12 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
     );
     driver.press(NamedKey::Enter);
     let parameter = driver.element(&params, 0, &[]);
-    // The definition is drawn as its name's line.
     let name = [
         parameter.as_slice(),
-        &[Step::Follow(gid::Resolution::Document)],
+        &[
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(crate::libraries::name::vocabulary::NAME),
+        ],
     ]
     .concat();
     let cell = driver
@@ -1225,9 +1247,9 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
     assert_eq!(
         driver.selection(),
         crate::occurrence::below(&[], &name),
-        "its name is typed next"
+        "its name is picked next"
     );
-    assert_eq!(driver.stage(), Some(crate::selection::Stage::Edge));
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
     let placeholder = driver.glyphs_at(&name);
     assert_eq!(
         placeholder.len(),

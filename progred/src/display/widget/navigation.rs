@@ -79,6 +79,46 @@ pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Second
         .find_map(|landmark| landmark.secondary.clone())
 }
 
+/// `child` drawn as part of the occurrence around it, as [`landmark`] but
+/// with no stop of its own, so arrows pass from what's around it to what's
+/// inside. A control drawn for it, such as the line of a definition yet to
+/// be written, still declares its stop there, and then it's reached and
+/// revealed as a landmark is.
+pub(crate) fn part_landmark<World: 'static, H: 'static>(
+    child: Measured<HoverPass<World, H>>,
+    path: Trail,
+    select: Select<World>,
+    selected: bool,
+) -> Measured<HoverPass<World, H>> {
+    measured::around_into(child, move |placement, inner, pass| {
+        pass.scope(
+            |pass| inner.place_into(pass),
+            move |mut output| {
+                let arrival = match output.landmark_select.take() {
+                    Some((at, arrive)) if at == path => Some(arrive),
+                    stray => {
+                        debug_assert!(stray.is_none(), "arrival override at another occurrence");
+                        None
+                    }
+                };
+                let tab_stop = output.tab_stop.take().is_some_and(|at| at == path);
+                if arrival.is_some() || tab_stop {
+                    output.landmarks.push(Landmark {
+                        root: None,
+                        path,
+                        rect: placement.rect,
+                        select: arrival.unwrap_or(select),
+                        secondary: None,
+                        selected,
+                        tab_stop,
+                    });
+                }
+                output
+            },
+        );
+    })
+}
+
 /// `child` registered as the landmark of the occurrence at `path`: what
 /// keyboard navigation reaches and reveals, over its full bounds. It claims
 /// no clicks: pointer selection belongs to the targets the view registers

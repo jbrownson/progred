@@ -42,8 +42,9 @@ precedes a deeper block that sits beside its first one.
 
 ## Stops
 
-Every occurrence drawn is an arrow stop; projections declare nothing for
-navigation. An occurrence's landmark adds a whole-value stop before what's drawn
+Every occurrence drawn is an arrow stop, unless its projection draws it as a
+part of the occurrence around it (below). An occurrence's landmark adds a
+whole-value stop before what's drawn
 inside it, unless a control drawn for the occurrence, a line edit or a picker,
 declares the occurrence's stop itself. That stop stays where the control is
 drawn, as a number's does after its name, and the landmark adds no second one;
@@ -60,12 +61,24 @@ selecting what's inside it, and every arrow press shows. Where what's inside
 would draw all of an occurrence, its projection marks it with a handle from the
 toolkit: a bar as tall as what it draws, before it, that a click on selects, as
 a notebook's record has. It always shows: structure seen only once selected
-isn't visible. Or a level can stop being one: a declaration's definition is one
-line that edits its name field (`LineEdit::of_field`), so its name is no stop of
-its own. Other marks serve too: a notebook numbers its entries in its list's margin, and an entry shows its
-arrow before it has a result. A sweep selects each stop and checks that its box
-is neither the box of the stop around it nor of one just inside it, over the
-sample and a new notebook, and, ignored for its time, the larger examples.
+isn't visible. Other marks serve too: a notebook numbers its entries in its
+list's margin, and an entry shows its arrow before it has a result. A sweep
+selects each stop and checks that its box is neither the box of the stop around
+it nor of one just inside it, over the sample and a new notebook, and, ignored
+for its time, the larger examples.
+
+A domain projection presents the domain's things, and a level someone working
+in it wouldn't act on alone isn't a stop: it's drawn as a part of the thing
+around it (`part`, a walk like `descend`). A part has no stop, highlight, or
+landmark of its own, so arrows pass from the thing to what's inside the part,
+which keeps its own stops; a control drawn for the part itself, such as the
+hole of a definition yet to be written, still declares one there. A Grap
+parameter is a cell and its definition record as one thing, its name a stop
+inside. The underlying data stays a view away, in Raw. Backspace landing on its
+container skips a part for the thing around it. The aim is that the domain
+views make an invalid state hard to reach and easy to leave: a parameter's
+definition can't be selected or deleted alone, and one with none is a hole
+whose offer, the name typed, defines it.
 
 A selection on nothing drawn, such as one inside a value its projection draws
 whole, as a number draws its spelling rather than its encoding, leaves arrows

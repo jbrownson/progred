@@ -34,11 +34,24 @@ pub fn selection_after_removing<World>(
         .then(|| following(landmarks, root, path))
         .flatten()
         .or_else(|| preceding(landmarks, root, path))
-        .unwrap_or_else(|| {
-            path.split_last()
-                .map(|(_, parent)| parent.to_vec())
-                .unwrap_or_default()
-        })
+        .unwrap_or_else(|| container(landmarks, root, path))
+}
+
+/// The nearest drawn occurrence around `path`, past any drawn as part of
+/// another, else `path`'s parent.
+fn container<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -> Path {
+    let drawn = |path: &[Step]| {
+        landmarks
+            .iter()
+            .any(|landmark| landmark.root.as_ref() == Some(root) && landmark.path == path)
+    };
+    let parent = path.split_last().map_or(&[][..], |(_, parent)| parent);
+    (0..=parent.len())
+        .rev()
+        .map(|end| &parent[..end])
+        .find(|around| drawn(around))
+        .unwrap_or(parent)
+        .to_vec()
 }
 
 /// Select All, once focused controls decline the raw key, selects the root

@@ -8,6 +8,8 @@ use measured::choices::{ChoiceBuild, ChoiceLayout};
 use puri::text::TextCtx;
 
 pub trait Project<World, Hover> {
+    /// Draw what's at `steps` below here; as a `part`, it joins this
+    /// occurrence's stop rather than being a stop of its own.
     fn descend(
         &self,
         text: &mut TextCtx,
@@ -15,6 +17,7 @@ pub trait Project<World, Hover> {
         steps: &[Step],
         overriding: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
+        part: bool,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
     fn jump(
         &self,

@@ -852,6 +852,26 @@ pub fn descend<World: 'static, Hover: 'static>(
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
+    walk(steps, overriding, default, false)
+}
+
+/// [`descend`], what's reached drawn as part of this occurrence: no stop,
+/// highlight or landmark of its own, so the two are one thing, as a
+/// parameter's cell and its definition are. What's inside it keeps its own.
+pub fn part<World: 'static, Hover: 'static>(
+    steps: impl AsRef<[Step]> + 'static,
+    overriding: Option<Partial<World, Hover>>,
+    default: Option<Partial<World, Hover>>,
+) -> Layout<World, Hover> {
+    walk(steps, overriding, default, true)
+}
+
+fn walk<World: 'static, Hover: 'static>(
+    steps: impl AsRef<[Step]> + 'static,
+    overriding: Option<Partial<World, Hover>>,
+    default: Option<Partial<World, Hover>>,
+    part: bool,
+) -> Layout<World, Hover> {
     Layout::program(Rc::new(move |context, build| {
         context.project.descend(
             context.text,
@@ -859,6 +879,7 @@ pub fn descend<World: 'static, Hover: 'static>(
             steps.as_ref(),
             overriding.clone(),
             default.clone(),
+            part,
         )
     }))
 }
