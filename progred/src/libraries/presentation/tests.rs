@@ -326,3 +326,14 @@ fn a_pane_draws_a_render_as_only_its_result() {
 }
 
 mod rendered;
+
+#[test]
+fn only_a_sized_value_reads_as_one() {
+    let declared = sized(LEFT_VALUE.into(), LEFT_VALUE.into());
+    assert!(viewport(&declared).is_some());
+    let data = Value::record([
+        (vocabulary::VALUE, LEFT_VALUE.into()),
+        (vocabulary::VIEWPORT, LEFT_VALUE.into()),
+    ]);
+    assert!(viewport(&data).is_none());
+}

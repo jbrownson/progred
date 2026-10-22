@@ -388,3 +388,14 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(doc.root.is_none());
     assert!(!delete_edge(&mut doc, &lib, &Location::root(&[])));
 }
+
+#[test]
+fn only_a_record_that_says_it_is_one_reads_as_a_location() {
+    let place = Location::root(vec![Step::Key(CellId::from_u128(1))]);
+    let stored = value(&place);
+    assert_eq!(read(&stored), Some(place.into_owned()));
+    // The same fields without the kind are data that happens to look like one.
+    let mut fields = stored.as_record().unwrap().clone();
+    fields.remove(&::grap::isa::ISA);
+    assert_eq!(read(&Value::Record(fields)), None);
+}
