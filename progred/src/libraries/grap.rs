@@ -17,7 +17,9 @@ use crate::display::{
     col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
-use ::grap::vocabulary::{BODY, ENVIRONMENT, FUNCTION, LAMBDA, PARAMS, VALUE, kind};
+use ::grap::vocabulary::{
+    BODY, ENVIRONMENT, FUNCTION, IMPLEMENTATION, LAMBDA, PARAMS, VALUE, kind,
+};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::text::Script;
 
@@ -591,23 +593,23 @@ fn parameters<W: Host>(
 }
 
 /// A foreign function reads as a lambda's head does, with no body to show:
-/// the function it's implemented as, by its name, which its own `name` gives
-/// where it's that function's definition, then its parameters.
+/// its implementation's cell, by its name, which its own `name` gives where
+/// it's that cell's definition, then its parameters.
 fn foreign_function_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     crate::display::structure::kind_form(
         input,
         kind::FOREIGN_FUNCTION,
-        [FUNCTION, name::vocabulary::NAME, PARAMS],
-        |[function, _, params]| {
-            function?.as_cell()?;
-            let function = shallow_path(input, [Step::Key(FUNCTION)]);
+        [IMPLEMENTATION, name::vocabulary::NAME, PARAMS],
+        |[implementation, _, params]| {
+            implementation?.as_cell()?;
+            let implementation = shallow_path(input, [Step::Key(IMPLEMENTATION)]);
             let params = match params {
                 Some(params) => Some(parameters(input, &params)?),
                 None => None,
             };
-            Some(row(3.0, std::iter::once(function).chain(params)))
+            Some(row(3.0, std::iter::once(implementation).chain(params)))
         },
     )
 }
@@ -770,6 +772,7 @@ pub fn library<W: Host>() -> Library<W> {
             (kind::LAMBDA, "lambda"),
             (kind::CLOSURE, "closure"),
             (kind::FOREIGN_FUNCTION, "foreign function"),
+            (IMPLEMENTATION, "implementation"),
             (kind::VALUE_WRAPPER, "value wrapper"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
             (::grap::vocabulary::EVALUATE, "evaluate"),

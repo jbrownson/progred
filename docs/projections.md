@@ -786,14 +786,14 @@ silently retarget editor state. With no definition,
 evaluation returns missing-cell absent. A cell is transparent: its definition is
 evaluated where it is referenced, using the bindings in scope there, so a cell
 defined for a function body can be referenced in several places within it. A
-foreign function's value is its definition, `{isa: foreign function, function:
-<cell>, name, params}`, the cell the one the host implements it under, which is
-its own: a reference to one evaluates to that data without invoking anything,
-and a function only a scoped capability supplies reads as
-`{isa: foreign function, function: <cell>}`. Calling one reaches the
-implementation under its `function` cell, a scope's first, as a call of the
-cell does. The Grap library draws one as a lambda's head: its function's name,
-then its parameters.
+foreign function's value is its definition, `{isa: foreign function,
+implementation: <cell>, name, params}`, the cell the one the host implements it
+under, which is its own: a reference to one evaluates to that data without
+invoking anything, and a function only a scoped capability supplies reads as
+`{isa: foreign function, implementation: <cell>}`. Calling one reaches the
+implementation under that cell, a scope's first, as a call of the cell does.
+The Grap library draws one as a lambda's head: its implementation's name, then
+its parameters.
 
 Direct calls retain the same `{function: cell, ...arguments}` syntax for Rust
 and Grap implementations. Passing a foreign function through an evaluated

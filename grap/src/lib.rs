@@ -131,7 +131,7 @@ impl Definition {
     pub fn foreign(cell: CellId, mut value: Value, implementation: ForeignFunction) -> Self {
         if let Value::Record(fields) = &mut value {
             fields.insert(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
-            fields.insert(vocabulary::FUNCTION, Value::from(cell));
+            fields.insert(vocabulary::IMPLEMENTATION, Value::from(cell));
             if let Some(parameters) = &implementation.parameters
                 && !fields.contains_key(&vocabulary::PARAMS)
             {
@@ -2362,7 +2362,7 @@ fn native_f64(value: &RuntimeValue) -> Option<f64> {
 pub fn foreign_function(cell: CellId) -> Value {
     isa::record(
         vocabulary::kind::FOREIGN_FUNCTION,
-        [(vocabulary::FUNCTION, Value::from(cell))],
+        [(vocabulary::IMPLEMENTATION, Value::from(cell))],
     )
 }
 
@@ -2371,7 +2371,7 @@ pub fn foreign_function(cell: CellId) -> Value {
 fn callee_cell(callable: &RuntimeValue) -> Option<CellId> {
     callable.as_cell().or_else(|| {
         (callable.kind()? == vocabulary::kind::FOREIGN_FUNCTION)
-            .then(|| callable.field(vocabulary::FUNCTION)?.as_cell())?
+            .then(|| callable.field(vocabulary::IMPLEMENTATION)?.as_cell())?
     })
 }
 

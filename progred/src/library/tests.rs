@@ -130,7 +130,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     let defined = ::grap::isa::record(
         ::grap::vocabulary::kind::FOREIGN_FUNCTION,
         [
-            (::grap::vocabulary::FUNCTION, SHARED_FUNCTION.into()),
+            (::grap::vocabulary::IMPLEMENTATION, SHARED_FUNCTION.into()),
             name::field("shared"),
         ],
     );

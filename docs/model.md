@@ -33,8 +33,8 @@ Each library has one definition per cell: either an ordinary value or a native
 definition (`grap::Definition::Foreign`) pairing a descriptive value with its
 Rust implementation. Reads and
 calls use the same lookup. A native definition's value says what it is,
-`{isa: foreign function, function: <its own cell>, name, params}`: a function
-the host implements under that cell. It's data, so a reference evaluates to it
+`{isa: foreign function, implementation: <its own cell>, name, params}`: a
+function the host implements under that cell. It's data, so a reference evaluates to it
 as to any definition, and calling it, or its cell, invokes the implementation.
 An absent or non-callable result does
 not try another source. A library's own value lives in that same table under

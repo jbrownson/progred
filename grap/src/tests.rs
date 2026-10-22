@@ -699,7 +699,7 @@ fn a_foreign_function_reads_as_its_definition_which_says_what_it_is() {
     let defined = isa::record(
         vocabulary::kind::FOREIGN_FUNCTION,
         [
-            (vocabulary::FUNCTION, Value::from(echo)),
+            (vocabulary::IMPLEMENTATION, Value::from(echo)),
             (input, blob("its description")),
         ],
     );
@@ -1163,7 +1163,9 @@ fn prepared_calls_pass_a_foreign_function_as_its_value() {
                 let function = context.value(&function).as_record().unwrap();
                 assert_eq!(isa::of(function), Some(vocabulary::kind::FOREIGN_FUNCTION));
                 assert_eq!(
-                    function.get(&vocabulary::FUNCTION).and_then(Value::as_cell),
+                    function
+                        .get(&vocabulary::IMPLEMENTATION)
+                        .and_then(Value::as_cell),
                     Some(foreign)
                 );
                 let argument = context.field(call, argument).unwrap();
