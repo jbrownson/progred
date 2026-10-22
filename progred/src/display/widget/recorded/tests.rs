@@ -19,7 +19,7 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
         (cell == sink).then(|| {
             (
                 Resolution::Document,
-                grap::Definition::foreign(gid::Value::record([]), function.clone()),
+                grap::Definition::foreign(sink, gid::Value::record([]), function.clone()),
             )
         })
     });

@@ -9,6 +9,7 @@ fn definitions_from_parts<'a>(
     TestHost(move |cell| {
         match (resolve(cell), foreign.get(cell)) {
             (value, Some(function)) => Some(Definition::foreign(
+                cell,
                 value.unwrap_or_else(|| Value::record([])),
                 function.clone(),
             )),
@@ -59,6 +60,7 @@ fn direct_cell_calls_return_decline_without_trying_another_definition() {
                 (
                     Resolution::Document,
                     Definition::foreign(
+                        cell,
                         gid::Value::record([]),
                         ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
                     ),
@@ -71,6 +73,7 @@ fn direct_cell_calls_return_decline_without_trying_another_definition() {
                 (
                     library,
                     Definition::foreign(
+                        cell,
                         gid::Value::record([]),
                         ForeignFunction::from_value(|_, _, _| {
                             Ok(Value::from(b"too late".to_vec()))
@@ -124,6 +127,7 @@ fn host_apply_returns_the_selected_definitions_decline() {
                 (
                     Resolution::Document,
                     Definition::foreign(
+                        function,
                         gid::Value::record([]),
                         ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
                     ),
@@ -603,18 +607,19 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
     let second = (
         Resolution::Library(new_cell_id()),
         Definition::foreign(
-            blob("library"),
+            cell,
+            Value::record([(cell, blob("library"))]),
             ForeignFunction::from_value(|_, _, _| {
                 panic!("reading a native definition must not invoke it")
             }),
         ),
     );
-    // A foreign function's value, whether a definition or a scope supplies
-    // it, is its cell.
+    // A foreign function's value is its definition, or where only a scope
+    // supplies it, a foreign function implemented under its cell.
     for (values, expected) in [
-        (vec![], Value::from(cell)),
+        (vec![], super::foreign_function(cell)),
         (vec![first.clone()], first.1.value().clone()),
-        (vec![second.clone()], Value::from(cell)),
+        (vec![second.clone()], second.1.value().clone()),
         (vec![first.clone(), second], first.1.value().clone()),
     ] {
         let result = super::evaluate_runtime_scoped(
@@ -676,7 +681,7 @@ fn rust_functions_control_evaluation_while_graph_functions_are_strict() {
 }
 
 #[test]
-fn a_foreign_function_reads_as_its_cell() {
+fn a_foreign_function_reads_as_its_definition_which_says_what_it_is() {
     const INPUT: CellId = CellId::from_u128(0x2e9c4a71b8d0563f91a0c7e4d15b6820);
     let echo = new_cell_id();
     let input = INPUT;
@@ -690,13 +695,32 @@ fn a_foreign_function_reads_as_its_cell() {
         }),
     );
 
+    let description = Value::record([(input, blob("its description"))]);
+    let defined = isa::record(
+        vocabulary::kind::FOREIGN_FUNCTION,
+        [
+            (vocabulary::FUNCTION, Value::from(echo)),
+            (input, blob("its description")),
+        ],
+    );
     let evaluation = evaluate(
         &Value::from(echo),
-        |_| Some(blob("its description")),
+        |_| Some(description.clone()),
         &foreign,
         10,
     );
-    assert_eq!(evaluation.result, Value::from(echo));
+    assert_eq!(evaluation.result, defined);
+    // The value it reads as calls it, as its cell does.
+    assert_eq!(
+        evaluate(
+            &call(defined.clone(), [(input, blob("passed"))]),
+            |_| Some(description.clone()),
+            &foreign,
+            10,
+        )
+        .result,
+        blob("passed")
+    );
     assert_eq!(
         evaluate(
             &call(Value::from(echo), [(input, Value::from(echo))]),
@@ -705,8 +729,8 @@ fn a_foreign_function_reads_as_its_cell() {
             10,
         )
         .result,
-        Value::from(echo),
-        "a foreign function's value is its cell"
+        super::foreign_function(echo),
+        "a foreign function's value is its definition"
     );
 }
 
@@ -1126,7 +1150,7 @@ fn apply_reaches_foreign_targets_with_the_arguments_as_fields() {
 }
 
 #[test]
-fn prepared_calls_pass_a_foreign_function_as_its_cell() {
+fn prepared_calls_pass_a_foreign_function_as_its_value() {
     let control = new_cell_id();
     let foreign = new_cell_id();
     let callable = new_cell_id();
@@ -1136,7 +1160,12 @@ fn prepared_calls_pass_a_foreign_function_as_its_cell() {
             foreign,
             ForeignFunction::from_value(move |context, call, environment| {
                 let function = context.field(call, vocabulary::FUNCTION).unwrap();
-                assert_eq!(context.value(&function).as_cell(), Some(foreign));
+                let function = context.value(&function).as_record().unwrap();
+                assert_eq!(isa::of(function), Some(vocabulary::kind::FOREIGN_FUNCTION));
+                assert_eq!(
+                    function.get(&vocabulary::FUNCTION).and_then(Value::as_cell),
+                    Some(foreign)
+                );
                 let argument = context.field(call, argument).unwrap();
                 context.eval_to_value(argument, environment)
             }),

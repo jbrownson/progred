@@ -127,6 +127,7 @@ fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
                         (
                             library,
                             Definition::foreign(
+                                function,
                                 gid::Value::record([]),
                                 ForeignFunction::from_value(|_, _, _| {
                                     panic!("effectful decline must stop before fallback")
@@ -172,6 +173,7 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
                     (
                         Resolution::Library(new_cell_id()),
                         Definition::foreign(
+                            function,
                             gid::Value::record([]),
                             ForeignFunction::from_value(|_, _, _| {
                                 panic!("ordinary absence is definitive")
@@ -260,6 +262,7 @@ fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
                         (
                             Resolution::Library(new_cell_id()),
                             Definition::foreign(
+                                function,
                                 gid::Value::record([]),
                                 ForeignFunction::from_value(|_, _, _| {
                                     panic!("halt must not fall through")
@@ -414,11 +417,16 @@ fn rust_functions_obey_the_same_decline_contract() {
                         vec![
                             (
                                 Resolution::Document,
-                                Definition::foreign(gid::Value::record([]), foreign.clone()),
+                                Definition::foreign(
+                                    function,
+                                    gid::Value::record([]),
+                                    foreign.clone(),
+                                ),
                             ),
                             (
                                 Resolution::Library(new_cell_id()),
                                 Definition::foreign(
+                                    function,
                                     gid::Value::record([]),
                                     ForeignFunction::from_value(move |_, _, _| {
                                         assert!(

@@ -109,8 +109,9 @@ pub struct ForeignFunction {
     primitive: Option<Rc<primitive::Primitive>>,
 }
 
-/// One host definition. Native implementations retain their ordinary
-/// descriptive value; reading a definition never invokes native code.
+/// One host definition. A native implementation's value is the foreign
+/// function it defines, an ordinary value like any other; reading a
+/// definition never invokes native code.
 #[derive(Clone)]
 pub enum Definition {
     Value(Value),
@@ -123,16 +124,22 @@ pub struct ForeignDefinition {
 }
 
 impl Definition {
-    /// Declared parameters join the description under `params`, as a
-    /// lambda's do, unless the description already lists its own.
-    pub fn foreign(mut value: Value, implementation: ForeignFunction) -> Self {
-        if let (Some(parameters), Value::Record(fields)) = (&implementation.parameters, &mut value)
-            && !fields.contains_key(&vocabulary::PARAMS)
-        {
-            fields.insert(
-                vocabulary::PARAMS,
-                Value::list(parameters.iter().map(|&parameter| parameter.into())),
-            );
+    /// `cell`'s definition as `implementation`: its description, a record,
+    /// says it's a foreign function implemented under `cell`. Declared
+    /// parameters join it under `params`, as a lambda's do, unless it lists
+    /// its own.
+    pub fn foreign(cell: CellId, mut value: Value, implementation: ForeignFunction) -> Self {
+        if let Value::Record(fields) = &mut value {
+            fields.insert(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
+            fields.insert(vocabulary::FUNCTION, Value::from(cell));
+            if let Some(parameters) = &implementation.parameters
+                && !fields.contains_key(&vocabulary::PARAMS)
+            {
+                fields.insert(
+                    vocabulary::PARAMS,
+                    Value::list(parameters.iter().map(|&parameter| parameter.into())),
+                );
+            }
         }
         Self::Foreign(Rc::new(ForeignDefinition {
             value,
@@ -1802,14 +1809,12 @@ impl<'a> Context<'a> {
             | RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_) => match self.runtime_closure(&callable) {
                 Some(closure) => Some(self.eval_grap_call(closure, call, environment, plan)),
-                None => callable
-                    .as_cell()
-                    .map(|cell| match self.foreign_target_cell(cell) {
-                        Some(foreign) => {
-                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
-                        }
-                        None => self.call_cell(cell, call, environment, None),
-                    }),
+                None => callee_cell(&callable).map(|cell| match self.foreign_target_cell(cell) {
+                    Some(foreign) => {
+                        self.call_foreign_staged(&foreign, call, environment, Some(stages))
+                    }
+                    None => self.call_cell(cell, call, environment, None),
+                }),
             },
             RuntimeValueKind::List(_) => None,
         }
@@ -1865,11 +1870,10 @@ impl<'a> Context<'a> {
         match environment.get_at(&self.indices, cell, index) {
             Some(value) => Ok(unbox(value.clone())),
             None => match self.host.resolve(cell) {
-                // A foreign function's value is its cell: what's foreign is
-                // the definition there, which a call reaches.
-                Some((_, Definition::Foreign(_))) => Ok(RuntimeValue::from(Value::from(cell))),
+                // A function only a scope supplies is a foreign function
+                // implemented under its cell.
                 None if self.foreign_target_cell(cell).is_some() => {
-                    Ok(RuntimeValue::from(Value::from(cell)))
+                    Ok(RuntimeValue::from(foreign_function(cell)))
                 }
                 None => Ok(missing_cell(cell)),
                 Some((resolution, definition)) => {
@@ -2085,7 +2089,7 @@ impl<'a> Context<'a> {
                 | RuntimeValueKind::Unboxed(_)
                 | RuntimeValueKind::Record(_) => {
                     let value = &callable.value;
-                    match value.as_cell() {
+                    match callee_cell(value) {
                         Some(cell) => {
                             let call = runtime_call(value.clone(), arguments);
                             match context.foreign_target_cell(cell) {
@@ -2221,19 +2225,15 @@ impl<'a> Context<'a> {
                 RuntimeValueKind::Data(_)
                 | RuntimeValueKind::Unboxed(_)
                 | RuntimeValueKind::Record(_) => {
-                    callable
-                        .as_cell()
-                        .map(|cell| match self.foreign_target_cell(cell) {
-                            Some(foreign) => self.apply_foreign(
-                                &foreign,
-                                callable,
-                                arguments.iter().cloned(),
-                                environment,
-                            ),
-                            None => {
-                                self.apply_cell(cell, callable, arguments.to_vec(), environment)
-                            }
-                        })
+                    callee_cell(&callable).map(|cell| match self.foreign_target_cell(cell) {
+                        Some(foreign) => self.apply_foreign(
+                            &foreign,
+                            callable,
+                            arguments.iter().cloned(),
+                            environment,
+                        ),
+                        None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
+                    })
                 }
                 RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
             },
@@ -2355,6 +2355,24 @@ fn native_f64(value: &RuntimeValue) -> Option<f64> {
         },
         _ => None,
     }
+}
+
+/// A foreign function implemented under `cell`, saying nothing more, as one
+/// a scope supplies reads.
+pub fn foreign_function(cell: CellId) -> Value {
+    isa::record(
+        vocabulary::kind::FOREIGN_FUNCTION,
+        [(vocabulary::FUNCTION, Value::from(cell))],
+    )
+}
+
+/// The cell calling `callable` calls: the cell it is, or the one a foreign
+/// function is implemented under.
+fn callee_cell(callable: &RuntimeValue) -> Option<CellId> {
+    callable.as_cell().or_else(|| {
+        (callable.kind()? == vocabulary::kind::FOREIGN_FUNCTION)
+            .then(|| callable.field(vocabulary::FUNCTION)?.as_cell())?
+    })
 }
 
 /// The absence a call answers when `callable` can't be called: an absent

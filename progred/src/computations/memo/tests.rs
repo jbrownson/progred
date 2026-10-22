@@ -22,9 +22,10 @@ fn definitions(runtime: &Runtime, table: Table) -> (Input<Table>, Definitions<Ta
     (input, source)
 }
 
-fn counted(runs: &Rc<Cell<usize>>, result: Value) -> Definition {
+fn counted(cell: CellId, runs: &Rc<Cell<usize>>, result: Value) -> Definition {
     let runs = runs.clone();
     Definition::foreign(
+        cell,
         Value::record([]),
         ForeignFunction::from_value(move |_, _, _| {
             runs.set(runs.get() + 1);
@@ -63,7 +64,7 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
         ::grap::absent::reason(&runtime.read(&query).unwrap().result),
         Some(absent::MISSING_CELL)
     );
-    let first = counted(&runs, Value::from(vec![1]));
+    let first = counted(cell, &runs, Value::from(vec![1]));
     table.set_by(vec![(cell, Resolution::Document, first.clone())], |_, _| {
         false
     });
@@ -85,7 +86,7 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
         vec![(
             cell,
             Resolution::Document,
-            counted(&runs, Value::from(vec![2])),
+            counted(cell, &runs, Value::from(vec![2])),
         )],
         |_, _| false,
     );
@@ -144,6 +145,7 @@ fn undeclared_foreign_reads_disable_reuse() {
     let cell = new_cell_id();
     let hidden = Rc::new(Cell::new(1u8));
     let definition = Definition::foreign(
+        cell,
         Value::record([]),
         ForeignFunction::from_value({
             let hidden = hidden.clone();
@@ -212,7 +214,11 @@ fn normally_returned_absents_are_cacheable_including_halt_reasons() {
         let result = absent::value(reason);
         let (_, source) = definitions(
             &runtime,
-            vec![(cell, Resolution::Document, counted(&runs, result.clone()))],
+            vec![(
+                cell,
+                Resolution::Document,
+                counted(cell, &runs, result.clone()),
+            )],
         );
         let query = evaluate(
             &runtime,

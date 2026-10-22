@@ -93,6 +93,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let receiver = host(vec![(
         sink,
         Definition::foreign(
+            sink,
             Value::record([]),
             ForeignFunction::new({
                 let (traces, tracer) = (traces.clone(), tracer.clone());
@@ -181,6 +182,7 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     let receiver = host(vec![(
         sink,
         Definition::foreign(
+            sink,
             Value::record([]),
             ForeignFunction::new({
                 let (traces, tracer) = (traces.clone(), tracer.clone());
@@ -342,6 +344,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
     let receiver = host(vec![(
         interpret,
         Definition::foreign(
+            interpret,
             Value::record([]),
             ForeignFunction::new(move |context, _, environment| {
                 context.eval_runtime_code(&value, environment)
@@ -442,6 +445,7 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
     let receiver = host(vec![(
         interpret,
         Definition::foreign(
+            interpret,
             Value::record([]),
             ForeignFunction::new(move |context, _, environment| {
                 context.eval_runtime_code(&value, environment)
@@ -559,6 +563,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
         (
             identity,
             Definition::foreign(
+                identity,
                 Value::record([]),
                 ForeignFunction::new(move |context, call, environment| {
                     context.eval(context.field(call, argument).unwrap(), environment)
@@ -620,6 +625,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
     let receiver = host(vec![(
         identity,
         Definition::foreign(
+            identity,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
                 context.eval(context.field(call, argument).unwrap(), environment)
@@ -679,6 +685,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
     let receiver = host(vec![(
         identity,
         Definition::foreign(
+            identity,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
                 context.eval(context.field(call, argument).unwrap(), environment)
@@ -778,6 +785,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
         let receiver = host(vec![(
             sink,
             Definition::foreign(
+                sink,
                 Value::record([]),
                 ForeignFunction::new(move |context, call, environment| {
                     output.borrow_mut().push(observer.trace().unwrap());
@@ -1057,6 +1065,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
     let receiver = host(vec![(
         identity,
         Definition::foreign(
+            identity,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
                 let expression = context.field(call, argument).unwrap();
@@ -1099,6 +1108,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
             (
                 capture,
                 Definition::foreign(
+                    capture,
                     Value::record([]),
                     ForeignFunction::new(move |context, call, environment| {
                         let expression = context.field(call, argument).unwrap();
@@ -1109,6 +1119,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
             (
                 target,
                 Definition::foreign(
+                    target,
                     Value::record([]),
                     ForeignFunction::new(move |_, _, _| {
                         let _ = &marker;
@@ -1128,6 +1139,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
     let receiver = host(vec![(
         target,
         Definition::foreign(
+            target,
             Value::record([]),
             ForeignFunction::new(|_, _, _| Ok(RuntimeValue::f64(2.0))),
         ),
@@ -1150,6 +1162,7 @@ fn retained_callables_use_the_receiving_scoped_capability() {
     let host = host(vec![(
         capture,
         Definition::foreign(
+            capture,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
                 let expression = context.field(call, argument).unwrap();
@@ -1238,6 +1251,7 @@ fn every_entry_point_binds_in_its_context_index_table() {
     let receiver = host(vec![(
         probe,
         Definition::foreign(
+            probe,
             Value::record([]),
             ForeignFunction::new(move |context, _, environment| {
                 seen.set(seen.get() && Rc::ptr_eq(&environment.indices, &context.indices));

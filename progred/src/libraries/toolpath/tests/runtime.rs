@@ -33,6 +33,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             Some((
                 gid::Resolution::Document,
                 ::grap::Definition::foreign(
+                    inspect,
                     Value::record([]),
                     ForeignFunction::new(move |context, call, environment| {
                         origins
@@ -80,6 +81,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             Some((
                 gid::Resolution::Document,
                 ::grap::Definition::foreign(
+                    place,
                     Value::record([]),
                     ForeignFunction::new(move |_, _, _| {
                         origins

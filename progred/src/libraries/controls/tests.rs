@@ -670,7 +670,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
         let mut definitions = Definitions::default();
         definitions.insert(
             function,
-            ::grap::Definition::foreign(Value::record([]), implementation),
+            ::grap::Definition::foreign(function, Value::record([]), implementation),
         );
         let mut libraries = crate::stack::load().libraries;
         libraries.insert(library, definitions);

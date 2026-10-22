@@ -71,7 +71,7 @@ fn declining_after_sampling_halts_the_evaluation() {
                 functions.get(cell).map(|function| {
                     (
                         gid::Resolution::Library(ID),
-                        grap::Definition::foreign(gid::Value::record([]), function.clone()),
+                        grap::Definition::foreign(cell, gid::Value::record([]), function.clone()),
                     )
                 })
             }

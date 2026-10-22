@@ -548,23 +548,7 @@ fn lambda_display<W: Host>(
         kind::LAMBDA,
         [name::vocabulary::NAME, PARAMS, BODY],
         |[_, params, _]| {
-            let cells = params?
-                .list_values()?
-                .map(|param| param.as_cell())
-                .collect::<Option<Vec<_>>>()?;
-            let computed = unnamed_parameters(&cells, &|cell| {
-                input.env.resolve(cell).map(|definition| definition.value)
-            });
-            let params = descend(
-                [Step::Key(PARAMS)],
-                Some(crate::display::first(
-                    input,
-                    crate::display::structure::list(Some(crate::display::runtime_partial(
-                        move |input| parameter(input, &computed),
-                    ))),
-                )),
-                None,
-            );
+            let params = parameters(input, &params?)?;
             let body_site = input.site().below(&[Step::Key(BODY)]);
             let lambda = descend(
                 [Step::Key(name::vocabulary::NAME)],
@@ -577,6 +561,53 @@ fn lambda_display<W: Host>(
             let arrow = selectable(crate::display::arrow(), &body_site);
             let head = row(3.0, [lambda, params, arrow]);
             Some(hug(head, expression_path(input, [Step::Key(BODY)]), 6.0))
+        },
+    )
+}
+
+/// A function's `params`, each a parameter cell, as a lambda's head lists
+/// them.
+fn parameters<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    params: &::grap::RuntimeValue,
+) -> Option<Layout<W>> {
+    let cells = params
+        .list_values()?
+        .map(|param| param.as_cell())
+        .collect::<Option<Vec<_>>>()?;
+    let computed = unnamed_parameters(&cells, &|cell| {
+        input.env.resolve(cell).map(|definition| definition.value)
+    });
+    Some(descend(
+        [Step::Key(PARAMS)],
+        Some(crate::display::first(
+            input,
+            crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
+                parameter(input, &computed)
+            }))),
+        )),
+        None,
+    ))
+}
+
+/// A foreign function reads as a lambda's head does, with no body to show:
+/// the function it's implemented as, by its name, which its own `name` gives
+/// where it's that function's definition, then its parameters.
+fn foreign_function_display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    crate::display::structure::kind_form(
+        input,
+        kind::FOREIGN_FUNCTION,
+        [FUNCTION, name::vocabulary::NAME, PARAMS],
+        |[function, _, params]| {
+            function?.as_cell()?;
+            let function = shallow_path(input, [Step::Key(FUNCTION)]);
+            let params = match params {
+                Some(params) => Some(parameters(input, &params)?),
+                None => None,
+            };
+            Some(row(3.0, std::iter::once(function).chain(params)))
         },
     )
 }
@@ -738,6 +769,7 @@ pub fn library<W: Host>() -> Library<W> {
             (kind::CALL, "call"),
             (kind::LAMBDA, "lambda"),
             (kind::CLOSURE, "closure"),
+            (kind::FOREIGN_FUNCTION, "foreign function"),
             (kind::VALUE_WRAPPER, "value wrapper"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
             (::grap::vocabulary::EVALUATE, "evaluate"),
@@ -791,6 +823,10 @@ pub fn library<W: Host>() -> Library<W> {
             (
                 kind::CLOSURE,
                 crate::display::runtime_partial(closure_display),
+            ),
+            (
+                kind::FOREIGN_FUNCTION,
+                crate::display::runtime_partial(foreign_function_display),
             ),
             (
                 kind::VALUE_WRAPPER,

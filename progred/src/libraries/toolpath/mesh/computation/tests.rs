@@ -365,6 +365,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     definitions.insert(
         counter,
         ::grap::Definition::foreign(
+            counter,
             Value::record([]),
             ::grap::ForeignFunction::from_value({
                 let runs = runs.clone();

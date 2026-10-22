@@ -96,6 +96,7 @@ impl Fixture {
         definitions.insert(
             counter,
             ::grap::Definition::foreign(
+                counter,
                 Value::record([]),
                 ::grap::ForeignFunction::from_value({
                     let runs = runs.clone();

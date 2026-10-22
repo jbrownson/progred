@@ -11,6 +11,7 @@ fn failing(fail: CellId, reason: CellId) -> impl Host {
                 (
                     Resolution::Document,
                     Definition::foreign(
+                        fail,
                         Value::record([]),
                         ForeignFunction::from_value(move |_, _, _| {
                             Ok(crate::absent::value(reason))

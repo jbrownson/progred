@@ -42,6 +42,7 @@ impl Definitions {
             definitions.insert(
                 cell,
                 Definition::foreign(
+                    cell,
                     definitions
                         .value(cell)
                         .cloned()

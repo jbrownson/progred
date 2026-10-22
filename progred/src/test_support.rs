@@ -70,6 +70,7 @@ pub(crate) fn test_host<'a>(
     TestHost(move |cell| {
         match (resolve(cell), foreign.get(cell)) {
             (value, Some(function)) => Some(grap::Definition::foreign(
+                cell,
                 value.unwrap_or_else(|| Value::record([])),
                 function.clone(),
             )),

@@ -36,8 +36,9 @@ Each library stores one sorted definition table. An entry is either an ordinary
 implementation. Reading uses the description; calling uses the implementation.
 The built-in builders join their data and function declarations once, when
 constructing this table; they are not separate lookup registries. A repeated
-definition replaces the prior entry. An unnamed native definition has an empty
-record as its description. A native implementation declares the arguments it
+definition replaces the prior entry. A native definition's description says
+it's a foreign function implemented under its own cell; an unnamed one says
+only that. A native implementation declares the arguments it
 requires, and its description lists them under `params`, as a lambda's does, so
 calls to either open their first argument and show slots for missing ones.
 Arguments with defaults stay undeclared. The library's own name record is an ordinary
@@ -785,17 +786,20 @@ silently retarget editor state. With no definition,
 evaluation returns missing-cell absent. A cell is transparent: its definition is
 evaluated where it is referenced, using the bindings in scope there, so a cell
 defined for a function body can be referenced in several places within it. A
-foreign function's value is its cell: what's foreign is the definition there,
-so a reference to one, or to a function a scoped capability supplies,
-evaluates to the cell without invoking anything, and a call of that cell
-reaches the implementation. Its descriptive value is what names and parameters
-are read from.
+foreign function's value is its definition, `{isa: foreign function, function:
+<cell>, name, params}`, the cell the one the host implements it under, which is
+its own: a reference to one evaluates to that data without invoking anything,
+and a function only a scoped capability supplies reads as
+`{isa: foreign function, function: <cell>}`. Calling one reaches the
+implementation under its `function` cell, a scope's first, as a call of the
+cell does. The Grap library draws one as a lambda's head: its function's name,
+then its parameters.
 
 Direct calls retain the same `{function: cell, ...arguments}` syntax for Rust
 and Grap implementations. Passing a foreign function through an evaluated
-argument passes its cell, which still dispatches in the receiving host
-context; it holds no native function pointer. The Fidget examples name their
-viewport function this way.
+argument passes that record, which still dispatches in the receiving host
+context by its cell; it holds no native function pointer. The Fidget examples
+name their viewport function this way.
 
 A direct call uses the same resolver. A native definition invokes its Rust
 implementation; an ordinary value is evaluated as the callable.

@@ -39,7 +39,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
     .unwrap();
     assert_eq!(native.resolution, Resolution::Library(library));
     assert!(native.native);
-    assert_eq!(native.value, &Value::record([]));
+    assert_eq!(native.value, &grap::foreign_function(function));
     let answer = Value::from(b"document".to_vec());
     for (definition, expected) in [
         (grap::lambda([], answer.clone()), answer.clone()),

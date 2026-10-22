@@ -127,12 +127,19 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
                 .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
         ),
     )]);
+    let defined = ::grap::isa::record(
+        ::grap::vocabulary::kind::FOREIGN_FUNCTION,
+        [
+            (::grap::vocabulary::FUNCTION, SHARED_FUNCTION.into()),
+            name::field("shared"),
+        ],
+    );
     assert_eq!(
         libraries
             .definitions(SHARED_FUNCTION)
             .map(|(_, definition)| definition.value())
             .collect::<Vec<_>>(),
-        [&name]
+        [&defined]
     );
     assert_eq!(foreign_sources(&libraries, SHARED_FUNCTION), [LEFT_LIBRARY]);
     assert_eq!(
@@ -142,10 +149,10 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
             .collect::<Vec<_>>(),
         [LEFT_LIBRARY]
     );
-    // The description is the definition's; the function's value is its cell.
+    // The function's value is its definition, which says what it is.
     assert_eq!(
         ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
-        Value::from(SHARED_FUNCTION)
+        defined
     );
     assert_eq!(
         ::grap::evaluate_value(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20).result,
@@ -163,6 +170,7 @@ fn definitions_are_sorted_unique_and_copy_on_write() {
     definitions.insert(
         SHARED_FUNCTION,
         Definition::foreign(
+            SHARED_FUNCTION,
             name::record("native", []),
             ForeignFunction::from_value(left_function),
         ),
@@ -291,7 +299,7 @@ fn library_descriptions_are_ordinary_cells() {
 }
 
 #[test]
-fn unnamed_native_definitions_have_an_empty_description() {
+fn unnamed_native_definitions_say_only_what_they_are() {
     let (libraries, _, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
         Library::<crate::Editor, crate::frame::Hovered>::new(Definitions::from_parts(
@@ -305,7 +313,7 @@ fn unnamed_native_definitions_have_an_empty_description() {
             .definitions(SHARED_FUNCTION)
             .map(|(_, definition)| definition.value().clone())
             .collect::<Vec<_>>(),
-        [Value::record([])]
+        [::grap::foreign_function(SHARED_FUNCTION)]
     );
     assert_eq!(
         ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20).result,

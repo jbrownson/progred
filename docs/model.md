@@ -18,8 +18,8 @@ says only what the record is, never what it requires, so a record stays its
 kind while it's unfinished and whatever its kind comes to require. A kind is a
 cell of its own, apart from any field that shares its name: the `call` kind
 will carry the type of calls, an absent's `call` field the type of what it
-holds. Grap's calls, lambdas, closures, value wrappers, unquotes, `match`
-cases, bindings, binders and absents say their kinds, as the Grap library's
+holds. Grap's calls, lambdas, closures, foreign functions, value wrappers, unquotes,
+`match` cases, bindings, binders and absents say their kinds, as the Grap library's
 evaluations and notebooks do, and a record that doesn't is data. A value encoded under one tag field,
 a number, text or a boolean, is told by that field.
 
@@ -32,9 +32,11 @@ implicitly composed. Duplicate indicators and inspection UI are deferred.
 Each library has one definition per cell: either an ordinary value or a native
 definition (`grap::Definition::Foreign`) pairing a descriptive value with its
 Rust implementation. Reads and
-calls use the same lookup. A native definition's description is what its
-name and parameters are read from; evaluating a reference to it gives its cell,
-the function's value, and calling it invokes its implementation. An absent or non-callable result does
+calls use the same lookup. A native definition's value says what it is,
+`{isa: foreign function, function: <its own cell>, name, params}`: a function
+the host implements under that cell. It's data, so a reference evaluates to it
+as to any definition, and calling it, or its cell, invokes the implementation.
+An absent or non-callable result does
 not try another source. A library's own value lives in that same table under
 its identity, not in a separate metadata store: `{isa: loaded library, name,
 cells}`, the name it gives itself and the cells it defines, ordered by their

@@ -350,6 +350,7 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
         definitions.insert(
             B,
             ::grap::Definition::foreign(
+                B,
                 Value::record([]),
                 if tracked {
                     implementation.tracked()
