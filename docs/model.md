@@ -566,8 +566,9 @@ definition beside it. Close Pane removes the selected pane's
 entry. Deleting a value
 pane's root does too, but a location pane's root is the place it shows, so
 deleting it deletes that content. Opening, closing and moving panes edit these
-lists, so they save and undo with the document. A malformed pane container or
-nonrecord root is not overwritten to make the operation possible.
+lists, so they save and undo with the document. An empty document opening a
+pane becomes a workspace whose `main` is still to write. A malformed pane
+container or nonrecord root is not overwritten to make the operation possible.
 
 Pane identity, the libraries shown, folds, scroll, and requested size are session
 state. The document view starts with the contents of `panes` folded; individual

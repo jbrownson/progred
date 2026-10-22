@@ -322,34 +322,36 @@ fn pane_path(side: Side, position: gid::Position) -> Path {
 
 /// `root` as a record to add the workspace's fields to: as it is if it
 /// already has them, and otherwise wrapped as a new workspace's main value,
-/// which moves every path into it under `main`. Whether it was wrapped.
-pub fn workspace_root(root: &Value) -> (Value, bool) {
-    match root.as_record() {
-        Some(fields)
-            if fields.get(&vocabulary::PANES).is_some()
-                || fields.get(&vocabulary::MAIN).is_some() =>
-        {
-            (root.clone(), false)
-        }
-        _ => (Value::record([(vocabulary::MAIN, root.clone())]), true),
+/// which moves every path into it under `main`. An empty document is a
+/// workspace with nothing in it yet, its main value still to write. Whether
+/// it was wrapped.
+pub fn workspace_root(root: Option<&Value>) -> (Value, bool) {
+    match root {
+        None => (Value::record([]), false),
+        Some(root) => match root.as_record() {
+            Some(fields)
+                if fields.get(&vocabulary::PANES).is_some()
+                    || fields.get(&vocabulary::MAIN).is_some() =>
+            {
+                (root.clone(), false)
+            }
+            _ => (Value::record([(vocabulary::MAIN, root.clone())]), true),
+        },
     }
 }
 
 pub fn can_open(root: Option<&Value>) -> bool {
-    let root = root.map(|root| workspace_root(root).0);
-    root.as_ref()
-        .and_then(Value::as_record)
-        .is_some_and(|fields| {
-            fields.get(&vocabulary::PANES).is_none_or(|panes| {
-                panes.as_record().is_some_and(|panes| {
-                    [vocabulary::LEFT, vocabulary::RIGHT].iter().all(|side| {
-                        panes
-                            .get(side)
-                            .is_none_or(|value| value.as_list().is_some())
-                    })
+    workspace_root(root).0.as_record().is_some_and(|fields| {
+        fields.get(&vocabulary::PANES).is_none_or(|panes| {
+            panes.as_record().is_some_and(|panes| {
+                [vocabulary::LEFT, vocabulary::RIGHT].iter().all(|side| {
+                    panes
+                        .get(side)
+                        .is_none_or(|value| value.as_list().is_some())
                 })
             })
         })
+    })
 }
 
 pub fn append(root: &Value, side: Side, value: Value) -> Option<(Value, Path)> {

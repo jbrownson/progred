@@ -590,20 +590,18 @@ impl Editor {
     }
 
     /// Opens what `entry` gives as the last pane on `side` and selects what
-    /// it shows. A bare root is wrapped in a workspace first; `entry` learns
-    /// whether it was, since wrapping moves every path from the root under
-    /// `main`.
+    /// it shows. A bare root is wrapped in a workspace first, and an empty
+    /// document starts one; `entry` learns whether the root was wrapped,
+    /// since wrapping moves every path from the root under `main`.
     fn open_pane(
         &mut self,
         side: workspace::Side,
         entry: impl FnOnce(&Self, bool) -> Option<gid::Value>,
     ) {
-        let next = self.model.doc.root.as_ref().and_then(|root| {
-            let (root, wrapped) = workspace::workspace_root(root);
-            let entry = entry(self, wrapped)?;
-            let (root, _) = workspace::append(&root, side, entry)?;
-            Some((root, wrapped))
-        });
+        let (root, wrapped) = workspace::workspace_root(self.model.doc.root.as_ref());
+        let next = entry(self, wrapped)
+            .and_then(|entry| workspace::append(&root, side, entry))
+            .map(|(root, _)| (root, wrapped));
         if let Some((value, wrapped)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);

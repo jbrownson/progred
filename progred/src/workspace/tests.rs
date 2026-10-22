@@ -174,7 +174,7 @@ fn opening_a_pane_wraps_a_bare_root_and_preserves_malformed_containers() {
         Value::record([(CellId::from_u128(1), value.clone())]),
     ] {
         assert!(can_open(Some(&root)));
-        let (workspace, wrapped) = workspace_root(&root);
+        let (workspace, wrapped) = workspace_root(Some(&root));
         assert!(wrapped);
         let (opened, path) = append(&workspace, Side::Left, value.clone()).unwrap();
         assert_eq!(
@@ -182,9 +182,23 @@ fn opening_a_pane_wraps_a_bare_root_and_preserves_malformed_containers() {
             Some(&root)
         );
         assert_eq!(crate::test_support::value_at(&opened, &path), Some(&value));
-        assert_eq!(workspace_root(&opened), (opened.clone(), false));
+        assert_eq!(workspace_root(Some(&opened)), (opened.clone(), false));
     }
-    assert!(!can_open(None));
+    // An empty document starts a workspace whose main value is still to
+    // write, which the document view shows as it showed the empty root.
+    assert!(can_open(None));
+    let (workspace, wrapped) = workspace_root(None);
+    assert!(!wrapped);
+    let (opened, path) = append(&workspace, Side::Left, value.clone()).unwrap();
+    assert_eq!(crate::test_support::value_at(&opened, &path), Some(&value));
+    assert_eq!(
+        main_path(Some(&opened)),
+        Some(vec![Step::Key(vocabulary::MAIN)])
+    );
+    assert_eq!(
+        crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
+        None
+    );
 }
 
 #[test]
@@ -800,4 +814,38 @@ fn open_library_shows_a_loaded_library_read_only_once() {
         1
     );
     assert_eq!(driver.selection(), shown);
+}
+
+#[test]
+fn an_empty_document_opens_a_library() {
+    use crate::command::DocCommand;
+    use crate::driver::Driver;
+    use crate::libraries::presentation;
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document::default()),
+        Driver::VIEWPORT,
+    );
+    let command = DocCommand::OpenLibrary(presentation::ID);
+    assert!(driver.editor().menu_availability().doc_enabled(command));
+    driver
+        .runner
+        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+            editor.run_doc_command(command, dispatch.geometry(1.0));
+            true
+        });
+    driver.present();
+    let root = driver.editor().model.doc.root.clone().unwrap();
+    let declared = declarations(Some(&root));
+    assert_eq!(declared.len(), 1);
+    let mut shown = crate::test_examples::pane_root(&declared[0].path);
+    shown.push(crate::occurrence::Step::jump(
+        crate::location::Location::in_cell(
+            presentation::ID,
+            gid::Resolution::Library(presentation::ID),
+            Vec::new(),
+        ),
+    ));
+    assert_eq!(driver.selection(), shown);
+    // The document view still shows a value to write: the workspace's main.
+    assert!(driver.drawn(&[Step::Key(vocabulary::MAIN)]));
 }

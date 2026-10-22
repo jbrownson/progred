@@ -540,6 +540,14 @@ discussed in October 2026:
   program and a Fidget scene, could draw as tabs or splits. That's a projection
   of a record of several things, wherever one appears, not part of the
   workspace convention.
+- **Panes outside the document.** Every pane is an entry in the document, so
+  opening one edits it. That's right for a pane that belongs to the work, such
+  as a starting point's preview, and wrong for looking around: opening a
+  library marks an untitled document changed, and in an empty document it
+  leaves a workspace whose empty `main` no longer offers the starting points,
+  which only an empty root does, until it's undone. The owner thinks panes
+  only in the document may be a flaw, or at least shouldn't be the only kind;
+  session panes that aren't saved would serve browsing.
 
 ## Islands in the document
 
