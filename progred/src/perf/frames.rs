@@ -6,7 +6,6 @@ use crate::frame::Hovered;
 use crate::frame::test_support::ProfileView;
 use crate::occurrence::Step;
 use crate::perf::{distribution, iterations};
-use crate::projection::Projection;
 use crate::projection::test_support::{Bench, BenchContext, FrameTimes};
 use crate::selection::Selection;
 use crate::sources::Sources;
@@ -316,29 +315,25 @@ fn fidget_orbit_profile(name: &str, source: &str) {
     let camera_path = Rc::new(std::cell::RefCell::new(None));
     let observed = camera_path.clone();
     let mut context = BenchContext::new();
-    context.stack.projection = Projection::new([
-        crate::display::partial(move |input| {
-            use crate::libraries::{fidget::vocabulary as f, toolpath::vocabulary as t};
-            let fields = input.value?.as_record()?;
-            if observed.borrow().is_none()
-                && matches!(
-                    ::grap::isa::of(fields),
-                    Some(
-                        f::kind::VOLUME_PREVIEW
-                            | f::kind::MESH_PREVIEW
-                            | t::kind::PATHS_MESH_PREVIEW
-                    )
-                )
-            {
-                let crate::hover::Hover::Value(path) = input.site().hover() else {
-                    panic!("preview must have an occurrence");
-                };
-                *observed.borrow_mut() = Some(path.to_vec());
-            }
-            None
-        }),
-        context.stack.projection.partial().clone(),
-    ]);
+    let observe = crate::display::partial(move |input| {
+        use crate::libraries::{fidget::vocabulary as f, toolpath::vocabulary as t};
+        let fields = input.value?.as_record()?;
+        if observed.borrow().is_none()
+            && matches!(
+                ::grap::isa::of(fields),
+                Some(f::kind::VOLUME_PREVIEW | f::kind::MESH_PREVIEW | t::kind::PATHS_MESH_PREVIEW)
+            )
+        {
+            let crate::hover::Hover::Value(path) = input.site().hover() else {
+                panic!("preview must have an occurrence");
+            };
+            *observed.borrow_mut() = Some(path.to_vec());
+        }
+        None
+    });
+    // The viewport is a pane, which draws with the pane's projection.
+    context.stack.projection = context.stack.projection.preceded_by(observe.clone());
+    context.stack.pane_projection = context.stack.pane_projection.preceded_by(observe);
     let (view, mut context) = view.prepare_with(&doc, context);
     let first_image = std::cell::RefCell::new(None::<ImageData>);
     let changed = std::cell::Cell::new(false);
