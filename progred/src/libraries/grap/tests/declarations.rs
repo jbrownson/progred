@@ -269,34 +269,37 @@ fn declarations(binder: CellId) -> Vec<(Value, Path)> {
 }
 
 #[test]
-fn declarations_keep_cell_handles_real_name_paths_and_editing() {
+fn declarations_keep_cell_handles_and_edit_the_real_name_field() {
     let binder = new_cell_id();
-    let libraries = core_libraries();
     for (root, binder_path) in declarations(binder) {
         let mut cells = Cells::new();
         cells.set_value(binder, name::record("size", []));
-        let mut doc = Rc::new(Document {
+        let doc = Rc::new(Document {
             root: Some(root),
             cells,
         });
-        let name_path = binder_path
+        // The definition is drawn as its name's line; editing it writes the
+        // name field.
+        let definition = binder_path
             .iter()
             .cloned()
-            .chain([
-                Step::Follow(gid::Resolution::Document),
-                Step::Key(name::vocabulary::NAME),
-            ])
+            .chain([Step::Follow(gid::Resolution::Document)])
+            .collect::<Path>();
+        let name_path = definition
+            .iter()
+            .cloned()
+            .chain([Step::Key(name::vocabulary::NAME)])
             .collect::<Path>();
         let (bench, _) = place(&doc, None, 1200.0);
         let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
         let cell_rect = rect(&binder_path);
-        let name_rect = rect(&name_path);
+        let name_rect = rect(&definition);
         let (hovered, _) = place_with(BenchFrame {
             pointer: Some(name_rect.center()),
             ..BenchFrame::of(&doc, 1200.0)
         });
         assert!(matches!(hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == name_path));
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == definition));
         let point = Point::new((cell_rect.x0 + name_rect.x0) / 2.0, cell_rect.center().y);
         let (hovered, _) = place_with(BenchFrame {
             pointer: Some(point),
@@ -304,15 +307,17 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
         });
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == binder_path));
-        let mut selected =
-            make_projected_editing_selection(&doc, &libraries, crate::occurrence::of(&name_path));
-        assert_eq!(selected.edit().unwrap().text(), "size");
-        selected.edit_mut().unwrap().set_text("width");
-        assert!(write_text(&mut doc, &libraries, &mut selected));
-        assert_eq!(
-            src(&doc, &libraries).resolve_path(&name_path),
-            Some(&text::value("width"))
-        );
+        // Typing over the name writes the definition's name field.
+        let mut driver = Driver::new(crate::test_editor((*doc).clone()), Driver::VIEWPORT);
+        driver.select(&definition);
+        driver.press(ui_events::keyboard::NamedKey::End);
+        assert_eq!(driver.line(), Some("size"));
+        for _ in "size".chars() {
+            driver.press(ui_events::keyboard::NamedKey::Backspace);
+        }
+        driver.type_text("width");
+        driver.press(ui_events::keyboard::NamedKey::Enter);
+        assert_eq!(driver.value(&name_path), text::value("width"));
     }
 }
 
@@ -478,8 +483,7 @@ fn use_site_overrides_do_not_hide_definitions_inside_inert_arguments() {
         Step::Key(nested),
         Step::Key(grap::vocabulary::PARAMS),
         Step::Element(param_list),
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(name::vocabulary::NAME)
+        Step::Follow(gid::Resolution::Document)
     ]));
 }
 
@@ -547,10 +551,12 @@ fn recursive_patterns_keep_text_and_number_facets() {
             Step::Element(elements[2].clone()),
             Step::Key(control::BIND),
             Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
         ])
         .collect::<Path>();
-    assert!(bench.landmarks.landmark(&name_path).is_some());
+    assert!(
+        bench.landmarks.landmark(&name_path).is_some(),
+        "the binder's definition, drawn as its name"
+    );
 }
 
 #[test]

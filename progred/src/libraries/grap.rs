@@ -184,16 +184,17 @@ fn parameter<W: Host>(
 }
 
 /// A new parameter named `spelling`, then selected; with no spelling, it
-/// has no name, and its name is picked next.
+/// has no name, and its definition, which is its name's line, is selected
+/// to type one into.
 fn new_parameter(spelling: String) -> Completion {
     let named = !spelling.is_empty();
     let then = if named {
         crate::selection::at(&[], crate::selection::payload::edge())
     } else {
-        crate::selection::pending_at(&[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ])
+        crate::selection::at(
+            &[Step::Follow(gid::Resolution::Document)],
+            crate::selection::payload::edge(),
+        )
     };
     let display = if named {
         spelling.clone()
@@ -224,11 +225,18 @@ pub(crate) fn declaration_cell<W: Host>(
     computed: Option<String>,
 ) -> Option<Layout<W>> {
     let cell = input.value?.as_cell()?;
-    let definition = input.env.resolve(cell)?;
+    // A cell with no definition yet gets one in the document, where typing
+    // its name writes it.
+    let source = input
+        .env
+        .resolve(cell)
+        .map_or(gid::Resolution::Document, |definition| {
+            definition.resolution
+        });
     Some(selectable_bracket(
         Delim::Paren,
         descend(
-            [Step::Follow(definition.resolution)],
+            [Step::Follow(source)],
             Some(crate::display::first(
                 input,
                 crate::display::runtime_partial(move |input| {
@@ -240,27 +248,28 @@ pub(crate) fn declaration_cell<W: Host>(
     ))
 }
 
-/// A declaration's definition as its name, there or not; its other fields
-/// follow, and a handle marks the definition apart from its name. A
-/// name that isn't text declines.
+/// A declaration's definition as its name: one line that edits the
+/// definition's name field, so the definition and its name are one stop,
+/// and deleting it deletes the definition whole. Its other fields follow.
+/// Where there's no definition, typing a name writes one. A missing name
+/// shows `computed` grey until one is typed; a name that isn't text
+/// declines.
 fn declaration_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<&str>,
 ) -> Option<Layout<W>> {
-    record_form(input, [name::vocabulary::NAME], |[spelled]| {
-        if let Some(spelled) = spelled {
-            crate::libraries::text::read(spelled.as_value())?;
-        }
-        Some(descend(
-            [Step::Key(name::vocabulary::NAME)],
-            Some(crate::display::first(
-                input,
-                name::projection(computed.map(str::to_owned)),
-            )),
-            None,
-        ))
-    })
-    .map(crate::display::handle)
+    let line = |spelled: Option<Value>| {
+        Some(crate::display::line_edit(crate::display::LineEdit {
+            placeholder: computed.map(str::to_owned),
+            ..name::line(spelled.as_ref())?.of_field(name::vocabulary::NAME)
+        }))
+    };
+    match input.value {
+        None => line(None),
+        Some(_) => record_form(input, [name::vocabulary::NAME], |[spelled]| {
+            line(spelled.map(|spelled| spelled.to_value()))
+        }),
+    }
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {

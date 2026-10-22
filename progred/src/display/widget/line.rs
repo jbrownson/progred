@@ -28,6 +28,28 @@ pub struct LineEdit {
 
 pub type LineUpdate = Rc<dyn Fn(&str, Option<&Value>) -> Option<Value>>;
 
+impl LineEdit {
+    /// This line, drawn for a record, editing the record's field `key`: it
+    /// reads that field and writes what it makes of the text back into the
+    /// record, the record's other fields kept, or into a new record where
+    /// there's none. The record and its field are then one stop, the field
+    /// no occurrence of its own; applied again, it reaches a field further
+    /// in.
+    pub fn of_field(self, key: gid::CellId) -> Self {
+        let update = self.update;
+        Self {
+            update: Rc::new(move |text, record| {
+                let fields = record.and_then(Value::as_record);
+                let field = update(text, fields.and_then(|fields| fields.get(&key)))?;
+                Some(Value::Record(
+                    fields.cloned().unwrap_or_default().update(key, field),
+                ))
+            }),
+            ..self
+        }
+    }
+}
+
 pub fn line_edit<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
     Layout::widget(Rc::new(move |context| view(context, line.clone())))
 }

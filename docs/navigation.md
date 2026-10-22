@@ -59,9 +59,10 @@ Each stop draws something of its own, so selecting it looks different from
 selecting what's inside it, and every arrow press shows. Where what's inside
 would draw all of an occurrence, its projection marks it with a handle from the
 toolkit: a bar as tall as what it draws, before it, that a click on selects, as
-a notebook's record has, and a declaration's definition drawn as its name. It
-always shows: structure seen only once selected isn't visible. Other marks serve
-too: a notebook numbers its entries in its list's margin, and an entry shows its
+a notebook's record has. It always shows: structure seen only once selected
+isn't visible. Or a level can stop being one: a declaration's definition is one
+line that edits its name field (`LineEdit::of_field`), so its name is no stop of
+its own. Other marks serve too: a notebook numbers its entries in its list's margin, and an entry shows its
 arrow before it has a result. A sweep selects each stop and checks that its box
 is neither the box of the stop around it nor of one just inside it, over the
 sample and a new notebook, and, ignored for its time, the larger examples.

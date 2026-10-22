@@ -238,11 +238,10 @@ parameter`, which has no name yet, and whose name is picked next.
 A parameter with no name of its own, or an empty one, is called what its list
 calls it: in order, the first of a, b, c… that none of the list's named
 parameters uses. The name is computed wherever it's shown and never stored, and
-it's drawn grey: in the declaration as the placeholder in its name's hole (or
-its empty name's editor), which typing replaces, in references to the
-parameter, and in offers. A declaration descends into its name whether it has
-one or not, and draws it with the same line editor either way, so a missing
-name and an empty one look alike. A line drawn where its value is missing is
+it's drawn grey: in the declaration as the placeholder in its name's editor,
+which typing replaces, in references to the parameter, and in offers. A
+declaration draws its name with the same line editor whether it has one or not,
+so a missing name and an empty one look alike. A line drawn where its value is missing is
 that place's hole too, a Tab stop with no offers: its first edit writes the
 value, and the selection stays on it at its edge, typing going on in its line
 from the same caret, the write and the rest of the typing one undo step; Enter
@@ -320,11 +319,15 @@ explicit composition rather than teaching the raw structural fallback about
 Grap. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
 a text name projects as `(name)`: the usual cell parentheses surround an
-unquoted line editor at the real `Follow` → `name` path. This contextual
-projection is not in the default stack. The definition is a navigation stop
-of its own between the cell and its name, and its other fields, and one being
-added, follow the name as a trailing record. A name that isn't text declines to
-the ordinary projection; a missing one is its line editor with nothing in it.
+unquoted line editor for the definition that edits its `name` field
+(`LineEdit::of_field`), so the definition and its name are one stop and the
+name no occurrence of its own. Deleting it deletes the definition whole:
+Backspace empties the name, then once more deletes the definition, the place
+left a line that typing a name defines again, all one undo step. This
+contextual projection is not in the default stack. The definition's other
+fields, and one being added, follow the name as a trailing record. A name that
+isn't text declines to the ordinary projection; a missing one is its line
+editor with nothing in it.
 Ordinary cells and quoted data are unchanged; named use sites remain shallow
 references.
 Calls use a stored or inline

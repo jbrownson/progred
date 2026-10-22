@@ -138,18 +138,16 @@ fn a_slot_offers_unnamed_parameters_by_their_letters() {
 }
 
 #[test]
-fn clicking_a_missing_name_picks_one() {
+fn clicking_a_missing_name_types_one() {
     let (mut driver, [_, first, _]) = lambda_with_unnamed_parameters();
+    // The definition is drawn as its name's line.
     let name = driver.element(
         &in_lambda(&[Step::Key(PARAMS)]),
         1,
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
+        &[Step::Follow(gid::Resolution::Document)],
     );
     driver.click(&name);
-    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Edge));
     driver.type_text("height");
     driver.press(ui_events::keyboard::NamedKey::Enter);
     assert_eq!(
@@ -163,11 +161,11 @@ fn clicking_a_missing_name_picks_one() {
 }
 
 #[test]
-fn arrowing_left_out_of_a_name_stops_on_its_definition_then_its_cell() {
+fn arrowing_left_out_of_a_name_stops_on_its_cell() {
     let (mut driver, _) = lambda_with_unnamed_parameters();
     let cell = driver.element(&in_lambda(&[Step::Key(PARAMS)]), 1, &[]);
-    let definition = [&cell[..], &[Step::Follow(gid::Resolution::Document)]].concat();
-    let name = [&definition[..], &[Step::Key(name::vocabulary::NAME)]].concat();
+    // The definition is drawn as its name's line, one stop.
+    let name = [&cell[..], &[Step::Follow(gid::Resolution::Document)]].concat();
     driver.click(&name);
     driver.type_text("w");
     driver.press(ui_events::keyboard::NamedKey::ArrowLeft);
@@ -176,8 +174,46 @@ fn arrowing_left_out_of_a_name_stops_on_its_definition_then_its_cell() {
         crate::occurrence::of(&name),
         "the caret first"
     );
-    for stop in [&definition, &cell] {
-        driver.press(ui_events::keyboard::NamedKey::ArrowLeft);
-        assert_eq!(driver.selection(), crate::occurrence::of(stop));
+    driver.press(ui_events::keyboard::NamedKey::ArrowLeft);
+    assert_eq!(driver.selection(), crate::occurrence::of(&cell));
+}
+
+#[test]
+fn a_parameter_s_definition_and_its_name_go_as_one() {
+    use ui_events::keyboard::{Key, Modifiers, NamedKey};
+    let (mut driver, [width, _, _]) = lambda_with_unnamed_parameters();
+    let cell = driver.element(&in_lambda(&[Step::Key(PARAMS)]), 0, &[]);
+    let definition = [&cell[..], &[Step::Follow(gid::Resolution::Document)]].concat();
+    let defined = |driver: &Driver| {
+        driver
+            .editor()
+            .sources()
+            .resolve(width)
+            .map(|definition| definition.value.clone())
+    };
+    // Copying the name with nothing in it selected copies the definition.
+    driver.select(&definition);
+    assert!(driver.keystroke(Key::Character("c".into()), crate::test_support::command()));
+    assert_eq!(driver.copied(), Some(name::record("width", [])));
+    // Backspacing empties the name, then deletes the definition whole.
+    driver.press(NamedKey::End);
+    for _ in "width".chars() {
+        driver.press(NamedKey::Backspace);
     }
+    assert_eq!(defined(&driver), Some(name::record("", [])));
+    assert!(driver.keystroke(Key::Named(NamedKey::Backspace), Modifiers::empty()));
+    assert_eq!(defined(&driver), None);
+    assert_eq!(driver.selection(), crate::occurrence::of(&definition));
+    // Undo brings it back; typing into its place writes a new one.
+    assert!(driver.undo());
+    assert_eq!(defined(&driver), Some(name::record("width", [])));
+    driver.select(&definition);
+    driver.press(NamedKey::End);
+    for _ in "width".chars() {
+        driver.press(NamedKey::Backspace);
+    }
+    driver.press(NamedKey::Backspace);
+    driver.type_text("depth");
+    driver.press(NamedKey::Enter);
+    assert_eq!(defined(&driver), Some(name::record("depth", [])));
 }
