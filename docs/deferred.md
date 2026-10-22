@@ -222,10 +222,21 @@ what the kind required when it was written. Open beside it:
   encoded under one primitive tag (numbers, text, booleans, colors, path
   steps) the exception. The projection stack draws a record as its kind
   provides first (see [projections](projections.md#projection-composition)),
-  and evaluation dispatches on Grap's kinds. Fidget's previews and scenes, toolpath's previews and tools, and layout's
-  stored nodes and programs say theirs too. Still told by their
-  fields: the other libraries' records, and `{grap: cell}`, which is to go. Declining partials allocate while they probe, about 4,300 times a
-  frame in the IoP source form, so the remaining probing has a cost to find.
+  and evaluation dispatches on Grap's kinds. Fidget's previews and scenes,
+  toolpath's previews and tools, and layout's stored nodes and programs say
+  theirs too. Still told by their fields, each a question for the owner:
+  - `{grap: cell}` and `{fidget: [...]}`, which mark what a workspace's main
+    value holds so an empty one gets that library's offers; `{grap: cell}`
+    is to go, which needs another way for an empty main cell to get them.
+  - presentation's `{render: expression}` and outlines, controls, and the
+    color picker's records.
+  - Tagged variants: drawing commands, shapes and path elements, a cutter
+    section's `cutting` or `non-cutting`. These read as values under one tag,
+    like a boolean, so they kept their tags.
+  - Plain records read by functions, such as points and playback settings.
+
+  Declining partials allocate while they probe, about 4,300 times a frame in
+  the IoP source form, so the remaining probing has a cost to find.
 - **A kind's own description.** A kind's cell could be described by a record
   that says it's a kind, `{isa: kind, name, …}`, as a field's could by
   `{isa: field, name, …}`, and `kind` by itself. A document's kinds would keep
