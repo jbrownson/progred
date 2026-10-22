@@ -45,13 +45,23 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
         figures.iter().zip(crate::test_examples::FIDGET)
     {
         let call = Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::CALL).into(),
+            ),
             (::grap::vocabulary::FUNCTION, Value::from(names[*preview])),
             (
                 presentation::vocabulary::VALUE,
-                Value::record([(
-                    ::grap::vocabulary::FUNCTION,
-                    figure.get(&names[*part]).unwrap().clone(),
-                )]),
+                Value::record([
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(::grap::vocabulary::CALL).into(),
+                    ),
+                    (
+                        ::grap::vocabulary::FUNCTION,
+                        figure.get(&names[*part]).unwrap().clone(),
+                    ),
+                ]),
             ),
         ]);
         let result = ::grap::evaluate_value(&call, &sources, ::grap::DEFAULT_FUEL);

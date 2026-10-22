@@ -70,6 +70,9 @@
     "block_then_beside": 9b88a10d89afb98aa78ba5b60d98eeda,
     "block": 00b29f3a5482ed976ef832dcb5864ebe,
     "beside": bdc1d0d88c90d2c4113b31ca3edf16bd,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -96,60 +99,72 @@
       notes: "Three cells enclose this multiline outline",
     },
     block_then_beside: {
+      isa: lambda,
       name: "block then beside",
       params: [],
       body: {
+        isa: call,
         function: row,
         gap: {f64: 0x0000000000004040},
         children: {
+          isa: call,
           function: do,
           expressions: [
-            {function: descend, step: {key: block}},
-            {function: descend, step: {key: beside}},
+            {isa: call, function: descend, step: {key: block}},
+            {isa: call, function: descend, step: {key: beside}},
           ],
         },
       },
     },
     top_columns: {
+      isa: lambda,
       name: "top-aligned columns",
       params: [],
-      body: {function: columns, baseline: {f64: 0x0000000000000000}},
+      body: {isa: call, function: columns, baseline: {f64: 0x0000000000000000}},
     },
     offset_columns: {
+      isa: lambda,
       name: "offset columns",
       params: [],
-      body: {function: columns, baseline: {f64: 0x0000000000000040}},
+      body: {isa: call, function: columns, baseline: {f64: 0x0000000000000040}},
     },
     columns: {
+      isa: lambda,
       name: "two-column projection",
       params: [baseline],
       body: {
+        isa: call,
         function: row,
         gap: {f64: 0x0000000000004040},
         children: {
+          isa: call,
           function: do,
           expressions: [
             {
+              isa: call,
               function: col,
               baseline: baseline,
               gap: {f64: 0x0000000000001040},
               children: {
+                isa: call,
                 function: do,
                 expressions: [
-                  {function: descend, step: {key: a}},
-                  {function: descend, step: {key: b}},
-                  {function: descend, step: {key: c}},
+                  {isa: call, function: descend, step: {key: a}},
+                  {isa: call, function: descend, step: {key: b}},
+                  {isa: call, function: descend, step: {key: c}},
                 ],
               },
             },
             {
+              isa: call,
               function: col,
               gap: {f64: 0x0000000000001040},
               children: {
+                isa: call,
                 function: do,
                 expressions: [
-                  {function: descend, step: {key: d}},
-                  {function: descend, step: {key: e}},
+                  {isa: call, function: descend, step: {key: d}},
+                  {isa: call, function: descend, step: {key: e}},
                 ],
               },
             },
@@ -184,7 +199,7 @@
       dimensions: [
         width,
         length,
-        {area: {evaluate: {function: multiply, left: width, right: length}}},
+        {area: {evaluate: {isa: call, function: multiply, left: width, right: length}}},
       ],
       operations: [
         {
@@ -203,26 +218,29 @@
     },
     forms: [
       {
+        isa: lambda,
         name: "rectangle",
         params: [width, length],
         body: {
+          isa: call,
           function: where,
           expression: {area: area, notes: "Resize to navigate the wrapped form"},
           bindings: [
-            {bind: area, value: {function: multiply, left: width, right: length}},
+            {bind: area, value: {isa: call, function: multiply, left: width, right: length}},
           ],
         },
       },
-      {name: "Area expression", named_value: {function: multiply, left: width, right: length}},
+      {name: "Area expression", named_value: {isa: call, function: multiply, left: width, right: length}},
       {
+        isa: call,
         function: quote,
         expression: [
           "A quoted template",
-          {unquote: {function: multiply, left: width, right: length}},
+          {isa: unquote, unquote: {isa: call, function: multiply, left: width, right: length}},
           ["Nested", "data"],
         ],
       },
-      {evaluate: {function: multiply, left: width, right: length}},
+      {evaluate: {isa: call, function: multiply, left: width, right: length}},
     ],
     parameters: [first, second, "Short text", "A longer editable text value"],
     lists: [

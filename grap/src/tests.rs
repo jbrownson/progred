@@ -433,6 +433,52 @@ fn a_call_of_an_absent_function_answers_that_absent() {
 }
 
 #[test]
+fn a_record_is_a_call_or_a_lambda_only_when_its_isa_says_so() {
+    let function = new_cell_id();
+    let resolve = |cell| (cell == function).then(|| crate::lambda([], blob("called")));
+    let shaped = Value::record([(vocabulary::FUNCTION, function.into())]);
+    assert_eq!(
+        evaluate(&shaped, resolve, &ForeignFunctions::default(), 10).result,
+        shaped,
+        "without an isa, a record with a function is data"
+    );
+    assert_eq!(
+        evaluate(
+            &crate::call(function.into(), []),
+            resolve,
+            &ForeignFunctions::default(),
+            10
+        )
+        .result,
+        blob("called")
+    );
+}
+
+#[test]
+fn a_call_or_a_lambda_missing_what_its_kind_requires_answers_why() {
+    let unfinished = isa::record(vocabulary::CALL, []);
+    assert_eq!(
+        evaluate(&unfinished, |_| None, &ForeignFunctions::default(), 10).result,
+        absent::missing_field(vocabulary::FUNCTION)
+    );
+    let parameter = new_cell_id();
+    let bodiless = isa::record(
+        vocabulary::LAMBDA,
+        [(vocabulary::PARAMS, Value::list([Value::from(parameter)]))],
+    );
+    assert_eq!(
+        evaluate(
+            &crate::call(bodiless, [(parameter, blob("argument"))]),
+            |_| None,
+            &ForeignFunctions::default(),
+            10
+        )
+        .result,
+        absent::missing_field(vocabulary::BODY)
+    );
+}
+
+#[test]
 fn graph_functions_match_parameter_labelled_fields() {
     let function_cell = new_cell_id();
     let x = new_cell_id();
@@ -828,10 +874,13 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
         absent::with_detail(absent::MISSING_CELL, absent::CELL, missing.into())
     );
 
-    let malformed = Value::record([
-        (vocabulary::PARAMS, blob("not a list")),
-        (vocabulary::BODY, blob("body")),
-    ]);
+    let malformed = isa::record(
+        vocabulary::LAMBDA,
+        [
+            (vocabulary::PARAMS, blob("not a list")),
+            (vocabulary::BODY, blob("body")),
+        ],
+    );
     let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::default(), 10);
     assert_eq!(
         evaluation.result,
@@ -839,10 +888,13 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
     );
 
     let invalid = blob("not a cell");
-    let lambda = Value::record([
-        (vocabulary::PARAMS, Value::list([invalid.clone()])),
-        (vocabulary::BODY, blob("body")),
-    ]);
+    let lambda = isa::record(
+        vocabulary::LAMBDA,
+        [
+            (vocabulary::PARAMS, Value::list([invalid.clone()])),
+            (vocabulary::BODY, blob("body")),
+        ],
+    );
     let evaluation = evaluate(&lambda, |_| None, &ForeignFunctions::default(), 10);
     assert_eq!(
         evaluation.result,

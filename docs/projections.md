@@ -106,7 +106,7 @@ alone, in the same `Layout` language, with no library's offers or names. It
 declines only at a missing location, draws a cell as its definition between
 parentheses, and shows labels as short ids. Raw and Plain are sets of
 libraries an area shows, as any other set is: Raw shows none, and Plain shows
-the name, text, absent and number libraries, so those read as
+the name, isa, text, absent and number libraries, so those read as
 themselves and the rest as Raw draws it. Arithmetic is Grap's, not the number
 libraries', so in Plain it stays the call records it is.
 One list in stack.rs defines Plain for the editor and the tutorial page alike.
@@ -218,15 +218,16 @@ Library completion providers compose separately, so multiple libraries
 can contribute offers to one picker.
 
 Grap's expression slots offer a `new lambda` value completion (aliases `lambda`
-and `λ`). It inserts `{params: []}` and
+and `λ`). It inserts `{isa: lambda, params: []}` and
 opens its first parameter, whose slot offers a new one; Tab goes on to the
 missing body.
-The lambda projection accepts that unfinished shape and descends into the body
+The lambda projection draws that unfinished lambda and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
-Beside it Grap offers `new call`, which inserts `{}` and opens its `function`
-field. A record whose `function` is being picked is a call being written, so
-the call projection draws it with its function slot open, an expression slot
-like any other: a binding, a lambda, or another call. A call drawn in a form of
+Beside it Grap offers `new call`, which inserts `{isa: call}` and opens its
+`function` field. It's a call before its function is picked, and stays one if
+it's left unfinished or its function is deleted, so the call projection draws
+its function slot open, an expression slot like any other: a binding, a
+lambda, or another call. A call drawn in a form of
 its own (an operator's, `let`'s, `match`'s) draws its function slot the same
 way, so typing over its function offers the others. There the functions in
 reach are offered as themselves, and picking one opens the call's first
@@ -697,17 +698,26 @@ of improved speed for arbitrary programs.
 
 ## Evaluation
 
-Grap recognizes these shapes through its vocabulary cells:
+Grap recognizes these forms through its vocabulary cells:
 
 ```text
-{params: [parameter-cells...], body: expression}
-{function: callable-expression, parameter-cell: argument-expression, ...}
+{isa: lambda, params: [parameter-cells...], body: expression}
+{isa: call, function: callable-expression, parameter-cell: argument-expression, ...}
 {value: expression, ...}
-{lambda: {params: [...], body: expression}, environment: {...}, body origin: ...}
+{lambda: {isa: lambda, params: [...], body: expression}, environment: {...}, body origin: ...}
 {ffi: function-cell}
 ```
 
-Evaluating an untagged `{params, body}` lambda captures its lexical environment
+A record is a call or a lambda only when its `isa` says so (the shared kind
+convention, which the `isa` library owns): without one, a record with a
+`function` or `params` is data. So an unfinished one stays what it is, and a
+field its kind requires that's missing answers a missing-field absent naming
+it, where it's used: a call with no function when it's called, a lambda with
+no body when it's applied. A lambda has its parameters, so a call of it its
+argument slots, before its body is written. Closures, values computed whole,
+are still told by their fields, as numbers and absents are.
+
+Evaluating a lambda captures its lexical environment
 in a callable value, a closure. Materialized, it is `{lambda, environment, body
 origin}`: the lambda as written, the environment as an ordinary GID record of
 its bindings, and, when the body has a source, where it came from, so errors
@@ -757,7 +767,8 @@ A direct call uses the same resolver. A native definition invokes its Rust
 implementation; an ordinary value is evaluated as the callable.
 Every result is definitive, including `{absent: declined}`. A non-callable value
 returns a not-callable absent with the offending value; it does not search other
-sources for an implementation. Scoped capability functions can override this
+sources for an implementation. An absent callable is its own reason, so a call
+of one answers it unchanged, as an absent argument passes on. Scoped capability functions can override this
 lookup. Higher-level operations own any deliberate dispatch or composition.
 Projection environments expose one borrowed resolution containing the selected
 definition's value, source, and whether it has a native implementation. Call
@@ -933,13 +944,13 @@ therefore retain their original code origins and captures. Patterns still use
 the GID-oriented structural matcher, converting only the individual pattern.
 Literal clause lists keep their existing prepared-expression path.
 
-`quote` walks the original raw structure, replacing `{unquote: expression}`
+`quote` walks the original raw structure, replacing `{isa: unquote, unquote: expression}`
 leaves by evaluating their expressions in the caller's environment. It never
-revisits a spliced result. Outside that traversal, an unquote-shaped record is
+revisits a spliced result. Outside that traversal, an unquote record is
 ordinary data. There is no evaluator-level quote/literal form.
 
 The normal projection shows a compact quote call with a double-quote prefix,
-and an `{unquote: expression}` record with a backtick prefix. The
+and an `{isa: unquote, unquote: expression}` record with a backtick prefix. The
 unquote prefix selects the whole unquote record; its body remains independently
 selectable at the stored field path. The expression
 uses Grap's local shallow-reference projection, while quoted data keeps its

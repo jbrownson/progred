@@ -25,28 +25,33 @@
     "second": f717b766d250a7b86c5eb842885c4417, "third": 5e716c07490849f072b4e9017dd6230d,
     "n": f3f2b37e8e7cfd134de155e1ac3c71bf, "mars": dd6a976689a3981ed726be04f86bcb29,
     "planet_view": f4b0fae8ac73858763257c87f218483d, "planet_drawing": 9088d2284bba446106a0bd1deebd0083,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
   },
   "cells": {
     planet: {name: "planet"}, moons: {name: "moons"}, n: {name: "n"},
     mars: {planet: "Mars", moons: {f64: 0x0000000000000040}},
-    planet_view: {name: "planet view", params: [value], body: {function: quote, expression: {drawing: {
+    planet_view: {isa: lambda, name: "planet view", params: [value], body: {isa: call, function: quote, expression: {drawing: {
       width: {f64: 0x0000000000408540}, ascent: {f64: 0x0000000000000000},
       descent: {f64: 0x0000000000005940}, fuel: {f64: 0x000000000088c340},
-      program: {function: planet_drawing, value: {unquote: value}},
+      program: {isa: call, function: planet_drawing, value: {isa: unquote, unquote: value}},
     }}}},
-    planet_drawing: {name: "planet drawing", params: [value], body: {
+    planet_drawing: {isa: lambda, name: "planet drawing", params: [value], body: {
+      isa: call,
       function: where,
       bindings: [{pattern: {moons: {bind: n}}, subject: value}],
-      expression: {function: all, expressions: [
-        {function: fill, paint: {rgb: 0xc1440e}, shape: {circle: {x: {f64: 0x0000000000004940},
+      expression: {isa: call, function: all, expressions: [
+        {isa: call, function: fill, paint: {rgb: 0xc1440e}, shape: {circle: {x: {f64: 0x0000000000004940},
           y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000004240}}}},
-        {function: for_each, items: {function: range, count: n}, action: {params: [item], body: {
-          function: fill, paint: {rgb: 0x8a8a8a}, shape: {function: quote, expression: {circle: {
-            x: {unquote: {function: sum, left: {f64: 0x0000000000405a40},
-                right: {function: multiply, left: item, right: {f64: 0x0000000000003240}}}},
+        {isa: call, function: for_each, items: {isa: call, function: range, count: n}, action: {isa: lambda, params: [item], body: {
+          isa: call,
+          function: fill, paint: {rgb: 0x8a8a8a}, shape: {isa: call, function: quote, expression: {circle: {
+            x: {isa: unquote, unquote: {isa: call, function: sum, left: {f64: 0x0000000000405a40},
+                right: {isa: call, function: multiply, left: item, right: {f64: 0x0000000000003240}}}},
             y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000001840}}}}}}},
       ]},
     }},
   },
-  "root": {first: mars, second: {render: {function: planet_view, value: mars}}, third: planet_drawing},
+  "root": {first: mars, second: {render: {isa: call, function: planet_view, value: mars}}, third: planet_drawing},
 }

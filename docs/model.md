@@ -11,6 +11,15 @@ A document has an optional root and a `CellId -> Value` table. An identity with
 no table entry is a bare cell. Record labels are cell identities; text, names,
 numbers, absence reasons, and domain data are library conventions.
 
+A record's kind is one of those conventions: its `isa` field, whose cell the
+`isa` library owns, names what kind of thing it is, as `{isa: call}` does.
+Typing stays structural, a kind's other fields read by what they are; the kind
+says only what the record is, never what it requires, so a record stays its
+kind while it's unfinished and whatever its kind comes to require. Grap's
+calls, lambdas and unquotes say theirs, and a record that doesn't is data.
+Values computed whole, such as numbers, absents and closures, are told by
+their fields still, since they're never half-written.
+
 A cell may accidentally occur in several sources, for example when editing a
 document that also exists as a loaded library. Normal lookup selects the document
 definition first, otherwise the first loaded library definition. Names, structural
@@ -368,7 +377,7 @@ Asked for its offers anywhere with a nonempty query, Grap offers calls to named
 stored lambdas,
 closures, and native functions discovered through those definitions. These are
 ordinary `call_completion` offers, distinguished by a `call` detail; choosing one
-inserts `{function: cell}` and opens its first declared argument when known.
+inserts `{isa: call, function: cell}` and opens its first declared argument when known.
 Call suggestions put document-defined functions before library functions, sorting
 each group alphabetically by display name, ignoring case. Typed-query matching
 still takes precedence; this order breaks equally ranked matches.

@@ -101,7 +101,17 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         ),
         (
             "lambda",
-            name::record("test", [(PARAMS, Value::list([])), (BODY, number())]),
+            name::record(
+                "test",
+                [
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    ),
+                    (PARAMS, Value::list([])),
+                    (BODY, number()),
+                ],
+            ),
             vec![Step::Key(name::vocabulary::NAME)],
         ),
         (
@@ -126,7 +136,13 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         ),
         (
             "unquote",
-            Value::record([(control::vocabulary::UNQUOTE, number())]),
+            Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(control::vocabulary::UNQUOTE).into(),
+                ),
+                (control::vocabulary::UNQUOTE, number()),
+            ]),
             vec![Step::Key(control::vocabulary::UNQUOTE)],
         ),
         (
@@ -343,7 +359,17 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
     cells.set_value(parameter, name::record("parameter", []));
     let params = Value::list([parameter.into()]);
     let position = positions(&params)[0].clone();
-    let lambda = name::record("lambda", [(PARAMS, params), (BODY, parameter.into())]);
+    let lambda = name::record(
+        "lambda",
+        [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (PARAMS, params),
+            (BODY, parameter.into()),
+        ],
+    );
     let mut f = Fixture::new(lambda, cells);
     let params = f.child([Step::Key(PARAMS)]);
     let cell = f.child([Step::Key(PARAMS), Step::Element(position.clone())]);
@@ -376,7 +402,14 @@ fn multiline_cell_and_its_function_share_a_vertical_entrance() {
         cell,
         name::record(
             "function",
-            [(PARAMS, Value::list([])), (BODY, f64::value(3.0))],
+            [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                ),
+                (PARAMS, Value::list([])),
+                (BODY, f64::value(3.0)),
+            ],
         ),
     );
     let mut f = Fixture::new(cell.into(), cells);

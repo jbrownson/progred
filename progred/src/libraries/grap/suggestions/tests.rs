@@ -153,6 +153,10 @@ fn completion_bindings_follow_lambda_scope_and_quote_boundaries() {
     let inner = gid::new_cell_id();
     let lambda = |parameter, body| {
         Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
             (PARAMS, Value::list([Value::from(parameter)])),
             (BODY, body),
         ])
@@ -174,7 +178,10 @@ fn completion_bindings_follow_lambda_scope_and_quote_boundaries() {
                 EXPRESSION,
                 lambda(
                     inner,
-                    Value::record([(control::UNQUOTE, Value::record([]))]),
+                    Value::record([
+                        (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                        (control::UNQUOTE, Value::record([])),
+                    ]),
                 ),
             )],
         ),

@@ -152,7 +152,13 @@ fn a_quote_burns_only_its_unquotes() {
             grap::vocabulary::EXPRESSION,
             Value::record([(
                 field,
-                Value::record([(control::vocabulary::UNQUOTE, blob("spliced"))]),
+                Value::record([
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(control::vocabulary::UNQUOTE).into(),
+                    ),
+                    (control::vocabulary::UNQUOTE, blob("spliced")),
+                ]),
             )]),
         )],
     );

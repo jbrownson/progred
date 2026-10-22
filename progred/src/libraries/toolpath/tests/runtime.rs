@@ -7,9 +7,15 @@ fn runtime_call(
     fields: impl IntoIterator<Item = (CellId, RuntimeValue)>,
 ) -> RuntimeValue {
     RuntimeValue::record(
-        [(grap::vocabulary::FUNCTION, Value::from(function).into())]
-            .into_iter()
-            .chain(fields),
+        [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::CALL).into(),
+            ),
+            (grap::vocabulary::FUNCTION, Value::from(function).into()),
+        ]
+        .into_iter()
+        .chain(fields),
     )
 }
 

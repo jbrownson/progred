@@ -546,10 +546,16 @@ fn constructor_keys_make_their_offer_from_an_empty_query() {
 #[test]
 fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
     use crate::selection::Stage;
-    let function = Value::record([(
-        ::grap::vocabulary::PARAMS,
-        Value::list([new_cell_id().into()]),
-    )]);
+    let function = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+        ),
+        (
+            ::grap::vocabulary::PARAMS,
+            Value::list([new_cell_id().into()]),
+        ),
+    ]);
     let body = vec![Step::Key(::grap::vocabulary::BODY)];
     for key in ["(", "[", "{"] {
         // Raw draws a plain document's root: the key makes what it does and

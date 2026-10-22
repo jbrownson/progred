@@ -17,7 +17,7 @@ pub fn at_display_partial() -> Value {
             Value::record([
                 (
                     layout::vocabulary::CONTENT,
-                    Value::record([(control::vocabulary::UNQUOTE, Value::from(binder))]),
+                    control::unquote(Value::from(binder)),
                 ),
                 (
                     layout::vocabulary::PAINT,
@@ -85,6 +85,7 @@ pub fn at_display_partial() -> Value {
     name::record(
         "at display",
         [
+            (::grap::isa::ISA, ::grap::vocabulary::LAMBDA.into()),
             (
                 grap::vocabulary::PARAMS,
                 Value::list([Value::from(layout::vocabulary::VALUE)]),
@@ -204,12 +205,15 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
             "planet": 6655e4ba9e8ae76706056e0b8edf94f0,
             "moons": 6122302fdbe3db3624731717321b94a1,
             "planet_view": 0b570cad527f02e4ed4b06110a62bf67,
+            "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+            "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+            "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
           }},
           "cells": {{
             planet: {{name: "planet"}},
             moons: {{name: "moons"}},
             n: {{name: "n"}},
-            planet_view: {{name: "planet view", params: [value], body: {view_body}}},
+            planet_view: {{isa: lambda, name: "planet view", params: [value], body: {view_body}}},
             planets: {{name: "planets", keys: [planet], projection: planet_view}},
           }},
           "root": {{
@@ -224,11 +228,12 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
 }
 
 pub const PLANET_VIEW: &str = r#"{
+  isa: call,
   function: where,
   bindings: [{pattern: {moons: {bind: n}}, subject: value}],
-  expression: {function: row, children: {function: do, expressions: [
-    {function: text, content: "planet with"},
-    {function: descend, step: {key: moons}},
+  expression: {isa: call, function: row, children: {isa: call, function: do, expressions: [
+    {isa: call, function: text, content: "planet with"},
+    {isa: call, function: descend, step: {key: moons}},
   ]}},
 }"#;
 

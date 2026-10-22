@@ -65,7 +65,13 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
     for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {
         for invoke_inside in [false, true] {
             let body = if invoke_inside {
-                RuntimeValue::record([(::grap::vocabulary::FUNCTION, closure.clone())])
+                RuntimeValue::record([
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(::grap::vocabulary::CALL).into(),
+                    ),
+                    (::grap::vocabulary::FUNCTION, closure.clone()),
+                ])
             } else {
                 closure.clone()
             };

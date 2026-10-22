@@ -10,6 +10,7 @@
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "button": 0ec32df180178e9fbc958d3d061481d7,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
@@ -38,6 +39,8 @@
     "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
     "handler": 3e5d38e4658b1895e38307ad12862061,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
     "layout_radius": 6423c35e07d7a4ff536127d1f1d8eb53,
     "layout_row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
@@ -133,7 +136,9 @@
                             function: selection_set,
                             selection_path: {
                               function: site_path,
+                              isa: call,
                             },
+                            isa: call,
                           },
                         },
                         0xaa: {
@@ -145,7 +150,9 @@
                           },
                         },
                       ],
+                      isa: call,
                     },
+                    isa: lambda,
                   },
                   child: {
                     layout_row: {
@@ -199,6 +206,7 @@
                           text: {
                             content: {
                               unquote: row,
+                              isa: unquote,
                             },
                             paint: name_face,
                           },
@@ -213,6 +221,7 @@
                           text: {
                             content: {
                               unquote: col,
+                              isa: unquote,
                             },
                             paint: name_face,
                           },
@@ -222,10 +231,13 @@
                   },
                 },
               },
+              isa: call,
             },
           },
         ],
+        isa: call,
       },
+      isa: lambda,
     },
     col: {
       name: "col",
@@ -252,7 +264,9 @@
         },
         function: multiply,
         left: amount,
+        isa: call,
       },
+      isa: lambda,
     },
     double_pitch: {
       name: "double pitch",
@@ -295,7 +309,9 @@
           left: {
             amount: pitch_value,
             function: double,
+            isa: call,
           },
+          isa: call,
         },
       },
       tags: [
@@ -308,6 +324,7 @@
         evaluate: {
           amount: pitch_value,
           function: double,
+          isa: call,
         },
       },
       points: [

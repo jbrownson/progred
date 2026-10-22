@@ -51,10 +51,18 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
         (VALUE, callback.clone()),
     ]);
     let program = RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::CALL).into(),
+        ),
         (::grap::vocabulary::FUNCTION, Value::from(ROW).into()),
         (
             CHILDREN,
             RuntimeValue::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::CALL).into(),
+                ),
                 (
                     ::grap::vocabulary::FUNCTION,
                     Value::from(control::DO).into(),

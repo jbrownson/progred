@@ -80,7 +80,13 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         let mut world = activate_projected(&doc, &pending, entry);
         assert_eq!(
             crate::occurrence::read(&world.sources(), &path),
-            Some(&Value::record([(PARAMS, Value::list([]))]))
+            Some(&Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into()
+                ),
+                (PARAMS, Value::list([]))
+            ]))
         );
         let selected = world.model.selection.as_ref().unwrap();
         let body_path = path
@@ -136,6 +142,10 @@ fn expression_list_insertion(callable: CellId) {
         name::record(
             "clouds",
             [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                ),
                 (grap::vocabulary::PARAMS, Value::list([argument.into()])),
                 (grap::vocabulary::BODY, Value::record([])),
             ],
@@ -171,10 +181,13 @@ fn without_the_text_library_nothing_offers_a_string() {
     let mut cells = Cells::new();
     cells.set_value(parameter, name::record("growth", []));
     let document = Document {
-        root: Some(Value::record([(
-            grap::vocabulary::PARAMS,
-            Value::list([parameter.into()]),
-        )])),
+        root: Some(Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (grap::vocabulary::PARAMS, Value::list([parameter.into()])),
+        ])),
         cells,
     };
     let empty = Document::default();
@@ -220,16 +233,23 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
         name::record(
             "clouds",
             [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                ),
                 (grap::vocabulary::PARAMS, Value::list([unrelated.into()])),
                 (grap::vocabulary::BODY, Value::record([])),
             ],
         ),
     );
     let document = Document {
-        root: Some(Value::record([(
-            grap::vocabulary::PARAMS,
-            Value::list([parameter.into()]),
-        )])),
+        root: Some(Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (grap::vocabulary::PARAMS, Value::list([parameter.into()])),
+        ])),
         cells,
     };
     let path = vec![Step::Key(grap::vocabulary::BODY)];

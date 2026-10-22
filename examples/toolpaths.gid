@@ -23,6 +23,7 @@
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "bottom_face": e05cb05bec16e656fd056d260441562f,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "ceil": e1ddb3a620b61117d3873c163f603488,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
@@ -102,6 +103,7 @@
     "initial": 24d55aeab9383d53899091958de88d21,
     "intercept": 94d5e250a796f2d654ca4e81b56850d9,
     "is_finite": 1ff1fcec05b669eba2314ad52fe8e8f1,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "item": 67bdfe4ec7d3bafc14407235618840aa,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
     "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
@@ -273,34 +275,42 @@
       params: [],
       body: {
         function: tooled_groups,
+        isa: call,
         program: {
           params: [],
           body: {
             function: tree_group,
+            isa: call,
             children: [
               0x55: {
                 function: cube_chamfers,
+                isa: call,
                 orientation: top,
               },
               0xaa: {
                 function: cube_chamfers,
+                isa: call,
                 orientation: right_face,
               },
             ],
           },
+          isa: lambda,
         },
         tool: square_tool,
       },
+      isa: lambda,
     },
     op1_groups: {
       name: "Op 1 · paths",
       params: [],
       body: {
         function: tree_group,
+        isa: call,
         children: [
           0x55: [
             0x2a: {
               function: tooled_groups,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -313,17 +323,21 @@
                     x: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                     z: {
                       f64: 0x000000000000f03f,
                     },
                   },
+                  isa: call,
                   orientation: top,
                 },
+                isa: lambda,
               },
               tool: ball_tool,
             },
             0x55: {
               function: tooled_groups,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -336,17 +350,21 @@
                     x: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                     z: {
                       f64: 0x000000000000f03f,
                     },
                   },
+                  isa: call,
                   orientation: right_face,
                 },
+                isa: lambda,
               },
               tool: ball_tool,
             },
             0x80: {
               function: tooled_groups,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -359,17 +377,21 @@
                     x: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                     z: {
                       f64: 0x000000000000f03f,
                     },
                   },
+                  isa: call,
                   orientation: back_face,
                 },
+                isa: lambda,
               },
               tool: ball_tool,
             },
             0xaa: {
               function: tooled_groups,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -382,17 +404,21 @@
                     x: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                     z: {
                       f64: 0x000000000000f03f,
                     },
                   },
+                  isa: call,
                   orientation: left_face,
                 },
+                isa: lambda,
               },
               tool: ball_tool,
             },
             0xd5: {
               function: tooled_groups,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -405,68 +431,85 @@
                     x: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                     z: {
                       f64: 0x000000000000f03f,
                     },
                   },
+                  isa: call,
                   orientation: front_face,
                 },
+                isa: lambda,
               },
               tool: ball_tool,
             },
           ],
           0xaa: {
             function: op1_chamfers,
+            isa: call,
           },
         ],
       },
+      isa: lambda,
     },
     op1: {
       name: "Op 1 · top and four sides",
       params: [],
       body: {
         function: sequence_paths,
+        isa: call,
         program: {
           function: collect_tree,
+          isa: call,
           tree_program: op1_groups,
         },
       },
+      isa: lambda,
     },
     op2: {
       name: "Op 2 · bottom",
       params: [],
       body: {
         function: sequence_paths,
+        isa: call,
         program: {
           function: collect_tree,
+          isa: call,
           tree_program: op2_groups,
         },
       },
+      isa: lambda,
     },
     op2_chamfers: {
       name: "Op 2 · chamfers",
       params: [],
       body: {
         function: tooled_groups,
+        isa: call,
         program: {
           params: [],
           body: {
             function: cube_chamfers,
+            isa: call,
             orientation: bottom_face,
           },
+          isa: lambda,
         },
         tool: square_tool,
       },
+      isa: lambda,
     },
     op2_groups: {
       name: "Op 2 · paths",
       params: [],
       body: {
         function: tree_group,
+        isa: call,
         children: [
           0x55: [
             0x80: {
               function: tooled_groups,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -479,21 +522,26 @@
                     x: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                     z: {
                       f64: 0x000000000000f0bf,
                     },
                   },
+                  isa: call,
                   orientation: bottom_face,
                 },
+                isa: lambda,
               },
               tool: ball_tool,
             },
           ],
           0xaa: {
             function: op2_chamfers,
+            isa: call,
           },
         ],
       },
+      isa: lambda,
     },
     operations_section: {
       name: "Operations",
@@ -509,15 +557,19 @@
       params: [],
       body: {
         function: tree_group,
+        isa: call,
         children: [
           0x55: {
             function: op1_groups,
+            isa: call,
           },
           0xaa: {
             function: op2_groups,
+            isa: call,
           },
         ],
       },
+      isa: lambda,
     },
     preview_operations: {
       name: "Preview · Op 1 + Op 2",
@@ -526,13 +578,17 @@
         expressions: [
           0x55: {
             function: op1,
+            isa: call,
           },
           0xaa: {
             function: op2,
+            isa: call,
           },
         ],
         function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     strategies_section: {
       name: "Strategies",
@@ -566,14 +622,17 @@
         function: point,
         y: z,
         x: x,
+        isa: call,
         z: {
           right: y,
           function: subtract,
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
       },
+      isa: lambda,
     },
     ball_center: {
       name: "ball center",
@@ -595,10 +654,13 @@
                 right: ny,
                 function: multiply,
                 left: ball_radius,
+                isa: call,
               },
+              isa: call,
             },
             function: sum,
             left: y,
+            isa: call,
           },
           x: {
             right: {
@@ -608,11 +670,15 @@
                 right: nx,
                 function: multiply,
                 left: ball_radius,
+                isa: call,
               },
+              isa: call,
             },
             function: sum,
             left: x,
+            isa: call,
           },
+          isa: call,
           z: {
             right: {
               right: normal_length,
@@ -621,12 +687,16 @@
                 right: nz,
                 function: multiply,
                 left: ball_radius,
+                isa: call,
               },
+              isa: call,
             },
             function: sum,
             left: z,
+            isa: call,
           },
         },
+        isa: call,
         bindings: [
           0x40: {
             subject: {
@@ -635,6 +705,7 @@
               },
               function: divide,
               left: tool_diameter,
+              isa: call,
             },
             bind: ball_radius,
           },
@@ -643,6 +714,7 @@
               function: normal,
               y: y,
               x: x,
+              isa: call,
               z: z,
             },
             pattern: {
@@ -665,12 +737,15 @@
                 right: ny,
                 function: hypot,
                 left: nx,
+                isa: call,
               },
+              isa: call,
             },
             bind: normal_length,
           },
         ],
       },
+      isa: lambda,
     },
     ball_radius: {
       name: "ball radius",
@@ -694,29 +769,37 @@
               right: axis_y,
               function: multiply,
               left: ball_radius,
+              isa: call,
             },
             function: subtract,
             left: ny,
+            isa: call,
           },
           x: {
             right: {
               right: axis_x,
               function: multiply,
               left: ball_radius,
+              isa: call,
             },
             function: subtract,
             left: nx,
+            isa: call,
           },
+          isa: call,
           z: {
             right: {
               right: axis_z,
               function: multiply,
               left: ball_radius,
+              isa: call,
             },
             function: subtract,
             left: nz,
+            isa: call,
           },
         },
+        isa: call,
         bindings: [
           0x33: {
             subject: {
@@ -724,6 +807,7 @@
               function: ball_center,
               y: y,
               x: x,
+              isa: call,
               z: z,
             },
             pattern: {
@@ -743,6 +827,7 @@
               function: orientation,
               y: y,
               x: x,
+              isa: call,
               z: z,
             },
             pattern: {
@@ -778,11 +863,13 @@
               },
               function: divide,
               left: tool_diameter,
+              isa: call,
             },
             bind: ball_radius,
           },
         ],
       },
+      isa: lambda,
     },
     ball_tool: {
       name: "ball tool",
@@ -792,6 +879,7 @@
         },
         function: ball_mill,
         cutter_diameter: tool_diameter,
+        isa: call,
       },
     },
     ball_path: {
@@ -799,8 +887,10 @@
       params: [],
       body: {
         function: sequence_paths,
+        isa: call,
         program: {
           function: collect_tree,
+          isa: call,
           tree_program: {
             params: [],
             body: {
@@ -813,15 +903,19 @@
                 x: {
                   f64: 0x0000000000000000,
                 },
+                isa: call,
                 z: {
                   f64: 0x000000000000f03f,
                 },
               },
+              isa: call,
               orientation: top,
             },
+            isa: lambda,
           },
         },
       },
+      isa: lambda,
     },
     bottom_face: {
       name: "bottom face",
@@ -838,16 +932,20 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
         x: x,
+        isa: call,
         z: {
           right: z,
           function: subtract,
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
       },
+      isa: lambda,
     },
     center_depth: {
       name: "center depth",
@@ -900,7 +998,9 @@
                         contact_height: contact_height,
                         cutter_diameter: cutter_diameter,
                         tool_axis: tool_axis,
+                        isa: call,
                       },
+                      isa: call,
                     },
                     expression: {
                       end: {
@@ -908,17 +1008,22 @@
                         t: {
                           f64: 0x000000000000f03f,
                         },
+                        isa: call,
                       },
                       start: {
                         function: curve,
                         t: {
                           f64: 0x0000000000000000,
                         },
+                        isa: call,
                       },
                       function: line,
                       tool_axis: tool_axis,
+                      isa: call,
                     },
+                    isa: call,
                   },
+                  isa: call,
                   bindings: [
                     0x80: {
                       subject: strip,
@@ -936,22 +1041,30 @@
                     },
                   ],
                 },
+                isa: lambda,
               },
               environment: {
                 contact_height: {
                   unquote: contact_height,
+                  isa: unquote,
                 },
                 cutter_diameter: {
                   unquote: cutter_diameter,
+                  isa: unquote,
                 },
                 strip: {
                   unquote: strip,
+                  isa: unquote,
                 },
               },
             },
+            isa: call,
           },
+          isa: call,
         },
+        isa: lambda,
       },
+      isa: lambda,
     },
     control_depth: {
       name: "control depth",
@@ -969,6 +1082,7 @@
       ],
       body: {
         function: tree_group,
+        isa: call,
         children: [
           0x55: {
             compensation: compensation,
@@ -977,6 +1091,7 @@
             slope: {
               f64: 0x000000000000f03f,
             },
+            isa: call,
             orientation: orientation,
             face: face,
           },
@@ -987,11 +1102,13 @@
             slope: {
               f64: 0x000000000000f0bf,
             },
+            isa: call,
             orientation: orientation,
             face: face,
           },
         ],
       },
+      isa: lambda,
     },
     crossing_passes: {
       name: "crossing passes",
@@ -1009,12 +1126,15 @@
           mapping: {
             function: compensation,
             tool_axis: tool_axis,
+            isa: call,
           },
+          isa: call,
           program: {
             params: [],
             body: {
               function: mapped_groups,
               mapping: face,
+              isa: call,
               program: {
                 params: [],
                 body: {
@@ -1032,6 +1152,7 @@
                           right: y,
                           function: multiply,
                           left: slope,
+                          isa: call,
                         },
                         function: sum,
                         left: {
@@ -1045,13 +1166,19 @@
                             left: {
                               f64: 0x000000000000f03f,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
+                        isa: call,
                       },
                       x: x,
+                      isa: call,
                       z: z,
                     },
+                    isa: lambda,
                   },
+                  isa: call,
                   program: {
                     params: [],
                     body: {
@@ -1060,6 +1187,7 @@
                         right: direction,
                         function: multiply,
                         left: slope,
+                        isa: call,
                       },
                       function: diagonal_groups,
                       spacing: {
@@ -1069,19 +1197,25 @@
                         f64: 0x0000000000003540,
                       },
                       tool_axis: tool_axis,
+                      isa: call,
                     },
+                    isa: lambda,
                   },
                 },
+                isa: lambda,
               },
             },
+            isa: lambda,
           },
         },
+        isa: call,
         bindings: [
           0x55: {
             subject: {
               function: pull_direction,
               setup_up: setup_up,
               slope: slope,
+              isa: call,
               orientation: orientation,
             },
             bind: direction,
@@ -1091,12 +1225,14 @@
               direction: direction,
               function: cut_axis,
               slope: slope,
+              isa: call,
               orientation: orientation,
             },
             bind: tool_axis,
           },
         ],
       },
+      isa: lambda,
     },
     crosswise_chamfer: {
       name: "crosswise chamfer",
@@ -1117,7 +1253,9 @@
                 condition: {
                   operand: width,
                   function: is_finite,
+                  isa: call,
                 },
+                isa: call,
               },
               0xaa: {
                 stepover: stepover,
@@ -1126,15 +1264,18 @@
                 offset: {
                   function: scaled_point,
                   vector: across,
+                  isa: call,
                   factor: {
                     right: {
                       f64: 0x0000000000000040,
                     },
                     function: divide,
                     left: width,
+                    isa: call,
                   },
                 },
                 curve: curve,
+                isa: call,
                 stroke: {
                   function: extend_stroke,
                   end_extension: {
@@ -1143,6 +1284,7 @@
                     },
                     function: divide,
                     left: cutter_diameter,
+                    isa: call,
                   },
                   start_extension: {
                     right: {
@@ -1150,7 +1292,9 @@
                     },
                     function: divide,
                     left: cutter_diameter,
+                    isa: call,
                   },
+                  isa: call,
                   stroke: {
                     params: [
                       0x55: start,
@@ -1161,13 +1305,17 @@
                       start: start,
                       function: line,
                       tool_axis: normal,
+                      isa: call,
                     },
+                    isa: lambda,
                   },
                 },
               },
             ],
             function: do,
+            isa: call,
           },
+          isa: call,
           bindings: [
             0x80: {
               subject: strip,
@@ -1191,7 +1339,9 @@
             },
           ],
         },
+        isa: lambda,
       },
+      isa: lambda,
     },
     cube_chamfers: {
       name: "cube chamfers",
@@ -1202,21 +1352,27 @@
         function: where,
         expression: {
           function: chamfer_ring,
+          isa: call,
           program: {
             params: [],
             body: {
               function: rotated_groups,
+              isa: call,
               orientation: orientation,
               program: {
                 params: [],
                 body: {
                   function: cut_strip,
+                  isa: call,
                   strip: strip,
                 },
+                isa: lambda,
               },
             },
+            isa: lambda,
           },
         },
+        isa: call,
         bindings: [
           0x55: {
             subject: chamfer_pass,
@@ -1225,6 +1381,7 @@
           0xaa: {
             subject: {
               function: cube,
+              isa: call,
             },
             pattern: {
               chamfer_strip: {
@@ -1234,6 +1391,7 @@
           },
         ],
       },
+      isa: lambda,
     },
     curve: {
       name: "curve",
@@ -1260,7 +1418,9 @@
             condition: {
               operand: rows,
               function: is_finite,
+              isa: call,
             },
+            isa: call,
           },
           0x49: {
             function: require,
@@ -1268,10 +1428,13 @@
               right: {
                 operand: rows,
                 function: floor,
+                isa: call,
               },
               function: equal,
               left: rows,
+              isa: call,
             },
+            isa: call,
           },
           0x6d: {
             function: require,
@@ -1281,14 +1444,18 @@
               left: {
                 f64: 0x000000000000f0bf,
               },
+              isa: call,
             },
+            isa: call,
           },
           0x92: {
             function: require,
             condition: {
               operand: spacing,
               function: is_finite,
+              isa: call,
             },
+            isa: call,
           },
           0xb6: {
             function: require,
@@ -1298,10 +1465,13 @@
               left: {
                 f64: 0x0000000000000000,
               },
+              isa: call,
             },
+            isa: call,
           },
           0xdb: {
             function: tree_group,
+            isa: call,
             children: {
               initial: {
                 f64: 0x000000000000f03f,
@@ -1315,6 +1485,7 @@
                     right: state,
                     function: less,
                     left: rows,
+                    isa: call,
                   },
                   function: match,
                   cases: [
@@ -1356,6 +1527,7 @@
                                             },
                                             function: sum,
                                             left: rows,
+                                            isa: call,
                                           },
                                           function: divide,
                                           left: {
@@ -1364,37 +1536,51 @@
                                             left: {
                                               f64: 0x0000000000000040,
                                             },
+                                            isa: call,
                                           },
+                                          isa: call,
                                         },
+                                        isa: call,
                                       },
                                       function: multiply,
                                       left: row_direction,
+                                      isa: call,
                                     },
                                     tool_axis: tool_axis,
+                                    isa: call,
                                   },
+                                  isa: lambda,
                                 },
                                 environment: {
                                   state: {
                                     unquote: state,
+                                    isa: unquote,
                                   },
                                   feed_direction: {
                                     unquote: feed_direction,
+                                    isa: unquote,
                                   },
                                   row_direction: {
                                     unquote: row_direction,
+                                    isa: unquote,
                                   },
                                   spacing: {
                                     unquote: spacing,
+                                    isa: unquote,
                                   },
                                   rows: {
                                     unquote: rows,
+                                    isa: unquote,
                                   },
                                   tool_axis: {
                                     unquote: tool_axis,
+                                    isa: unquote,
                                   },
                                 },
                               },
+                              isa: call,
                             },
+                            isa: call,
                           },
                           0xaa: {
                             right: {
@@ -1402,20 +1588,27 @@
                             },
                             function: sum,
                             left: state,
+                            isa: call,
                           },
                         ],
                         function: do,
+                        isa: call,
                       },
                     },
                   ],
+                  isa: call,
                 },
+                isa: lambda,
               },
               function: iterate,
+              isa: call,
             },
           },
         ],
         function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     diagonals: {
       name: "diagonal passes",
@@ -1428,8 +1621,10 @@
       ],
       body: {
         function: sequence_paths,
+        isa: call,
         program: {
           function: collect_tree,
+          isa: call,
           tree_program: {
             params: [],
             body: {
@@ -1439,10 +1634,13 @@
               spacing: spacing,
               rows: rows,
               tool_axis: tool_axis,
+              isa: call,
             },
+            isa: lambda,
           },
         },
       },
+      isa: lambda,
     },
     dot: {
       name: "dot product",
@@ -1457,6 +1655,7 @@
             right: z,
             function: multiply,
             left: nz,
+            isa: call,
           },
           function: sum,
           left: {
@@ -1464,15 +1663,20 @@
               right: y,
               function: multiply,
               left: ny,
+              isa: call,
             },
             function: sum,
             left: {
               right: x,
               function: multiply,
               left: nx,
+              isa: call,
             },
+            isa: call,
           },
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x55: {
             subject: left,
@@ -1504,6 +1708,7 @@
           },
         ],
       },
+      isa: lambda,
     },
     edge_limit: {
       name: "edge limit",
@@ -1516,6 +1721,7 @@
       stepover: chamfer_stepover,
       function: crosswise_chamfer,
       cutter_diameter: square_diameter,
+      isa: call,
     },
     evenly_spaced: {
       name: "evenly spaced",
@@ -1531,7 +1737,9 @@
             condition: {
               operand: length,
               function: is_finite,
+              isa: call,
             },
+            isa: call,
           },
           0x55: {
             function: require,
@@ -1541,14 +1749,18 @@
               left: {
                 f64: 0x0000000000000000,
               },
+              isa: call,
             },
+            isa: call,
           },
           0x80: {
             function: require,
             condition: {
               operand: stepover,
               function: is_finite,
+              isa: call,
             },
+            isa: call,
           },
           0xaa: {
             function: require,
@@ -1558,7 +1770,9 @@
               left: {
                 f64: 0x0000000000000000,
               },
+              isa: call,
             },
+            isa: call,
           },
           0xd5: {
             function: where,
@@ -1569,10 +1783,13 @@
                   condition: {
                     operand: segments,
                     function: is_finite,
+                    isa: call,
                   },
+                  isa: call,
                 },
                 0xaa: {
                   function: tree_group,
+                  isa: call,
                   children: {
                     initial: {
                       f64: 0x0000000000000000,
@@ -1586,6 +1803,7 @@
                           right: state,
                           function: less,
                           left: segments,
+                          isa: call,
                         },
                         function: match,
                         cases: [
@@ -1616,22 +1834,30 @@
                                             right: segments,
                                             function: divide,
                                             left: state,
+                                            isa: call,
                                           },
+                                          isa: call,
                                         },
+                                        isa: lambda,
                                       },
                                       environment: {
                                         segments: {
                                           unquote: segments,
+                                          isa: unquote,
                                         },
                                         state: {
                                           unquote: state,
+                                          isa: unquote,
                                         },
                                         action: {
                                           unquote: action,
+                                          isa: unquote,
                                         },
                                       },
                                     },
+                                    isa: call,
                                   },
+                                  isa: call,
                                 },
                                 0xaa: {
                                   right: {
@@ -1639,20 +1865,27 @@
                                   },
                                   function: sum,
                                   left: state,
+                                  isa: call,
                                 },
                               ],
                               function: do,
+                              isa: call,
                             },
                           },
                         ],
+                        isa: call,
                       },
+                      isa: lambda,
                     },
                     function: iterate,
+                    isa: call,
                   },
                 },
               ],
               function: do,
+              isa: call,
             },
+            isa: call,
             bindings: [
               0x80: {
                 subject: {
@@ -1661,13 +1894,16 @@
                       right: stepover,
                       function: divide,
                       left: length,
+                      isa: call,
                     },
                     function: ceil,
+                    isa: call,
                   },
                   function: max,
                   left: {
                     f64: 0x000000000000f03f,
                   },
+                  isa: call,
                 },
                 bind: segments,
               },
@@ -1675,7 +1911,9 @@
           },
         ],
         function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     extend_stroke: {
       name: "extend straight stroke",
@@ -1696,28 +1934,35 @@
               right: {
                 function: scaled_point,
                 vector: direction,
+                isa: call,
                 factor: end_extension,
               },
               function: point_sum,
               left: end,
+              isa: call,
             },
             start: {
               right: {
                 function: scaled_point,
                 vector: direction,
+                isa: call,
                 factor: {
                   right: start_extension,
                   function: subtract,
                   left: {
                     f64: 0x0000000000000000,
                   },
+                  isa: call,
                 },
               },
               function: point_sum,
               left: start,
+              isa: call,
             },
             function: stroke,
+            isa: call,
           },
+          isa: call,
           bindings: [
             0x80: {
               subject: {
@@ -1726,19 +1971,24 @@
                   right: {
                     function: scaled_point,
                     vector: start,
+                    isa: call,
                     factor: {
                       f64: 0x000000000000f0bf,
                     },
                   },
                   function: point_sum,
                   left: end,
+                  isa: call,
                 },
+                isa: call,
               },
               bind: direction,
             },
           ],
         },
+        isa: lambda,
       },
+      isa: lambda,
     },
     face_pair: {
       name: "face pair",
@@ -1768,20 +2018,26 @@
                 y: y,
                 x: x,
                 tool_axis: tool_axis,
+                isa: call,
                 orientation: orientation,
                 z: z,
               },
+              isa: lambda,
             },
+            isa: lambda,
           },
           function: crosshatch,
           setup_up: setup_up,
+          isa: call,
           orientation: orientation,
           face: face,
         },
+        isa: call,
         bindings: [
           0x80: {
             subject: {
               function: cube,
+              isa: call,
             },
             pattern: {
               normal: {
@@ -1794,6 +2050,7 @@
           },
         ],
       },
+      isa: lambda,
     },
     factor: {
       name: "factor",
@@ -1822,10 +2079,12 @@
                     function: point,
                     y: ny,
                     x: nx,
+                    isa: call,
                     z: {
                       f64: 0x000000000000f03f,
                     },
                   },
+                  isa: call,
                   bindings: [
                     0x33: {
                       subject: {
@@ -1835,13 +2094,16 @@
                           left: {
                             f64: 0x0000000000000040,
                           },
+                          isa: call,
                         },
                         function: divide,
                         left: {
                           right: half_face,
                           function: sum,
                           left: x,
+                          isa: call,
                         },
+                        isa: call,
                       },
                       bind: u,
                     },
@@ -1853,13 +2115,16 @@
                           left: {
                             f64: 0x0000000000000040,
                           },
+                          isa: call,
                         },
                         function: divide,
                         left: {
                           right: half_face,
                           function: sum,
                           left: y,
+                          isa: call,
                         },
+                        isa: call,
                       },
                       bind: v,
                     },
@@ -1873,9 +2138,11 @@
                               left: {
                                 f64: 0x000000000000f03f,
                               },
+                              isa: call,
                             },
                             function: multiply,
                             left: v,
+                            isa: call,
                           },
                           function: multiply,
                           left: {
@@ -1885,12 +2152,15 @@
                               left: {
                                 f64: 0x0000000000000040,
                               },
+                              isa: call,
                             },
                             function: subtract,
                             left: {
                               f64: 0x000000000000f03f,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
                         function: multiply,
                         left: {
@@ -1902,8 +2172,11 @@
                             left: {
                               f64: 0x0000000000000040,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
+                        isa: call,
                       },
                       bind: nx,
                     },
@@ -1917,9 +2190,11 @@
                               left: {
                                 f64: 0x000000000000f03f,
                               },
+                              isa: call,
                             },
                             function: multiply,
                             left: u,
+                            isa: call,
                           },
                           function: multiply,
                           left: {
@@ -1929,12 +2204,15 @@
                               left: {
                                 f64: 0x0000000000000040,
                               },
+                              isa: call,
                             },
                             function: subtract,
                             left: {
                               f64: 0x000000000000f03f,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
                         function: multiply,
                         left: {
@@ -1946,14 +2224,19 @@
                             left: {
                               f64: 0x0000000000000040,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
+                        isa: call,
                       },
                       bind: ny,
                     },
                   ],
                 },
+                isa: lambda,
               },
+              isa: unquote,
             },
             field: {
               unquote: {
@@ -1971,6 +2254,7 @@
                           u: {
                             axis: model_y,
                           },
+                          isa: call,
                         },
                         function: model_max,
                         left: {
@@ -1981,7 +2265,9 @@
                           u: {
                             axis: model_x,
                           },
+                          isa: call,
                         },
+                        isa: call,
                       },
                       function: model_max,
                       left: {
@@ -1992,7 +2278,9 @@
                         u: {
                           axis: model_x,
                         },
+                        isa: call,
                       },
+                      isa: call,
                     },
                     function: model_max,
                     left: {
@@ -2008,6 +2296,7 @@
                           u: {
                             axis: model_x,
                           },
+                          isa: call,
                         },
                         function: model_max,
                         left: {
@@ -2021,7 +2310,9 @@
                           u: {
                             axis: model_x,
                           },
+                          isa: call,
                         },
+                        isa: call,
                       },
                       function: model_max,
                       left: {
@@ -2035,14 +2326,19 @@
                         u: {
                           axis: model_y,
                         },
+                        isa: call,
                       },
+                      isa: call,
                     },
+                    isa: call,
                   },
+                  isa: call,
                   bindings: [
                     0x20: {
                       subject: {
                         operand: half_size,
                         function: to_f32,
+                        isa: call,
                       },
                       bind: half_size,
                     },
@@ -2050,6 +2346,7 @@
                       subject: {
                         operand: half_face,
                         function: to_f32,
+                        isa: call,
                       },
                       bind: half_face,
                     },
@@ -2057,6 +2354,7 @@
                       subject: {
                         operand: center_depth,
                         function: to_f32,
+                        isa: call,
                       },
                       bind: center_depth,
                     },
@@ -2064,6 +2362,7 @@
                       subject: {
                         operand: edge_limit,
                         function: to_f32,
+                        isa: call,
                       },
                       bind: edge_limit,
                     },
@@ -2079,19 +2378,24 @@
                                 right: half_face,
                                 function: model_divide,
                                 left: coordinate,
+                                isa: call,
                               },
                               function: square,
+                              isa: call,
                             },
                             function: model_subtract,
                             left: {
                               f32: 0x0000803f,
                             },
+                            isa: call,
                           },
                           function: model_max,
                           left: {
                             f32: 0x00000000,
                           },
+                          isa: call,
                         },
+                        isa: lambda,
                       },
                       bind: shoulder,
                     },
@@ -2108,15 +2412,19 @@
                               right: {
                                 coordinate: v,
                                 function: shoulder,
+                                isa: call,
                               },
                               function: model_multiply,
                               left: {
                                 coordinate: u,
                                 function: shoulder,
+                                isa: call,
                               },
+                              isa: call,
                             },
                             function: model_multiply,
                             left: center_depth,
+                            isa: call,
                           },
                           function: model_sum,
                           left: {
@@ -2125,9 +2433,13 @@
                             left: {
                               operand: normal,
                               function: abs,
+                              isa: call,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
+                        isa: lambda,
                       },
                       bind: face_pair,
                     },
@@ -2144,20 +2456,27 @@
                             right: {
                               operand: v,
                               function: abs,
+                              isa: call,
                             },
                             function: model_sum,
                             left: {
                               operand: u,
                               function: abs,
+                              isa: call,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
+                        isa: lambda,
                       },
                       bind: chamfer_pair,
                     },
                   ],
                 },
+                isa: lambda,
               },
+              isa: unquote,
             },
             chamfer_strip: {
               normal: {
@@ -2172,15 +2491,18 @@
                       left: {
                         f64: 0x000000000000f03f,
                       },
+                      isa: call,
                     },
                     function: divide,
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
                   x: {
                     f64: 0x0000000000000000,
                   },
+                  isa: call,
                   z: {
                     right: {
                       right: {
@@ -2190,16 +2512,20 @@
                       left: {
                         f64: 0x000000000000f03f,
                       },
+                      isa: call,
                     },
                     function: divide,
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
                 },
+                isa: unquote,
               },
               length: {
                 unquote: size,
+                isa: unquote,
               },
               curve: {
                 unquote: {
@@ -2215,19 +2541,24 @@
                         },
                         function: divide,
                         left: chamfer,
+                        isa: call,
                       },
                       function: subtract,
                       left: half_size,
+                      isa: call,
                     },
                     x: {
                       right: {
                         right: t,
                         function: multiply,
                         left: size,
+                        isa: call,
                       },
                       function: subtract,
                       left: half_size,
+                      isa: call,
                     },
+                    isa: call,
                     z: {
                       right: {
                         right: {
@@ -2235,12 +2566,16 @@
                         },
                         function: divide,
                         left: chamfer,
+                        isa: call,
                       },
                       function: subtract,
                       left: half_size,
+                      isa: call,
                     },
                   },
+                  isa: lambda,
                 },
+                isa: unquote,
               },
               across: {
                 unquote: {
@@ -2255,20 +2590,24 @@
                         left: {
                           f64: 0x000000000000f03f,
                         },
+                        isa: call,
                       },
                       function: divide,
                       left: {
                         f64: 0x000000000000f03f,
                       },
+                      isa: call,
                     },
                     function: subtract,
                     left: {
                       f64: 0x0000000000000000,
                     },
+                    isa: call,
                   },
                   x: {
                     f64: 0x0000000000000000,
                   },
+                  isa: call,
                   z: {
                     right: {
                       right: {
@@ -2278,13 +2617,16 @@
                       left: {
                         f64: 0x000000000000f03f,
                       },
+                      isa: call,
                     },
                     function: divide,
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
                 },
+                isa: unquote,
               },
               width: {
                 unquote: {
@@ -2296,10 +2638,13 @@
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
                   function: multiply,
                   left: chamfer,
+                  isa: call,
                 },
+                isa: unquote,
               },
             },
             face: {
@@ -2318,6 +2663,7 @@
                       left: {
                         f64: 0x0000000000000040,
                       },
+                      isa: call,
                     },
                     function: multiply,
                     left: {
@@ -2326,7 +2672,9 @@
                       },
                       function: subtract,
                       left: y,
+                      isa: call,
                     },
+                    isa: call,
                   },
                   x: {
                     right: {
@@ -2335,6 +2683,7 @@
                       left: {
                         f64: 0x0000000000000040,
                       },
+                      isa: call,
                     },
                     function: multiply,
                     left: {
@@ -2343,8 +2692,11 @@
                       },
                       function: subtract,
                       left: x,
+                      isa: call,
                     },
+                    isa: call,
                   },
+                  isa: call,
                   z: {
                     right: {
                       right: {
@@ -2355,9 +2707,11 @@
                             left: {
                               f64: 0x000000000000f03f,
                             },
+                            isa: call,
                           },
                           function: multiply,
                           left: y,
+                          isa: call,
                         },
                         function: multiply,
                         left: {
@@ -2367,10 +2721,13 @@
                             left: {
                               f64: 0x000000000000f03f,
                             },
+                            isa: call,
                           },
                           function: multiply,
                           left: x,
+                          isa: call,
                         },
+                        isa: call,
                       },
                       function: multiply,
                       left: {
@@ -2379,16 +2736,23 @@
                         left: {
                           f64: 0x0000000000001040,
                         },
+                        isa: call,
                       },
+                      isa: call,
                     },
                     function: subtract,
                     left: half_size,
+                    isa: call,
                   },
                 },
+                isa: lambda,
               },
+              isa: unquote,
             },
           },
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x20: {
             subject: {
@@ -2415,6 +2779,7 @@
               },
               function: divide,
               left: size,
+              isa: call,
             },
             bind: half_size,
           },
@@ -2423,6 +2788,7 @@
               right: chamfer,
               function: subtract,
               left: half_size,
+              isa: call,
             },
             bind: half_face,
           },
@@ -2433,6 +2799,7 @@
               },
               function: divide,
               left: control_depth,
+              isa: call,
             },
             bind: center_depth,
           },
@@ -2441,11 +2808,13 @@
               right: chamfer,
               function: subtract,
               left: size,
+              isa: call,
             },
             bind: edge_limit,
           },
         ],
       },
+      isa: lambda,
     },
     chamfer_ring: {
       name: "four rotated copies",
@@ -2454,29 +2823,35 @@
       ],
       body: {
         function: tree_group,
+        isa: call,
         children: [
           0x33: {
             function: rotated_groups,
+            isa: call,
             orientation: top,
             program: program,
           },
           0x66: {
             function: rotated_groups,
+            isa: call,
             orientation: quarter_turn,
             program: program,
           },
           0x99: {
             function: rotated_groups,
+            isa: call,
             orientation: half_turn,
             program: program,
           },
           0xcc: {
             function: rotated_groups,
+            isa: call,
             orientation: three_quarter_turn,
             program: program,
           },
         ],
       },
+      isa: lambda,
     },
     t: {
       name: "fraction",
@@ -2496,10 +2871,13 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
         x: x,
+        isa: call,
         z: y,
       },
+      isa: lambda,
     },
     half_face: {
       name: "half face",
@@ -2522,6 +2900,7 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
         x: {
           right: x,
@@ -2529,9 +2908,12 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
+        isa: call,
         z: z,
       },
+      isa: lambda,
     },
     intercept: {
       name: "intercept",
@@ -2552,9 +2934,12 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
+        isa: call,
         z: x,
       },
+      isa: lambda,
     },
     length: {
       name: "length",
@@ -2580,25 +2965,35 @@
                   mapping: mapping,
                   expression: {
                     function: item,
+                    isa: call,
                   },
+                  isa: call,
                 },
+                isa: lambda,
               },
               environment: {
                 item: {
                   unquote: value,
+                  isa: unquote,
                 },
                 mapping: {
                   unquote: mapping,
+                  isa: unquote,
                 },
               },
             },
+            isa: call,
           },
+          isa: lambda,
         },
         function: map_tree,
+        isa: call,
         children: {
           function: program,
+          isa: call,
         },
       },
+      isa: lambda,
     },
     normal: {
       name: "normal",
@@ -2645,32 +3040,41 @@
                 right: offset,
                 function: point_sum,
                 left: coordinate,
+                isa: call,
               },
               start: {
                 right: {
                   function: scaled_point,
                   vector: offset,
+                  isa: call,
                   factor: {
                     f64: 0x000000000000f0bf,
                   },
                 },
                 function: point_sum,
                 left: coordinate,
+                isa: call,
               },
               function: stroke,
+              isa: call,
             },
+            isa: call,
             bindings: [
               0x80: {
                 subject: {
                   function: curve,
                   t: t,
+                  isa: call,
                 },
                 bind: coordinate,
               },
             ],
           },
+          isa: lambda,
         },
+        isa: call,
       },
+      isa: lambda,
     },
     point_sum: {
       name: "point sum",
@@ -2686,18 +3090,23 @@
             right: ny,
             function: sum,
             left: y,
+            isa: call,
           },
           x: {
             right: nx,
             function: sum,
             left: x,
+            isa: call,
           },
+          isa: call,
           z: {
             right: nz,
             function: sum,
             left: z,
+            isa: call,
           },
         },
+        isa: call,
         bindings: [
           0x55: {
             subject: left,
@@ -2729,6 +3138,7 @@
           },
         ],
       },
+      isa: lambda,
     },
     preview_mode: {
       name: "preview mode",
@@ -2758,11 +3168,14 @@
               x: {
                 f64: 0x000000000000f03f,
               },
+              isa: call,
               z: {
                 f64: 0x0000000000000000,
               },
             },
+            isa: call,
           },
+          isa: call,
         },
         function: match,
         cases: [
@@ -2783,7 +3196,9 @@
             },
           },
         ],
+        isa: call,
       },
+      isa: lambda,
     },
     direction: {
       name: "pull sign",
@@ -2804,9 +3219,12 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
+        isa: call,
         z: z,
       },
+      isa: lambda,
     },
     right_face: {
       name: "right face",
@@ -2819,14 +3237,17 @@
         function: point,
         y: y,
         x: z,
+        isa: call,
         z: {
           right: x,
           function: subtract,
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
       },
+      isa: lambda,
     },
     rotated_groups: {
       name: "rotate path groups",
@@ -2846,26 +3267,35 @@
                 params: [],
                 body: {
                   function: rotate_paths,
+                  isa: call,
                   orientation: orientation,
                   program: item,
                 },
+                isa: lambda,
               },
               environment: {
                 item: {
                   unquote: value,
+                  isa: unquote,
                 },
                 orientation: {
                   unquote: orientation,
+                  isa: unquote,
                 },
               },
             },
+            isa: call,
           },
+          isa: lambda,
         },
         function: map_tree,
+        isa: call,
         children: {
           function: program,
+          isa: call,
         },
       },
+      isa: lambda,
     },
     rotate_paths: {
       name: "rotate paths",
@@ -2881,9 +3311,13 @@
           mapping: orientation,
           expression: {
             function: program,
+            isa: call,
           },
+          isa: call,
         },
+        isa: call,
       },
+      isa: lambda,
     },
     row_direction: {
       name: "row direction",
@@ -2919,9 +3353,12 @@
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
+                  isa: call,
                 },
                 function: lerp,
+                isa: call,
               },
               x: {
                 end: u1,
@@ -2937,11 +3374,15 @@
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
+                  isa: call,
                 },
                 function: lerp,
+                isa: call,
               },
               tool_axis: tool_axis,
+              isa: call,
               z: {
                 f64: 0x0000000000000000,
               },
@@ -2959,6 +3400,7 @@
                     right: state,
                     function: less,
                     left: segments,
+                    isa: call,
                   },
                   function: match,
                   cases: [
@@ -2985,17 +3427,21 @@
                                 start: v0,
                                 amount: t,
                                 function: lerp,
+                                isa: call,
                               },
                               x: {
                                 end: u1,
                                 start: u0,
                                 amount: t,
                                 function: lerp,
+                                isa: call,
                               },
+                              isa: call,
                               z: {
                                 f64: 0x0000000000000000,
                               },
                             },
+                            isa: call,
                             bindings: [
                               0x80: {
                                 subject: {
@@ -3004,9 +3450,11 @@
                                       right: segments,
                                       function: divide,
                                       left: state,
+                                      isa: call,
                                     },
                                     function: multiply,
                                     left: feed_direction,
+                                    isa: call,
                                   },
                                   function: sum,
                                   left: {
@@ -3020,8 +3468,11 @@
                                       left: {
                                         f64: 0x000000000000f03f,
                                       },
+                                      isa: call,
                                     },
+                                    isa: call,
                                   },
+                                  isa: call,
                                 },
                                 bind: t,
                               },
@@ -3033,19 +3484,26 @@
                             },
                             function: sum,
                             left: state,
+                            isa: call,
                           },
                         ],
                         function: do,
+                        isa: call,
                       },
                     },
                   ],
+                  isa: call,
                 },
+                isa: lambda,
               },
               function: iterate,
+              isa: call,
             },
           ],
           function: do,
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x2a: {
             subject: {
@@ -3059,7 +3517,9 @@
                 },
                 function: max,
                 left: intercept,
+                isa: call,
               },
+              isa: call,
             },
             bind: u0,
           },
@@ -3068,6 +3528,7 @@
               right: intercept,
               function: subtract,
               left: u0,
+              isa: call,
             },
             bind: v0,
           },
@@ -3088,8 +3549,11 @@
                   left: {
                     f64: 0x000000000000f03f,
                   },
+                  isa: call,
                 },
+                isa: call,
               },
+              isa: call,
             },
             bind: v1,
           },
@@ -3098,6 +3562,7 @@
               right: intercept,
               function: sum,
               left: v1,
+              isa: call,
             },
             bind: u1,
           },
@@ -3112,26 +3577,33 @@
                       right: v0,
                       function: subtract,
                       left: v1,
+                      isa: call,
                     },
                     function: hypot,
                     left: {
                       right: u0,
                       function: subtract,
                       left: u1,
+                      isa: call,
                     },
+                    isa: call,
                   },
+                  isa: call,
                 },
                 function: ceil,
+                isa: call,
               },
               function: max,
               left: {
                 f64: 0x000000000000f03f,
               },
+              isa: call,
             },
             bind: segments,
           },
         ],
       },
+      isa: lambda,
     },
     scaled_point: {
       name: "scaled vector",
@@ -3147,18 +3619,23 @@
             right: factor,
             function: multiply,
             left: y,
+            isa: call,
           },
           x: {
             right: factor,
             function: multiply,
             left: x,
+            isa: call,
           },
+          isa: call,
           z: {
             right: factor,
             function: multiply,
             left: z,
+            isa: call,
           },
         },
+        isa: call,
         bindings: [
           0x80: {
             subject: vector,
@@ -3176,6 +3653,7 @@
           },
         ],
       },
+      isa: lambda,
     },
     segments: {
       name: "segments",
@@ -3195,8 +3673,10 @@
         },
         function: divide,
         left: cutting_length,
+        isa: call,
       },
       cutter_diameter: square_diameter,
+      isa: call,
     },
     size: {
       name: "size",
@@ -3220,27 +3700,33 @@
         right: {
           function: scaled_point,
           vector: tool_axis,
+          isa: call,
           factor: {
             right: contact_height,
             function: subtract,
             left: {
               f64: 0x0000000000000000,
             },
+            isa: call,
           },
         },
         function: point_sum,
         left: {
           function: scaled_point,
           vector: normal,
+          isa: call,
           factor: {
             right: {
               f64: 0x0000000000000040,
             },
             function: divide,
             left: cutter_diameter,
+            isa: call,
           },
         },
+        isa: call,
       },
+      isa: lambda,
     },
     square_tool: {
       name: "square tool",
@@ -3258,12 +3744,15 @@
                       },
                       function: divide,
                       left: square_diameter,
+                      isa: call,
                     },
+                    isa: unquote,
                   },
                 },
                 0xaa: {
                   axial: {
                     unquote: cutting_length,
+                    isa: unquote,
                   },
                 },
               ],
@@ -3292,6 +3781,7 @@
             },
           ],
         },
+        isa: call,
       },
     },
     square_diameter: {
@@ -3320,8 +3810,10 @@
               y: y,
               x: x,
               tool_axis: tool_axis,
+              isa: call,
               z: z,
             },
+            isa: call,
             bindings: [
               0x80: {
                 subject: start,
@@ -3345,8 +3837,10 @@
               function: line_to,
               y: y,
               x: x,
+              isa: call,
               z: z,
             },
+            isa: call,
             bindings: [
               0x80: {
                 subject: end,
@@ -3366,7 +3860,9 @@
           },
         ],
         function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     strip: {
       name: "strip",
@@ -3389,10 +3885,13 @@
           left: {
             f64: 0x0000000000000000,
           },
+          isa: call,
         },
         x: y,
+        isa: call,
         z: z,
       },
+      isa: lambda,
     },
     tilt: {
       name: "tilt (degrees)",
@@ -3415,7 +3914,9 @@
             condition: {
               operand: tilt,
               function: is_finite,
+              isa: call,
             },
+            isa: call,
           },
           0xaa: {
             function: where,
@@ -3432,18 +3933,23 @@
                       left: {
                         f64: 0x000000000000f03f,
                       },
+                      isa: call,
                     },
                     function: divide,
                     left: {
                       operand: angle,
                       function: sin,
+                      isa: call,
                     },
+                    isa: call,
                   },
                   function: multiply,
                   left: slope,
+                  isa: call,
                 },
                 function: multiply,
                 left: direction,
+                isa: call,
               },
               x: {
                 right: {
@@ -3455,21 +3961,28 @@
                     left: {
                       f64: 0x000000000000f03f,
                     },
+                    isa: call,
                   },
                   function: divide,
                   left: {
                     operand: angle,
                     function: sin,
+                    isa: call,
                   },
+                  isa: call,
                 },
                 function: multiply,
                 left: direction,
+                isa: call,
               },
+              isa: call,
               z: {
                 operand: angle,
                 function: cos,
+                isa: call,
               },
             },
+            isa: call,
             bindings: [
               0x80: {
                 subject: {
@@ -3479,9 +3992,11 @@
                     },
                     function: divide,
                     left: pi,
+                    isa: call,
                   },
                   function: multiply,
                   left: tilt,
+                  isa: call,
                 },
                 bind: angle,
               },
@@ -3489,7 +4004,9 @@
           },
         ],
         function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     tool_diameter: {
       name: "tool diameter",
@@ -3515,26 +4032,36 @@
                   function: with_tool,
                   expression: {
                     function: item,
+                    isa: call,
                   },
+                  isa: call,
                   tool: tool,
                 },
+                isa: lambda,
               },
               environment: {
                 item: {
                   unquote: value,
+                  isa: unquote,
                 },
                 tool: {
                   unquote: tool,
+                  isa: unquote,
                 },
               },
             },
+            isa: call,
           },
+          isa: lambda,
         },
         function: map_tree,
+        isa: call,
         children: {
           function: program,
+          isa: call,
         },
       },
+      isa: lambda,
     },
     top: {
       name: "top",
@@ -3547,8 +4074,10 @@
         function: point,
         y: y,
         x: x,
+        isa: call,
         z: z,
       },
+      isa: lambda,
     },
     face: {
       name: "top face",
@@ -3571,10 +4100,14 @@
             function: point,
             y: y,
             x: x,
+            isa: call,
             z: z,
           },
+          isa: call,
         },
+        isa: lambda,
       },
+      isa: lambda,
     },
     u: {
       name: "u",
@@ -3595,22 +4128,27 @@
         expression: {
           function: scaled_point,
           vector: vector,
+          isa: call,
           factor: {
             right: {
               right: {
                 right: z,
                 function: hypot,
                 left: y,
+                isa: call,
               },
               function: hypot,
               left: x,
+              isa: call,
             },
             function: divide,
             left: {
               f64: 0x000000000000f03f,
             },
+            isa: call,
           },
         },
+        isa: call,
         bindings: [
           0x80: {
             subject: vector,
@@ -3628,6 +4166,7 @@
           },
         ],
       },
+      isa: lambda,
     },
     v: {
       name: "v",
@@ -3745,20 +4284,26 @@
                             expression: {
                               focus: {
                                 unquote: focus,
+                                isa: unquote,
                               },
                               position: {
                                 unquote: progress,
+                                isa: unquote,
                               },
                               profile_tolerance: {
                                 unquote: profile_tolerance,
+                                isa: unquote,
                               },
                               stock_max: {
                                 unquote: stock_max,
+                                isa: unquote,
                               },
                               stock_min: {
                                 unquote: stock_min,
+                                isa: unquote,
                               },
                             },
+                            isa: call,
                           },
                         },
                         0xaa: {
@@ -3768,18 +4313,23 @@
                             expression: {
                               focus: {
                                 unquote: focus,
+                                isa: unquote,
                               },
                               position: {
                                 unquote: progress,
+                                isa: unquote,
                               },
                               profile_tolerance: {
                                 unquote: profile_tolerance,
+                                isa: unquote,
                               },
                               stock_max: {
                                 unquote: stock_max,
+                                isa: unquote,
                               },
                               stock_min: {
                                 unquote: stock_min,
+                                isa: unquote,
                               },
                               stock: {
                                 color: {
@@ -3787,9 +4337,11 @@
                                 },
                               },
                             },
+                            isa: call,
                           },
                         },
                       ],
+                      isa: call,
                     },
                     min_z: {
                       f32: 0x9a9959bf,
@@ -3811,11 +4363,14 @@
                                 function: where,
                                 expression: {
                                   function: field,
+                                  isa: call,
                                 },
+                                isa: call,
                                 bindings: [
                                   0x80: {
                                     subject: {
                                       function: cube,
+                                      isa: call,
                                     },
                                     pattern: {
                                       field: {
@@ -3825,6 +4380,7 @@
                                   },
                                 ],
                               },
+                              isa: unquote,
                             },
                             color: {
                               rgb: 0x5f96b4,
@@ -3832,6 +4388,7 @@
                           },
                         ],
                       },
+                      isa: call,
                     },
                     max_x: {
                       f32: 0x9a99593f,
@@ -3846,6 +4403,7 @@
                     max_z: {
                       f32: 0x9a99593f,
                     },
+                    isa: call,
                     min_y: {
                       f32: 0x9a9959bf,
                     },
@@ -3855,6 +4413,7 @@
                       f32: 0x9a9959bf,
                     },
                   },
+                  isa: call,
                   bindings: [
                     0x33: {
                       subject: parameters,
@@ -3917,6 +4476,7 @@
                     },
                   ],
                 },
+                isa: lambda,
               },
               function: with_controls,
               value: value,
@@ -3929,22 +4489,28 @@
                     expression: {
                       playback: {
                         unquote: parameters,
+                        isa: unquote,
                       },
                       preview_mode: {
                         unquote: preview_mode,
+                        isa: unquote,
                       },
                     },
+                    isa: call,
                   },
+                  isa: call,
                   bindings: [
                     0x55: {
                       subject: {
                         control_initial: {
                           function: quote,
                           expression: model,
+                          isa: call,
                         },
                         control_key: {
                           function: quote,
                           expression: preview_mode,
+                          isa: call,
                         },
                         function: radio,
                         control_options: [
@@ -3957,6 +4523,7 @@
                             value: stock,
                           },
                         ],
+                        isa: call,
                       },
                       pattern: {
                         bind: preview_mode,
@@ -3970,8 +4537,10 @@
                         control_key: {
                           function: quote,
                           expression: focus,
+                          isa: call,
                         },
                         function: tree_program_cursor,
+                        isa: call,
                         tree_program: value,
                       },
                       pattern: {
@@ -3980,10 +4549,13 @@
                     },
                   ],
                 },
+                isa: lambda,
               },
               height: height,
+              isa: call,
               width: width,
             },
+            isa: lambda,
           },
           value: program_tree,
         },

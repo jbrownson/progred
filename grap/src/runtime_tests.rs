@@ -1,6 +1,15 @@
 use super::*;
 use gid::new_cell_id;
 
+/// A call built at runtime from `fields`, its function among them.
+fn runtime_call(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> RuntimeValue {
+    RuntimeValue::record(
+        [(isa::ISA, Value::from(vocabulary::CALL).into())]
+            .into_iter()
+            .chain(fields),
+    )
+}
+
 /// A record's unboxed form, as the evaluator makes it on entry.
 fn unboxed(fields: gid::Record) -> RuntimeValue {
     RuntimeValue::new(RuntimeValueKind::Unboxed(
@@ -22,6 +31,7 @@ fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
     let syntax = lambda([second, first], Value::record([]));
     let closure = evaluate(&syntax, &host(vec![]), 100).result;
     let generated = RuntimeValue::record([
+        (isa::ISA, Value::from(vocabulary::LAMBDA).into()),
         (
             vocabulary::PARAMS,
             RuntimeValue::list([Value::from(second).into(), Value::from(first).into()]),
@@ -37,6 +47,19 @@ fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
         assert_eq!(value.callable_parameters(), Some(vec![second, first]));
         assert!(value.1.get().is_none());
     }
+    let unwritten = RuntimeValue::from(isa::record(
+        vocabulary::LAMBDA,
+        [(
+            vocabulary::PARAMS,
+            Value::list([Value::from(second), Value::from(first)]),
+        )],
+    ));
+    assert_eq!(
+        unwritten.callable_parameters(),
+        Some(vec![second, first]),
+        "a lambda has its parameters before its body is written"
+    );
+    // Neither is a lambda, the first not saying it is.
     for value in [
         RuntimeValue::record([(vocabulary::PARAMS, RuntimeValue::list([]))]),
         RuntimeValue::record([
@@ -80,7 +103,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
             }),
         ),
     )]);
-    let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure.clone())]);
+    let expression = runtime_call([(vocabulary::FUNCTION, closure.clone())]);
     let result = evaluate_runtime_at(
         &expression,
         Some(SourceOrigin::Stored(vec![gid::Step::Key(invocation)])),
@@ -115,6 +138,7 @@ fn runtime_syntax_origins_descend_through_generated_lists_and_lambdas() {
     let syntax = RuntimeValue::record([(
         field,
         RuntimeValue::list([RuntimeValue::record([
+            (isa::ISA, Value::from(vocabulary::LAMBDA).into()),
             (vocabulary::PARAMS, RuntimeValue::list([])),
             (vocabulary::BODY, RuntimeValue::record([])),
         ])]),
@@ -163,7 +187,7 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     )]);
     let runtime = RuntimeValue::record([(
         vocabulary::VALUE,
-        RuntimeValue::record([(vocabulary::FUNCTION, Value::from(sink).into())]),
+        runtime_call([(vocabulary::FUNCTION, Value::from(sink).into())]),
     )]);
     let stored = runtime.to_value();
     for origin in [
@@ -483,7 +507,7 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
         };
         let ids = [sink];
         let overlay = ForeignOverlay::new(&ids, &capture);
-        let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure)]);
+        let expression = runtime_call([(vocabulary::FUNCTION, closure)]);
         let result =
             evaluate_runtime_scoped(&expression, &Observed::new(&empty, &tracer), &overlay, 100);
         assert!(result.completed);
@@ -621,7 +645,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             100,
         );
         assert_eq!(actual.result.to_value(), expected.result);
-        let expression = RuntimeValue::record([
+        let expression = runtime_call([
             (vocabulary::FUNCTION, function),
             (argument, RuntimeValue::f64(8.0)),
         ]);
@@ -685,7 +709,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
                     .as_f64(),
                 Some(8.0)
             );
-            let expression = RuntimeValue::record(
+            let expression = runtime_call(
                 [(vocabulary::FUNCTION, function.clone())]
                     .into_iter()
                     .chain(arguments()),
@@ -840,7 +864,7 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
             let next = closure.to_value();
             assert_eq!(next, encoded);
             encoded = next;
-            let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure)]);
+            let expression = runtime_call([(vocabulary::FUNCTION, closure)]);
             let code = context.lower_runtime_code_at(
                 &expression,
                 Some(OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(
@@ -977,7 +1001,7 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
     let mut context = context(&empty, None, 100);
     let environment = Environment::default().extended_runtime([(binding, inner.clone())]);
     let captured = context.closure_value([], call(binding.into(), []), &environment);
-    let inline = context.lower_runtime_code(&RuntimeValue::record([(vocabulary::FUNCTION, inner)]));
+    let inline = context.lower_runtime_code(&runtime_call([(vocabulary::FUNCTION, inner)]));
     let embedded = context.closure([], inline, &Environment::default());
     let trace = RefCell::new(None);
     let tracer = Tracer::default();
@@ -1178,7 +1202,7 @@ fn every_call_path_binds_the_callee_and_charges_the_same_steps() {
     )
     .result;
     let seven = || [(argument, RuntimeValue::f64(7.0))];
-    let expression = RuntimeValue::record([
+    let expression = runtime_call([
         (vocabulary::FUNCTION, closure.clone()),
         (argument, RuntimeValue::f64(7.0)),
     ]);
@@ -1211,7 +1235,7 @@ fn every_entry_point_binds_in_its_context_index_table() {
     )]);
     // An inline lambda calls the probe, which sees the environment its
     // parameter's binding made.
-    let lambda_call = RuntimeValue::record([
+    let lambda_call = runtime_call([
         (
             vocabulary::FUNCTION,
             lambda([argument], call(probe.into(), [])).into(),

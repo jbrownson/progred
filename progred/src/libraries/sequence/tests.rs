@@ -75,7 +75,12 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
     use crate::libraries::grap::control::vocabulary as c;
     use ::grap::vocabulary::EXPRESSION;
     let captured = gid::new_cell_id();
-    let unquote = |value| Value::record([(c::UNQUOTE, value)]);
+    let unquote = |value| {
+        Value::record([
+            (::grap::isa::ISA, gid::Value::from(c::UNQUOTE).into()),
+            (c::UNQUOTE, value),
+        ])
+    };
     let quote = |value| call(c::QUOTE, [(EXPRESSION, value)]);
     let producer = ::grap::lambda(
         [captured],

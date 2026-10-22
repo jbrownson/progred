@@ -60,7 +60,10 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
                         (l::PAINT, l::NAME_FACE.into()),
                         (
                             l::CONTENT,
-                            Value::record([(control::UNQUOTE, LABEL.into())]),
+                            Value::record([
+                                (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                                (control::UNQUOTE, LABEL.into()),
+                            ]),
                         ),
                     ]),
                 )]),
@@ -87,7 +90,12 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
         let col = layout::test_support::col(
             0,
             2.0,
-            calls.map(|call| Value::record([(control::UNQUOTE, call)])),
+            calls.map(|call| {
+                Value::record([
+                    (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                    (control::UNQUOTE, call),
+                ])
+            }),
         );
         quote(if bordered {
             layout::test_support::bordered(col)

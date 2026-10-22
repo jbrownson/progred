@@ -9,6 +9,9 @@ pub const MALFORMED_LAMBDA: CellId = CellId::from_u128(0xfbf5894d7f62b6d0048d17d
 pub const INVALID_PARAMETER: CellId = CellId::from_u128(0x93ca0e9199372c46ee24bd4c508e178c);
 pub const NOT_CALLABLE: CellId = CellId::from_u128(0x8624488c2d10d2a4b84560dfa99a38e6);
 pub const MISSING_ARGUMENT: CellId = CellId::from_u128(0x8b2f0db36e5c3d35595eb5666cc89c78);
+/// Why a call or a lambda can't be used yet: it lacks a field its kind
+/// requires, carried under `cell`.
+pub const MISSING_FIELD: CellId = CellId::from_u128(0xafc95de9df924ebd8de30f7b0243c6b5);
 pub const INVALID_ENVIRONMENT: CellId = CellId::from_u128(0x152f2cac01f072317ab5746c5befdf9c);
 pub const NO_ALTERNATIVE: CellId = CellId::from_u128(0x3bf0543fa73a0cee9036317cdb5cacd9);
 pub const EFFECTFUL_DECLINE: CellId = CellId::from_u128(0xdc2651b863aa8aaf2df25ccb0c1fef03);
@@ -40,6 +43,11 @@ pub fn missing_argument(cell: CellId, call: Option<&SourceOrigin>) -> Value {
         .into_iter()
         .chain(call.map(|call| (CALL, crate::source::value(call)))),
     )
+}
+
+/// Why a construct can't be used while it lacks `field`.
+pub fn missing_field(field: CellId) -> Value {
+    with_detail(MISSING_FIELD, CELL, field.into())
 }
 
 pub fn value(reason: CellId) -> Value {

@@ -414,3 +414,58 @@ fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
     driver.choose("-f64");
     assert_eq!(driver.value(&function), Value::from(SUBTRACT));
 }
+
+#[test]
+fn a_call_left_without_its_function_stays_a_call_and_says_what_it_lacks() {
+    use ::grap::vocabulary::{CALL, FUNCTION};
+    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let slot = expression(&driver, 0);
+    driver.select(&slot);
+    driver.choose("new call");
+    let function = [slot.clone(), vec![Step::Key(FUNCTION)]].concat();
+    driver.press(NamedKey::Escape);
+    assert!(driver.editor().model.selection.is_none());
+    assert_eq!(
+        driver.value(&slot),
+        ::grap::isa::record(CALL, []),
+        "leaving keeps the call"
+    );
+    assert!(driver.drawn(&function), "its function is a slot still");
+    assert_eq!(
+        result(&mut driver, 0),
+        Some(::grap::absent::missing_field(FUNCTION))
+    );
+
+    // Selecting the slot opens its picker, which offers the functions.
+    driver.select(&function);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    assert_eq!(
+        driver.picker_detail("-f64").as_deref(),
+        Some("function · grap")
+    );
+}
+
+#[test]
+fn backspacing_a_call_s_function_leaves_the_call_and_then_steps_back() {
+    use ::grap::vocabulary::{CALL, FUNCTION};
+    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let slot = expression(&driver, 0);
+    driver.select(&slot);
+    driver.choose("new call");
+    driver.choose("+f64");
+    let function = [slot.clone(), vec![Step::Key(FUNCTION)]].concat();
+    driver.select(&function);
+    driver.press(NamedKey::Backspace);
+    assert_eq!(
+        driver.value(&slot),
+        ::grap::isa::record(CALL, []),
+        "the call is still a call without its function"
+    );
+    assert_eq!(driver.selection(), occurrence::below(&[], &function));
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+
+    // On the empty slot, Backspace removes nothing: it steps back to the call.
+    driver.press(NamedKey::Backspace);
+    assert_eq!(driver.value(&slot), ::grap::isa::record(CALL, []));
+    assert_eq!(driver.selection(), occurrence::below(&[], &slot));
+}

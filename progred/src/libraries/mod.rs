@@ -17,6 +17,7 @@ pub mod f32;
 pub mod f64;
 pub mod fidget;
 pub mod grap;
+pub mod isa;
 pub mod layout;
 pub mod list;
 pub mod logic;

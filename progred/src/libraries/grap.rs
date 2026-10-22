@@ -17,7 +17,7 @@ use crate::display::{
     col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
-use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
+use ::grap::vocabulary::{BODY, CALL, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::text::Script;
 
@@ -474,12 +474,10 @@ pub(crate) fn call_with_function<W: Host>(
     // Enter; one being added some other way shows in the plain record view.
     (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
-    // One whose function is still being picked is a call too.
-    let function = match fields.field(FUNCTION) {
-        Some(function) => Some(function),
-        None => (input.pending == Some(Pending::Child(Step::Key(FUNCTION)))).then_some(None)?,
-    };
-    let parameters = function
+    // It's a call while its function is still to be picked.
+    (fields.kind() == Some(CALL)).then_some(())?;
+    let parameters = fields
+        .field(FUNCTION)
         .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)))
         .unwrap_or_default();
     let function = descend(
@@ -498,7 +496,11 @@ pub(crate) fn call_with_function<W: Host>(
             .slots(parameters)
             .child(|_| Some(crate::display::runtime_partial(expression)))
             .shown_empty()
-            .after(input, |key| key == FUNCTION, function),
+            .after(
+                input,
+                |key| key == FUNCTION || key == ::grap::isa::ISA,
+                function,
+            ),
     )
 }
 
@@ -508,8 +510,9 @@ pub(crate) fn call_with_function<W: Host>(
 fn lambda_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    record_form(
+    crate::display::structure::kind_form(
         input,
+        LAMBDA,
         [name::vocabulary::NAME, PARAMS, BODY],
         |[_, params, _]| {
             let cells = params?
@@ -728,6 +731,7 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::absent::INVALID_PARAMETER, "invalid parameter"),
             (::grap::absent::NOT_CALLABLE, "not callable"),
             (::grap::absent::MISSING_ARGUMENT, "missing argument"),
+            (::grap::absent::MISSING_FIELD, "missing field"),
             (::grap::absent::INVALID_ENVIRONMENT, "invalid environment"),
         ]
         .into_iter()
@@ -772,7 +776,7 @@ fn constructs() -> [Completion; 2] {
     [
         crate::libraries::completion::insert(
             "new lambda",
-            Value::record([(PARAMS, Value::list([]))]),
+            ::grap::isa::record(LAMBDA, [(PARAMS, Value::list([]))]),
             Some(crate::selection::pending_at(&[
                 Step::Key(PARAMS),
                 Step::Element(gid::position::between(None, None).expect("an empty list has room")),
@@ -782,7 +786,7 @@ fn constructs() -> [Completion; 2] {
         .with_detail(ID),
         crate::libraries::completion::insert(
             "new call",
-            Value::record([]),
+            ::grap::isa::record(CALL, []),
             Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
         )
         .with_detail(ID),

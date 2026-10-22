@@ -219,8 +219,9 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
         let mut world = crate::test_editor(doc.clone());
         world.model.workspace.document.shown = crate::workspace::Shown::RAW;
         let raw = editing_frame(&mut world);
+        // The form draws the call's kind and the fields it consumes.
         for field in doc.root.as_ref().unwrap().as_record().unwrap().keys() {
-            if *field != extra {
+            if *field != extra && *field != ::grap::isa::ISA {
                 assert!(bench.landmarks.landmark(&[Step::Key(*field)]).is_some());
             }
             assert!(raw.landmarks.landmark(&[Step::Key(*field)]).is_some());

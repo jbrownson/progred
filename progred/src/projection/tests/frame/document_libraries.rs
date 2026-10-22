@@ -45,7 +45,7 @@ fn the_library_follows_edits_to_its_own_view() {
 #[test]
 fn a_view_that_draws_its_own_value_ends() {
     // Descending to the same value, the library steps aside there.
-    let (mut world, names) = planets("{function: descend_path, steps: []}");
+    let (mut world, names) = planets("{isa: call, function: descend_path, steps: []}");
     assert!(drawn(
         &mut world,
         &[Step::Key(names["mars"]), Step::Key(names["moons"])]

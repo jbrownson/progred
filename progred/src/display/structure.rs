@@ -266,6 +266,26 @@ impl<W: Host> Fields<W> {
         Some(self.after(input, |key| queried.contains(&key), content))
     }
 
+    /// [`Fields::form`] for a record of `kind`, as its `isa` says, declining
+    /// one of another kind. The form draws what kind it is, so the `isa`
+    /// doesn't follow it.
+    pub(crate) fn kind_form<const N: usize>(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        kind: CellId,
+        queried: [CellId; N],
+        draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+    ) -> Option<Layout<W>> {
+        let fields = input.value?;
+        (fields.kind() == Some(kind)).then_some(())?;
+        let content = draw(queried.map(|key| fields.field(key)))?;
+        Some(self.after(
+            input,
+            |key| key == ::grap::isa::ISA || queried.contains(&key),
+            content,
+        ))
+    }
+
     /// `content` followed by the fields it doesn't draw, as a call's function
     /// is by its arguments. Drawn as one piece, the value takes no new field
     /// from Enter: these views don't offer [`authoring`], which a rawer view
@@ -358,6 +378,16 @@ pub(crate) fn record_form<W: Host, const N: usize>(
     draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
 ) -> Option<Layout<W>> {
     Fields::default().form(input, queried, draw)
+}
+
+/// [`Fields::kind_form`], the fields read as usual.
+pub(crate) fn kind_form<W: Host, const N: usize>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    kind: CellId,
+    queried: [CellId; N],
+    draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+) -> Option<Layout<W>> {
+    Fields::default().kind_form(input, kind, queried, draw)
 }
 
 /// Named fields first, by name, then the others by id.

@@ -108,7 +108,10 @@ fn quote(value: Value) -> Value {
     ::grap::call(c::QUOTE.into(), [(::grap::vocabulary::EXPRESSION, value)])
 }
 fn splice(value: Value) -> Value {
-    Value::record([(c::UNQUOTE, value)])
+    Value::record([
+        (::grap::isa::ISA, gid::Value::from(c::UNQUOTE).into()),
+        (c::UNQUOTE, value),
+    ])
 }
 
 #[test]
@@ -408,10 +411,18 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
     let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &libraries, None, 1000).result;
     let controls = ::grap::evaluate_runtime_at(
         &RuntimeValue::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
             (::grap::vocabulary::PARAMS, RuntimeValue::list([])),
             (
                 ::grap::vocabulary::BODY,
                 RuntimeValue::record([
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(::grap::vocabulary::CALL).into(),
+                    ),
                     (
                         ::grap::vocabulary::FUNCTION,
                         Value::from(TREE_PROGRAM_CURSOR).into(),

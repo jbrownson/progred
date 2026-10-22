@@ -8,7 +8,7 @@ use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 use crate::display::hug;
-use crate::display::structure::record_form;
+use crate::display::structure::{kind_form, record_form};
 use crate::display::{alternatives, col, descend, dim, row, selectable, shared};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
@@ -45,6 +45,11 @@ pub mod vocabulary {
     pub const PATTERN_MISMATCH: CellId = CellId::from_u128(0xc44d3f1a71dea754a02bc14561a143b7);
     pub const MISSING_FINAL_EXPRESSION: CellId =
         CellId::from_u128(0x9e3fa2dd570e0b38a8b0053585f4dde2);
+}
+
+/// An unquote of `expression`, as a quoted template holds one.
+pub fn unquote(expression: Value) -> Value {
+    ::grap::isa::record(vocabulary::UNQUOTE, [(vocabulary::UNQUOTE, expression)])
 }
 
 fn functions() -> ForeignFunctions {
@@ -154,19 +159,26 @@ fn replace_unquotes(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     if let Some(fields) = context.fields(&expression) {
-        match fields
-            .iter()
-            .find(|(field, _)| *field == vocabulary::UNQUOTE)
-        {
-            Some((_, unquote)) => context.eval(unquote.clone(), environment),
-            None => try_map_sized(fields, |(field, value)| {
-                Ok((
-                    *field,
-                    replace_unquotes(value.clone(), context, environment)?,
-                ))
-            })
-            .map(RuntimeValue::record),
+        // An unquote, as its `isa` says, evaluates the expression it requires.
+        let unquote = fields.iter().any(|(field, kind)| {
+            *field == ::grap::isa::ISA && context.value(kind).as_cell() == Some(vocabulary::UNQUOTE)
+        });
+        if unquote {
+            return match fields
+                .iter()
+                .find(|(field, _)| *field == vocabulary::UNQUOTE)
+            {
+                Some((_, expression)) => context.eval(expression.clone(), environment),
+                None => Ok(::grap::absent::missing_field(vocabulary::UNQUOTE).into()),
+            };
         }
+        try_map_sized(fields, |(field, value)| {
+            Ok((
+                *field,
+                replace_unquotes(value.clone(), context, environment)?,
+            ))
+        })
+        .map(RuntimeValue::record)
     } else if let Some(elements) = context.elements(&expression) {
         try_map_sized(elements, |value| {
             replace_unquotes(value.clone(), context, environment)
@@ -197,17 +209,20 @@ fn replace_unquotes_value(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     match value {
-        Value::Record(fields) => match fields.get(&vocabulary::UNQUOTE) {
-            Some(expression) => context.eval_value_runtime(expression, environment),
-            None => Ok(RuntimeValue::record(
-                fields
-                    .iter()
-                    .map(|(field, value)| {
-                        Ok((*field, replace_unquotes_value(value, context, environment)?))
-                    })
-                    .collect::<Result<Vec<(CellId, RuntimeValue)>, Halt>>()?,
-            )),
-        },
+        Value::Record(fields) if ::grap::isa::of(fields) == Some(vocabulary::UNQUOTE) => {
+            match fields.get(&vocabulary::UNQUOTE) {
+                Some(expression) => context.eval_value_runtime(expression, environment),
+                None => Ok(::grap::absent::missing_field(vocabulary::UNQUOTE).into()),
+            }
+        }
+        Value::Record(fields) => Ok(RuntimeValue::record(
+            fields
+                .iter()
+                .map(|(field, value)| {
+                    Ok((*field, replace_unquotes_value(value, context, environment)?))
+                })
+                .collect::<Result<Vec<(CellId, RuntimeValue)>, Halt>>()?,
+        )),
         Value::List(values) => Ok(RuntimeValue::list(
             values
                 .values()
@@ -604,8 +619,9 @@ fn matches_pattern(
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
 fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(
+    kind_form(
         input,
+        ::grap::vocabulary::CALL,
         [
             ::grap::vocabulary::FUNCTION,
             vocabulary::VALUE,
@@ -704,8 +720,9 @@ enum BindingForm {
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
 fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(
+    kind_form(
         input,
+        ::grap::vocabulary::CALL,
         [
             ::grap::vocabulary::FUNCTION,
             vocabulary::BINDINGS,
@@ -825,8 +842,9 @@ fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
 /// rather than as a generic call with a redundant `expression` label.
 /// Unrelated fields do not change recognition; they follow the template.
 fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(
+    kind_form(
         input,
+        ::grap::vocabulary::CALL,
         [::grap::vocabulary::FUNCTION, ::grap::vocabulary::EXPRESSION],
         |[function, expression]| {
             (function?.as_cell()? == vocabulary::QUOTE).then_some(())?;
@@ -856,16 +874,9 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
 
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
-/// A just-inserted unquote is already one, so its empty hole offers code.
+/// It's an unquote while its expression is still a hole, which offers code.
 fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(input, [vocabulary::UNQUOTE], |[unquote]| {
-        match &input.pending {
-            Some(crate::display::Pending::Child(Step::Key(vocabulary::UNQUOTE))) => {
-                input.value?.record_len() == Some(0)
-            }
-            _ => unquote.is_some(),
-        }
-        .then_some(())?;
+    kind_form(input, vocabulary::UNQUOTE, [vocabulary::UNQUOTE], |_| {
         let site = input.site();
         Some(row(
             2.0,
@@ -887,8 +898,9 @@ fn expression_list_display<W: Host>(
     input: &ProjectionInput<'_, W, RuntimeValue>,
     callable: CellId,
 ) -> Option<Layout<W>> {
-    record_form(
+    kind_form(
         input,
+        ::grap::vocabulary::CALL,
         [::grap::vocabulary::FUNCTION, vocabulary::EXPRESSIONS],
         |[function, expressions]| {
             (function?.as_cell()? == callable).then_some(())?;

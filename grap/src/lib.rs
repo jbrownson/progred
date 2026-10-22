@@ -21,6 +21,7 @@ pub mod absent;
 pub mod arguments;
 pub mod f32;
 pub mod f64;
+pub mod isa;
 pub mod logic;
 pub mod path;
 pub mod primitive;
@@ -478,6 +479,11 @@ impl RuntimeValue {
     }
 
     /// Why this value is absent, if it is.
+    /// The kind its `isa` says it is.
+    pub fn kind(&self) -> Option<CellId> {
+        self.field(isa::ISA)?.as_cell()
+    }
+
     pub fn absent_reason(&self) -> Option<CellId> {
         self.field(absent::ABSENT)?.as_cell()
     }
@@ -502,11 +508,17 @@ impl RuntimeValue {
     pub fn callable_parameters(&self) -> Option<Vec<CellId>> {
         match &self.0 {
             RuntimeValueKind::Closure(closure) => Some(closure.params.to_vec()),
+            // A closure's lambda, as it's called; or a lambda, which has its
+            // parameters before its body is written.
             _ => {
-                let fields = self.field(vocabulary::LAMBDA);
-                let fields = fields.as_ref().unwrap_or(self);
-                fields.field(vocabulary::BODY)?;
-                fields
+                let lambda = match self.field(vocabulary::LAMBDA) {
+                    Some(lambda) => lambda,
+                    None => {
+                        (self.field(isa::ISA)?.as_cell()? == vocabulary::LAMBDA).then_some(())?;
+                        self.clone()
+                    }
+                };
+                lambda
                     .field(vocabulary::PARAMS)?
                     .list_values()?
                     .map(|parameter| parameter.as_cell())
@@ -1260,28 +1272,38 @@ impl<'a> Context<'a> {
                         (*key, self.lower_runtime_code_at(value, child))
                     })
                     .collect();
-                let form = if let Some(function) = lowered_field(&fields, vocabulary::FUNCTION) {
-                    Form::Call { function }
-                } else if let (Some(params), Some(body)) = (
-                    value.field(vocabulary::PARAMS),
-                    lowered_field(&fields, vocabulary::BODY),
-                ) {
-                    Form::Lambda {
-                        parameters: LambdaParameters::parse(params.list_values().map(|values| {
-                            values
-                                .map(|v| v.as_cell().ok_or_else(|| v.to_value()))
-                                .collect()
-                        })),
-                        body,
+                // A field a kind requires, or why it's missing.
+                let required = |field| {
+                    lowered_field(&fields, field).unwrap_or_else(|| {
+                        missing_field(field, child_origin(origin.clone(), gid::Step::Key(field)))
+                    })
+                };
+                let params = value.field(vocabulary::PARAMS);
+                let form = match value.field(isa::ISA).and_then(|kind| kind.as_cell()) {
+                    Some(kind) if kind == vocabulary::CALL => Form::Call {
+                        function: required(vocabulary::FUNCTION),
+                    },
+                    Some(kind) if kind == vocabulary::LAMBDA => Form::Lambda {
+                        parameters: LambdaParameters::parse(
+                            params
+                                .as_ref()
+                                .and_then(RuntimeValue::list_values)
+                                .map(|values| {
+                                    values
+                                        .map(|v| v.as_cell().ok_or_else(|| v.to_value()))
+                                        .collect()
+                                }),
+                        ),
+                        body: required(vocabulary::BODY),
                         fields: record
                             .iter()
                             .map(|(key, value)| (*key, value.to_value()))
                             .collect(),
-                    }
-                } else if let Some(value) = lowered_field(&fields, vocabulary::VALUE) {
-                    Form::Value(value)
-                } else {
-                    Form::Ready(value.clone())
+                    },
+                    _ => match lowered_field(&fields, vocabulary::VALUE) {
+                        Some(value) => Form::Value(value),
+                        None => Form::Ready(value.clone()),
+                    },
                 };
                 Expression(Rc::new(Lowered {
                     source: value.clone(),
@@ -1337,37 +1359,44 @@ impl<'a> Context<'a> {
                         })
                         .collect::<Vec<_>>()
                 };
-                match (
-                    fields.get(&vocabulary::FUNCTION),
-                    fields
-                        .get(&vocabulary::PARAMS)
-                        .zip(fields.get(&vocabulary::BODY)),
-                    fields.get(&vocabulary::VALUE),
-                ) {
-                    (Some(function), _, _) => {
-                        let function = lower_field(self, vocabulary::FUNCTION, function);
+                // A field a kind requires, or why it's missing.
+                let required = |this: &mut Self, field: CellId| match fields.get(&field) {
+                    Some(value) => lower_field(this, field, value),
+                    None => {
+                        missing_field(field, child_origin(origin.clone(), gid::Step::Key(field)))
+                    }
+                };
+                // A record is a call or a lambda only when its `isa` says so.
+                match (isa::of(fields), fields.get(&vocabulary::VALUE)) {
+                    (Some(kind), _) if kind == vocabulary::CALL => {
+                        let function = required(self, vocabulary::FUNCTION);
                         let fields = lower_all(self, Some((vocabulary::FUNCTION, &function)));
                         (Form::Call { function }, Some(fields), None)
                     }
-                    (None, Some((params, body)), _) => (
+                    (Some(kind), _) if kind == vocabulary::LAMBDA => (
                         Form::Lambda {
-                            parameters: LambdaParameters::parse(params.as_list().map(|list| {
-                                list.values()
-                                    .map(|v| v.as_cell().ok_or_else(|| v.clone()))
-                                    .collect()
-                            })),
-                            body: lower_field(self, vocabulary::BODY, body),
+                            parameters: LambdaParameters::parse(
+                                fields
+                                    .get(&vocabulary::PARAMS)
+                                    .and_then(Value::as_list)
+                                    .map(|list| {
+                                        list.values()
+                                            .map(|v| v.as_cell().ok_or_else(|| v.clone()))
+                                            .collect()
+                                    }),
+                            ),
+                            body: required(self, vocabulary::BODY),
                             fields: fields.clone(),
                         },
                         None,
                         None,
                     ),
-                    (None, None, Some(value)) => {
+                    (_, Some(value)) => {
                         let value = lower_field(self, vocabulary::VALUE, value);
                         let fields = lower_all(self, Some((vocabulary::VALUE, &value)));
                         (Form::Value(value), Some(fields), None)
                     }
-                    (None, None, None) => (
+                    (_, None) => (
                         // A number or text literal is its native value
                         // from the start, rather than read on every use.
                         match Unboxed::recognize(fields) {
@@ -1468,6 +1497,7 @@ impl<'a> Context<'a> {
     ) -> RuntimeValue {
         let params: Rc<[CellId]> = params.into_iter().collect();
         let fields = [
+            (isa::ISA, Value::from(vocabulary::LAMBDA)),
             (
                 vocabulary::PARAMS,
                 Value::list(params.iter().copied().map(Value::from)),
@@ -1933,9 +1963,12 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         let call = self.lower_runtime_code(&RuntimeValue::record(
-            [(vocabulary::FUNCTION, callable)]
-                .into_iter()
-                .chain(arguments),
+            [
+                (isa::ISA, RuntimeValue::from(Value::from(vocabulary::CALL))),
+                (vocabulary::FUNCTION, callable),
+            ]
+            .into_iter()
+            .chain(arguments),
         ));
         self.call_foreign(foreign, &call, environment)
     }
@@ -2414,6 +2447,19 @@ fn child_origin(parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
     parent.map(|parent| OriginId(Rc::new(OriginNode::Child { parent, step })))
 }
 
+/// A field a construct's kind requires, while it's missing: found where the
+/// field would be, answering why it can't be used yet.
+fn missing_field(field: CellId, origin: Option<OriginId>) -> Expression {
+    let value = RuntimeValue::from(absent::missing_field(field));
+    Expression(Rc::new(Lowered {
+        source: value.clone(),
+        origin,
+        form: Form::Ready(value),
+        fields: None,
+        elements: None,
+    }))
+}
+
 fn runtime_expression(value: RuntimeValue) -> Expression {
     Expression(Rc::new(Lowered {
         source: value.clone(),
@@ -2426,9 +2472,12 @@ fn runtime_expression(value: RuntimeValue) -> Expression {
 
 fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) -> Expression {
     let fields: Rc<[_]> = gid::sorted_entries(
-        [(vocabulary::FUNCTION, function)]
-            .into_iter()
-            .chain(arguments),
+        [
+            (isa::ISA, RuntimeValue::from(Value::from(vocabulary::CALL))),
+            (vocabulary::FUNCTION, function),
+        ]
+        .into_iter()
+        .chain(arguments),
     )
     .into();
     let lowered = fields
@@ -2446,13 +2495,16 @@ fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) 
 }
 
 pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
-    Value::record([
-        (
-            vocabulary::PARAMS,
-            Value::list(params.into_iter().map(Value::from)),
-        ),
-        (vocabulary::BODY, body),
-    ])
+    isa::record(
+        vocabulary::LAMBDA,
+        [
+            (
+                vocabulary::PARAMS,
+                Value::list(params.into_iter().map(Value::from)),
+            ),
+            (vocabulary::BODY, body),
+        ],
+    )
 }
 
 /// A callable naming a foreign function — the FFI bridge as a value.
@@ -2461,7 +2513,8 @@ pub fn ffi(cell: CellId) -> Value {
 }
 
 pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    Value::record(
+    isa::record(
+        vocabulary::CALL,
         [(vocabulary::FUNCTION, function)]
             .into_iter()
             .chain(arguments),

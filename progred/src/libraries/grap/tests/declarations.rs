@@ -210,6 +210,10 @@ fn declarations(binder: CellId) -> Vec<(Value, Path)> {
     let parameters = Value::list([binder.into()]);
     let position = parameters.as_list().unwrap().keys().next().unwrap().clone();
     let lambda = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+        ),
         (grap::vocabulary::PARAMS, parameters),
         (grap::vocabulary::BODY, binder.into()),
     ]);
@@ -570,7 +574,10 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
                 control::QUOTE.into(),
                 [(
                     grap::vocabulary::EXPRESSION,
-                    Value::record([(control::UNQUOTE, expression)]),
+                    Value::record([
+                        (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                        (control::UNQUOTE, expression),
+                    ]),
                 )],
             )),
             cells: cells.clone(),
@@ -608,7 +615,10 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
 fn quote_prefixes_draw_extra_fields_after_them_and_keep_field_insertion_available() {
     let extra = new_cell_id();
     for root in [
-        Value::record([(control::UNQUOTE, text::value("expression"))]),
+        Value::record([
+            (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+            (control::UNQUOTE, text::value("expression")),
+        ]),
         grap::call(
             control::QUOTE.into(),
             [(grap::vocabulary::EXPRESSION, text::value("template"))],

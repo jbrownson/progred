@@ -19,9 +19,11 @@
     "first": 9940ece27410c72a5308a544890ccc71,
     "third": 5e716c07490849f072b4e9017dd6230d,
     "dot_program": 1aef3dfdbc27183833ef29bbecaccd95,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
   },
   "cells": {
-    dot_program: {function: fill, paint: {rgb: 0x3b82a0}, shape: {circle: {radius: {f64: 0x0000000000003840}, x: {f64: 0x0000000000004e40}, y: {f64: 0x0000000000004940}}}},
+    dot_program: {isa: call, function: fill, paint: {rgb: 0x3b82a0}, shape: {circle: {radius: {f64: 0x0000000000003840}, x: {f64: 0x0000000000004e40}, y: {f64: 0x0000000000004940}}}},
   },
   "root": {
     first: dot_program,

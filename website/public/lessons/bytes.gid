@@ -16,15 +16,17 @@
     "third": 5e716c07490849f072b4e9017dd6230d,
     "fourth": 8ec6740fa565a2b3b0348132d030d03b,
     "fifth": 24f6d8a4161e69ebc99c0aa4591beb43,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
   },
   "cells": {
     raw: 0x4f50454e,
   },
   "root": {
     first: raw,
-    second: {render: {function: quote, expression: {mystery: {unquote: raw}}}},
-    third: {render: {function: quote, expression: {utf8: {unquote: raw}}}},
-    fourth: {render: {function: quote, expression: {rgba: {unquote: raw}}}},
-    fifth: {render: {function: quote, expression: {f32: {unquote: raw}}}},
+    second: {render: {isa: call, function: quote, expression: {mystery: {isa: unquote, unquote: raw}}}},
+    third: {render: {isa: call, function: quote, expression: {utf8: {isa: unquote, unquote: raw}}}},
+    fourth: {render: {isa: call, function: quote, expression: {rgba: {isa: unquote, unquote: raw}}}},
+    fifth: {render: {isa: call, function: quote, expression: {f32: {isa: unquote, unquote: raw}}}},
   },
 }

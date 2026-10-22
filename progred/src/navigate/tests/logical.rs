@@ -167,6 +167,10 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
         name::record(
             "cube",
             [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                ),
                 (::grap::vocabulary::PARAMS, Value::list([])),
                 (
                     ::grap::vocabulary::BODY,

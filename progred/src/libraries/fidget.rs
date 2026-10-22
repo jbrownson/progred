@@ -243,6 +243,7 @@ fn radial_function(spelling: &str, squared_distance: Value) -> Value {
     name::record(
         spelling,
         [
+            (::grap::isa::ISA, ::grap::vocabulary::LAMBDA.into()),
             (
                 ::grap::vocabulary::PARAMS,
                 Value::list([vocabulary::RADIUS.into()]),
@@ -256,7 +257,7 @@ fn radial_function(spelling: &str, squared_distance: Value) -> Value {
                         binary(
                             vocabulary::SUBTRACT,
                             unary(vocabulary::SQRT, squared_distance),
-                            node(control::vocabulary::UNQUOTE, vocabulary::RADIUS.into()),
+                            control::unquote(vocabulary::RADIUS.into()),
                         ),
                     )],
                 ),

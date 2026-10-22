@@ -5,6 +5,10 @@ pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
         (
             g::LAMBDA,
             Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                ),
                 (g::PARAMS, Value::list([])),
                 (
                     g::BODY,

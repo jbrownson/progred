@@ -75,7 +75,7 @@ fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
 fn unquote() -> Completion {
     crate::libraries::completion::insert(
         control::UNQUOTE,
-        Value::record([]),
+        ::grap::isa::record(control::UNQUOTE, []),
         Some(crate::selection::pending_at(&[Step::Key(control::UNQUOTE)])),
     )
     .with_aliases(["`"])
@@ -131,14 +131,21 @@ pub(super) fn scope<'a>(
         };
         let suffix = &path[offset..];
         let mut computed = BTreeMap::new();
+        let kind = ::grap::isa::of(fields);
         if quoted {
-            if matches!(suffix.first(), Some(Step::Key(field)) if *field == control::UNQUOTE) {
+            if kind == Some(control::UNQUOTE)
+                && matches!(suffix.first(), Some(Step::Key(field)) if *field == control::UNQUOTE)
+            {
                 quoted = false;
             }
             continue;
         }
         let mut found = BTreeSet::new();
-        match fields.get(&FUNCTION).and_then(Value::as_cell) {
+        let callee = match kind {
+            Some(::grap::vocabulary::CALL) => fields.get(&FUNCTION).and_then(Value::as_cell),
+            _ => None,
+        };
+        match callee {
             Some(control::QUOTE) if matches!(suffix.first(), Some(Step::Key(EXPRESSION))) => {
                 quoted = true;
             }
@@ -180,9 +187,7 @@ pub(super) fn scope<'a>(
                     pattern_bindings(pattern, &mut found);
                 }
             }
-            None if !fields.contains_key(&FUNCTION)
-                && matches!(suffix.first(), Some(Step::Key(BODY))) =>
-            {
+            None if kind == Some(LAMBDA) && matches!(suffix.first(), Some(Step::Key(BODY))) => {
                 if let Some(params) = fields.get(&PARAMS).and_then(Value::as_list) {
                     let params: Vec<_> = params.values().filter_map(Value::as_cell).collect();
                     computed = super::unnamed_parameters(&params, value_of);

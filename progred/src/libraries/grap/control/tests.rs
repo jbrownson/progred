@@ -374,7 +374,13 @@ fn quote_preserves_value_wrappers_and_splices_inside_them() {
         "named expression",
         [(
             grap::vocabulary::VALUE,
-            Value::record([(vocabulary::UNQUOTE, blob("spliced"))]),
+            Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(vocabulary::UNQUOTE).into(),
+                ),
+                (vocabulary::UNQUOTE, blob("spliced")),
+            ]),
         )],
     );
     let result = evaluate(&quote_call(template)).result;
@@ -452,6 +458,10 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
     let unquote = name::record(
         "named unquote",
         [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(vocabulary::UNQUOTE).into(),
+            ),
             (vocabulary::UNQUOTE, blob("body")),
             (extra, blob("metadata")),
         ],
@@ -459,7 +469,13 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
     assert!(unquote_display(&projection_input(&NoEval, &(&unquote).into())).is_some());
     for malformed in [
         Value::record([]),
-        Value::record([(grap::vocabulary::FUNCTION, vocabulary::QUOTE.into())]),
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::CALL).into(),
+            ),
+            (grap::vocabulary::FUNCTION, vocabulary::QUOTE.into()),
+        ]),
         Value::record([(grap::vocabulary::EXPRESSION, blob("body"))]),
         grap::call(
             new_cell_id().into(),
@@ -477,7 +493,13 @@ fn quote_replaces_unquotes_in_its_calling_environment() {
     let field = new_cell_id();
     let template = Value::list([Value::record([(
         field,
-        Value::record([(vocabulary::UNQUOTE, Value::from(parameter))]),
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(vocabulary::UNQUOTE).into(),
+            ),
+            (vocabulary::UNQUOTE, Value::from(parameter)),
+        ]),
     )])]);
     let positions = template
         .as_list()
@@ -509,7 +531,13 @@ fn quote_replaces_unquotes_in_its_calling_environment() {
 #[test]
 fn unquote_is_ordinary_data_outside_quote() {
     let missing = new_cell_id();
-    let expression = Value::record([(vocabulary::UNQUOTE, Value::from(missing))]);
+    let expression = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(vocabulary::UNQUOTE).into(),
+        ),
+        (vocabulary::UNQUOTE, Value::from(missing)),
+    ]);
     let evaluation = evaluate(&expression);
     assert_eq!(evaluation.result, expression);
 }
@@ -517,8 +545,20 @@ fn unquote_is_ordinary_data_outside_quote() {
 #[test]
 fn quote_does_not_revisit_an_unquoted_result() {
     let missing = new_cell_id();
-    let inner = Value::record([(vocabulary::UNQUOTE, Value::from(missing))]);
-    let expression = quote_call(Value::record([(vocabulary::UNQUOTE, inner.clone())]));
+    let inner = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(vocabulary::UNQUOTE).into(),
+        ),
+        (vocabulary::UNQUOTE, Value::from(missing)),
+    ]);
+    let expression = quote_call(Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(vocabulary::UNQUOTE).into(),
+        ),
+        (vocabulary::UNQUOTE, inner.clone()),
+    ]));
     let evaluation = evaluate(&expression);
     assert_eq!(evaluation.result, inner);
 }
@@ -1134,7 +1174,11 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     driver.type_text("`");
     assert_eq!(offered(&mut driver)[0], "unquote");
     driver.press(NamedKey::Enter);
-    assert_eq!(driver.value(&expression), Value::record([]));
+    assert_eq!(
+        driver.value(&expression),
+        ::grap::isa::record(vocabulary::UNQUOTE, []),
+        "an unquote while its expression is yet to be written"
+    );
     let hole = [&expression[..], &[Step::Key(vocabulary::UNQUOTE)]].concat();
     assert_eq!(driver.selection(), hole);
     assert_eq!(driver.stage(), Some(Stage::Pending));

@@ -5,6 +5,7 @@
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
     "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
@@ -25,6 +26,8 @@
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
     "half_size": f6e416437259d6867c11eced7923bf1c,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "main": f146d8a1d3174d9ab6136b4334768a2f,
     "max": 7082a82b3fd6dbc575aa5c85adfacc76,
@@ -103,6 +106,7 @@
                 u: {
                   axis: y,
                 },
+                isa: call,
               },
               function: max,
               left: {
@@ -113,7 +117,9 @@
                 u: {
                   axis: x,
                 },
+                isa: call,
               },
+              isa: call,
             },
             function: max,
             left: {
@@ -124,7 +130,9 @@
               u: {
                 axis: x,
               },
+              isa: call,
             },
+            isa: call,
           },
           function: max,
           left: {
@@ -140,6 +148,7 @@
                 u: {
                   axis: x,
                 },
+                isa: call,
               },
               function: max,
               left: {
@@ -153,7 +162,9 @@
                 u: {
                   axis: x,
                 },
+                isa: call,
               },
+              isa: call,
             },
             function: max,
             left: {
@@ -167,9 +178,13 @@
               u: {
                 axis: y,
               },
+              isa: call,
             },
+            isa: call,
           },
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x17: {
             value: {
@@ -196,6 +211,7 @@
               },
               function: f32_divide,
               left: size,
+              isa: call,
             },
             bind: half_size,
           },
@@ -204,6 +220,7 @@
               right: chamfer,
               function: f32_subtract,
               left: half_size,
+              isa: call,
             },
             bind: half_face,
           },
@@ -214,6 +231,7 @@
               },
               function: f32_divide,
               left: control_depth,
+              isa: call,
             },
             bind: center_depth,
           },
@@ -222,6 +240,7 @@
               right: chamfer,
               function: f32_subtract,
               left: size,
+              isa: call,
             },
             bind: edge_limit,
           },
@@ -237,19 +256,24 @@
                       right: half_face,
                       function: divide,
                       left: coordinate,
+                      isa: call,
                     },
                     function: square,
+                    isa: call,
                   },
                   function: subtract,
                   left: {
                     f32: 0x0000803f,
                   },
+                  isa: call,
                 },
                 function: max,
                 left: {
                   f32: 0x00000000,
                 },
+                isa: call,
               },
+              isa: lambda,
             },
             bind: shoulder,
           },
@@ -266,15 +290,19 @@
                     right: {
                       coordinate: v,
                       function: shoulder,
+                      isa: call,
                     },
                     function: multiply,
                     left: {
                       coordinate: u,
                       function: shoulder,
+                      isa: call,
                     },
+                    isa: call,
                   },
                   function: multiply,
                   left: center_depth,
+                  isa: call,
                 },
                 function: sum,
                 left: {
@@ -283,9 +311,13 @@
                   left: {
                     operand: normal,
                     function: abs,
+                    isa: call,
                   },
+                  isa: call,
                 },
+                isa: call,
               },
+              isa: lambda,
             },
             bind: face_pair,
           },
@@ -302,19 +334,25 @@
                   right: {
                     operand: v,
                     function: abs,
+                    isa: call,
                   },
                   function: sum,
                   left: {
                     operand: u,
                     function: abs,
+                    isa: call,
                   },
+                  isa: call,
                 },
+                isa: call,
               },
+              isa: lambda,
             },
             bind: chamfer_pair,
           },
         ],
       },
+      isa: lambda,
     },
     half_face: {
       name: "half face",
@@ -369,7 +407,9 @@
                       field: {
                         unquote: {
                           function: projection_value,
+                          isa: call,
                         },
+                        isa: unquote,
                       },
                       color: {
                         rgb: 0x60b6d0,
@@ -377,6 +417,7 @@
                     },
                   ],
                 },
+                isa: call,
               },
               max_x: {
                 f32: 0x9a99193f,
@@ -388,6 +429,7 @@
               max_z: {
                 f32: 0x9a99193f,
               },
+              isa: call,
               min_y: {
                 f32: 0x9a9919bf,
               },
@@ -396,6 +438,7 @@
                 f32: 0x9a9919bf,
               },
             },
+            isa: lambda,
           },
           projection_value: cube,
         },

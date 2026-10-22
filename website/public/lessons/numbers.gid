@@ -24,14 +24,16 @@
     "difference": c621348e3c35e46e87c1994eb1a50965,
     "field": 66bad5269b830181b840cf23a391b10e,
     "delta_x": 671936a24eb2d9d6e47ac5915a3e38c4,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
   },
   "cells": {
   },
   "root": {
-    first: {evaluate: {function: sum, left: {f64: 0x9a9999999999b93f}, right: {f64: 0x9a9999999999c93f}}},
-    second: {evaluate: {function: sum_f32, left: {f32: 0xcdcccc3d}, right: {f32: 0xcdcc4c3e}}},
-    third: {evaluate: {function: subtract_u64, left: {u64: 0x0200000000000000}, right: {u64: 0x0300000000000000}}},
-    fourth: {evaluate: {function: sum, left: {f64: 0x9a9999999999b93f}, right: {f32: 0xcdcc4c3e}}},
-    fifth: {evaluate: {function: preview_3d, value: {function: difference, left: {function: sphere, radius: {f32: 0x00000042}}, right: {function: translate, field: {function: sphere, radius: {f32: 0x0000c041}}, delta_x: {f32: 0x0000f041}}}}},
+    first: {evaluate: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f64: 0x9a9999999999c93f}}},
+    second: {evaluate: {isa: call, function: sum_f32, left: {f32: 0xcdcccc3d}, right: {f32: 0xcdcc4c3e}}},
+    third: {evaluate: {isa: call, function: subtract_u64, left: {u64: 0x0200000000000000}, right: {u64: 0x0300000000000000}}},
+    fourth: {evaluate: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f32: 0xcdcc4c3e}}},
+    fifth: {evaluate: {isa: call, function: preview_3d, value: {isa: call, function: difference, left: {isa: call, function: sphere, radius: {f32: 0x00000042}}, right: {isa: call, function: translate, field: {isa: call, function: sphere, radius: {f32: 0x0000c041}}, delta_x: {f32: 0x0000f041}}}}},
   },
 }

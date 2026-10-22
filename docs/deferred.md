@@ -209,6 +209,23 @@ evaluation*). The bindings it was made under aren't shown yet: an observer
 could capture the environment at the answering call the same way, for a
 display still to be designed.
 
+## Kinds
+
+Grap's calls, lambdas and unquotes say their kind (`isa`) since 22 October
+2026 (see [model](model.md#data-and-resolution)); before, a stored hole kept a
+shape's identifying field present, which recorded what the kind required when
+it was written. Open beside it:
+
+- **Value wrappers** (`{value: expression}`) are still told by their field, so
+  one whose expression is deleted becomes data. The editor offers none yet.
+- **Declared kinds.** A kind's cell could hold its definition, the fields it
+  has and which it requires, so forms and offers read it instead of each
+  projection listing its own; that's the structural type system the owner has
+  in mind.
+- **Documents from before.** A call or lambda saved without an `isa` loads as
+  data. The checked-in documents were migrated by a one-off tool; a user's
+  saved document isn't, and there's no upgrade on load.
+
 ## Context for an absent from below
 
 A function written in Rust reports the arguments it couldn't use in its own

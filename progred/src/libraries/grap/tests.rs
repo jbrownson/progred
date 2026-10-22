@@ -61,7 +61,17 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
     .map(|(source, name)| {
         (
             source,
-            name::record(name, [(PARAMS, Value::list([])), (BODY, Value::record([]))]),
+            name::record(
+                name,
+                [
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    ),
+                    (PARAMS, Value::list([])),
+                    (BODY, Value::record([])),
+                ],
+            ),
         )
     });
     for order in [cells.to_vec(), cells.iter().rev().copied().collect()] {
@@ -110,11 +120,19 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     let extra = new_cell_id();
     let metadata = new_cell_id();
     let lambda = R::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+        ),
         (PARAMS, R::list([Value::from(parameter).into()])),
         (BODY, Value::from(parameter).into()),
         (metadata, R::list([R::f64(3.0)])),
     ]);
     let call = R::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::CALL).into(),
+        ),
         (FUNCTION, lambda.clone()),
         (extra, R::list([lambda.clone()])),
     ]);
@@ -125,7 +143,13 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     assert_eq!(argument_order(&layout), [parameter, extra]);
     assert!(lambda_display(&input.with_value(Some(&lambda))).is_some());
 
-    let malformed = R::record([(PARAMS, R::list([R::f64(3.0)]))]);
+    let malformed = R::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+        ),
+        (PARAMS, R::list([R::f64(3.0)])),
+    ]);
     assert!(lambda_display(&input.with_value(Some(&malformed))).is_none());
     let wrapper = R::record([(VALUE, call)]);
     assert!(value_display(&input.with_value(Some(&wrapper))).is_some());
@@ -293,6 +317,10 @@ fn compact_declarations_draw_metadata_after_them_but_decline_invalid_names() {
 fn value_projection_leaves_competing_forms_to_composition() {
     let env = env();
     let malformed_lambda = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+        ),
         (PARAMS, Value::record([])),
         (BODY, Value::record([])),
         (VALUE, Value::record([])),
@@ -302,7 +330,14 @@ fn value_projection_leaves_competing_forms_to_composition() {
     assert!(project_runtime(value_display, &input).is_some());
     assert!(project_runtime(&*library().projection.unwrap(), &input).is_some());
 
-    let call = Value::record([(FUNCTION, Value::record([])), (VALUE, Value::record([]))]);
+    let call = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::CALL).into(),
+        ),
+        (FUNCTION, Value::record([])),
+        (VALUE, Value::record([])),
+    ]);
     let input = ProjectionInput {
         value: Some(&call),
         ..input
@@ -321,6 +356,10 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
         (
             ::grap::vocabulary::LAMBDA,
             Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                ),
                 (PARAMS, Value::list([parameter.into()])),
                 (BODY, Value::record([])),
             ]),
@@ -374,6 +413,10 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
         Value::record([]),
         ::grap::call(reference.clone(), []),
         Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
             (PARAMS, Value::list([Value::record([])])),
             (BODY, Value::record([])),
         ]),
@@ -840,6 +883,10 @@ fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
 fn an_unfinished_lambda_keeps_its_missing_body_visible() {
     let env = env();
     let definition = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+        ),
         (PARAMS, Value::list([])),
         (new_cell_id(), Value::record([])),
     ]);
@@ -853,11 +900,23 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
 
     for malformed in [
         Value::record([]),
-        Value::record([(PARAMS, Value::record([]))]),
-        Value::record([(
-            PARAMS,
-            Value::list([crate::libraries::text::value("not a cell")]),
-        )]),
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (PARAMS, Value::record([])),
+        ]),
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (
+                PARAMS,
+                Value::list([crate::libraries::text::value("not a cell")]),
+            ),
+        ]),
     ] {
         assert!(project_runtime(lambda_display, &projection_input(&env, &malformed)).is_none());
     }
@@ -867,7 +926,14 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
 fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
     let definition = name::record(
         "tree",
-        [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
+        [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (PARAMS, Value::list([])),
+            (BODY, Value::from(vec![1])),
+        ],
     );
     let layout = project_runtime(lambda_display, &projection_input(&env(), &definition)).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
@@ -923,7 +989,14 @@ fn the_lambda_name_partial_handles_missing_names_or_text() {
 fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
     let definition = name::record(
         "",
-        [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
+        [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (PARAMS, Value::list([])),
+            (BODY, Value::from(vec![1])),
+        ],
     );
     let layout = project_runtime(lambda_display, &projection_input(&env(), &definition)).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
@@ -1155,7 +1228,16 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
     use ui_events::keyboard::{Key, NamedKey};
     let function = new_cell_id();
     let mut cells = Cells::new();
-    cells.set_value(function, Value::record([(PARAMS, Value::list([]))]));
+    cells.set_value(
+        function,
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (PARAMS, Value::list([])),
+        ]),
+    );
     let mut driver = crate::driver::Driver::new(
         crate::test_editor(Document {
             root: Some(Value::record([(vocabulary::GRAP, function.into())])),
@@ -1199,7 +1281,16 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
     use ui_events::keyboard::NamedKey;
     let function = new_cell_id();
     let mut cells = Cells::new();
-    cells.set_value(function, Value::record([(PARAMS, Value::list([]))]));
+    cells.set_value(
+        function,
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            ),
+            (PARAMS, Value::list([])),
+        ]),
+    );
     let mut driver = crate::driver::Driver::new(
         crate::test_editor(Document {
             root: Some(Value::record([(vocabulary::GRAP, function.into())])),
@@ -1346,8 +1437,8 @@ fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
         .expect("a parameter cell");
     let argument = [&program[..], &[Step::Key(parameter)]].concat();
     assert!(
-        !driver.drawn(&argument),
-        "a lambda with no body isn't callable yet"
+        driver.drawn(&argument),
+        "a lambda has its parameters, so the call its arguments, before its body is written"
     );
     driver.press(NamedKey::Tab);
     assert_eq!(

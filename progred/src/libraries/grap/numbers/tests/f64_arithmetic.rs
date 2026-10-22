@@ -42,6 +42,10 @@ fn functions() -> ::grap::ForeignFunctions {
 fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
     let sum = RuntimeValue::record([
         (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::CALL).into(),
+        ),
+        (
             FUNCTION,
             Value::from(crate::libraries::grap::numbers::f64::SUM).into(),
         ),
@@ -55,6 +59,10 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
         ),
     ]);
     let product = RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::CALL).into(),
+        ),
         (
             FUNCTION,
             Value::from(crate::libraries::grap::numbers::f64::MULTIPLY).into(),

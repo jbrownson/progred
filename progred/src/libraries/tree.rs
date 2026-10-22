@@ -270,6 +270,10 @@ fn evaluate(
         Ok(value)
     };
     let expression = RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            Value::from(::grap::vocabulary::CALL).into(),
+        ),
         (::grap::vocabulary::FUNCTION, Value::from(COLLECT).into()),
         (PROGRAM, program.clone()),
     ]);
