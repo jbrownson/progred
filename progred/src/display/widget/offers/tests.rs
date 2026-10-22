@@ -9,12 +9,12 @@ use gid::{Cells, Document, Resolution, Step, new_cell_id};
 #[test]
 fn retained_completion_offers_follow_live_names_before_filtering() {
     use crate::display::{CompletionKind, CompletionProvider, CompletionRequest, CompletionScope};
-    use fidget::vocabulary::{FIDGET, SPHERE};
+    use fidget::vocabulary::{FIDGET, kind::SQRT};
 
     let stack = crate::stack::load();
     let path = [Step::Key(FIDGET)];
     let mut document = Document::default();
-    let offer = crate::libraries::completion::select(SPHERE, SPHERE.into()).with_detail(fidget::ID);
+    let offer = crate::libraries::completion::select(SQRT, SQRT.into()).with_detail(fidget::ID);
     let expected_value = offer.test_value();
     let expected_selection = crate::libraries::test_widgets::activate_completion(&offer)
         .model
@@ -24,7 +24,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
 
     // An empty name names nothing, as no name doesn't.
     for (definition, library, display, detail) in [
-        (None, None, "sphere".to_owned(), "fidget".to_owned()),
+        (None, None, "sqrt".to_owned(), "fidget".to_owned()),
         (
             Some(name::record("boule", [])),
             Some("formes"),
@@ -34,18 +34,18 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
         (
             Some(name::record("", [])),
             Some(""),
-            short_id(SPHERE),
+            short_id(SQRT),
             short_id(fidget::ID),
         ),
         (
             Some(Value::record([])),
             Some("sans nom"),
-            short_id(SPHERE),
+            short_id(SQRT),
             "sans nom".to_owned(),
         ),
     ] {
         if let Some(value) = definition {
-            document.cells.set_value(SPHERE, value);
+            document.cells.set_value(SQRT, value);
         }
         if let Some(library) = library {
             document
@@ -53,7 +53,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                 .set_value(fidget::ID, name::record(library, []));
         }
         let sources = src(&document, &stack.libraries);
-        for query in ["", display.as_str(), "unrelated query", "sphere"] {
+        for query in ["", display.as_str(), "unrelated query", "sqrt"] {
             let entries = ranked(provider.clone())(&CompletionRequest {
                 query,
                 kind: CompletionKind::Value,

@@ -1,6 +1,6 @@
 {
   "binders": {
-    "abs": 9f71b219018a191fab7b726732645ab1,
+    "abs": 119eddd0f1404b34a6e8653279b69feb,
     "absent": d9c0a7145a38859a245640d3469cbcd4,
     "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
@@ -100,11 +100,11 @@
     "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
     "min_z": 392a615eb91c6d64df871ec95831f89a,
     "model": dc172f7e5c9e1cd46205ab65ca867ef3,
-    "model_divide": f9b35090433ceb932fb6da18d0dcc9bf,
-    "model_max": 7082a82b3fd6dbc575aa5c85adfacc76,
-    "model_multiply": d2b341855e79890fc79bb562b109fcaf,
-    "model_subtract": 90e22494757f01a2ddf9bea409c186ae,
-    "model_sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
+    "model_divide": 9f458eda134e4adc98661b07b5169223,
+    "model_max": 968e2f1f111a4849a8449dbeddbe8412,
+    "model_multiply": 2b80236eda7245d6a63b0da98da25850,
+    "model_subtract": 4535d940d2f04affa350291dd96f06bc,
+    "model_sum": 7300fd0088314a1b800a9cb15b015ba8,
     "model_x": 0192bad40c32c951e2237679084528bc,
     "model_y": 213e54dd15ac9c9750308f35a606f56f,
     "model_z": c93e6bb743a9d90f85f8cdea3aabf5c1,
@@ -148,7 +148,7 @@
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
     "slope": add49f506cecac65e0da65e073ed9e80,
     "spacing": 7ef7649d1684dcdf58f4156b295ccee1,
-    "square": 6164efe43a126d79bcd252a17a9453c1,
+    "square": d4f866cfe9014192a360d5567df9cbef,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_at": 0b3ea6a88bdb8a105704e4af8b7950a5,
     "state": 3775735ae4c156144c110ba819cb1e39,
@@ -204,6 +204,9 @@
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "closure": 0e8180c5b2f0492291ce5150f2292697,
     "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
+    "model_right": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
+    "model_left": 3cbf5357204947fdb4f26eadcbd777d6,
+    "model_operand": b66457fa59524110bb363bc28754cea0,
   },
   "cells": {
     model: {name: "Model"},
@@ -750,45 +753,77 @@
                   function: where,
                   expression: {
                     isa: call,
-                    right: {
-                      isa: call,
-                      right: {
-                        isa: call,
-                        right: {isa: call, v: {isa: axis_2, axis: model_z}, function: chamfer_pair, u: {isa: axis_2, axis: model_y}},
-                        function: model_max,
-                        left: {isa: call, v: {isa: axis_2, axis: model_z}, function: chamfer_pair, u: {isa: axis_2, axis: model_x}},
-                      },
-                      function: model_max,
-                      left: {isa: call, v: {isa: axis_2, axis: model_y}, function: chamfer_pair, u: {isa: axis_2, axis: model_x}},
-                    },
-                    function: model_max,
-                    left: {
-                      isa: call,
-                      right: {
-                        isa: call,
-                        right: {
-                          isa: call,
-                          v: {isa: axis_2, axis: model_y},
-                          normal: {isa: axis_2, axis: model_z},
-                          function: face_pair,
-                          u: {isa: axis_2, axis: model_x},
+                    function: quote,
+                    expression: {
+                      isa: model_max,
+                      model_right: {
+                        isa: model_max,
+                        model_right: {
+                          isa: model_max,
+                          model_right: {
+                            isa: unquote_2,
+                            unquote: {
+                              isa: call,
+                              v: {isa: axis_2, axis: model_z},
+                              function: chamfer_pair,
+                              u: {isa: axis_2, axis: model_y},
+                            },
+                          },
+                          model_left: {
+                            isa: unquote_2,
+                            unquote: {
+                              isa: call,
+                              v: {isa: axis_2, axis: model_z},
+                              function: chamfer_pair,
+                              u: {isa: axis_2, axis: model_x},
+                            },
+                          },
                         },
-                        function: model_max,
-                        left: {
-                          isa: call,
-                          v: {isa: axis_2, axis: model_z},
-                          normal: {isa: axis_2, axis: model_y},
-                          function: face_pair,
-                          u: {isa: axis_2, axis: model_x},
+                        model_left: {
+                          isa: unquote_2,
+                          unquote: {
+                            isa: call,
+                            v: {isa: axis_2, axis: model_y},
+                            function: chamfer_pair,
+                            u: {isa: axis_2, axis: model_x},
+                          },
                         },
                       },
-                      function: model_max,
-                      left: {
-                        isa: call,
-                        v: {isa: axis_2, axis: model_z},
-                        normal: {isa: axis_2, axis: model_x},
-                        function: face_pair,
-                        u: {isa: axis_2, axis: model_y},
+                      model_left: {
+                        isa: model_max,
+                        model_right: {
+                          isa: model_max,
+                          model_right: {
+                            isa: unquote_2,
+                            unquote: {
+                              isa: call,
+                              v: {isa: axis_2, axis: model_y},
+                              normal: {isa: axis_2, axis: model_z},
+                              function: face_pair,
+                              u: {isa: axis_2, axis: model_x},
+                            },
+                          },
+                          model_left: {
+                            isa: unquote_2,
+                            unquote: {
+                              isa: call,
+                              v: {isa: axis_2, axis: model_z},
+                              normal: {isa: axis_2, axis: model_y},
+                              function: face_pair,
+                              u: {isa: axis_2, axis: model_x},
+                            },
+                          },
+                        },
+                        model_left: {
+                          isa: unquote_2,
+                          unquote: {
+                            isa: call,
+                            v: {isa: axis_2, axis: model_z},
+                            normal: {isa: axis_2, axis: model_x},
+                            function: face_pair,
+                            u: {isa: axis_2, axis: model_y},
+                          },
+                        },
                       },
                     },
                   },
@@ -803,18 +838,23 @@
                         params: [coordinate],
                         body: {
                           isa: call,
-                          right: {
-                            isa: call,
-                            right: {
-                              isa: call,
-                              operand: {isa: call, right: half_face, function: model_divide, left: coordinate},
-                              function: square,
+                          function: quote,
+                          expression: {
+                            isa: model_max,
+                            model_right: {
+                              isa: model_subtract,
+                              model_right: {
+                                isa: square,
+                                model_operand: {
+                                  isa: model_divide,
+                                  model_right: {isa: unquote_2, unquote: half_face},
+                                  model_left: {isa: unquote_2, unquote: coordinate},
+                                },
+                              },
+                              model_left: {f32: 0x0000803f},
                             },
-                            function: model_subtract,
-                            left: {f32: 0x0000803f},
+                            model_left: {f32: 0x00000000},
                           },
-                          function: model_max,
-                          left: {f32: 0x00000000},
                         },
                       },
                       bind: shoulder,
@@ -825,23 +865,23 @@
                         params: [normal, u, v],
                         body: {
                           isa: call,
-                          right: {
-                            isa: call,
-                            right: {
-                              isa: call,
-                              right: {isa: call, coordinate: v, function: shoulder},
-                              function: model_multiply,
-                              left: {isa: call, coordinate: u, function: shoulder},
+                          function: quote,
+                          expression: {
+                            isa: model_sum,
+                            model_right: {
+                              isa: model_multiply,
+                              model_right: {
+                                isa: model_multiply,
+                                model_right: {isa: unquote_2, unquote: {isa: call, coordinate: v, function: shoulder}},
+                                model_left: {isa: unquote_2, unquote: {isa: call, coordinate: u, function: shoulder}},
+                              },
+                              model_left: {isa: unquote_2, unquote: center_depth},
                             },
-                            function: model_multiply,
-                            left: center_depth,
-                          },
-                          function: model_sum,
-                          left: {
-                            isa: call,
-                            right: half_size,
-                            function: model_subtract,
-                            left: {isa: call, operand: normal, function: abs},
+                            model_left: {
+                              isa: model_subtract,
+                              model_right: {isa: unquote_2, unquote: half_size},
+                              model_left: {isa: abs, model_operand: {isa: unquote_2, unquote: normal}},
+                            },
                           },
                         },
                       },
@@ -853,13 +893,15 @@
                         params: [u, v],
                         body: {
                           isa: call,
-                          right: edge_limit,
-                          function: model_subtract,
-                          left: {
-                            isa: call,
-                            right: {isa: call, operand: v, function: abs},
-                            function: model_sum,
-                            left: {isa: call, operand: u, function: abs},
+                          function: quote,
+                          expression: {
+                            isa: model_subtract,
+                            model_right: {isa: unquote_2, unquote: edge_limit},
+                            model_left: {
+                              isa: model_sum,
+                              model_right: {isa: abs, model_operand: {isa: unquote_2, unquote: v}},
+                              model_left: {isa: abs, model_operand: {isa: unquote_2, unquote: u}},
+                            },
                           },
                         },
                       },

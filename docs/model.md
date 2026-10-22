@@ -407,9 +407,10 @@ draws a name as its line editor, there or missing: typed into where it's
 missing, the first keystroke writes the name, and Enter with nothing typed
 writes the empty string. A missing-name marker, such as an anonymous lambda's,
 selects that name location and then draws the same editor. A `name` field drawn by
-the generic structure projection offers Raw's instead. Circle and sphere are
-ordinary named Grap lambdas that use quote/unquote to return Fidget arithmetic;
-the Fidget parser has no circle or sphere forms.
+the generic structure projection offers Raw's instead. A sphere is a Fidget
+program, not a Fidget form: the examples that use one define `sphere` as an
+ordinary named Grap lambda that quotes Fidget arithmetic with its radius
+unquoted.
 
 The numeric libraries read the query as `f32`, `f64`, and `u64` numbers when it
 parses, showing the representation and the actual stored number; a query that

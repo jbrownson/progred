@@ -55,14 +55,23 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
             (fidget::vocabulary::RIGHT, crate::libraries::f32::value(2.0)),
         ],
     );
-    for (function, result) in [
+    // A Grap call, and Grap quoting a Fidget field.
+    for (expression, result) in [
         (
-            crate::libraries::grap::numbers::f32::SUBTRACT,
+            grap::call(
+                crate::libraries::grap::numbers::f32::SUBTRACT.into(),
+                arguments.clone(),
+            ),
             crate::libraries::f32::value(5.0),
         ),
-        (fidget::vocabulary::DIFFERENCE, shape),
+        (
+            grap::call(
+                crate::libraries::grap::control::vocabulary::QUOTE.into(),
+                [(grap::vocabulary::EXPRESSION, shape.clone())],
+            ),
+            shape,
+        ),
     ] {
-        let expression = grap::call(function.into(), arguments.clone());
         doc.cells.set_value(cell, expression.clone());
         displayed.borrow_mut().clear();
         context.frame(BenchFrame {

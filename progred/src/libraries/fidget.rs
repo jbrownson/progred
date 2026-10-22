@@ -3,7 +3,7 @@
 //! the host representation.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, color, f32, grap::control, name, presentation, representation};
+use crate::libraries::{Library, color, f32, name, presentation, representation};
 #[cfg(not(target_arch = "wasm32"))]
 use fidget_engine::wgpu::{
     Gpu, RenderShape,
@@ -62,24 +62,6 @@ pub mod vocabulary {
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);
     pub const Y: CellId = CellId::from_u128(0x213e54dd15ac9c9750308f35a606f56f);
     pub const Z: CellId = CellId::from_u128(0xc93e6bb743a9d90f85f8cdea3aabf5c1);
-    pub const SUM: CellId = CellId::from_u128(0x208bf7b0ee1a002c66c86b34cf9eff3d);
-    pub const SUBTRACT: CellId = CellId::from_u128(0x90e22494757f01a2ddf9bea409c186ae);
-    pub const MULTIPLY: CellId = CellId::from_u128(0xd2b341855e79890fc79bb562b109fcaf);
-    pub const DIVIDE: CellId = CellId::from_u128(0xf9b35090433ceb932fb6da18d0dcc9bf);
-    pub const MIN: CellId = CellId::from_u128(0x3fa78b77a43b285f26a97e7aaf5f7028);
-    pub const MAX: CellId = CellId::from_u128(0x7082a82b3fd6dbc575aa5c85adfacc76);
-    pub const NEGATE: CellId = CellId::from_u128(0x06eccebf47fc0faf7e33572d19c0d049);
-    pub const ABS: CellId = CellId::from_u128(0x9f71b219018a191fab7b726732645ab1);
-    pub const SQRT: CellId = CellId::from_u128(0xf275fe836c9d66fed1e0de4325e134c6);
-    pub const SQUARE: CellId = CellId::from_u128(0x6164efe43a126d79bcd252a17a9453c1);
-    pub const SIN: CellId = CellId::from_u128(0xd9f6470a88f105fc9a54f65226afd55d);
-    pub const COS: CellId = CellId::from_u128(0x68f159b5e393e2f827de486f95c2df6b);
-    pub const CIRCLE: CellId = CellId::from_u128(0xe467941b11832c441c98488dbdc5a540);
-    pub const SPHERE: CellId = CellId::from_u128(0xc40de238820c3da73ec7780ddd438757);
-    pub const TRANSLATE: CellId = CellId::from_u128(0xcc63ad1f4efa15b6f43f36b3cd11f3f6);
-    pub const UNION: CellId = CellId::from_u128(0xb1d41a3c4f76c5929db19be204083d02);
-    pub const INTERSECTION: CellId = CellId::from_u128(0x737a28cb9bd1a6d28604e8a68a909932);
-    pub const DIFFERENCE: CellId = CellId::from_u128(0xc621348e3c35e46e87c1994eb1a50965);
     pub const PREVIEW: CellId = CellId::from_u128(0x69662683bafef0d10c88d46245cb638f);
     pub const PREVIEW_3D: CellId = CellId::from_u128(0x9a8142ecc3124e873dd2ad955d28fb85);
     pub const PREVIEW_MESH: CellId = CellId::from_u128(0x95eec28ff8cc6ba67153f9dfc4021139);
@@ -88,7 +70,6 @@ pub mod vocabulary {
     pub const FIELD: CellId = CellId::from_u128(0x66bad5269b830181b840cf23a391b10e);
     pub const SCENE: CellId = CellId::from_u128(0xd6757ca4cb992116fe31ede39530709d);
     pub const COLOR: CellId = CellId::from_u128(0xd6b4c91765541de967c02878c42d15ea);
-    pub const RADIUS: CellId = CellId::from_u128(0x64302843e07250efdb485267245c762e);
     pub const DELTA_X: CellId = CellId::from_u128(0x671936a24eb2d9d6e47ac5915a3e38c4);
     pub const DELTA_Y: CellId = CellId::from_u128(0x3dd683179b807ca200980eeffb90011f);
     pub const DELTA_Z: CellId = CellId::from_u128(0x48c4e6ddda046c53c02452d3d73e4388);
@@ -132,36 +113,27 @@ pub mod vocabulary {
     }
 }
 
-/// The nodes of two operands: each kind, the Grap function that builds one,
-/// and its spelling.
-const BINARY: [(CellId, CellId, &str); 9] = [
-    (vocabulary::kind::SUM, vocabulary::SUM, "+"),
-    (vocabulary::kind::SUBTRACT, vocabulary::SUBTRACT, "-"),
-    (vocabulary::kind::MULTIPLY, vocabulary::MULTIPLY, "*"),
-    (vocabulary::kind::DIVIDE, vocabulary::DIVIDE, "/"),
-    (vocabulary::kind::MIN, vocabulary::MIN, "min"),
-    (vocabulary::kind::MAX, vocabulary::MAX, "max"),
-    (vocabulary::kind::UNION, vocabulary::UNION, "union"),
-    (
-        vocabulary::kind::INTERSECTION,
-        vocabulary::INTERSECTION,
-        "intersection",
-    ),
-    (
-        vocabulary::kind::DIFFERENCE,
-        vocabulary::DIFFERENCE,
-        "difference",
-    ),
+/// The nodes of two operands: each kind and its spelling.
+const BINARY: [(CellId, &str); 9] = [
+    (vocabulary::kind::SUM, "+"),
+    (vocabulary::kind::SUBTRACT, "-"),
+    (vocabulary::kind::MULTIPLY, "*"),
+    (vocabulary::kind::DIVIDE, "/"),
+    (vocabulary::kind::MIN, "min"),
+    (vocabulary::kind::MAX, "max"),
+    (vocabulary::kind::UNION, "union"),
+    (vocabulary::kind::INTERSECTION, "intersection"),
+    (vocabulary::kind::DIFFERENCE, "difference"),
 ];
 
 /// The nodes of one operand, as [`BINARY`] lists those of two.
-const UNARY: [(CellId, CellId, &str); 6] = [
-    (vocabulary::kind::NEGATE, vocabulary::NEGATE, "negate"),
-    (vocabulary::kind::ABS, vocabulary::ABS, "abs"),
-    (vocabulary::kind::SQRT, vocabulary::SQRT, "sqrt"),
-    (vocabulary::kind::SQUARE, vocabulary::SQUARE, "square"),
-    (vocabulary::kind::SIN, vocabulary::SIN, "sin"),
-    (vocabulary::kind::COS, vocabulary::COS, "cos"),
+const UNARY: [(CellId, &str); 6] = [
+    (vocabulary::kind::NEGATE, "negate"),
+    (vocabulary::kind::ABS, "abs"),
+    (vocabulary::kind::SQRT, "sqrt"),
+    (vocabulary::kind::SQUARE, "square"),
+    (vocabulary::kind::SIN, "sin"),
+    (vocabulary::kind::COS, "cos"),
 ];
 
 /// The kinds of node a field is built from.
@@ -169,16 +141,16 @@ fn node_kinds() -> impl Iterator<Item = CellId> {
     BINARY
         .into_iter()
         .chain(UNARY)
-        .map(|(kind, _, _)| kind)
+        .map(|(kind, _)| kind)
         .chain([vocabulary::kind::AXIS, vocabulary::kind::TRANSLATE])
 }
 
 /// Arithmetic, which reads infix as a number's does: those of [`BINARY`]
 /// spelled as a symbol.
-fn arithmetic() -> impl Iterator<Item = (CellId, CellId, &'static str)> {
+fn arithmetic() -> impl Iterator<Item = (CellId, &'static str)> {
     BINARY
         .into_iter()
-        .filter(|(_, _, spelling)| representation::Precedence::of_symbol(spelling).is_some())
+        .filter(|(_, spelling)| representation::Precedence::of_symbol(spelling).is_some())
 }
 
 /// The kind of node `fields` says it is, if it's one of Fidget's.
@@ -189,18 +161,22 @@ fn node_kind(fields: &gid::Record) -> Option<CellId> {
         .then_some(kind)
 }
 
+#[cfg(test)]
 fn node(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::isa::record(kind, fields)
 }
 
+#[cfg(test)]
 fn axis(axis: CellId) -> Value {
     node(vocabulary::kind::AXIS, [(vocabulary::AXIS, axis.into())])
 }
 
+#[cfg(test)]
 fn unary(kind: CellId, operand: Value) -> Value {
     node(kind, [(vocabulary::OPERAND, operand)])
 }
 
+#[cfg(test)]
 fn binary(kind: CellId, left: Value, right: Value) -> Value {
     node(kind, [(vocabulary::LEFT, left), (vocabulary::RIGHT, right)])
 }
@@ -300,83 +276,6 @@ fn bound_arguments(
         .collect()
 }
 
-// The Grap functions take Grap numbers' operands and build Fidget's nodes.
-
-fn unary_function(kind: CellId) -> ForeignFunction {
-    ForeignFunction::with_arguments(
-        [crate::libraries::grap::numbers::vocabulary::OPERAND],
-        move |_, (operand,): (Value,)| unary(kind, operand),
-    )
-    .tracked()
-}
-
-fn binary_function(kind: CellId) -> ForeignFunction {
-    use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
-    ForeignFunction::with_arguments([LEFT, RIGHT], move |_, (left, right): (Value, Value)| {
-        binary(kind, left, right)
-    })
-    .tracked()
-}
-
-fn radial_function(spelling: &str, squared_distance: Value) -> Value {
-    name::record(
-        spelling,
-        [
-            (::grap::isa::ISA, ::grap::vocabulary::kind::LAMBDA.into()),
-            (
-                ::grap::vocabulary::PARAMS,
-                Value::list([vocabulary::RADIUS.into()]),
-            ),
-            (
-                ::grap::vocabulary::BODY,
-                ::grap::call(
-                    control::vocabulary::QUOTE.into(),
-                    [(
-                        ::grap::vocabulary::EXPRESSION,
-                        binary(
-                            vocabulary::kind::SUBTRACT,
-                            unary(vocabulary::kind::SQRT, squared_distance),
-                            control::unquote(vocabulary::RADIUS.into()),
-                        ),
-                    )],
-                ),
-            ),
-        ],
-    )
-}
-
-fn translate_function(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<Value, Halt> {
-    let Some(field) = evaluated(context, call, environment, vocabulary::FIELD)? else {
-        return Ok(context.missing_argument(call, vocabulary::FIELD));
-    };
-    let deltas = [
-        vocabulary::DELTA_X,
-        vocabulary::DELTA_Y,
-        vocabulary::DELTA_Z,
-    ]
-    .into_iter()
-    .map(|coordinate| {
-        evaluated(context, call, environment, coordinate).map(|value| {
-            let value = value.unwrap_or_else(|| f32::value(0.0));
-            f32::read(&value)
-                .filter(|number| number.is_finite())
-                .map(|_| (coordinate, value))
-        })
-    })
-    .collect::<Result<Option<Vec<_>>, _>>()?;
-    Ok(match deltas {
-        Some(deltas) => node(
-            vocabulary::kind::TRANSLATE,
-            [(vocabulary::FIELD, field)].into_iter().chain(deltas),
-        ),
-        None => ::grap::absent::value(vocabulary::INVALID_FIELD),
-    })
-}
-
 fn preview_function(
     context: &mut ::grap::Context,
     call: &Expression,
@@ -441,25 +340,10 @@ fn volume_preview_function(
     )
 }
 
+/// Fidget's previews, which a pane's viewport or a document's evaluation
+/// calls to draw a field.
 fn functions() -> ForeignFunctions {
-    BINARY
-        .into_iter()
-        .map(|(kind, function, _)| (function, binary_function(kind)))
-        .chain(
-            UNARY
-                .into_iter()
-                .map(|(kind, function, _)| (function, unary_function(kind))),
-        )
-        .fold(
-            ForeignFunctions::default(),
-            |functions, (cell, function)| functions.register(cell, function),
-        )
-        .register(
-            vocabulary::TRANSLATE,
-            ForeignFunction::from_value(translate_function)
-                .parameters([vocabulary::FIELD])
-                .tracked(),
-        )
+    ForeignFunctions::default()
         .register(
             vocabulary::PREVIEW,
             ForeignFunction::from_value(preview_function)
@@ -483,9 +367,9 @@ fn functions() -> ForeignFunctions {
 /// The fields a node of `kind` requires, when it's one of Fidget's
 /// operations.
 fn parameters(kind: CellId) -> Option<&'static [CellId]> {
-    if BINARY.iter().any(|(candidate, _, _)| *candidate == kind) {
+    if BINARY.iter().any(|(candidate, _)| *candidate == kind) {
         Some(&[vocabulary::LEFT, vocabulary::RIGHT])
-    } else if UNARY.iter().any(|(candidate, _, _)| *candidate == kind) {
+    } else if UNARY.iter().any(|(candidate, _)| *candidate == kind) {
         Some(&[vocabulary::OPERAND])
     } else {
         None
@@ -508,9 +392,16 @@ fn tree(value: &Value) -> Option<Tree> {
         },
         kind::TRANSLATE => {
             let field = operand(vocabulary::FIELD)?;
-            let dx = f32::read(fields.get(&vocabulary::DELTA_X)?)?;
-            let dy = f32::read(fields.get(&vocabulary::DELTA_Y)?)?;
-            let dz = f32::read(fields.get(&vocabulary::DELTA_Z)?)?;
+            // An offset left out is none.
+            let delta = |field| match fields.get(&field) {
+                Some(value) => f32::read(value).filter(|delta| delta.is_finite()),
+                None => Some(0.0),
+            };
+            let [dx, dy, dz] = [
+                delta(vocabulary::DELTA_X)?,
+                delta(vocabulary::DELTA_Y)?,
+                delta(vocabulary::DELTA_Z)?,
+            ];
             Some(field.remap_xyz(Tree::x() - dx, Tree::y() - dy, Tree::z() - dz))
         }
         kind @ (kind::NEGATE | kind::ABS | kind::SQRT | kind::SQUARE | kind::SIN | kind::COS) => {
@@ -1116,27 +1007,7 @@ pub(crate) fn interactive_volume<W: Host, V>(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let square = |cell| unary(vocabulary::kind::SQUARE, axis(cell));
-    let radial = binary(
-        vocabulary::kind::SUM,
-        square(vocabulary::X),
-        square(vocabulary::Y),
-    );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
-    let infix: Rc<[_]> = arithmetic()
-        .filter_map(|(_, function, symbol)| {
-            Some((function, representation::Precedence::of_symbol(symbol)?))
-        })
-        .collect();
-    // Calls of each infix operator draw infix.
-    let operator = {
-        let infix = infix.clone();
-        crate::display::runtime_partial(move |input| representation::infix_display(&infix, input))
-    };
-    let operators = infix
-        .iter()
-        .map(|(cell, _)| (*cell, operator.clone()))
-        .collect::<Vec<_>>();
     // Each of Fidget's nodes draws as its kind provides.
     let nodes = node_kinds()
         .map(|kind| (kind, crate::display::runtime_partial(projection::field)))
@@ -1151,7 +1022,6 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::LEFT, "left"),
             (vocabulary::RIGHT, "right"),
             (vocabulary::OPERAND, "operand"),
-            (vocabulary::TRANSLATE, "translate"),
             (vocabulary::kind::TRANSLATE, "translate"),
             (vocabulary::PREVIEW, "preview"),
             (vocabulary::PREVIEW_3D, "preview 3d"),
@@ -1160,7 +1030,6 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::FIELD, "field"),
             (vocabulary::SCENE, "scene"),
             (vocabulary::COLOR, "color"),
-            (vocabulary::RADIUS, "radius"),
             (vocabulary::DELTA_X, "x"),
             (vocabulary::DELTA_Y, "y"),
             (vocabulary::DELTA_Z, "z"),
@@ -1181,20 +1050,19 @@ pub fn library<W: Host>() -> Library<W> {
             UNARY
                 .into_iter()
                 .chain(BINARY)
-                .filter(|(_, _, spelling)| {
-                    representation::Precedence::of_symbol(spelling).is_none()
-                })
-                .flat_map(|(kind, function, spelling)| [(kind, spelling), (function, spelling)]),
+                .filter(|(_, spelling)| representation::Precedence::of_symbol(spelling).is_none()),
         )
         .map(|(cell, spelling)| (cell, crate::libraries::text::value(spelling)))
         // An arithmetic symbol carries Fidget's tag, telling it from a
         // number's.
-        .chain(arithmetic().flat_map(|(kind, function, spelling)| {
-            let name = name::formatted([
-                crate::libraries::text::value(spelling),
-                name::subscript(vocabulary::FIDGET.into()),
-            ]);
-            [(kind, name.clone()), (function, name)]
+        .chain(arithmetic().map(|(kind, spelling)| {
+            (
+                kind,
+                name::formatted([
+                    crate::libraries::text::value(spelling),
+                    name::subscript(vocabulary::FIDGET.into()),
+                ]),
+            )
         }))
         .chain(
             [
@@ -1229,23 +1097,9 @@ pub fn library<W: Host>() -> Library<W> {
                     ],
                 ),
             )
-        })
-        .into_iter()
-        .chain([
-            (
-                vocabulary::CIRCLE,
-                radial_function("circle", radial.clone()),
-            ),
-            (
-                vocabulary::SPHERE,
-                radial_function(
-                    "sphere",
-                    binary(vocabulary::kind::SUM, radial, square(vocabulary::Z)),
-                ),
-            ),
-        ]),
+        }),
     )
-    .with_projections_for(operators.into_iter().chain(nodes))
+    .with_projections_for(nodes)
     .with_projection(crate::display::compose_partials([
         crate::display::runtime_partial(move |input| display(input, &renderer)),
         crate::display::runtime_partial(mesh::display),

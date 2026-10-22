@@ -31,16 +31,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
         &context.stack.projection,
         kurbo::Size::new(96.0, 64.0),
     );
-    let sphere = |radius| {
-        grap::call(
-            fidget::vocabulary::SPHERE.into(),
-            [(
-                fidget::vocabulary::RADIUS,
-                crate::libraries::f32::value(radius),
-            )],
-        )
-    };
-    let coverage = [None, Some(sphere(40.0)), Some(sphere(20.0))].map(|value| {
+    let coverage = [None, Some(super::sphere(40.0)), Some(super::sphere(20.0))].map(|value| {
         if let Some(value) = value {
             doc.cells.set_value(cell, value);
         }

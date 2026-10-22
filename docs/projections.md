@@ -126,9 +126,10 @@ inputs carry the provided projections, so a projection can ask another cell for
 its own: Grap's call kind draws a call as its function provides, else as a
 call. Grap's calls, lambdas, closures and value wrappers provide theirs;
 control's `match`, `let`, `where`, `do`, `all` and `quote` and the infix
-operators of Grap's numbers and of Fidget provide theirs for calls of them, and
-the unquote kind for unquotes. An area that switches a library off leaves its
-cells' projections off, so with Grap off an operator call is a record again.
+operators of Grap's numbers provide theirs for calls of them, and the unquote
+kind for unquotes; each of Fidget's node kinds provides its own. An area that
+switches a library off leaves its cells' projections off, so with Grap off an
+operator call is a record again.
 Measured on 22 October 2026, this took the IoP source form's projection scope
 from 2.44 ms to 2.23 ms a frame and its allocations from about 35,000 to 30,700;
 the frame canaries moved within their noise. The current host partials are Rust
@@ -404,13 +405,14 @@ from ordinary definitions. Operands retain their stored paths and stock editing
 controls, while an operator targets its whole expression. Named fields expose
 their editable name beside the formula. Unrelated fields on an operation or its
 operand record do not block notation or change grouping. Incomplete forms
-decline; translation keeps its explicit named parameters. Fidget's Grap
-functions (`sum`, `sqrt`, `translate` and the rest) build these nodes from
-Grap numbers' operands. These are source projections only, independent of the opt-in
+decline; translation keeps its explicit named parameters, each offset none when
+left out. Fidget has no Grap functions for its nodes: a field is written as
+data, and Grap assembles one procedurally with `quote`, unquoting what it
+computes. Its previews remain Grap functions, the viewports presentation calls. These are source projections only, independent of the opt-in
 rendered viewport.
 
-Grap calls of arithmetic and comparison, a number type's or Fidget's, read
-infix as well, the operator tagged with its representation. f64, f32 and u64
+Grap calls of a number type's arithmetic and comparison read infix as well, the
+operator tagged with its representation. f64, f32 and u64
 are only numbers: how each is stored, read, spelled and drawn. Their
 operations, the Rust functions that run them and the infix drawing are the
 Grap library's ([`grap/numbers.rs`](../progred/src/libraries/grap/numbers.rs)),

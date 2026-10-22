@@ -221,7 +221,15 @@ fn numbers() {
 
     // And change a radius.
     let before = numbers.images();
-    let radius = numbers.path(&["fifth", "evaluate", "value", "left", "radius"]);
+    let radius = numbers.path(&[
+        "fifth",
+        "evaluate",
+        "value",
+        "expression",
+        "shape_left",
+        "unquote",
+        "radius",
+    ]);
     numbers.double_click(&radius);
     numbers.type_text("20");
     assert_eq!(

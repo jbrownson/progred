@@ -29,6 +29,24 @@ fn sample(tree: Tree, x: f32, y: f32, z: f32) -> f32 {
     evaluator.eval(&tape, &[x], &[y], &[z]).unwrap()[0]
 }
 
+/// The field of a sphere of `radius` about the origin.
+fn sphere(radius: f32) -> Value {
+    use vocabulary::kind;
+    let square = |cell| unary(kind::SQUARE, axis(cell));
+    binary(
+        kind::SUBTRACT,
+        unary(
+            kind::SQRT,
+            binary(
+                kind::SUM,
+                binary(kind::SUM, square(vocabulary::X), square(vocabulary::Y)),
+                square(vocabulary::Z),
+            ),
+        ),
+        f32::value(radius),
+    )
+}
+
 /// A record holding `content` under its one `tag`.
 fn tagged(tag: CellId, content: Value) -> Value {
     Value::record([(tag, content)])
@@ -276,7 +294,7 @@ fn gpu_colors_constants_and_workspace_reuse() {
 }
 
 #[test]
-fn trigonometry_is_fidget_data_and_ordinary_grap_construction() {
+fn trigonometry_is_fidget_data() {
     let operand = name::record(
         "phase",
         [
@@ -284,30 +302,17 @@ fn trigonometry_is_fidget_data_and_ordinary_grap_construction() {
             (vocabulary::AXIS, vocabulary::X.into()),
         ],
     );
-    for (kind, function, operation) in [
+    for (kind, operation) in [
         (
             vocabulary::kind::SIN,
-            vocabulary::SIN,
             std::primitive::f32::sin as fn(f32) -> f32,
         ),
         (
             vocabulary::kind::COS,
-            vocabulary::COS,
             std::primitive::f32::cos as fn(f32) -> f32,
         ),
     ] {
-        let data = unary(kind, operand.clone());
-        assert_eq!(
-            evaluate(&call(
-                function,
-                [(
-                    crate::libraries::grap::numbers::vocabulary::OPERAND,
-                    operand.clone()
-                )]
-            )),
-            data,
-        );
-        let field = tree(&data).unwrap();
+        let field = tree(&unary(kind, operand.clone())).unwrap();
         for phase in [-3.0, -0.5, 0.0, 0.5, 3.0] {
             assert!((sample(field.clone(), phase, 0.0, 0.0) - operation(phase)).abs() < 1e-6);
         }
@@ -315,75 +320,50 @@ fn trigonometry_is_fidget_data_and_ordinary_grap_construction() {
     }
 }
 
+/// Grap assembles a field as any other data, with quote: what's computed
+/// is unquoted, and Fidget reads the result.
 #[test]
-fn radial_shapes_are_grap_functions_returning_fidget_arithmetic() {
-    let library = library::<crate::Editor>();
-    for (shape, spelling, at_z) in [
-        (vocabulary::CIRCLE, "circle", -10.0),
-        (vocabulary::SPHERE, "sphere", 10.0),
-    ] {
-        assert!(
-            crate::test_support::foreign_functions(&library)
-                .get(shape)
-                .is_none()
-        );
-        let definition = library.definitions.value(shape).unwrap();
-        assert_eq!(name::read(definition), Some(spelling));
-        let definition = definition.as_record().unwrap();
-        assert_eq!(
-            definition.get(&::grap::vocabulary::PARAMS),
-            Some(&Value::list([vocabulary::RADIUS.into()]))
-        );
-        assert_eq!(
-            definition
-                .get(&::grap::vocabulary::BODY)
-                .and_then(Value::as_record)
-                .and_then(|body| body.get(&::grap::vocabulary::FUNCTION)),
-            Some(&control::vocabulary::QUOTE.into())
-        );
-
-        let field = evaluate(&call(shape, [(vocabulary::RADIUS, f32::value(10.0))]));
-        assert_eq!(
-            node_kind(field.as_record().unwrap()),
-            Some(vocabulary::kind::SUBTRACT)
-        );
-        let tree = tree(&field).unwrap();
-        assert_eq!(sample(tree.clone(), 0.0, 0.0, 0.0), -10.0);
-        assert_eq!(sample(tree.clone(), 6.0, 8.0, 0.0), 0.0);
-        assert_eq!(sample(tree, 0.0, 0.0, 20.0), at_z);
-        assert!(super::tree(&tagged(shape, f32::value(10.0))).is_none());
-    }
-}
-
-#[test]
-fn radial_templates_splice_the_radius_without_reencoding_it() {
-    let radius = name::record(
-        "radius",
-        [(
-            f32::vocabulary::F32,
-            Value::from(10.0_f32.to_le_bytes().to_vec()),
-        )],
+fn grap_quotes_a_field_that_fidget_evaluates() {
+    let circle = binary(
+        vocabulary::kind::SUBTRACT,
+        unary(
+            vocabulary::kind::SQRT,
+            binary(
+                vocabulary::kind::SUM,
+                unary(vocabulary::kind::SQUARE, axis(vocabulary::X)),
+                unary(vocabulary::kind::SQUARE, axis(vocabulary::Y)),
+            ),
+        ),
+        f32::value(10.0),
     );
-    let field = evaluate(&call(
-        vocabulary::SPHERE,
-        [(vocabulary::RADIUS, radius.clone())],
-    ));
-    assert_eq!(
-        field.as_record().unwrap().get(&vocabulary::RIGHT),
-        Some(&radius)
-    );
-    assert!(tree(&field).is_some());
-}
-
-#[test]
-fn grap_constructs_a_field_that_fidget_evaluates() {
-    let circle = call(vocabulary::CIRCLE, [(vocabulary::RADIUS, f32::value(10.0))]);
-    let moved = call(
-        vocabulary::TRANSLATE,
+    let offset = call(
+        crate::libraries::grap::numbers::f32::SUM,
         [
-            (vocabulary::FIELD, circle),
-            (vocabulary::DELTA_X, f32::value(5.0)),
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                f32::value(2.0),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                f32::value(3.0),
+            ),
         ],
+    );
+    let moved = call(
+        crate::libraries::grap::control::vocabulary::QUOTE,
+        [(
+            ::grap::vocabulary::EXPRESSION,
+            node(
+                vocabulary::kind::TRANSLATE,
+                [
+                    (vocabulary::FIELD, circle),
+                    (
+                        vocabulary::DELTA_X,
+                        crate::libraries::grap::control::unquote(offset),
+                    ),
+                ],
+            ),
+        )],
     );
     let field = evaluate(&moved);
     let tree = tree(&field).expect("GID field lowers to Fidget");
@@ -396,10 +376,7 @@ fn grap_constructs_a_field_that_fidget_evaluates() {
 fn preview_is_an_ordinary_projected_value() {
     let expression = call(
         vocabulary::PREVIEW,
-        [(
-            presentation::vocabulary::VALUE,
-            call(vocabulary::CIRCLE, [(vocabulary::RADIUS, f32::value(40.0))]),
-        )],
+        [(presentation::vocabulary::VALUE, sphere(40.0))],
     );
     let value = evaluate(&expression);
     let renderer = RefCell::new(PreviewRenderer::default());
@@ -429,10 +406,7 @@ fn preview_is_an_ordinary_projected_value() {
 fn grap_constructs_a_three_dimensional_preview() {
     let expression = call(
         vocabulary::PREVIEW_3D,
-        [(
-            presentation::vocabulary::VALUE,
-            call(vocabulary::SPHERE, [(vocabulary::RADIUS, f32::value(40.0))]),
-        )],
+        [(presentation::vocabulary::VALUE, sphere(40.0))],
     );
     let value = evaluate(&expression);
     let preview = volume_preview(&value).expect("3D preview value");
@@ -449,10 +423,7 @@ fn rectangular_previews_preserve_pixel_scale_and_render_at_native_resolution() {
         let value = evaluate(&call(
             vocabulary::PREVIEW_3D,
             [
-                (
-                    presentation::vocabulary::VALUE,
-                    call(vocabulary::SPHERE, [(vocabulary::RADIUS, f32::value(40.0))]),
-                ),
+                (presentation::vocabulary::VALUE, sphere(40.0)),
                 (
                     crate::libraries::layout::vocabulary::WIDTH,
                     crate::libraries::f64::value(size.width),

@@ -52,6 +52,7 @@ pub mod vocabulary {
 }
 
 /// An unquote of `expression`, as a quoted template holds one.
+#[cfg(test)]
 pub fn unquote(expression: Value) -> Value {
     ::grap::isa::record(
         vocabulary::kind::UNQUOTE,

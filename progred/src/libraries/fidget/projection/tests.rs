@@ -191,39 +191,4 @@ fn coordinates_are_shallow_and_names_remain_editable_data() {
     );
 }
 
-#[test]
-fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
-    let library = crate::libraries::fidget::library();
-    use crate::libraries::grap::numbers::vocabulary as numbers;
-    let reads_infix = |function: CellId| {
-        let call = ::grap::call(
-            Value::from(function),
-            [(numbers::LEFT, number(1.0)), (numbers::RIGHT, number(2.0))],
-        );
-        let runtime = ::grap::RuntimeValue::from(&call);
-        // What the function provides for calls of it.
-        let Some((_, operator)) = library.provided.iter().find(|(cell, _)| *cell == function)
-        else {
-            return false;
-        };
-        operator(&projection_input(&Names, &call).with_value(Some(&runtime))).is_some_and(
-            |layout| {
-                let Recorded::Alternatives(options) = layout.record().content().clone() else {
-                    return false;
-                };
-                let Recorded::Row { children, .. } = options[0].content() else {
-                    return false;
-                };
-                matches!(&inspect(&(unshared(&children[0]))),
-                    ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(numbers::LEFT)]
-                )
-            },
-        )
-    };
-    for function in [SUM, SUBTRACT, MULTIPLY, DIVIDE] {
-        assert!(reads_infix(function), "{function:?} reads infix");
-    }
-    assert!(!reads_infix(MAX));
-}
-
 mod frames;

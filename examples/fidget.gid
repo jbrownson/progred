@@ -1,8 +1,11 @@
 {
   "binders": {
+    "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "axis_2": f82b802a154f47ab973d4a522fd3d034,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "color": d6b4c91765541de967c02878c42d15ea,
-    "difference": c621348e3c35e46e87c1994eb1a50965,
+    "difference": 10f86aecbad3474fa912858a56ebdf94,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
     "ffi": 912adb7252d689659b6de9eeeb827658,
@@ -10,58 +13,121 @@
     "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "left": 3cbf5357204947fdb4f26eadcbd777d6,
     "main": f146d8a1d3174d9ab6136b4334768a2f,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "operand": b66457fa59524110bb363bc28754cea0,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
     "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
-    "radius": 64302843e07250efdb485267245c762e,
+    "radius": 9908a369d98f331f4bd2006385703d72,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
-    "right": 4f53ff25390f58472d31a6142644dec2,
+    "right": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
     "ring": ec804b721f63fb7b8fea58b401ae4eed,
     "scene": d6757ca4cb992116fe31ede39530709d,
-    "sphere": c40de238820c3da73ec7780ddd438757,
-    "translate": cc63ad1f4efa15b6f43f36b3cd11f3f6,
+    "sphere": a9a3b58ae0e1e06bf100d3eff777664f,
+    "sqrt": db6e742a39104ba89f2216ad9ab75e99,
+    "square": d4f866cfe9014192a360d5567df9cbef,
+    "subtract": 4535d940d2f04affa350291dd96f06bc,
+    "sum": 7300fd0088314a1b800a9cb15b015ba8,
+    "translate": 25dba7fa2ee74c2b986ba6e28aa3cbdf,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
     "x": 671936a24eb2d9d6e47ac5915a3e38c4,
+    "x_2": 0192bad40c32c951e2237679084528bc,
+    "y": 213e54dd15ac9c9750308f35a606f56f,
+    "z": c93e6bb743a9d90f85f8cdea3aabf5c1,
   },
   "cells": {
+    radius: {
+      name: "radius",
+    },
+    sphere: {
+      name: "sphere",
+      params: [
+        0x80: radius,
+      ],
+      body: {
+        function: quote,
+        expression: {
+          left: {
+            operand: {
+              left: {
+                left: {
+                  operand: {
+                    isa: axis_2,
+                    axis: x_2,
+                  },
+                  isa: square,
+                },
+                right: {
+                  operand: {
+                    isa: axis_2,
+                    axis: y,
+                  },
+                  isa: square,
+                },
+                isa: sum,
+              },
+              right: {
+                operand: {
+                  isa: axis_2,
+                  axis: z,
+                },
+                isa: square,
+              },
+              isa: sum,
+            },
+            isa: sqrt,
+          },
+          right: {
+            unquote: radius,
+            isa: unquote_2,
+          },
+          isa: subtract,
+        },
+        isa: call,
+      },
+      isa: lambda,
+    },
     ring: {
       function: quote,
       expression: {
         scene: [
           0x55: {
             field: {
-              unquote: {
-                right: {
-                  field: {
-                    radius: {
-                      f32: 0x0000c041,
-                    },
-                    function: sphere,
-                    isa: call,
-                  },
-                  x: {
-                    f32: 0x00004042,
-                  },
-                  function: translate,
-                  isa: call,
-                },
-                function: difference,
-                left: {
+              left: {
+                unquote: {
+                  function: sphere,
                   radius: {
                     f32: 0x00008042,
                   },
-                  function: sphere,
                   isa: call,
                 },
-                isa: call,
+                isa: unquote_2,
               },
-              isa: unquote_2,
+              right: {
+                field: {
+                  unquote: {
+                    function: sphere,
+                    radius: {
+                      f32: 0x0000c041,
+                    },
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                x: {
+                  f32: 0x00004042,
+                },
+                isa: translate,
+              },
+              isa: difference,
             },
             color: {
               rgb: 0x5096dc,
@@ -69,21 +135,20 @@
           },
           0xaa: {
             field: {
-              unquote: {
-                field: {
+              field: {
+                unquote: {
+                  function: sphere,
                   radius: {
                     f32: 0x00006041,
                   },
-                  function: sphere,
                   isa: call,
                 },
-                x: {
-                  f32: 0x00004042,
-                },
-                function: translate,
-                isa: call,
+                isa: unquote_2,
               },
-              isa: unquote_2,
+              x: {
+                f32: 0x00004042,
+              },
+              isa: translate,
             },
             color: {
               rgb: 0xf0ae50,

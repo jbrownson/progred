@@ -12,7 +12,7 @@ use gid::{CellId, Step, Value};
 mod tests;
 
 fn precedence(kind: CellId) -> Option<Precedence> {
-    let (_, _, symbol) = super::arithmetic().find(|(candidate, _, _)| *candidate == kind)?;
+    let (_, symbol) = super::arithmetic().find(|(candidate, _)| *candidate == kind)?;
     Precedence::of_symbol(symbol)
 }
 
