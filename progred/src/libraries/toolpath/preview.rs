@@ -110,22 +110,22 @@ pub(super) fn preview(
         Err(invalid())
     } else {
         let fuel = fuel(context, call, environment)?;
-        Ok(RuntimeValue::record([(
-            PREVIEW,
-            RuntimeValue::record([
+        Ok(::grap::isa::runtime(
+            kind::PATHS_PREVIEW,
+            [
                 (PROGRAM, program),
                 (layout::vocabulary::WIDTH, RuntimeValue::f64(width)),
                 (layout::vocabulary::HEIGHT, RuntimeValue::f64(height)),
                 (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
-            ]),
-        )]))
+            ],
+        ))
     }
 }
 
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?.field(PREVIEW)?;
+    let fields = input.value?;
     let program = fields.field(PROGRAM)?;
     let width = fields.field(layout::vocabulary::WIDTH)?.as_f64()?;
     let height = fields.field(layout::vocabulary::HEIGHT)?.as_f64()?;

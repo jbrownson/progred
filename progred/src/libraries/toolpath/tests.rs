@@ -178,15 +178,13 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
             10_000,
         );
         assert!(preview.completed, "{:?}", preview.result);
-        preview
-            .result
-            .as_record()
-            .unwrap()
-            .get(&PREVIEW_REFINED)
-            .expect("refined preview callable")
-            .as_record()
-            .unwrap()
-            .clone()
+        let fields = preview.result.as_record().unwrap().clone();
+        assert_eq!(
+            ::grap::isa::of(&fields),
+            Some(kind::PATHS_REFINED_PREVIEW),
+            "a refined preview"
+        );
+        fields
     });
     let [model, mut stock] = previews;
     let mut stock_playback = stock.get(&PLAYBACK).unwrap().as_record().unwrap().clone();

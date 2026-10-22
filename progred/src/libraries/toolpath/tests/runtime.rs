@@ -248,18 +248,15 @@ fn preview_constructor_preserves_its_runtime_program() {
         100,
     );
     assert!(result.completed);
-    assert!(
-        result
-            .result
-            .field(PREVIEW)
-            .unwrap()
-            .field(PROGRAM)
-            .unwrap()
-            .same_result(&program)
-    );
+    assert_eq!(result.result.kind(), Some(kind::PATHS_PREVIEW));
+    assert!(result.result.field(PROGRAM).unwrap().same_result(&program));
     // The three 3D constructors must keep the same executable leaves as the
     // 2D one; only the model/appearance data goes through domain decoders.
-    for function in [PREVIEW_3D, PREVIEW_MESH, PREVIEW_REFINED] {
+    for (function, kind) in [
+        (PREVIEW_3D, kind::PATHS_VOLUME_PREVIEW),
+        (PREVIEW_MESH, kind::PATHS_MESH_PREVIEW),
+        (PREVIEW_REFINED, kind::PATHS_REFINED_PREVIEW),
+    ] {
         let programs = RuntimeValue::list([RuntimeValue::list([program.clone()])]);
         let result = ::grap::apply(
             &Value::from(function).into(),
@@ -286,15 +283,8 @@ fn preview_constructor_preserves_its_runtime_program() {
             "{:?}",
             result.result
         );
-        assert!(
-            result
-                .result
-                .field(function)
-                .unwrap()
-                .field(PROGRAM)
-                .unwrap()
-                .same_result(&programs)
-        );
+        assert_eq!(result.result.kind(), Some(kind));
+        assert!(result.result.field(PROGRAM).unwrap().same_result(&programs));
     }
 }
 

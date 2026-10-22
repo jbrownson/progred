@@ -375,14 +375,8 @@ fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
         );
         assert!(result.completed);
         if valid {
-            let fields = result
-                .result
-                .as_record()
-                .unwrap()
-                .get(&PREVIEW_MESH)
-                .unwrap()
-                .as_record()
-                .unwrap();
+            let fields = result.result.as_record().unwrap();
+            assert_eq!(::grap::isa::of(fields), Some(kind::PATHS_MESH_PREVIEW));
             let (model, actual) =
                 fidget::mesh::read(fields.get(&presentation::vocabulary::VALUE).unwrap()).unwrap();
             assert_eq!(actual, depth as u8);

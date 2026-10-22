@@ -46,13 +46,11 @@ pub fn runtime(
     reason: CellId,
     details: impl IntoIterator<Item = (CellId, crate::RuntimeValue)>,
 ) -> crate::RuntimeValue {
-    crate::RuntimeValue::record(
-        [
-            (ISA, Value::from(ABSENT).into()),
-            (REASON, Value::from(reason).into()),
-        ]
-        .into_iter()
-        .chain(details),
+    crate::isa::runtime(
+        ABSENT,
+        [(REASON, Value::from(reason).into())]
+            .into_iter()
+            .chain(details),
     )
 }
 

@@ -55,6 +55,28 @@ pub mod vocabulary {
     pub const STOCK_MIN: CellId = CellId::from_u128(0x8ea1172ebbc67d795f0810ee5ca04d00);
     pub const STOCK_MAX: CellId = CellId::from_u128(0x607b5e9a8636c8258959709bf0c3506b);
     pub const STOCK: CellId = CellId::from_u128(0xc7dc9217fe6809ea89ba31d458706e5c);
+
+    /// The kinds of the previews toolpath's functions return, each the
+    /// program to draw and how.
+    pub mod kind {
+        use gid::CellId;
+
+        /// Paths drawn flat: `{isa: paths preview, program, width, height,
+        /// fuel}`, as `preview paths` makes one.
+        pub const PATHS_PREVIEW: CellId = CellId::from_u128(0xcfbb63befb1148ddbec04b0f7d823cea);
+        /// Paths drawn over a Fidget volume preview: `{isa: paths volume
+        /// preview, value, program, line radius, color, fuel, playback?}`, as
+        /// `preview paths 3d` makes one.
+        pub const PATHS_VOLUME_PREVIEW: CellId =
+            CellId::from_u128(0xec1a120368384df19bfba3678d60d03c);
+        /// The same over a mesh preview, as `preview paths mesh` makes one.
+        pub const PATHS_MESH_PREVIEW: CellId =
+            CellId::from_u128(0x783cbd3416244b8586647d2ca133520b);
+        /// The same over a mesh preview refined by the implicit stock, as
+        /// `preview paths refined` makes one.
+        pub const PATHS_REFINED_PREVIEW: CellId =
+            CellId::from_u128(0xb2b559c9e1b74b3baa7c45c5621c6474);
+    }
 }
 
 use cam::paths::{Axis, InvalidPath, Point3, Sink};
@@ -452,6 +474,10 @@ pub fn library<W: Host>() -> Library<W> {
             (Y, "y"),
             (Z, "z"),
             (PREVIEW, "preview paths"),
+            (kind::PATHS_PREVIEW, "paths preview"),
+            (kind::PATHS_VOLUME_PREVIEW, "paths volume preview"),
+            (kind::PATHS_MESH_PREVIEW, "paths mesh preview"),
+            (kind::PATHS_REFINED_PREVIEW, "paths refined preview"),
             (PREVIEW_3D, "preview paths 3d"),
             (PREVIEW_MESH, "preview paths mesh"),
             (PREVIEW_REFINED, "preview paths refined"),
@@ -474,11 +500,23 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(cutter::names()),
         cutter::functions(functions()),
     )
-    .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(cutter::display),
-        crate::display::runtime_partial(preview::display),
-        crate::display::runtime_partial(fidget::display),
-        crate::display::runtime_partial(mesh::display),
-        crate::display::runtime_partial(refined::display),
-    ]))
+    .with_projections_for([
+        (
+            kind::PATHS_PREVIEW,
+            crate::display::runtime_partial(preview::display),
+        ),
+        (
+            kind::PATHS_VOLUME_PREVIEW,
+            crate::display::runtime_partial(fidget::display),
+        ),
+        (
+            kind::PATHS_MESH_PREVIEW,
+            crate::display::runtime_partial(mesh::display),
+        ),
+        (
+            kind::PATHS_REFINED_PREVIEW,
+            crate::display::runtime_partial(refined::display),
+        ),
+    ])
+    .with_projection(crate::display::runtime_partial(cutter::display))
 }

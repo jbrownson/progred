@@ -17,3 +17,11 @@ pub fn of(fields: &Record) -> Option<CellId> {
 pub fn record(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     Value::record([(ISA, Value::from(kind))].into_iter().chain(fields))
 }
+
+/// Runtime `fields`, such as callables, saying they're a `kind`.
+pub fn runtime(
+    kind: CellId,
+    fields: impl IntoIterator<Item = (CellId, crate::RuntimeValue)>,
+) -> crate::RuntimeValue {
+    crate::RuntimeValue::record([(ISA, Value::from(kind).into())].into_iter().chain(fields))
+}

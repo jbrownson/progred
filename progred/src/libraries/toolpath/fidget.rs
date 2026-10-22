@@ -53,7 +53,7 @@ pub(super) fn preview(
         context,
         call,
         environment,
-        PREVIEW_3D,
+        kind::PATHS_VOLUME_PREVIEW,
         fidget::preview_3d_function,
     ))
 }
@@ -62,7 +62,7 @@ pub(super) fn preview_with(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-    marker: gid::CellId,
+    kind: gid::CellId,
     model: impl FnOnce(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
 ) -> Result<RuntimeValue, Error> {
     let playback = match context.field(call, PLAYBACK) {
@@ -84,20 +84,18 @@ pub(super) fn preview_with(
     })?;
     let fuel = super::fuel(context, call, environment)?;
     let model = present(model(context, call, environment)?.into())?;
-    Ok(RuntimeValue::record([(
-        marker,
-        RuntimeValue::record(
-            [
-                (presentation::vocabulary::VALUE, model),
-                (PROGRAM, program),
-                (LINE_RADIUS, RuntimeValue::f64(radius)),
-                (fidget::vocabulary::COLOR, color.into()),
-                (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
-            ]
-            .into_iter()
-            .chain(playback),
-        ),
-    )]))
+    Ok(::grap::isa::runtime(
+        kind,
+        [
+            (presentation::vocabulary::VALUE, model),
+            (PROGRAM, program),
+            (LINE_RADIUS, RuntimeValue::f64(radius)),
+            (fidget::vocabulary::COLOR, color.into()),
+            (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
+        ]
+        .into_iter()
+        .chain(playback),
+    ))
 }
 
 /// What a 3D path preview's value holds besides its model, as `preview_with`
@@ -128,7 +126,7 @@ impl PathPreview {
 }
 
 pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?.field(PREVIEW_3D)?;
+    let fields = input.value?;
     let model = fidget::volume_preview(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let PathPreview {
         program,

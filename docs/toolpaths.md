@@ -355,7 +355,7 @@ uses ordinary numeric coordinates, not a unit-aware value type or machine setup.
 
 `preview paths` is an opt-in viewport function with `value` (a callable program),
 `width`, `height`, and optional `fuel` (otherwise Grap's default). It returns an
-ordinary preview declaration containing that program and these parameters. The
+ordinary paths preview, `{isa: paths preview, program, width, height, fuel}`. The
 native widget runs the program with this explicit budget. It fits a fixed
 isometric projection inside the assigned pane, with a 16-logical-unit margin,
 reduced in tiny panes.
@@ -365,7 +365,9 @@ All paths are green; there is no inferred cut/link classification.
 with `program` (a callable path generator). It also takes an explicit positive
 f64 `line radius` and opaque `color`, plus the same width, height, and bounds
 as Fidget's `preview 3d` and an optional path-evaluation `fuel` budget. Its result
-is an ordinary preview declaration, not an opaque native value.
+is an ordinary paths volume preview, not an opaque native value; `preview paths
+mesh` and `preview paths refined` likewise return a paths mesh or paths refined
+preview, each drawn as the toolpath library provides for its kind.
 
 The native sink constructs a capsule for each line and unions the segments of
 each continuous path into its own Fidget scene object. `start at` separates

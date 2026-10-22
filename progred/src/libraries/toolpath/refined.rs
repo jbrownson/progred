@@ -26,7 +26,7 @@ pub(super) fn preview(
         context,
         call,
         environment,
-        PREVIEW_REFINED,
+        kind::PATHS_REFINED_PREVIEW,
         fidget::mesh::preview,
     ))
 }
@@ -147,7 +147,7 @@ impl Computation {
 }
 
 pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?.field(PREVIEW_REFINED)?;
+    let fields = input.value?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let implicit::PathPreview {

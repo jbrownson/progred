@@ -321,10 +321,14 @@ fn fidget_orbit_profile(name: &str, source: &str) {
             use crate::libraries::{fidget::vocabulary as f, toolpath::vocabulary as t};
             let fields = input.value?.as_record()?;
             if observed.borrow().is_none()
-                && (matches!(
+                && matches!(
                     ::grap::isa::of(fields),
-                    Some(f::kind::VOLUME_PREVIEW | f::kind::MESH_PREVIEW)
-                ) || fields.contains_key(&t::PREVIEW_MESH))
+                    Some(
+                        f::kind::VOLUME_PREVIEW
+                            | f::kind::MESH_PREVIEW
+                            | t::kind::PATHS_MESH_PREVIEW
+                    )
+                )
             {
                 let crate::hover::Hover::Value(path) = input.site().hover() else {
                     panic!("preview must have an occurrence");
