@@ -549,6 +549,7 @@ fn handled_mapping_failure(mapping: CellId) {
             (
                 control::vocabulary::CASES,
                 Value::list([Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                     (
                         control::vocabulary::PATTERN,
                         Value::record([(absent::vocabulary::ABSENT, reason.into())]),

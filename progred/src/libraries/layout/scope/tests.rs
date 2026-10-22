@@ -317,6 +317,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
             (
                 control::CASES,
                 Value::list([Value::record([
+                    (::grap::isa::ISA, control::kind::CASE.into()),
                     (
                         control::PATTERN,
                         Value::record([(absent::vocabulary::ABSENT, reason.into())]),

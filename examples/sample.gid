@@ -8,9 +8,11 @@
     "at": 4c2cb3268f1911bd26a0eb74622ba097,
     "at_display": 31554fd72b1717254695c5d14a6944f9,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "button": 0ec32df180178e9fbc958d3d061481d7,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "case": 7ebb4ced7047479caafcd90b14499697,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
@@ -107,9 +109,11 @@
             pattern: {
               col: {
                 bind: col,
+                isa: binder,
               },
               row: {
                 bind: row,
+                isa: binder,
               },
             },
             expression: {
@@ -141,14 +145,17 @@
                             },
                             isa: call,
                           },
+                          isa: case,
                         },
                         0xaa: {
                           pattern: {
                             bind: event,
+                            isa: binder,
                           },
                           expression: {
                             absent: declined,
                           },
+                          isa: case,
                         },
                       ],
                       isa: call,
@@ -234,6 +241,7 @@
               },
               isa: call,
             },
+            isa: case,
           },
         ],
         isa: call,

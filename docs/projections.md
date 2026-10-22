@@ -952,17 +952,21 @@ new evaluator syntax, hidden stream handle, or precomputed list of indices.
 
 Grap's [control module](../progred/src/libraries/grap/control.rs) supplies structural matching
 and quote/unquote as ordinary Rust functions using that evaluator interface.
-`match` evaluates its subject once, then tries ordered cases. Record patterns
-are open; list patterns are exact and ordered; `{bind: cell}` captures a value.
+`match` evaluates its subject once, then tries ordered cases, each
+`{isa: case, pattern, expression}`. Record patterns are open; list patterns are
+exact and ordered; `{isa: binder, bind: cell}` captures a value.
 Repeated binders require equal captures, and a final binder is the ordinary
 catch-all. Only the selected expression runs,
 in the caller's environment extended by captures. Its absent result is final,
 not a request to try another case. There is no implicit match-subject binding.
 
-A `match`'s cases and a `let`/`where`'s bindings are the form's own syntax,
-read where they're written and never evaluated, like `do`'s expressions. A
-clause list that isn't written in place, such as a reference to a cell holding
-one, answers invalid cases or invalid bindings.
+A `match`'s cases and a `let`/`where`'s bindings, each
+`{isa: binding, bind | pattern, value}`, are the form's own syntax, read where
+they're written and never evaluated, like `do`'s expressions. A clause list
+that isn't written in place, such as a reference to a cell holding one,
+answers invalid cases or invalid bindings, and a clause that doesn't say its
+kind is an invalid case or binding. A record in a pattern is a binder only
+when it says so; any other record there is a record pattern.
 
 `quote` walks the original raw structure, replacing `{isa: unquote, unquote: expression}`
 leaves by evaluating their expressions in the caller's environment. It never

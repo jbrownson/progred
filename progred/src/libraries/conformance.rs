@@ -121,6 +121,7 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
             (
                 control::vocabulary::CASES,
                 Value::list([Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                     (control::vocabulary::PATTERN, blob("other")),
                     (grap::vocabulary::EXPRESSION, blob("never")),
                 ])]),
@@ -190,11 +191,15 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
             (
                 control::vocabulary::CASES,
                 Value::list([Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                     (
                         control::vocabulary::PATTERN,
                         Value::record([(
                             note,
-                            Value::record([(control::vocabulary::BIND, Value::from(binder))]),
+                            Value::record([
+                                (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                                (control::vocabulary::BIND, Value::from(binder)),
+                            ]),
                         )]),
                     ),
                     (grap::vocabulary::EXPRESSION, Value::from(binder)),
@@ -225,13 +230,18 @@ fn callable_record_patterns_are_transparent_to_lowering() {
         for pattern in [Value::record([]), Value::record([(field, contents)])] {
             let cases = Value::list([
                 Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                     (control::vocabulary::PATTERN, pattern),
                     (grap::vocabulary::EXPRESSION, blob("record")),
                 ]),
                 Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                     (
                         control::vocabulary::PATTERN,
-                        Value::record([(control::vocabulary::BIND, Value::from(binder))]),
+                        Value::record([
+                            (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                            (control::vocabulary::BIND, Value::from(binder)),
+                        ]),
                     ),
                     (grap::vocabulary::EXPRESSION, blob("other")),
                 ]),
@@ -256,18 +266,24 @@ fn clause_lists_behind_cells_are_invalid() {
     let binder = new_cell_id();
     let cases = Value::list([
         Value::record([
+            (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
             (control::vocabulary::PATTERN, blob("other")),
             (grap::vocabulary::EXPRESSION, blob("never")),
         ]),
         Value::record([
+            (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
             (
                 control::vocabulary::PATTERN,
-                Value::record([(control::vocabulary::BIND, Value::from(binder))]),
+                Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                    (control::vocabulary::BIND, Value::from(binder)),
+                ]),
             ),
             (grap::vocabulary::EXPRESSION, Value::from(binder)),
         ]),
     ]);
     let bindings = Value::list([Value::record([
+        (::grap::isa::ISA, control::vocabulary::kind::BINDING.into()),
         (control::vocabulary::BIND, Value::from(binder)),
         (control::vocabulary::VALUE, blob("bound")),
     ])]);

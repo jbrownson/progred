@@ -93,9 +93,13 @@ fn scopes_restore_after_recovered_absents_and_evaluator_halts() {
                 (
                     control::vocabulary::CASES,
                     Value::list([Value::record([
+                        (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                         (
                             control::vocabulary::PATTERN,
-                            Value::record([(control::vocabulary::BIND, binder.into())]),
+                            Value::record([
+                                (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                                (control::vocabulary::BIND, binder.into()),
+                            ]),
                         ),
                         (::grap::vocabulary::EXPRESSION, Value::record([])),
                     ])]),

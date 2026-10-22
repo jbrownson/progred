@@ -113,6 +113,8 @@
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
   },
   "cells": {
   functions: {name: "functions"},
@@ -146,6 +148,7 @@
           function: where,
           bindings: [
             {
+              isa: binding,
               bind: cloud_x,
               subject: {
                 isa: call,
@@ -175,6 +178,7 @@
               }
             },
             {
+              isa: binding,
               bind: cloud_y,
               subject: {
                 isa: call,
@@ -198,6 +202,7 @@
               }
             },
             {
+              isa: binding,
               bind: cloud_radius,
               subject: {
                 isa: call,
@@ -719,6 +724,7 @@
       },
       bindings: [
         {
+          isa: binding,
           subject: {
             isa: call,
             function: multiply,
@@ -740,9 +746,10 @@
               }
             }
           },
-          pattern: {bind: tree_height}
+          pattern: {isa: binder, bind: tree_height}
         },
         {
+          isa: binding,
           subject: {
             isa: call,
             function: multiply,
@@ -774,7 +781,7 @@
               }
             }
           },
-          pattern: {bind: crown}
+          pattern: {isa: binder, bind: crown}
         }
       ]
     }

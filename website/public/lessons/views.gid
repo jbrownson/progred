@@ -29,6 +29,8 @@
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
   },
   "cells": {
     planet: {name: "planet"}, moons: {name: "moons"}, n: {name: "n"},
@@ -41,7 +43,7 @@
     planet_drawing: {isa: lambda, name: "planet drawing", params: [value], body: {
       isa: call,
       function: where,
-      bindings: [{pattern: {moons: {bind: n}}, subject: value}],
+      bindings: [{isa: binding, pattern: {moons: {isa: binder, bind: n}}, subject: value}],
       expression: {isa: call, function: all, expressions: [
         {isa: call, function: fill, paint: {rgb: 0xc1440e}, shape: {circle: {x: {f64: 0x0000000000004940},
           y: {f64: 0x0000000000004940}, radius: {f64: 0x0000000000004240}}}},

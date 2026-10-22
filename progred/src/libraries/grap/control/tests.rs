@@ -12,25 +12,37 @@ fn blob(text: &str) -> Value {
 }
 
 fn binding(cell: CellId) -> Value {
-    Value::record([(vocabulary::BIND, Value::from(cell))])
+    ::grap::isa::record(
+        vocabulary::kind::BINDER,
+        [(vocabulary::BIND, Value::from(cell))],
+    )
 }
 
 fn case_arm(pattern: Value, expression: Value) -> Value {
-    Value::record([
-        (vocabulary::PATTERN, pattern),
-        (grap::vocabulary::EXPRESSION, expression),
-    ])
+    ::grap::isa::record(
+        vocabulary::kind::CASE,
+        [
+            (vocabulary::PATTERN, pattern),
+            (grap::vocabulary::EXPRESSION, expression),
+        ],
+    )
 }
 
 fn binding_clause(pattern: Value, value: Value) -> Value {
-    Value::record([(vocabulary::PATTERN, pattern), (vocabulary::VALUE, value)])
+    ::grap::isa::record(
+        vocabulary::kind::BINDING,
+        [(vocabulary::PATTERN, pattern), (vocabulary::VALUE, value)],
+    )
 }
 
 fn bind_clause(binder: CellId, value: Value) -> Value {
-    Value::record([
-        (vocabulary::BIND, Value::from(binder)),
-        (vocabulary::VALUE, value),
-    ])
+    ::grap::isa::record(
+        vocabulary::kind::BINDING,
+        [
+            (vocabulary::BIND, Value::from(binder)),
+            (vocabulary::VALUE, value),
+        ],
+    )
 }
 
 fn bindings_call(
@@ -323,15 +335,21 @@ fn compact_control_projections_still_decline_malformed_contents_and_conflicting_
         ),
         (
             partial(pattern_binder),
-            Value::record([(vocabulary::BIND, blob("not a cell"))]),
+            ::grap::isa::record(
+                vocabulary::kind::BINDER,
+                [(vocabulary::BIND, blob("not a cell"))],
+            ),
         ),
         (
             partial(binding_display),
-            Value::record([
-                (vocabulary::BIND, new_cell_id().into()),
-                (vocabulary::PATTERN, blob("pattern")),
-                (vocabulary::VALUE, blob("value")),
-            ]),
+            ::grap::isa::record(
+                vocabulary::kind::BINDING,
+                [
+                    (vocabulary::BIND, new_cell_id().into()),
+                    (vocabulary::PATTERN, blob("pattern")),
+                    (vocabulary::VALUE, blob("value")),
+                ],
+            ),
         ),
         (
             partial(bindings_display),
@@ -829,7 +847,10 @@ fn patterns_match_runtime_and_stored_subjects_alike() {
 #[test]
 fn patterns_report_mismatches_and_binder_errors_lazily() {
     let binder = new_cell_id();
-    let invalid = Value::record([(vocabulary::BIND, blob("not a cell"))]);
+    let invalid = ::grap::isa::record(
+        vocabulary::kind::BINDER,
+        [(vocabulary::BIND, blob("not a cell"))],
+    );
     let subject = Value::list([blob("first"), blob("second")]);
     for (pattern, reason) in [
         (Value::list([binding(binder), binding(binder)]), None),
@@ -1065,7 +1086,10 @@ fn malformed_match_data_returns_library_absents() {
     let invalid_binder = match_call(
         blob("subject"),
         [case_arm(
-            Value::record([(vocabulary::BIND, blob("not a cell"))]),
+            ::grap::isa::record(
+                vocabulary::kind::BINDER,
+                [(vocabulary::BIND, blob("not a cell"))],
+            ),
             blob("matched"),
         )],
     );
@@ -1097,11 +1121,14 @@ fn malformed_let_data_returns_library_absents() {
 
     let ambiguous = bindings_call(
         vocabulary::LET,
-        [Value::record([
-            (vocabulary::BIND, Value::from(new_cell_id())),
-            (vocabulary::PATTERN, blob("pattern")),
-            (vocabulary::VALUE, blob("value")),
-        ])],
+        [::grap::isa::record(
+            vocabulary::kind::BINDING,
+            [
+                (vocabulary::BIND, Value::from(new_cell_id())),
+                (vocabulary::PATTERN, blob("pattern")),
+                (vocabulary::VALUE, blob("value")),
+            ],
+        )],
         blob("body"),
     );
     assert_eq!(
@@ -1111,10 +1138,13 @@ fn malformed_let_data_returns_library_absents() {
 
     let invalid_binder = bindings_call(
         vocabulary::LET,
-        [Value::record([
-            (vocabulary::BIND, blob("not a cell")),
-            (vocabulary::VALUE, blob("value")),
-        ])],
+        [::grap::isa::record(
+            vocabulary::kind::BINDING,
+            [
+                (vocabulary::BIND, blob("not a cell")),
+                (vocabulary::VALUE, blob("value")),
+            ],
+        )],
         blob("body"),
     );
     assert_eq!(

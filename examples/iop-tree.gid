@@ -6,6 +6,8 @@
     "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
     "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "blossom_colors": 2a5109ec22acf09a33b63836c01ea058,
     "blossom_index": 3000d79cfc62262635d95ceaad339453,
@@ -23,6 +25,7 @@
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "canvas_height": 274d0b51bc6c8033eb55de7d825eca01,
     "canvas_width": 957105218c1fd308ab76b51fd4e368cb,
+    "case": 7ebb4ced7047479caafcd90b14499697,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "child_depth": ee142e9d6e06eb62da5db5dcf242700d,
     "child_width": aaa4e1f70b7edac5317b9fbbd23c7e55,
@@ -272,17 +275,22 @@
                           pattern: [
                             0x33: {
                               bind: x0,
+                              isa: binder,
                             },
                             0x66: {
                               bind: y0,
+                              isa: binder,
                             },
                             0x99: {
                               bind: x1,
+                              isa: binder,
                             },
                             0xcc: {
                               bind: y1,
+                              isa: binder,
                             },
                           ],
+                          isa: binding,
                         },
                         0x24: {
                           value: {
@@ -296,6 +304,7 @@
                             isa: call,
                           },
                           bind: x_amount,
+                          isa: binding,
                         },
                         0x36: {
                           value: {
@@ -309,6 +318,7 @@
                             isa: call,
                           },
                           bind: x_jitter,
+                          isa: binding,
                         },
                         0x49: {
                           value: {
@@ -322,6 +332,7 @@
                             isa: call,
                           },
                           bind: y_amount,
+                          isa: binding,
                         },
                         0x5b: {
                           value: {
@@ -335,6 +346,7 @@
                             isa: call,
                           },
                           bind: y_jitter,
+                          isa: binding,
                         },
                         0x6d: {
                           value: {
@@ -350,6 +362,7 @@
                             isa: call,
                           },
                           bind: color_pick,
+                          isa: binding,
                         },
                         0x80: {
                           value: {
@@ -363,6 +376,7 @@
                             isa: call,
                           },
                           bind: radius,
+                          isa: binding,
                         },
                         0x92: {
                           value: {
@@ -378,6 +392,7 @@
                             isa: call,
                           },
                           bind: x,
+                          isa: binding,
                         },
                         0xa4: {
                           value: {
@@ -393,6 +408,7 @@
                             isa: call,
                           },
                           bind: y,
+                          isa: binding,
                         },
                         0xb6: {
                           value: {
@@ -401,6 +417,7 @@
                             isa: call,
                           },
                           bind: color_index,
+                          isa: binding,
                         },
                         0xc9: {
                           value: {
@@ -410,6 +427,7 @@
                             isa: call,
                           },
                           bind: paint,
+                          isa: binding,
                         },
                         0xdb: {
                           value: {
@@ -421,6 +439,7 @@
                             isa: call,
                           },
                           bind: next_blossom,
+                          isa: binding,
                         },
                         0xed: {
                           value: {
@@ -450,10 +469,12 @@
                                   },
                                   isa: call,
                                 },
+                                isa: case,
                               },
                               0xaa: {
                                 pattern: {
                                   bind: value,
+                                  isa: binder,
                                 },
                                 expression: {
                                   function: quote,
@@ -475,6 +496,7 @@
                                   },
                                   isa: call,
                                 },
+                                isa: case,
                               },
                             ],
                             isa: call,
@@ -482,14 +504,18 @@
                           pattern: {
                             blossom_index: {
                               bind: next_blossom,
+                              isa: binder,
                             },
                             segment_index: {
                               bind: next_segment,
+                              isa: binder,
                             },
                           },
+                          isa: binding,
                         },
                       ],
                     },
+                    isa: case,
                   },
                   0xaa: {
                     pattern: {
@@ -498,6 +524,7 @@
                     expression: {
                       absent: finished,
                     },
+                    isa: case,
                   },
                 ],
                 isa: call,
@@ -509,11 +536,14 @@
                   pattern: {
                     blossom_index: {
                       bind: blossom_index,
+                      isa: binder,
                     },
                     segment_index: {
                       bind: segment_index,
+                      isa: binder,
                     },
                   },
+                  isa: binding,
                 },
                 0xaa: {
                   value: {
@@ -522,6 +552,7 @@
                     isa: call,
                   },
                   bind: segment_count,
+                  isa: binding,
                 },
               ],
             },
@@ -548,12 +579,14 @@
               },
             ],
             bind: blossom_colors,
+            isa: binding,
           },
           0xaa: {
             value: {
               f64: 0x0000000000003040,
             },
             bind: blossoms_per_branch,
+            isa: binding,
           },
         ],
       },
@@ -611,12 +644,14 @@
               f64: 0x0000000000004e40,
             },
             bind: branch_length,
+            isa: binding,
           },
           0x80: {
             value: {
               f64: 0x0000000000405840,
             },
             bind: trunk_length,
+            isa: binding,
           },
           0xc0: {
             value: {
@@ -682,10 +717,12 @@
                         frontier: [],
                       },
                       expression: {},
+                      isa: case,
                     },
                     0xaa: {
                       pattern: {
                         bind: value,
+                        isa: binder,
                       },
                       expression: {
                         function: let,
@@ -712,8 +749,10 @@
                             pattern: {
                               frontier: {
                                 bind: frontier,
+                                isa: binder,
                               },
                             },
+                            isa: binding,
                           },
                           0x20: {
                             value: {
@@ -727,20 +766,26 @@
                             pattern: [
                               0x2a: {
                                 bind: depth,
+                                isa: binder,
                               },
                               0x55: {
                                 bind: angle,
+                                isa: binder,
                               },
                               0x80: {
                                 bind: x,
+                                isa: binder,
                               },
                               0xaa: {
                                 bind: y,
+                                isa: binder,
                               },
                               0xd5: {
                                 bind: branch_width,
+                                isa: binder,
                               },
                             ],
+                            isa: binding,
                           },
                           0x30: {
                             value: {
@@ -749,6 +794,7 @@
                               isa: call,
                             },
                             bind: rest,
+                            isa: binding,
                           },
                           0x40: {
                             value: {
@@ -762,6 +808,7 @@
                               isa: call,
                             },
                             bind: random_scale,
+                            isa: binding,
                           },
                           0x50: {
                             value: {
@@ -785,6 +832,7 @@
                               isa: call,
                             },
                             bind: scaled_length,
+                            isa: binding,
                           },
                           0x60: {
                             value: {
@@ -803,17 +851,21 @@
                                     bool: true,
                                   },
                                   expression: trunk_length,
+                                  isa: case,
                                 },
                                 0xaa: {
                                   pattern: {
                                     bind: value,
+                                    isa: binder,
                                   },
                                   expression: scaled_length,
+                                  isa: case,
                                 },
                               ],
                               isa: call,
                             },
                             bind: length,
+                            isa: binding,
                           },
                           0x70: {
                             value: {
@@ -825,6 +877,7 @@
                               isa: call,
                             },
                             bind: half_width,
+                            isa: binding,
                           },
                           0x80: {
                             value: {
@@ -834,6 +887,7 @@
                               isa: call,
                             },
                             bind: tip_distance,
+                            isa: binding,
                           },
                           0x90: {
                             value: {
@@ -852,6 +906,7 @@
                               isa: call,
                             },
                             bind: tip_x,
+                            isa: binding,
                           },
                           0xa0: {
                             value: {
@@ -870,6 +925,7 @@
                               isa: call,
                             },
                             bind: tip_y,
+                            isa: binding,
                           },
                           0xb0: {
                             value: {
@@ -881,6 +937,7 @@
                               isa: call,
                             },
                             bind: child_depth,
+                            isa: binding,
                           },
                           0xc0: {
                             value: {
@@ -892,6 +949,7 @@
                               isa: call,
                             },
                             bind: child_width,
+                            isa: binding,
                           },
                           0xd0: {
                             value: {
@@ -926,6 +984,7 @@
                                           isa: call,
                                         },
                                         bind: turn_left,
+                                        isa: binding,
                                       },
                                       0x55: {
                                         value: {
@@ -939,6 +998,7 @@
                                           isa: call,
                                         },
                                         bind: turn_right,
+                                        isa: binding,
                                       },
                                       0x80: {
                                         value: {
@@ -953,6 +1013,7 @@
                                           isa: call,
                                         },
                                         bind: left_angle,
+                                        isa: binding,
                                       },
                                       0xaa: {
                                         value: {
@@ -967,6 +1028,7 @@
                                           isa: call,
                                         },
                                         bind: right_angle,
+                                        isa: binding,
                                       },
                                       0xd5: {
                                         value: {
@@ -1025,13 +1087,16 @@
                                           isa: call,
                                         },
                                         bind: new_frontier,
+                                        isa: binding,
                                       },
                                     ],
                                   },
+                                  isa: case,
                                 },
                                 0xaa: {
                                   pattern: {
                                     bind: value,
+                                    isa: binder,
                                   },
                                   expression: {
                                     value: {
@@ -1065,6 +1130,7 @@
                                                 isa: call,
                                               },
                                               bind: turn_left,
+                                              isa: binding,
                                             },
                                             0x80: {
                                               value: {
@@ -1079,6 +1145,7 @@
                                                 isa: call,
                                               },
                                               bind: left_angle,
+                                              isa: binding,
                                             },
                                             0xc0: {
                                               value: {
@@ -1113,24 +1180,30 @@
                                                 isa: call,
                                               },
                                               bind: new_frontier,
+                                              isa: binding,
                                             },
                                           ],
                                         },
+                                        isa: case,
                                       },
                                       0xaa: {
                                         pattern: {
                                           bind: value,
+                                          isa: binder,
                                         },
                                         expression: rest,
+                                        isa: case,
                                       },
                                     ],
                                     isa: call,
                                   },
+                                  isa: case,
                                 },
                               ],
                               isa: call,
                             },
                             bind: new_frontier,
+                            isa: binding,
                           },
                           0xe0: {
                             value: {
@@ -1172,17 +1245,21 @@
                                     ],
                                     isa: call,
                                   },
+                                  isa: case,
                                 },
                                 0xaa: {
                                   pattern: {
                                     bind: value,
+                                    isa: binder,
                                   },
                                   expression: [],
+                                  isa: case,
                                 },
                               ],
                               isa: call,
                             },
                             bind: branch_points,
+                            isa: binding,
                           },
                           0xf0: {
                             value: {
@@ -1254,9 +1331,11 @@
                               isa: call,
                             },
                             bind: branch_item,
+                            isa: binding,
                           },
                         ],
                       },
+                      isa: case,
                     },
                   ],
                   isa: call,
@@ -1269,8 +1348,10 @@
             pattern: {
               list: {
                 bind: branch_items,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -1449,6 +1530,7 @@
                                 isa: call,
                               },
                               bind: dx,
+                              isa: binding,
                             },
                             0x66: {
                               value: {
@@ -1462,6 +1544,7 @@
                                 isa: call,
                               },
                               bind: dy,
+                              isa: binding,
                             },
                             0x99: {
                               value: {
@@ -1471,6 +1554,7 @@
                                 isa: call,
                               },
                               bind: next_x,
+                              isa: binding,
                             },
                             0xcc: {
                               value: {
@@ -1480,9 +1564,11 @@
                                 isa: call,
                               },
                               bind: next_y,
+                              isa: binding,
                             },
                           ],
                         },
+                        isa: case,
                       },
                       0xaa: {
                         pattern: {
@@ -1491,6 +1577,7 @@
                         expression: {
                           absent: finished,
                         },
+                        isa: case,
                       },
                     ],
                     isa: call,
@@ -1502,11 +1589,14 @@
                       pattern: {
                         x: {
                           bind: x,
+                          isa: binder,
                         },
                         y: {
                           bind: y,
+                          isa: binder,
                         },
                       },
+                      isa: binding,
                     },
                   ],
                 },
@@ -1552,6 +1642,7 @@
               isa: call,
             },
             bind: initial_y,
+            isa: binding,
           },
         ],
       },

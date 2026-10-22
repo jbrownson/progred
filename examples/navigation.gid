@@ -75,6 +75,7 @@
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -228,7 +229,7 @@
           function: where,
           expression: {area: area, notes: "Resize to navigate the wrapped form"},
           bindings: [
-            {bind: area, value: {isa: call, function: multiply, left: width, right: length}},
+            {isa: binding, bind: area, value: {isa: call, function: multiply, left: width, right: length}},
           ],
         },
       },

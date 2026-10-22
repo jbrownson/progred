@@ -10,7 +10,12 @@ use gid::{Document, Value};
 /// It is not installed into the editor's projection chain.
 pub fn at_display_partial() -> Value {
     let (row, col) = (label("row"), label("col"));
-    let bind = |cell| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
+    let bind = |cell| {
+        Value::record([
+            (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+            (control::vocabulary::BIND, Value::from(cell)),
+        ])
+    };
     let spliced_text = |binder| {
         Value::record([(
             layout::vocabulary::TEXT,
@@ -39,6 +44,7 @@ pub fn at_display_partial() -> Value {
                     control::vocabulary::CASES,
                     Value::list([
                         Value::record([
+                            (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                             (
                                 control::vocabulary::PATTERN,
                                 Value::record([
@@ -71,6 +77,7 @@ pub fn at_display_partial() -> Value {
                             ),
                         ]),
                         Value::record([
+                            (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                             (
                                 control::vocabulary::PATTERN,
                                 bind(layout::vocabulary::EVENT),
@@ -102,6 +109,7 @@ pub fn at_display_partial() -> Value {
                         (
                             control::vocabulary::CASES,
                             Value::list([Value::record([
+                                (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
                                 (
                                     control::vocabulary::PATTERN,
                                     Value::record([(row, bind(row)), (col, bind(col))]),
@@ -208,6 +216,8 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
             "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
             "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
             "lambda": e4a0653134ca48379cab2e008bed03e7,
+            "binding": 039cd524b99d47ca92d23b26de5a01aa,
+            "binder": 81d57515ba3b44aab94e43d59a47fe9a,
           }},
           "cells": {{
             planet: {{name: "planet"}},
@@ -230,7 +240,7 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
 pub const PLANET_VIEW: &str = r#"{
   isa: call,
   function: where,
-  bindings: [{pattern: {moons: {bind: n}}, subject: value}],
+  bindings: [{isa: binding, pattern: {moons: {isa: binder, bind: n}}, subject: value}],
   expression: {isa: call, function: row, children: {isa: call, function: do, expressions: [
     {isa: call, function: text, content: "planet with"},
     {isa: call, function: descend, step: {key: moons}},

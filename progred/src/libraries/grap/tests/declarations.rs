@@ -246,6 +246,7 @@ fn declarations(binder: CellId) -> Vec<(Value, Path)> {
     )];
     for function in [control::LET, control::WHERE] {
         let bindings = Value::list([Value::record([
+            (::grap::isa::ISA, control::kind::BINDING.into()),
             (control::BIND, binder.into()),
             (control::VALUE, f64::value(1.0)),
         ])]);
@@ -266,9 +267,13 @@ fn declarations(binder: CellId) -> Vec<(Value, Path)> {
         ));
     }
     let cases = Value::list([Value::record([
+        (::grap::isa::ISA, control::kind::CASE.into()),
         (
             control::PATTERN,
-            Value::list([Value::record([(control::BIND, binder.into())])]),
+            Value::list([Value::record([
+                (::grap::isa::ISA, control::kind::BINDER.into()),
+                (control::BIND, binder.into()),
+            ])]),
         ),
         (grap::vocabulary::EXPRESSION, binder.into()),
     ])]);
@@ -519,7 +524,10 @@ fn recursive_patterns_keep_text_and_number_facets() {
         Value::list([
             text::value("literal"),
             f64::value(3.0),
-            Value::record([(control::BIND, binder.into())]),
+            Value::record([
+                (::grap::isa::ISA, control::kind::BINDER.into()),
+                (control::BIND, binder.into()),
+            ]),
         ]),
     )]);
     let elements = pattern
@@ -533,6 +541,7 @@ fn recursive_patterns_keep_text_and_number_facets() {
         .cloned()
         .collect::<Vec<_>>();
     let cases = Value::list([Value::record([
+        (::grap::isa::ISA, control::kind::CASE.into()),
         (control::PATTERN, pattern),
         (grap::vocabulary::EXPRESSION, binder.into()),
     ])]);

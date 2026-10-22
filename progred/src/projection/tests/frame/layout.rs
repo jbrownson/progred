@@ -711,6 +711,10 @@ fn sample_text_line_claims_its_own_hover() {
 fn control_forms_fold_as_their_projection_chooses() {
     let arm = Value::record([
         (
+            ::grap::isa::ISA,
+            crate::libraries::grap::control::vocabulary::kind::CASE.into(),
+        ),
+        (
             crate::libraries::grap::control::vocabulary::PATTERN,
             Value::from(vec![1]),
         ),

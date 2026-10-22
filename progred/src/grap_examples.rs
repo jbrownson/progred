@@ -51,6 +51,7 @@ fn the_sample_contains_a_projectable_grap_computation() {
 /// a match.
 fn generated_cases(binders: &Binders, value: ::core::primitive::f64) -> Value {
     Value::list([Value::record([
+        (binders["isa"], Value::from(binders["case"])),
         (binders["pattern"], crate::libraries::text::value("subject")),
         (binders["expression"], f64::value(value)),
     ])])

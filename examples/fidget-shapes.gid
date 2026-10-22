@@ -7,6 +7,8 @@
     "axis_2": f82b802a154f47ab973d4a522fd3d034,
     "baseline": 6cd28a4f91e057b3c2941e6a07f5d3b8,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
@@ -333,18 +335,21 @@
               f32: 0x0000803f,
             },
             bind: size,
+            isa: binding,
           },
           0x2e: {
             value: {
               f32: 0xcdcccc3d,
             },
             bind: chamfer,
+            isa: binding,
           },
           0x45: {
             value: {
               f32: 0x0000003f,
             },
             bind: control_depth,
+            isa: binding,
           },
           0x5d: {
             value: {
@@ -356,6 +361,7 @@
               isa: call,
             },
             bind: half_size,
+            isa: binding,
           },
           0x74: {
             value: {
@@ -365,6 +371,7 @@
               isa: call,
             },
             bind: half_face,
+            isa: binding,
           },
           0x8b: {
             value: {
@@ -376,6 +383,7 @@
               isa: call,
             },
             bind: center_depth,
+            isa: binding,
           },
           0xa2: {
             value: {
@@ -385,6 +393,7 @@
               isa: call,
             },
             bind: edge_limit,
+            isa: binding,
           },
           0xba: {
             value: {
@@ -424,6 +433,7 @@
               isa: lambda,
             },
             bind: shoulder,
+            isa: binding,
           },
           0xd1: {
             value: {
@@ -482,6 +492,7 @@
               isa: lambda,
             },
             bind: face_pair,
+            isa: binding,
           },
           0xe8: {
             value: {
@@ -520,6 +531,7 @@
               isa: lambda,
             },
             bind: chamfer_pair,
+            isa: binding,
           },
         ],
       },
@@ -607,8 +619,10 @@
             pattern: {
               figure: {
                 bind: shape,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -822,8 +836,10 @@
             pattern: {
               mesh: {
                 bind: shape,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },

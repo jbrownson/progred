@@ -20,11 +20,14 @@
     "ball_tip": 5caa858bf636751fe7731cc680a7cd41,
     "ball_tool": a6b46be409fd39a211789adb29716a0a,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "bottom_face": e05cb05bec16e656fd056d260441562f,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "case": 7ebb4ced7047479caafcd90b14499697,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "ceil": e1ddb3a620b61117d3873c163f603488,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
@@ -716,6 +719,7 @@
               isa: call,
             },
             bind: ball_radius,
+            isa: binding,
           },
           0x80: {
             subject: {
@@ -728,14 +732,18 @@
             pattern: {
               y: {
                 bind: ny,
+                isa: binder,
               },
               x: {
                 bind: nx,
+                isa: binder,
               },
               z: {
                 bind: nz,
+                isa: binder,
               },
             },
+            isa: binding,
           },
           0xc0: {
             subject: {
@@ -750,6 +758,7 @@
               isa: call,
             },
             bind: normal_length,
+            isa: binding,
           },
         ],
       },
@@ -821,14 +830,18 @@
             pattern: {
               y: {
                 bind: y,
+                isa: binder,
               },
               x: {
                 bind: x,
+                isa: binder,
               },
               z: {
                 bind: z,
+                isa: binder,
               },
             },
+            isa: binding,
           },
           0x66: {
             subject: {
@@ -841,28 +854,36 @@
             pattern: {
               y: {
                 bind: ny,
+                isa: binder,
               },
               x: {
                 bind: nx,
+                isa: binder,
               },
               z: {
                 bind: nz,
+                isa: binder,
               },
             },
+            isa: binding,
           },
           0x99: {
             subject: tool_axis,
             pattern: {
               y: {
                 bind: axis_y,
+                isa: binder,
               },
               x: {
                 bind: axis_x,
+                isa: binder,
               },
               z: {
                 bind: axis_z,
+                isa: binder,
               },
             },
+            isa: binding,
           },
           0xcc: {
             subject: {
@@ -874,6 +895,7 @@
               isa: call,
             },
             bind: ball_radius,
+            isa: binding,
           },
         ],
       },
@@ -1040,14 +1062,18 @@
                       pattern: {
                         normal: {
                           bind: normal,
+                          isa: binder,
                         },
                         curve: {
                           bind: curve,
+                          isa: binder,
                         },
                         across: {
                           bind: tool_axis,
+                          isa: binder,
                         },
                       },
+                      isa: binding,
                     },
                   ],
                 },
@@ -1229,6 +1255,7 @@
               orientation: orientation,
             },
             bind: direction,
+            isa: binding,
           },
           0xaa: {
             subject: {
@@ -1239,6 +1266,7 @@
               orientation: orientation,
             },
             bind: tool_axis,
+            isa: binding,
           },
         ],
       },
@@ -1332,20 +1360,26 @@
               pattern: {
                 normal: {
                   bind: normal,
+                  isa: binder,
                 },
                 length: {
                   bind: length,
+                  isa: binder,
                 },
                 curve: {
                   bind: curve,
+                  isa: binder,
                 },
                 across: {
                   bind: across,
+                  isa: binder,
                 },
                 width: {
                   bind: width,
+                  isa: binder,
                 },
               },
+              isa: binding,
             },
           ],
         },
@@ -1387,6 +1421,7 @@
           0x55: {
             subject: chamfer_pass,
             bind: cut_strip,
+            isa: binding,
           },
           0xaa: {
             subject: {
@@ -1396,8 +1431,10 @@
             pattern: {
               chamfer_strip: {
                 bind: strip,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -1506,6 +1543,7 @@
                       expression: {
                         absent: done,
                       },
+                      isa: case,
                     },
                     0xaa: {
                       pattern: {
@@ -1605,6 +1643,7 @@
                         function: do,
                         isa: call,
                       },
+                      isa: case,
                     },
                   ],
                   isa: call,
@@ -1694,28 +1733,36 @@
             pattern: {
               y: {
                 bind: ny,
+                isa: binder,
               },
               x: {
                 bind: nx,
+                isa: binder,
               },
               z: {
                 bind: nz,
+                isa: binder,
               },
             },
+            isa: binding,
           },
           0xaa: {
             subject: right,
             pattern: {
               y: {
                 bind: y,
+                isa: binder,
               },
               x: {
                 bind: x,
+                isa: binder,
               },
               z: {
                 bind: z,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -1825,6 +1872,7 @@
                             expression: {
                               absent: done,
                             },
+                            isa: case,
                           },
                           0xaa: {
                             pattern: {
@@ -1883,6 +1931,7 @@
                               function: do,
                               isa: call,
                             },
+                            isa: case,
                           },
                         ],
                         isa: call,
@@ -1918,6 +1967,7 @@
                   isa: call,
                 },
                 bind: segments,
+                isa: binding,
               },
             ],
           },
@@ -1995,6 +2045,7 @@
                 isa: call,
               },
               bind: direction,
+              isa: binding,
             },
           ],
         },
@@ -2054,11 +2105,14 @@
             pattern: {
               normal: {
                 bind: normal,
+                isa: binder,
               },
               face: {
                 bind: face,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -2118,6 +2172,7 @@
                         isa: call,
                       },
                       bind: u,
+                      isa: binding,
                     },
                     0x66: {
                       subject: {
@@ -2139,6 +2194,7 @@
                         isa: call,
                       },
                       bind: v,
+                      isa: binding,
                     },
                     0x99: {
                       subject: {
@@ -2191,6 +2247,7 @@
                         isa: call,
                       },
                       bind: nx,
+                      isa: binding,
                     },
                     0xcc: {
                       subject: {
@@ -2243,6 +2300,7 @@
                         isa: call,
                       },
                       bind: ny,
+                      isa: binding,
                     },
                   ],
                 },
@@ -2385,6 +2443,7 @@
                         isa: call,
                       },
                       bind: half_size,
+                      isa: binding,
                     },
                     0x40: {
                       subject: {
@@ -2393,6 +2452,7 @@
                         isa: call,
                       },
                       bind: half_face,
+                      isa: binding,
                     },
                     0x60: {
                       subject: {
@@ -2401,6 +2461,7 @@
                         isa: call,
                       },
                       bind: center_depth,
+                      isa: binding,
                     },
                     0x80: {
                       subject: {
@@ -2409,6 +2470,7 @@
                         isa: call,
                       },
                       bind: edge_limit,
+                      isa: binding,
                     },
                     0xa0: {
                       subject: {
@@ -2448,6 +2510,7 @@
                         isa: lambda_2,
                       },
                       bind: shoulder,
+                      isa: binding,
                     },
                     0xc0: {
                       subject: {
@@ -2506,6 +2569,7 @@
                         isa: lambda_2,
                       },
                       bind: face_pair,
+                      isa: binding,
                     },
                     0xe0: {
                       subject: {
@@ -2544,6 +2608,7 @@
                         isa: lambda_2,
                       },
                       bind: chamfer_pair,
+                      isa: binding,
                     },
                   ],
                 },
@@ -2832,18 +2897,21 @@
               f64: 0x000000000000f03f,
             },
             bind: size,
+            isa: binding,
           },
           0x40: {
             subject: {
               f64: 0x9a9999999999b93f,
             },
             bind: chamfer,
+            isa: binding,
           },
           0x60: {
             subject: {
               f64: 0x000000000000e03f,
             },
             bind: control_depth,
+            isa: binding,
           },
           0x80: {
             subject: {
@@ -2855,6 +2923,7 @@
               isa: call,
             },
             bind: half_size,
+            isa: binding,
           },
           0xa0: {
             subject: {
@@ -2864,6 +2933,7 @@
               isa: call,
             },
             bind: half_face,
+            isa: binding,
           },
           0xc0: {
             subject: {
@@ -2875,6 +2945,7 @@
               isa: call,
             },
             bind: center_depth,
+            isa: binding,
           },
           0xe0: {
             subject: {
@@ -2884,6 +2955,7 @@
               isa: call,
             },
             bind: edge_limit,
+            isa: binding,
           },
         ],
       },
@@ -3141,6 +3213,7 @@
                   isa: call,
                 },
                 bind: coordinate,
+                isa: binding,
               },
             ],
           },
@@ -3187,28 +3260,36 @@
             pattern: {
               y: {
                 bind: y,
+                isa: binder,
               },
               x: {
                 bind: x,
+                isa: binder,
               },
               z: {
                 bind: z,
+                isa: binder,
               },
             },
+            isa: binding,
           },
           0xaa: {
             subject: right,
             pattern: {
               y: {
                 bind: ny,
+                isa: binder,
               },
               x: {
                 bind: nx,
+                isa: binder,
               },
               z: {
                 bind: nz,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -3260,6 +3341,7 @@
             expression: {
               f64: 0x000000000000f0bf,
             },
+            isa: case,
           },
           0xaa: {
             pattern: {
@@ -3268,6 +3350,7 @@
             expression: {
               f64: 0x000000000000f03f,
             },
+            isa: case,
           },
         ],
         isa: call,
@@ -3486,6 +3569,7 @@
                       expression: {
                         absent: done,
                       },
+                      isa: case,
                     },
                     0xaa: {
                       pattern: {
@@ -3550,6 +3634,7 @@
                                   isa: call,
                                 },
                                 bind: t,
+                                isa: binding,
                               },
                             ],
                           },
@@ -3565,6 +3650,7 @@
                         function: do,
                         isa: call,
                       },
+                      isa: case,
                     },
                   ],
                   isa: call,
@@ -3597,6 +3683,7 @@
               isa: call,
             },
             bind: u0,
+            isa: binding,
           },
           0x55: {
             subject: {
@@ -3606,6 +3693,7 @@
               isa: call,
             },
             bind: v0,
+            isa: binding,
           },
           0x80: {
             subject: {
@@ -3631,6 +3719,7 @@
               isa: call,
             },
             bind: v1,
+            isa: binding,
           },
           0xaa: {
             subject: {
@@ -3640,6 +3729,7 @@
               isa: call,
             },
             bind: u1,
+            isa: binding,
           },
           0xd5: {
             subject: {
@@ -3675,6 +3765,7 @@
               isa: call,
             },
             bind: segments,
+            isa: binding,
           },
         ],
       },
@@ -3717,14 +3808,18 @@
             pattern: {
               y: {
                 bind: y,
+                isa: binder,
               },
               x: {
                 bind: x,
+                isa: binder,
               },
               z: {
                 bind: z,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -3896,14 +3991,18 @@
                 pattern: {
                   y: {
                     bind: y,
+                    isa: binder,
                   },
                   x: {
                     bind: x,
+                    isa: binder,
                   },
                   z: {
                     bind: z,
+                    isa: binder,
                   },
                 },
+                isa: binding,
               },
             ],
           },
@@ -3923,14 +4022,18 @@
                 pattern: {
                   y: {
                     bind: y,
+                    isa: binder,
                   },
                   x: {
                     bind: x,
+                    isa: binder,
                   },
                   z: {
                     bind: z,
+                    isa: binder,
                   },
                 },
+                isa: binding,
               },
             ],
           },
@@ -4075,6 +4178,7 @@
                   isa: call,
                 },
                 bind: angle,
+                isa: binding,
               },
             ],
           },
@@ -4232,14 +4336,18 @@
             pattern: {
               y: {
                 bind: y,
+                isa: binder,
               },
               x: {
                 bind: x,
+                isa: binder,
               },
               z: {
                 bind: z,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
@@ -4382,6 +4490,7 @@
                             },
                             isa: call,
                           },
+                          isa: case,
                         },
                         0xaa: {
                           pattern: stock,
@@ -4416,6 +4525,7 @@
                             },
                             isa: call,
                           },
+                          isa: case,
                         },
                       ],
                       isa: call,
@@ -4452,8 +4562,10 @@
                                     pattern: {
                                       field: {
                                         bind: field,
+                                        isa: binder,
                                       },
                                     },
+                                    isa: binding,
                                   },
                                 ],
                               },
@@ -4498,18 +4610,23 @@
                         playback: {
                           position: {
                             bind: progress,
+                            isa: binder,
                           },
                           control_items: {
                             bind: program_items,
+                            isa: binder,
                           },
                           control_range: {
                             bind: focus,
+                            isa: binder,
                           },
                         },
                         preview_mode: {
                           bind: preview_mode,
+                          isa: binder,
                         },
                       },
+                      isa: binding,
                     },
                     0x66: {
                       subject: {
@@ -4517,7 +4634,9 @@
                       },
                       pattern: {
                         bind: profile_tolerance,
+                        isa: binder,
                       },
+                      isa: binding,
                     },
                     0x99: {
                       subject: {
@@ -4533,7 +4652,9 @@
                       },
                       pattern: {
                         bind: stock_min,
+                        isa: binder,
                       },
+                      isa: binding,
                     },
                     0xcc: {
                       subject: {
@@ -4549,7 +4670,9 @@
                       },
                       pattern: {
                         bind: stock_max,
+                        isa: binder,
                       },
+                      isa: binding,
                     },
                   ],
                 },
@@ -4604,7 +4727,9 @@
                       },
                       pattern: {
                         bind: preview_mode,
+                        isa: binder,
                       },
+                      isa: binding,
                     },
                     0xaa: {
                       subject: {
@@ -4622,7 +4747,9 @@
                       },
                       pattern: {
                         bind: parameters,
+                        isa: binder,
                       },
+                      isa: binding,
                     },
                   ],
                 },

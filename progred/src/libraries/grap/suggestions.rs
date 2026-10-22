@@ -83,12 +83,12 @@ fn unquote() -> Completion {
 
 fn pattern_bindings(value: &Value, result: &mut BTreeSet<CellId>) {
     match value {
-        Value::Record(fields) => match fields.get(&control::BIND) {
-            Some(binder) => result.extend(binder.as_cell()),
-            None => fields
-                .values()
-                .for_each(|value| pattern_bindings(value, result)),
-        },
+        Value::Record(fields) if ::grap::isa::of(fields) == Some(control::kind::BINDER) => {
+            result.extend(fields.get(&control::BIND).and_then(Value::as_cell))
+        }
+        Value::Record(fields) => fields
+            .values()
+            .for_each(|value| pattern_bindings(value, result)),
         Value::List(values) => values
             .values()
             .for_each(|value| pattern_bindings(value, result)),
@@ -97,7 +97,10 @@ fn pattern_bindings(value: &Value, result: &mut BTreeSet<CellId>) {
 }
 
 fn binding_names(value: &Value, result: &mut BTreeSet<CellId>) {
-    if let Some(fields) = value.as_record() {
+    if let Some(fields) = value
+        .as_record()
+        .filter(|fields| ::grap::isa::of(fields) == Some(control::kind::BINDING))
+    {
         match (fields.get(&control::BIND), fields.get(&control::PATTERN)) {
             (Some(binder), None) => result.extend(binder.as_cell()),
             (None, Some(pattern)) => pattern_bindings(pattern, result),
@@ -182,6 +185,7 @@ pub(super) fn scope<'a>(
                         .and_then(Value::as_list)
                         .and_then(|cases| cases.get(position))
                         .and_then(Value::as_record)
+                        .filter(|case| ::grap::isa::of(case) == Some(control::kind::CASE))
                         .and_then(|case| case.get(&control::PATTERN))
                 {
                     pattern_bindings(pattern, &mut found);

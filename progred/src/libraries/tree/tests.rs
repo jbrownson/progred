@@ -236,7 +236,14 @@ fn failures_stop_children_and_scopes_balance_when_a_caller_recovers() {
             (
                 c::CASES,
                 Value::list([Value::record([
-                    (c::PATTERN, Value::record([(c::BIND, C.into())])),
+                    (::grap::isa::ISA, c::kind::CASE.into()),
+                    (
+                        c::PATTERN,
+                        Value::record([
+                            (::grap::isa::ISA, c::kind::BINDER.into()),
+                            (c::BIND, C.into()),
+                        ]),
+                    ),
                     (g::EXPRESSION, leaf(f64::value(4.0))),
                 ])]),
             ),

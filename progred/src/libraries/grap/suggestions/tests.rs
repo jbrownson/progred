@@ -207,13 +207,20 @@ fn completion_bindings_follow_lambda_scope_and_quote_boundaries() {
 fn completion_bindings_include_only_preceding_let_bindings_and_current_match_case() {
     let first = gid::new_cell_id();
     let second = gid::new_cell_id();
-    let binder = |cell| Value::record([(control::BIND, Value::from(cell))]);
+    let binder = |cell| {
+        Value::record([
+            (::grap::isa::ISA, control::kind::BINDER.into()),
+            (control::BIND, Value::from(cell)),
+        ])
+    };
     let clauses = Value::list([
         Value::record([
+            (::grap::isa::ISA, control::kind::BINDING.into()),
             (control::BIND, first.into()),
             (control::VALUE, Value::record([])),
         ]),
         Value::record([
+            (::grap::isa::ISA, control::kind::BINDING.into()),
             (control::PATTERN, Value::list([binder(second)])),
             (control::VALUE, Value::record([])),
         ]),
@@ -255,6 +262,7 @@ fn completion_bindings_include_only_preceding_let_bindings_and_current_match_cas
     }
     let cases = Value::list([first, second].map(|cell| {
         Value::record([
+            (::grap::isa::ISA, control::kind::CASE.into()),
             (control::PATTERN, binder(cell)),
             (EXPRESSION, Value::record([])),
         ])

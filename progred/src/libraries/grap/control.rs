@@ -8,7 +8,7 @@ use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 use crate::display::hug;
-use crate::display::structure::{kind_form, record_form};
+use crate::display::structure::kind_form;
 use crate::display::{alternatives, col, descend, dim, row, selectable, shared};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
@@ -48,7 +48,23 @@ pub mod vocabulary {
         use gid::CellId;
 
         pub const UNQUOTE: CellId = CellId::from_u128(0x732eb340fd444f89ab0c6e9afc89b8bd);
+        /// A `match`'s case: `{isa: case, pattern, expression}`.
+        pub const CASE: CellId = CellId::from_u128(0x7ebb4ced7047479caafcd90b14499697);
+        /// A `let`'s or `where`'s binding: `{isa: binding, bind | pattern,
+        /// value}`.
+        pub const BINDING: CellId = CellId::from_u128(0x039cd524b99d47ca92d23b26de5a01aa);
+        /// A pattern's binder: `{isa: binder, bind}`.
+        pub const BINDER: CellId = CellId::from_u128(0x81d57515ba3b44aab94e43d59a47fe9a);
     }
+}
+
+/// Whether the clause `expression` says it's of `kind`.
+fn says(context: &Context, expression: &Expression, kind: CellId) -> bool {
+    context
+        .value(expression)
+        .as_record()
+        .and_then(::grap::isa::of)
+        == Some(kind)
 }
 
 /// An unquote of `expression`, as a quoted template holds one.
@@ -260,6 +276,9 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
             elements
                 .iter()
                 .map(|case| {
+                    if !says(context, case, vocabulary::kind::CASE) {
+                        return CompiledCase::Malformed;
+                    }
                     match (
                         context.field(case, vocabulary::PATTERN),
                         context.field(case, ::grap::vocabulary::EXPRESSION),
@@ -334,6 +353,9 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                 elements
                     .iter()
                     .map(|binding| {
+                        if !says(context, binding, vocabulary::kind::BINDING) {
+                            return CompiledBinding::Malformed(vocabulary::INVALID_BINDING);
+                        }
                         match (
                             context.field(binding, vocabulary::VALUE),
                             context.field(binding, vocabulary::BIND),
@@ -452,8 +474,11 @@ fn matches_pattern(
 ) -> Result<bool, InvalidBinder> {
     match pattern {
         Value::Record(pattern_fields) => {
-            if let Some(binder) = pattern_fields.get(&vocabulary::BIND) {
-                match binder.as_cell() {
+            if ::grap::isa::of(pattern_fields) == Some(vocabulary::kind::BINDER) {
+                match pattern_fields
+                    .get(&vocabulary::BIND)
+                    .and_then(Value::as_cell)
+                {
                     Some(binder) => match bindings.iter().find(|(bound, _)| *bound == binder) {
                         Some((_, bound)) => Ok(bound.to_value() == value.to_value()),
                         None => {
@@ -559,10 +584,13 @@ fn pattern_path<W: Host>(
     crate::display::descend(steps, Some(binders.clone()), Some(binders))
 }
 
-/// A binder reads as the record it is, its cell declared; matching reads
-/// only that field, but the others still show.
+/// A binder reads as the record it is, its cell declared, but for the kind
+/// its `bind` already says; matching reads only that field, but the others
+/// still show.
 fn pattern_binder<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    input.value?.field(vocabulary::BIND)?.as_cell()?;
+    let fields = input.value?;
+    (fields.kind() == Some(vocabulary::kind::BINDER)).then_some(())?;
+    fields.field(vocabulary::BIND)?.as_cell()?;
     crate::display::structure::Fields::default()
         .child(|key| {
             (key == vocabulary::BIND).then(|| {
@@ -571,12 +599,14 @@ fn pattern_binder<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opti
                 })
             })
         })
-        .record(input)
+        .shown_empty()
+        .rest(input, |key| key == ::grap::isa::ISA)
 }
 
 fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(
+    kind_form(
         input,
+        vocabulary::kind::CASE,
         [vocabulary::PATTERN, ::grap::vocabulary::EXPRESSION],
         |[pattern, expression]| {
             pattern?;
@@ -691,8 +721,9 @@ fn bindings_form<W: Host>(
 /// A binding binds a cell or a pattern, whichever it has. One of them being
 /// added has no place in that form, so a plainer view takes it.
 fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(
+    kind_form(
         input,
+        vocabulary::kind::BINDING,
         [vocabulary::BIND, vocabulary::PATTERN, vocabulary::VALUE],
         |[binder, pattern, value]| {
             (!matches!(
@@ -844,6 +875,9 @@ pub(super) fn contribution<W: Host>() -> (
         (vocabulary::QUOTE, "quote"),
         (vocabulary::UNQUOTE, "unquote"),
         (vocabulary::kind::UNQUOTE, "unquote"),
+        (vocabulary::kind::CASE, "case"),
+        (vocabulary::kind::BINDING, "binding"),
+        (vocabulary::kind::BINDER, "binder"),
         (vocabulary::LET, "let"),
         (vocabulary::WHERE, "where"),
         (vocabulary::BINDINGS, "bindings"),
@@ -893,6 +927,18 @@ pub(super) fn contribution<W: Host>() -> (
         (
             vocabulary::kind::UNQUOTE,
             folding(crate::display::runtime_partial(unquote_display)),
+        ),
+        (
+            vocabulary::kind::CASE,
+            crate::display::runtime_partial(case_display),
+        ),
+        (
+            vocabulary::kind::BINDING,
+            crate::display::runtime_partial(binding_display),
+        ),
+        (
+            vocabulary::kind::BINDER,
+            crate::display::runtime_partial(pattern_binder),
         ),
     ];
     (names, functions(), provided)

@@ -556,19 +556,30 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
                                         c::CASES,
                                         Value::list([
                                             Value::record([
+                                                (::grap::isa::ISA, c::kind::CASE.into()),
                                                 (
                                                     c::PATTERN,
                                                     Value::record([(
                                                         other,
-                                                        Value::record([(c::BIND, other.into())]),
+                                                        Value::record([
+                                                            (
+                                                                ::grap::isa::ISA,
+                                                                c::kind::BINDER.into(),
+                                                            ),
+                                                            (c::BIND, other.into()),
+                                                        ]),
                                                     )]),
                                                 ),
                                                 (::grap::vocabulary::EXPRESSION, other.into()),
                                             ]),
                                             Value::record([
+                                                (::grap::isa::ISA, c::kind::CASE.into()),
                                                 (
                                                     c::PATTERN,
-                                                    Value::record([(c::BIND, other.into())]),
+                                                    Value::record([
+                                                        (::grap::isa::ISA, c::kind::BINDER.into()),
+                                                        (c::BIND, other.into()),
+                                                    ]),
                                                 ),
                                                 (::grap::vocabulary::EXPRESSION, f64::value(0.0)),
                                             ]),

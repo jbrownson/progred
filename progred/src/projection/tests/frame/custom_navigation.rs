@@ -433,8 +433,12 @@ fn multiline_cell_and_its_function_share_a_vertical_entrance() {
 fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling() {
     use NavigationDirection::*;
     use control::vocabulary as c;
+    let binder = gid::new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(binder, name::record("binder", []));
     let binding = Value::record([
-        (c::BIND, text::value("pattern")),
+        (::grap::isa::ISA, c::kind::BINDING.into()),
+        (c::BIND, binder.into()),
         (c::VALUE, f64::value(1.0)),
     ]);
     let bindings = Value::list([binding]);
@@ -444,7 +448,7 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
             c::LET.into(),
             [(c::BINDINGS, bindings), (EXPRESSION, f64::value(2.0))],
         ),
-        Cells::new(),
+        cells,
     );
     let list = f.child([Step::Key(c::BINDINGS)]);
     let binding = f.child([Step::Key(c::BINDINGS), Step::Element(position.clone())]);
@@ -452,6 +456,14 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
         Step::Key(c::BINDINGS),
         Step::Element(position.clone()),
         Step::Key(c::BIND),
+    ]);
+    // The binder and its definition are one thing, the name a stop inside.
+    let name = f.child([
+        Step::Key(c::BINDINGS),
+        Step::Element(position.clone()),
+        Step::Key(c::BIND),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(name::vocabulary::NAME),
     ]);
     let value = f.child([
         Step::Key(c::BINDINGS),
@@ -463,8 +475,10 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
         (list, Right, binding.clone()),
         (binding.clone(), Right, pattern.clone()),
         (pattern.clone(), Left, binding),
-        (pattern.clone(), Right, value.clone()),
-        (value.clone(), Left, pattern.clone()),
+        (pattern.clone(), Right, name.clone()),
+        (name.clone(), Left, pattern.clone()),
+        (name.clone(), Right, value.clone()),
+        (value.clone(), Left, name),
         (value, Right, body.clone()),
         (body, Right, f.after.clone()),
         (pattern, Down, f.after.clone()),

@@ -207,6 +207,9 @@
     "model_right": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
     "model_left": 3cbf5357204947fdb4f26eadcbd777d6,
     "model_operand": b66457fa59524110bb363bc28754cea0,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
+    "case": 7ebb4ced7047479caafcd90b14499697,
   },
   "cells": {
     model: {name: "Model"},
@@ -314,14 +317,17 @@
         },
         bindings: [
           {
+            isa: binding,
             subject: {isa: call, right: {f64: 0x0000000000000040}, function: divide, left: tool_diameter},
             bind: ball_radius,
           },
           {
+            isa: binding,
             subject: {isa: call, function: normal, y: y, x: x, z: z},
-            pattern: {y: {bind: ny}, x: {bind: nx}, z: {bind: nz}},
+            pattern: {y: {isa: binder, bind: ny}, x: {isa: binder, bind: nx}, z: {isa: binder, bind: nz}},
           },
           {
+            isa: binding,
             subject: {isa: call, right: nz, function: hypot, left: {isa: call, right: ny, function: hypot, left: nx}},
             bind: normal_length,
           },
@@ -345,15 +351,18 @@
         },
         bindings: [
           {
+            isa: binding,
             subject: {isa: call, normal: normal, function: ball_center, y: y, x: x, z: z},
-            pattern: {y: {bind: y}, x: {bind: x}, z: {bind: z}},
+            pattern: {y: {isa: binder, bind: y}, x: {isa: binder, bind: x}, z: {isa: binder, bind: z}},
           },
           {
+            isa: binding,
             subject: {isa: call, function: orientation, y: y, x: x, z: z},
-            pattern: {y: {bind: ny}, x: {bind: nx}, z: {bind: nz}},
+            pattern: {y: {isa: binder, bind: ny}, x: {isa: binder, bind: nx}, z: {isa: binder, bind: nz}},
           },
-          {subject: tool_axis, pattern: {y: {bind: axis_y}, x: {bind: axis_x}, z: {bind: axis_z}}},
+          {isa: binding, subject: tool_axis, pattern: {y: {isa: binder, bind: axis_y}, x: {isa: binder, bind: axis_x}, z: {isa: binder, bind: axis_z}}},
           {
+            isa: binding,
             subject: {isa: call, right: {f64: 0x0000000000000040}, function: divide, left: tool_diameter},
             bind: ball_radius,
           },
@@ -466,10 +475,12 @@
         },
         bindings: [
           {
+            isa: binding,
             subject: {isa: call, function: pull_direction, setup_up: setup_up, slope: slope, orientation: orientation},
             bind: direction,
           },
           {
+            isa: binding,
             subject: {isa: call, direction: direction, function: cut_axis, slope: slope, orientation: orientation},
             bind: tool_axis,
           },
@@ -508,8 +519,9 @@
                   subject: {isa: call, right: state, function: less, left: rows},
                   function: match,
                   cases: [
-                    {pattern: {bool: true}, expression: {absent: done}},
+                    {isa: case, pattern: {bool: true}, expression: {absent: done}},
                     {
+                      isa: case,
                       pattern: {bool: false},
                       expression: {
                         isa: call,
@@ -599,8 +611,8 @@
           },
         },
         bindings: [
-          {subject: left, pattern: {y: {bind: ny}, x: {bind: nx}, z: {bind: nz}}},
-          {subject: right, pattern: {y: {bind: y}, x: {bind: x}, z: {bind: z}}},
+          {isa: binding, subject: left, pattern: {y: {isa: binder, bind: ny}, x: {isa: binder, bind: nx}, z: {isa: binder, bind: nz}}},
+          {isa: binding, subject: right, pattern: {y: {isa: binder, bind: y}, x: {isa: binder, bind: x}, z: {isa: binder, bind: z}}},
         ],
       },
     },
@@ -638,7 +650,7 @@
           orientation: orientation,
           face: face,
         },
-        bindings: [{subject: {isa: call, function: cube}, pattern: {normal: {bind: normal}, face: {bind: face}}}],
+        bindings: [{isa: binding, subject: {isa: call, function: cube}, pattern: {normal: {isa: binder, bind: normal}, face: {isa: binder, bind: face}}}],
       },
     },
     feed_direction: {name: "feed direction"},
@@ -664,6 +676,7 @@
                   expression: {isa: call, function: point, y: ny, x: nx, z: {f64: 0x000000000000f03f}},
                   bindings: [
                     {
+                      isa: binding,
                       subject: {
                         isa: call,
                         right: {isa: call, right: half_face, function: multiply, left: {f64: 0x0000000000000040}},
@@ -673,6 +686,7 @@
                       bind: u,
                     },
                     {
+                      isa: binding,
                       subject: {
                         isa: call,
                         right: {isa: call, right: half_face, function: multiply, left: {f64: 0x0000000000000040}},
@@ -682,6 +696,7 @@
                       bind: v,
                     },
                     {
+                      isa: binding,
                       subject: {
                         isa: call,
                         right: {
@@ -711,6 +726,7 @@
                       bind: nx,
                     },
                     {
+                      isa: binding,
                       subject: {
                         isa: call,
                         right: {
@@ -828,11 +844,12 @@
                     },
                   },
                   bindings: [
-                    {subject: {isa: call, operand: half_size, function: to_f32}, bind: half_size},
-                    {subject: {isa: call, operand: half_face, function: to_f32}, bind: half_face},
-                    {subject: {isa: call, operand: center_depth, function: to_f32}, bind: center_depth},
-                    {subject: {isa: call, operand: edge_limit, function: to_f32}, bind: edge_limit},
+                    {isa: binding, subject: {isa: call, operand: half_size, function: to_f32}, bind: half_size},
+                    {isa: binding, subject: {isa: call, operand: half_face, function: to_f32}, bind: half_face},
+                    {isa: binding, subject: {isa: call, operand: center_depth, function: to_f32}, bind: center_depth},
+                    {isa: binding, subject: {isa: call, operand: edge_limit, function: to_f32}, bind: edge_limit},
                     {
+                      isa: binding,
                       subject: {
                         isa: lambda_2,
                         params: [coordinate],
@@ -860,6 +877,7 @@
                       bind: shoulder,
                     },
                     {
+                      isa: binding,
                       subject: {
                         isa: lambda_2,
                         params: [normal, u, v],
@@ -888,6 +906,7 @@
                       bind: face_pair,
                     },
                     {
+                      isa: binding,
                       subject: {
                         isa: lambda_2,
                         params: [u, v],
@@ -1049,15 +1068,16 @@
           },
         },
         bindings: [
-          {subject: {f64: 0x000000000000f03f}, bind: size},
-          {subject: {f64: 0x9a9999999999b93f}, bind: chamfer},
-          {subject: {isa: call, right: {f64: 0x0000000000000040}, function: divide, left: size}, bind: half_size},
-          {subject: {isa: call, right: chamfer, function: subtract, left: half_size}, bind: half_face},
+          {isa: binding, subject: {f64: 0x000000000000f03f}, bind: size},
+          {isa: binding, subject: {f64: 0x9a9999999999b93f}, bind: chamfer},
+          {isa: binding, subject: {isa: call, right: {f64: 0x0000000000000040}, function: divide, left: size}, bind: half_size},
+          {isa: binding, subject: {isa: call, right: chamfer, function: subtract, left: half_size}, bind: half_face},
           {
+            isa: binding,
             subject: {isa: call, right: {f64: 0x0000000000001040}, function: divide, left: control_depth},
             bind: center_depth,
           },
-          {subject: {isa: call, right: chamfer, function: subtract, left: size}, bind: edge_limit},
+          {isa: binding, subject: {isa: call, right: chamfer, function: subtract, left: size}, bind: edge_limit},
         ],
       },
     },
@@ -1120,8 +1140,8 @@
         },
         function: match,
         cases: [
-          {pattern: {bool: true}, expression: {f64: 0x000000000000f0bf}},
-          {pattern: {bool: false}, expression: {f64: 0x000000000000f03f}},
+          {isa: case, pattern: {bool: true}, expression: {f64: 0x000000000000f0bf}},
+          {isa: case, pattern: {bool: false}, expression: {f64: 0x000000000000f03f}},
         ],
       },
     },
@@ -1185,8 +1205,9 @@
                   subject: {isa: call, right: state, function: less, left: segments},
                   function: match,
                   cases: [
-                    {pattern: {bool: true}, expression: {absent: done}},
+                    {isa: case, pattern: {bool: true}, expression: {absent: done}},
                     {
+                      isa: case,
                       pattern: {bool: false},
                       expression: {
                         isa: call,
@@ -1203,6 +1224,7 @@
                             },
                             bindings: [
                               {
+                                isa: binding,
                                 subject: {
                                   isa: call,
                                   right: {
@@ -1243,6 +1265,7 @@
         },
         bindings: [
           {
+            isa: binding,
             subject: {
               isa: call,
               right: {f64: 0x000000000000f03f},
@@ -1251,8 +1274,9 @@
             },
             bind: u0,
           },
-          {subject: {isa: call, right: intercept, function: subtract, left: u0}, bind: v0},
+          {isa: binding, subject: {isa: call, right: intercept, function: subtract, left: u0}, bind: v0},
           {
+            isa: binding,
             subject: {
               isa: call,
               right: {f64: 0x000000000000f03f},
@@ -1266,8 +1290,9 @@
             },
             bind: v1,
           },
-          {subject: {isa: call, right: intercept, function: sum, left: v1}, bind: u1},
+          {isa: binding, subject: {isa: call, right: intercept, function: sum, left: v1}, bind: u1},
           {
+            isa: binding,
             subject: {
               isa: call,
               right: {
@@ -1345,6 +1370,7 @@
             },
             bindings: [
               {
+                isa: binding,
                 subject: {
                   isa: call,
                   right: {isa: call, right: {f64: 0x0000000000806640}, function: divide, left: pi},
@@ -1418,6 +1444,7 @@
                   function: match,
                   cases: [
                     {
+                      isa: case,
                       pattern: model,
                       expression: {
                         isa: call,
@@ -1432,6 +1459,7 @@
                       },
                     },
                     {
+                      isa: case,
                       pattern: stock,
                       expression: {
                         isa: call,
@@ -1464,7 +1492,7 @@
                             isa: call,
                             function: where,
                             expression: {isa: call, function: field},
-                            bindings: [{subject: {isa: call, function: cube}, pattern: {field: {bind: field}}}],
+                            bindings: [{isa: binding, subject: {isa: call, function: cube}, pattern: {field: {isa: binder, bind: field}}}],
                           },
                         },
                         color: {rgb: 0x5f96b4},
@@ -1485,32 +1513,35 @@
               },
               bindings: [
                 {
+                  isa: binding,
                   subject: parameters,
                   pattern: {
                     playback: {
-                      position: {bind: progress},
-                      control_items: {bind: program_items},
-                      control_range: {bind: focus},
+                      position: {isa: binder, bind: progress},
+                      control_items: {isa: binder, bind: program_items},
+                      control_range: {isa: binder, bind: focus},
                     },
-                    preview_mode: {bind: preview_mode},
+                    preview_mode: {isa: binder, bind: preview_mode},
                   },
                 },
-                {subject: {f64: 0xfca9f1d24d62303f}, pattern: {bind: profile_tolerance}},
+                {isa: binding, subject: {f64: 0xfca9f1d24d62303f}, pattern: {isa: binder, bind: profile_tolerance}},
                 {
+                  isa: binding,
                   subject: {
                     y: {f64: 0x000000000000e0bf},
                     x: {f64: 0x000000000000e0bf},
                     z: {f64: 0x000000000000e0bf},
                   },
-                  pattern: {bind: stock_min},
+                  pattern: {isa: binder, bind: stock_min},
                 },
                 {
+                  isa: binding,
                   subject: {
                     y: {f64: 0x000000000000e03f},
                     x: {f64: 0x000000000000e03f},
                     z: {f64: 0x000000000000e03f},
                   },
-                  pattern: {bind: stock_max},
+                  pattern: {isa: binder, bind: stock_max},
                 },
               ],
             },
@@ -1530,6 +1561,7 @@
               },
               bindings: [
                 {
+                  isa: binding,
                   subject: {
                     isa: call,
                     control_initial: {isa: call, function: quote, expression: stock},
@@ -1537,9 +1569,10 @@
                     function: radio,
                     control_options: [{name: "Model", value: model}, {name: "Stock", value: stock}],
                   },
-                  pattern: {bind: preview_mode},
+                  pattern: {isa: binder, bind: preview_mode},
                 },
                 {
+                  isa: binding,
                   subject: {
                     isa: call,
                     fuel: {f64: 0x00000000804f1241},
@@ -1548,7 +1581,7 @@
                     tree_program: program_tree,
                     control_initial: {isa: call, function: multiply, left: rows, right: {f64: 0x9a99999999990540}},
                   },
-                  pattern: {bind: parameters},
+                  pattern: {isa: binder, bind: parameters},
                 },
               ],
             },
