@@ -14,7 +14,7 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
     let definition = new_cell_id();
     for evaluated in [false, true] {
         let value = if evaluated {
-            Value::record([(::grap::vocabulary::EVALUATE, Value::Cell(definition))])
+            crate::libraries::grap::evaluation(Value::Cell(definition))
         } else {
             tool.clone()
         };

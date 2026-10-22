@@ -362,7 +362,6 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
     );
     assert_eq!(Tool::read(&tool.value()), Some(tool));
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    assert_eq!(names["evaluate"], ::grap::vocabulary::EVALUATE);
     let sources = crate::sources::Sources {
         doc: &doc,
         libraries: &stack.libraries,

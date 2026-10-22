@@ -17,26 +17,38 @@ pub mod vocabulary {
 
     /// A notebook's entries: a list of cells, each evaluated where it's
     /// drawn.
-    pub const NOTEBOOK: CellId = CellId::from_u128(0x30371e11863404e70052ccff54276702);
+    pub const ENTRIES: CellId = CellId::from_u128(0x26b6e7f1fc0d482da89e2a4835d2f789);
+
+    pub mod kind {
+        use gid::CellId;
+
+        /// A notebook: `{isa: notebook, entries}`.
+        pub const NOTEBOOK: CellId = CellId::from_u128(0x9111dde9a00f4106a817720187b45645);
+    }
 }
 
-/// A record naming a notebook draws its entries, then its other fields,
-/// after a handle of its own. The record and its list of entries are one
-/// thing, the notebook; each entry is a stop inside.
+/// A notebook draws its entries, then its other fields, after a handle of
+/// its own. The record and its list of entries are one thing, the notebook;
+/// each entry is a stop inside.
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], |[notebook]| {
-        notebook?;
-        Some(crate::display::part(
-            [Step::Key(vocabulary::NOTEBOOK)],
-            Some(crate::display::first(
-                input,
-                crate::display::runtime_partial(entries),
-            )),
-            None,
-        ))
-    })
+    crate::display::structure::kind_form(
+        input,
+        vocabulary::kind::NOTEBOOK,
+        [vocabulary::ENTRIES],
+        |[list]| {
+            list?;
+            Some(crate::display::part(
+                [Step::Key(vocabulary::ENTRIES)],
+                Some(crate::display::first(
+                    input,
+                    crate::display::runtime_partial(entries),
+                )),
+                None,
+            ))
+        },
+    )
     .map(crate::display::handle)
 }
 
@@ -256,22 +268,25 @@ fn start_entry(
 pub(super) fn starter() -> Completion {
     let first = gid::position::between(None, None).expect("an empty list has room");
     crate::libraries::completion::generated(
-        vocabulary::NOTEBOOK,
+        vocabulary::kind::NOTEBOOK,
         {
             let first = first.clone();
             move || {
-                Value::record([(
-                    vocabulary::NOTEBOOK,
-                    Value::List(
-                        [(first.clone(), gid::new_cell_id().into())]
-                            .into_iter()
-                            .collect(),
-                    ),
-                )])
+                ::grap::isa::record(
+                    vocabulary::kind::NOTEBOOK,
+                    [(
+                        vocabulary::ENTRIES,
+                        Value::List(
+                            [(first.clone(), gid::new_cell_id().into())]
+                                .into_iter()
+                                .collect(),
+                        ),
+                    )],
+                )
             }
         },
         Some(crate::selection::pending_at(&[
-            Step::Key(vocabulary::NOTEBOOK),
+            Step::Key(vocabulary::ENTRIES),
             Step::Element(first),
             Step::Follow(Resolution::Document),
         ])),

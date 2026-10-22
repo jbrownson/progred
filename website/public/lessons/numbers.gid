@@ -2,7 +2,6 @@
   "binders": {
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
-    "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
@@ -45,6 +44,7 @@
     "x": 0192bad40c32c951e2237679084528bc,
     "y": 213e54dd15ac9c9750308f35a606f56f,
     "z": c93e6bb743a9d90f85f8cdea3aabf5c1,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
   },
   "cells": {
     sphere: {
@@ -75,11 +75,11 @@
     radius: {name: "radius"},
   },
   "root": {
-    first: {evaluate: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f64: 0x9a9999999999c93f}}},
-    second: {evaluate: {isa: call, function: sum_f32, left: {f32: 0xcdcccc3d}, right: {f32: 0xcdcc4c3e}}},
-    third: {evaluate: {isa: call, function: subtract_u64, left: {u64: 0x0200000000000000}, right: {u64: 0x0300000000000000}}},
-    fourth: {evaluate: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f32: 0xcdcc4c3e}}},
-    fifth: {evaluate: {
+    first: {isa: evaluation, expression: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f64: 0x9a9999999999c93f}}},
+    second: {isa: evaluation, expression: {isa: call, function: sum_f32, left: {f32: 0xcdcccc3d}, right: {f32: 0xcdcc4c3e}}},
+    third: {isa: evaluation, expression: {isa: call, function: subtract_u64, left: {u64: 0x0200000000000000}, right: {u64: 0x0300000000000000}}},
+    fourth: {isa: evaluation, expression: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f32: 0xcdcc4c3e}}},
+    fifth: {isa: evaluation, expression: {
       isa: call,
       function: preview_3d,
       value: {

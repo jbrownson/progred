@@ -69,9 +69,9 @@ impl<P> Driver<P> {
         self.computed(path, crate::libraries::presentation::vocabulary::RENDER)
     }
 
-    /// What the `{evaluate: …}` at `path` computes.
+    /// What the evaluation at `path` computes.
     pub(crate) fn result(&self, path: &[Step]) -> Value {
-        self.computed(path, ::grap::vocabulary::EVALUATE)
+        self.computed(path, ::grap::vocabulary::EXPRESSION)
     }
 
     fn computed(&self, path: &[Step], key: CellId) -> Value {

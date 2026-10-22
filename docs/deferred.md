@@ -18,13 +18,13 @@ it is not a general fallback policy for arbitrary facets such as line editors.
 
 ## Discoverability of expression definitions
 
-Keep Grap expression references shallow, including the source shown by
-`{evaluate: expression}`. The toolpath example places an ordinary reference to
+Keep Grap expression references shallow, including the source an evaluation
+shows. The toolpath example places an ordinary reference to
 the ball-tool cell immediately before its evaluation so the normal projection
 exposes its editable contents. Both occurrences reference the same definition;
 neither is a special declaration. Revisit navigation or expansion affordances
 if finding these definitions becomes a recurring problem, rather than changing
-`evaluate`'s projection now.
+the evaluation's projection now.
 
 ## Selection destinations and history
 
@@ -212,7 +212,8 @@ display still to be designed.
 ## Kinds
 
 Grap's calls, lambdas, closures, value wrappers, unquotes, cases, bindings,
-binders and absents say their kind (`isa`) since 22 October 2026 (see [model](model.md#data-and-resolution));
+binders, absents, evaluations and notebooks say their kind (`isa`) since 22
+October 2026 (see [model](model.md#data-and-resolution));
 before, a stored hole kept a shape's identifying field present, which recorded
 what the kind required when it was written. Open beside it:
 
@@ -222,8 +223,7 @@ what the kind required when it was written. Open beside it:
   steps) the exception. The projection stack draws a record as its kind
   provides first (see [projections](projections.md#projection-composition)),
   and evaluation dispatches on Grap's kinds. Still told by their fields:
-  `{evaluate: …}`, notebooks, and the other libraries' records;
-  `{grap: cell}` is to go. Declining partials allocate while they probe, about 4,300 times a
+  the other libraries' records, and `{grap: cell}`, which is to go. Declining partials allocate while they probe, about 4,300 times a
   frame in the IoP source form, so the remaining probing has a cost to find.
 - **A kind's own description.** A kind's cell could be described by a record
   that says it's a kind, `{isa: kind, name, …}`, as a field's could by
@@ -1282,8 +1282,8 @@ Still to come:
   automatic names. The picker doesn't yet offer named cells that aren't
   functions, a gap to note rather than fix first.
 - The notebook knows what it is, so an entry is its expression alone, with no
-  wrapper. `{evaluate: expression}` is a poor design as it stands: a reference
-  to one gets the record, not its result.
+  wrapper. An evaluation record is a poor design as it stands: a reference to
+  one gets the record, not its result.
 
 - A REPL pane evaluates in the scope of the selection. After Cmd-clicking an
   output, the call that drew it supplies the bindings, as a debugger console

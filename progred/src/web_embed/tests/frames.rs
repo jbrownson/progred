@@ -329,7 +329,7 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
     let frame = editing_frame(&mut world);
     let callee = [
         Step::Key(names["second"]),
-        Step::Key(::grap::vocabulary::EVALUATE),
+        Step::Key(::grap::vocabulary::EXPRESSION),
         Step::Key(FUNCTION),
     ];
     assert!(frame.landmarks.landmark(&callee).is_some());

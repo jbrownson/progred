@@ -3,7 +3,6 @@
     "name": 02e562654d6d0828d3a7559e6f75fffe, "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "function": 751fca4373debdd0b7e6eb73e08d684b, "params": 195b378d0d31d90ab0d7366c15346b70,
     "body": 986143866eda2e2fbf9ab8484357a0c9, "expression": ccc55b0eb63b9f564ea74436094d4014,
-    "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497, "unquote": da48703c290e3b35d7353c38110bc953,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2, "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f, "bind": 5e46d12705690e8a377eb0f16ad9dba6,
@@ -47,6 +46,7 @@
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
   },
   "cells": {
     over: {name: "over"}, under: {name: "under"}, degrees: {name: "degrees"},
@@ -117,7 +117,7 @@
       {name: "angle", keys: [degrees], projection: angle_view, functions: [dial]},
     ],
     fractions: [half, quarter],
-    fraction_sum: {evaluate: {isa: call, function: add_fractions, p: half, q: quarter}},
+    fraction_sum: {isa: evaluation, expression: {isa: call, function: add_fractions, p: half, q: quarter}},
     angles: [{degrees: {f64: 0x0000000000804640}}, {degrees: {f64: 0x0000000000005e40}}],
   },
 }

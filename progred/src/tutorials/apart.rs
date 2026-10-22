@@ -223,7 +223,7 @@ fn numbers() {
     let before = numbers.images();
     let radius = numbers.path(&[
         "fifth",
-        "evaluate",
+        "expression",
         "value",
         "expression",
         "shape_left",
@@ -242,7 +242,7 @@ fn numbers() {
 #[test]
 fn unfinished() {
     let mut unfinished = page("unfinished");
-    let argument = |embed: &Embed, slot| embed.path(&[slot, "evaluate", "x"]);
+    let argument = |embed: &Embed, slot| embed.path(&[slot, "expression", "x"]);
     let result = |embed: &Embed, slot| embed.result(&[embed.key(slot)]);
     assert!(::grap::absent::is_absent(&result(&unfinished, "third")));
 

@@ -81,7 +81,7 @@ fn grap_fixture_shares_an_unnamed_numeric_cell() {
         let call = item
             .as_record()
             .unwrap()
-            .get(&grap::vocabulary::EVALUATE)
+            .get(&grap::vocabulary::EXPRESSION)
             .unwrap()
             .as_record()
             .unwrap();
@@ -102,7 +102,7 @@ fn grap_fixture_shares_an_unnamed_numeric_cell() {
 #[test]
 fn functions_fixture_has_a_parameter_not_a_shared_numeric_input() {
     use crate::libraries::{f64, name};
-    use grap::vocabulary::{BODY, EVALUATE, FUNCTION, PARAMS};
+    use grap::vocabulary::{BODY, EXPRESSION, FUNCTION, PARAMS};
 
     let (doc, names) = parse(include_str!("../../fixtures/functions.gid")).unwrap();
     assert_eq!(doc.cells.cells().count(), 2);
@@ -130,7 +130,7 @@ fn functions_fixture_has_a_parameter_not_a_shared_numeric_input() {
         let call = item
             .as_record()
             .unwrap()
-            .get(&EVALUATE)
+            .get(&EXPRESSION)
             .unwrap()
             .as_record()
             .unwrap();

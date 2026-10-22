@@ -59,10 +59,10 @@ fn evaluated_output_is_tinted_without_tinting_its_expression() {
     use crate::libraries::presentation::vocabulary::RESULT;
     let child = new_cell_id();
     let value = Value::record([(child, Value::list([text::value("result")]))]);
-    let mut world = world(Value::record([(grap::vocabulary::EVALUATE, value)]));
+    let mut world = world(crate::libraries::grap::evaluation(value));
     let frame = editing_frame(&mut world);
     let result = stop(&frame, &[Step::Key(RESULT), Step::Computed]).rect;
-    let expression = stop(&frame, &[Step::Key(grap::vocabulary::EVALUATE)]).rect;
+    let expression = stop(&frame, &[Step::Key(grap::vocabulary::EXPRESSION)]).rect;
     let drawing = settle(frame, &world.sources()).list;
     let tints = grounds(&drawing.0, style::Theme::Light.palette().readonly_ground);
     assert_eq!(tints, [result.inset(3.0)]);
@@ -72,16 +72,15 @@ fn evaluated_output_is_tinted_without_tinting_its_expression() {
 #[test]
 fn nested_computed_results_do_not_stack_readonly_tints() {
     use crate::libraries::presentation::vocabulary::RESULT;
-    let mut world = world(Value::record([(
-        grap::vocabulary::EVALUATE,
-        Value::record([(grap::vocabulary::EVALUATE, text::value("nested"))]),
-    )]));
+    let mut world = world(crate::libraries::grap::evaluation(
+        crate::libraries::grap::evaluation(text::value("nested")),
+    ));
     let frame = editing_frame(&mut world);
     let outer = stop(&frame, &[Step::Key(RESULT), Step::Computed]).rect;
     let source_result = stop(
         &frame,
         &[
-            Step::Key(grap::vocabulary::EVALUATE),
+            Step::Key(grap::vocabulary::EXPRESSION),
             Step::Key(RESULT),
             Step::Computed,
         ],
@@ -106,7 +105,7 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
     use crate::libraries::presentation::vocabulary::RESULT;
     let child = new_cell_id();
     let value = Value::record([(child, Value::list([f64::value(1.0)]))]);
-    let mut world = world(Value::record([(grap::vocabulary::EVALUATE, value.clone())]));
+    let mut world = world(crate::libraries::grap::evaluation(value.clone()));
     let result = [Step::Key(RESULT), Step::Computed];
     let child_path = [Step::Key(RESULT), Step::Computed, Step::Key(child)];
     let before = world.model.doc.clone();
@@ -133,7 +132,7 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
     assert!(command(&mut driver, Key::Named(NamedKey::ArrowUp)));
     assert!(!driver.drawn(&child_path));
     // The stored expression remains projected, not folded with its result.
-    assert!(driver.drawn(&[Step::Key(grap::vocabulary::EVALUATE)]));
+    assert!(driver.drawn(&[Step::Key(grap::vocabulary::EXPRESSION)]));
     assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
     assert!(!driver.editor().model.dirty());
 }
@@ -160,7 +159,7 @@ fn nested_result_evaluations_use_their_own_allowance() {
                 ]),
             )])
         } else {
-            Value::record([(grap::vocabulary::EVALUATE, expression.clone())])
+            crate::libraries::grap::evaluation(expression.clone())
         };
         // Returning this inert record is cheap; evaluating its expression is not.
         let mut driver = Driver::of(Value::record([(

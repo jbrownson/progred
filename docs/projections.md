@@ -422,11 +422,11 @@ moment the operator is chosen: a missing operand is an empty slot whose picker
 opens in place, and other fields, including one being added, follow in a
 record. A line too narrow for the expression wraps before its operator.
 
-`{evaluate: expression}` is a Grap-library value partial, not evaluator syntax
-or a field hook in the structural walk. The evaluator never observes the field;
-a host that never loads the projection never sees it. It shows the stored
-expression at its real `…/evaluate` path, a dim `→` that selects the whole
-record, and the returned value from its own read-only `at` occurrence, all in
+An evaluation, `{isa: evaluation, expression}`, is a Grap-library kind whose
+projection shows an expression's result, not evaluator syntax or a field hook
+in the structural walk. The evaluator never observes it; a host that never
+loads the projection never sees it. It shows the stored expression at its real
+`…/expression` path, a dim `→` that selects the whole record, and the returned value from its own read-only `at` occurrence, all in
 one group. When wrapped, the arrow stays with the stored
 expression and the result is indented underneath. Result children are ordinary
 navigation stops and can be copied and folded independently. An absent result
@@ -449,8 +449,8 @@ and draws the program `grap` names as an expression slot: the cell keeps its
 parentheses, and an empty program offers Grap's suggestions rather than the
 whole vocabulary.
 
-Grap's other root template is a notebook: a record whose `notebook` field lists
-entry cells. The record and its list are one thing, the notebook, marked by a
+Grap's other root template is a notebook, `{isa: notebook, entries}`, whose
+entries are cells. The record and its list are one thing, the notebook, marked by a
 bar down its side that selects it; its entries are stops inside, numbered in
 its margin, a number selecting its entry. Each entry draws as its cell's
 expression, an arrow, and what it evaluates to, beside it or below it where

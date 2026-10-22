@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 #[test]
 fn expression_cells_are_shallow_only_with_a_valid_name() {
-    use grap::vocabulary::{EVALUATE, FUNCTION};
+    use grap::vocabulary::{EXPRESSION, FUNCTION};
 
     let cell = new_cell_id();
     for (definition, named) in [
@@ -35,8 +35,8 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
         for (root, path, expression) in [
             (cell.into(), vec![], false),
             (
-                Value::record([(EVALUATE, cell.into())]),
-                vec![Step::Key(EVALUATE)],
+                crate::libraries::grap::evaluation(cell.into()),
+                vec![Step::Key(EXPRESSION)],
                 true,
             ),
             (grap::call(cell.into(), []), vec![Step::Key(FUNCTION)], true),

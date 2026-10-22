@@ -282,8 +282,7 @@ fn closing_the_picker_removes_only_its_selection_state() {
 #[test]
 fn a_read_only_swatch_selects_its_color() {
     let color = value(Color::from_rgb8(0x50, 0x96, 0xdc));
-    let mut driver =
-        crate::driver::Driver::of(Value::record([(::grap::vocabulary::EVALUATE, color)]));
+    let mut driver = crate::driver::Driver::of(crate::libraries::grap::evaluation(color));
     // The evaluated result is computed, so it's read-only.
     let result = crate::test_examples::result_path(&[]);
     let rect = driver.rect(&result);

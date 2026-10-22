@@ -79,7 +79,7 @@
     "end_extension": ca9bd94d95a6b53179cdfb599033aabb,
     "environment": e910025c710c25c43d0a5b296378f374,
     "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
-    "evaluate": acfc5e50881292518dab3cec77cf43ee,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
     "evenly_spaced": 19307c3d1b09e230632c61a9f88170b5,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
@@ -4382,11 +4382,13 @@
       tools_section: [
         0x33: ball_tool,
         0x66: {
-          evaluate: ball_tool,
+          expression: ball_tool,
+          isa: evaluation,
         },
         0x99: square_tool,
         0xcc: {
-          evaluate: square_tool,
+          expression: square_tool,
+          isa: evaluation,
         },
       ],
       geometry_section: [

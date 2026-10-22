@@ -438,14 +438,14 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     let e = entry_paths(&value, &crate::test_examples::result_path(&[]), a).remove(0);
     let source_entry = entry_paths(
         &value,
-        &occurrence::of(&[Step::Key(grap::vocabulary::EVALUATE)]),
+        &occurrence::of(&[Step::Key(grap::vocabulary::EXPRESSION)]),
         a,
     )
     .remove(0);
     let result_body = body(&e, a);
     let source_body = body(&source_entry, a);
     let expected = value.as_record().unwrap().get(&a).unwrap().clone();
-    doc.root = Some(Value::record([(grap::vocabulary::EVALUATE, value)]));
+    doc.root = Some(crate::libraries::grap::evaluation(value));
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let before = driver.editor().model.doc.clone();
     let positions: Vec<_> = expected.as_list().unwrap().keys().cloned().collect();

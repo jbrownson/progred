@@ -17,7 +17,7 @@ use crate::display::{
     col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
-use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FUNCTION, LAMBDA, PARAMS, VALUE, kind};
+use ::grap::vocabulary::{BODY, ENVIRONMENT, FUNCTION, LAMBDA, PARAMS, VALUE, kind};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::text::Script;
 
@@ -157,6 +157,25 @@ pub mod vocabulary {
     /// Source whose contents belong to the Grap domain. This is an
     /// ordinary field and requests no evaluation.
     pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
+
+    /// The kinds of the Grap library's own records, as their `isa` names
+    /// them.
+    pub mod kind {
+        use gid::CellId;
+
+        /// An expression shown with its result: `{isa: evaluation,
+        /// expression}`.
+        pub const EVALUATION: CellId = CellId::from_u128(0x549dd85073474d6296d773c8df9c0526);
+    }
+}
+
+/// `expression` shown with its result.
+#[cfg(test)]
+pub fn evaluation(expression: Value) -> Value {
+    ::grap::isa::record(
+        vocabulary::kind::EVALUATION,
+        [(::grap::vocabulary::EXPRESSION, expression)],
+    )
 }
 
 /// A parameter is a cell, with no name of its own called what its list
@@ -638,28 +657,35 @@ fn value_display<W: Host>(
     )
 }
 
-/// Foreignness is an evaluator implementation detail. In source, an
-fn evaluate_display<W: Host>(
+/// An expression and its result, beside it when they fit, else below it.
+fn evaluation_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    record_form(input, [EVALUATE], |[expression]| {
-        let result =
-            input
-                .env
-                .evaluate_runtime(&expression?, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
-        let expression = shared(expression_path(input, [Step::Key(EVALUATE)]));
-        let shaft_site = input.site();
-        let shaft = shared(selectable(crate::display::arrow(), &shaft_site));
-        let result = shared(crate::libraries::presentation::result_layout(&result));
-        Some(alternatives([
-            row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
-            col(
-                0,
-                2.0,
-                [row(6.0, [expression, shaft]), indent(20.0, result)],
-            ),
-        ]))
-    })
+    use ::grap::vocabulary::EXPRESSION;
+    crate::display::structure::kind_form(
+        input,
+        vocabulary::kind::EVALUATION,
+        [EXPRESSION],
+        |[expression]| {
+            let result = input.env.evaluate_runtime(
+                &expression?,
+                ::grap::DEFAULT_FUEL,
+                &[Step::Key(EXPRESSION)],
+            );
+            let expression = shared(expression_path(input, [Step::Key(EXPRESSION)]));
+            let shaft_site = input.site();
+            let shaft = shared(selectable(crate::display::arrow(), &shaft_site));
+            let result = shared(crate::libraries::presentation::result_layout(&result));
+            Some(alternatives([
+                row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
+                col(
+                    0,
+                    2.0,
+                    [row(6.0, [expression, shaft]), indent(20.0, result)],
+                ),
+            ]))
+        },
+    )
 }
 
 fn evaluate_foreign(
@@ -715,6 +741,7 @@ pub fn library<W: Host>() -> Library<W> {
             (kind::VALUE_WRAPPER, "value wrapper"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
             (::grap::vocabulary::EVALUATE, "evaluate"),
+            (vocabulary::kind::EVALUATION, "evaluation"),
             (::grap::vocabulary::EXPRESSION, "expression"),
             (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
             (::grap::source::vocabulary::INPUT, "input source"),
@@ -723,7 +750,8 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::source::vocabulary::PATH, "source path"),
             (::grap::source::vocabulary::SOURCE, "definition source"),
             (vocabulary::GRAP, "grap"),
-            (notebook::vocabulary::NOTEBOOK, "notebook"),
+            (notebook::vocabulary::kind::NOTEBOOK, "notebook"),
+            (notebook::vocabulary::ENTRIES, "entries"),
             (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
             (memo::CYCLE, "computation cycle"),
             (memo::INPUTS_CHANGED, "inputs changed during computation"),
@@ -768,6 +796,14 @@ pub fn library<W: Host>() -> Library<W> {
                 kind::VALUE_WRAPPER,
                 crate::display::runtime_partial(value_display),
             ),
+            (
+                vocabulary::kind::EVALUATION,
+                crate::display::runtime_partial(evaluation_display),
+            ),
+            (
+                notebook::vocabulary::kind::NOTEBOOK,
+                crate::display::runtime_partial(notebook::display),
+            ),
         ]
         .into_iter()
         .chain(control)
@@ -777,9 +813,7 @@ pub fn library<W: Host>() -> Library<W> {
         // A number takes its operators as typing.
         crate::display::compose_partials([
             numbers,
-            crate::display::runtime_partial(evaluate_display),
             crate::display::runtime_partial(program_display),
-            crate::display::runtime_partial(notebook::display),
         ]),
     )
     .with_completions(completions)

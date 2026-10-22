@@ -3,7 +3,6 @@
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "outline": e6c0b2058b8468428d64576d953e2d62,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
-    "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -76,6 +75,7 @@
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -202,7 +202,7 @@
       dimensions: [
         width,
         length,
-        {area: {evaluate: {isa: call, function: multiply, left: width, right: length}}},
+        {area: {isa: evaluation, expression: {isa: call, function: multiply, left: width, right: length}}},
       ],
       operations: [
         {
@@ -243,7 +243,7 @@
           ["Nested", "data"],
         ],
       },
-      {evaluate: {isa: call, function: multiply, left: width, right: length}},
+      {isa: evaluation, expression: {isa: call, function: multiply, left: width, right: length}},
     ],
     parameters: [first, second, "Short text", "A longer editable text value"],
     lists: [
@@ -254,7 +254,7 @@
     ],
     empty: [[], {}, "", bare],
     shared: [first, first, second],
-    results: {evaluate: ["Computed text", ["Nested", "result"]]},
+    results: {isa: evaluation, expression: ["Computed text", ["Nested", "result"]]},
     deep: deep_outer,
     side_by_side: {
       layout_program: top_columns,

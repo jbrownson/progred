@@ -16,6 +16,7 @@
     "environment": e910025c710c25c43d0a5b296378f374,
     "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "evaluate_result": 164b6921e7f168ce5ebe60e22c9d1f30,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
@@ -235,17 +236,18 @@
     },
     0x40: {
       add_result: {
-        evaluate: {
+        expression: {
           right: b_value,
           function: sum,
           left: a_value,
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0x4c: {
       nested_result: {
-        evaluate: {
+        expression: {
           right: scale_value,
           function: multiply,
           left: {
@@ -256,11 +258,12 @@
           },
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0x59: {
       evaluate_result: {
-        evaluate: {
+        expression: {
           function: evaluate,
           expression: {
             right: b_value,
@@ -271,6 +274,7 @@
           isa: call,
           environment: {},
         },
+        isa: evaluation,
       },
     },
     0x66: {
@@ -284,12 +288,13 @@
     },
     0x8c: {
       graph_function_result: {
-        evaluate: scale_and_add_expression,
+        expression: scale_and_add_expression,
+        isa: evaluation,
       },
     },
     0x99: {
       circle_result: {
-        evaluate: {
+        expression: {
           function: circle,
           radius: {
             x_parameter: a_value,
@@ -300,11 +305,12 @@
           },
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0xa6: {
       match_result: {
-        evaluate: {
+        expression: {
           value: {
             function: circle,
             radius: a_value,
@@ -327,31 +333,34 @@
           ],
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0xb3: {
       quoted_cases: {
-        evaluate: {
+        expression: {
           generated_value: a_value,
           function: make_cases,
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0xc0: {
       metadata_call: {
-        evaluate: {
+        expression: {
           right: b_value,
           function: sum,
           left: a_value,
           note: "extra fields remain visible and do not prevent evaluation",
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0xcc: {
       inert_data: {
-        evaluate: {
+        expression: {
           contains_call: {
             right: b_value,
             function: sum,
@@ -360,33 +369,37 @@
           },
           note: "this record is data, so its call-shaped child remains data",
         },
+        isa: evaluation,
       },
     },
     0xd9: {
       type_absent: {
-        evaluate: {
+        expression: {
           right: b_value,
           function: sum,
           left: "three",
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0xe6: {
       missing_argument: {
-        evaluate: {
+        expression: {
           function: sum,
           left: a_value,
           isa: call,
         },
+        isa: evaluation,
       },
     },
     0xf3: {
       not_callable: {
-        evaluate: {
+        expression: {
           function: a_value,
           isa: call,
         },
+        isa: evaluation,
       },
     },
   ],

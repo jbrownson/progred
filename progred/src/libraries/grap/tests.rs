@@ -106,7 +106,10 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
 }
 
 fn wrapper(expression: Value, extra: impl IntoIterator<Item = (gid::CellId, Value)>) -> Value {
-    Value::record(std::iter::once((EVALUATE, expression)).chain(extra))
+    ::grap::isa::record(
+        super::vocabulary::kind::EVALUATION,
+        std::iter::once((::grap::vocabulary::EXPRESSION, expression)).chain(extra),
+    )
 }
 
 fn env() -> EvaluatesTo {
@@ -165,7 +168,7 @@ fn projected(
     env: &dyn Env,
     value: &Value,
 ) -> Option<Recorded<crate::Editor, crate::frame::Hovered>> {
-    project_runtime(evaluate_display, &projection_input(env, value))
+    project_runtime(evaluation_display, &projection_input(env, value))
         .map(|layout| layout.record().content().clone())
 }
 
@@ -494,7 +497,7 @@ fn a_record_with_the_field_is_expression_then_result() {
     let layout = projected(&env(), &wrapper(expression.clone(), [])).unwrap();
     let (shown, result) = arms(&layout);
     assert!(matches!(&inspect(&(shown)),
-        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(EVALUATE)]
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(::grap::vocabulary::EXPRESSION)]
     ));
     assert!(matches!(&inspect(&(result)),
         ProjectionCall::At { value, steps, .. } if *value == Value::from(vec![1])
@@ -577,7 +580,7 @@ fn an_evaluate_shaped_result_is_another_projection() {
     let layout = projected(&env(), &result).unwrap();
     let (nested, _) = arms(&layout);
     assert!(matches!(&inspect(&(nested)),
-        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(EVALUATE)]
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(::grap::vocabulary::EXPRESSION)]
     ));
 }
 

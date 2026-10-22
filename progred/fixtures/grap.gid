@@ -1,7 +1,6 @@
 {
   "binders": {
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
-    "evaluate": acfc5e50881292518dab3cec77cf43ee,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -13,13 +12,15 @@
     "third": 5e716c07490849f072b4e9017dd6230d,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
   },
   "cells": {
     input: {f64: 0x0000000000000840},
   },
   "root": {
     first: input,
-    second: {evaluate: {isa: call, function: sum, left: input, right: {f64: 0x0000000000000040}}},
-    third: {evaluate: {isa: call, function: multiply, left: input, right: {f64: 0x0000000000000040}}},
+    second: {isa: evaluation, expression: {isa: call, function: sum, left: input, right: {f64: 0x0000000000000040}}},
+    third: {isa: evaluation, expression: {isa: call, function: multiply, left: input, right: {f64: 0x0000000000000040}}},
   },
 }

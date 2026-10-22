@@ -144,7 +144,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         total
             .as_record()
             .unwrap()
-            .get(&::grap::vocabulary::EVALUATE)
+            .get(&::grap::vocabulary::EXPRESSION)
             .unwrap(),
         &world.sources(),
         ::grap::DEFAULT_FUEL,

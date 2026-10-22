@@ -9,8 +9,11 @@ use gid::{Document, Value};
 fn evaluated_expression(value: &Value) -> &Value {
     value
         .as_record()
-        .and_then(|fields| fields.get(&grap::vocabulary::EVALUATE))
-        .expect("evaluation projection")
+        .filter(|fields| {
+            grap::isa::of(fields) == Some(crate::libraries::grap::vocabulary::kind::EVALUATION)
+        })
+        .and_then(|fields| fields.get(&grap::vocabulary::EXPRESSION))
+        .expect("an evaluation")
 }
 
 fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation<gid::Value> {
