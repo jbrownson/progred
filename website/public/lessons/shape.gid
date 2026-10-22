@@ -194,7 +194,7 @@
     "second": f717b766d250a7b86c5eb842885c4417,
     "machine": 051d0400d4860f83d08fc26848ae463e,
     "sample": 20e38b0d6777d6159d93a9e33527084b,
-    "render": 37cda4bdea0091349e305951564fbdf1,
+    "render": 2a93e331172d418c82f7c67e426a95f6,
     "u64": fc77282178c2fa31b80aed2b8b6f7888,
     "mesh_depth": 47114a01984bb53e1538906f13333f84,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
@@ -1607,6 +1607,6 @@
   },
   "root": {
     first: sample,
-    second: {render: {isa: call, function: sample, width: {f64: 0x0000000000408540}, height: {f64: 0x0000000000407a40}}},
+    second: {isa: render, expression: {isa: call, function: sample, width: {f64: 0x0000000000408540}, height: {f64: 0x0000000000407a40}}},
   },
 }

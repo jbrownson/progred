@@ -583,7 +583,7 @@ too, not event-specific special cases.
 
 Cross-frame reuse consists of caller-threaded text shaping and the explicit
 caller-owned [computation graph](incremental.md), which holds
-`{render: expression}` evaluations, viewport preparation, tree preparation,
+renders' evaluations, viewport preparation, tree preparation,
 preview interaction state, and CAM geometry.
 Visible Grap canvas programs record once per frame, sharing commands and
 source hits between hit-testing and painting. This within-frame sharing and

@@ -130,17 +130,11 @@ fn view() -> ProfileView {
     }
 }
 
-/// A bench whose root presents the document's value through its own
-/// projection field.
+/// A bench whose root is drawn as a pane's, presenting the document's value
+/// through its own projection field, or a render as its result.
 fn presenting() -> BenchContext {
     let mut context = BenchContext::new();
-    context.stack.projection =
-        context
-            .stack
-            .projection
-            .with_entry(crate::display::runtime_partial(
-                presentation::projected_display,
-            ));
+    context.stack.projection = context.stack.pane_projection.clone();
     context
 }
 
@@ -220,9 +214,9 @@ fn grap_layout_ffi_profile_loop() {
             .get(&presentation::vocabulary::PROJECTION)
             .unwrap()
             .clone();
-        doc.root = Some(Value::record([(
-            presentation::vocabulary::RENDER,
-            Value::record([
+        doc.root = Some(::grap::isa::record(
+            presentation::vocabulary::kind::RENDER,
+            [
                 (
                     grap::vocabulary::EXPRESSION,
                     grap::call(
@@ -231,12 +225,12 @@ fn grap_layout_ffi_profile_loop() {
                     ),
                 ),
                 (l::FUEL, crate::libraries::f64::value(100_000.0)),
-            ]),
-        )]));
+            ],
+        ));
         doc
     });
-    // The root is a render record, which the ordinary projection draws.
-    let (view, mut context) = (view(), BenchContext::new());
+    // The root is a render, which a pane draws as its result.
+    let (view, mut context) = (view(), presenting());
     let annotations = Annotations::default();
     let count = iterations();
     let mut samples = [Vec::new(), Vec::new()];

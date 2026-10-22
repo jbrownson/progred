@@ -853,10 +853,7 @@ fn constructs() -> [Completion; 2] {
 
 fn new_program() -> Completion {
     crate::libraries::completion::starter(vocabulary::GRAP, |cell| {
-        Value::record([(
-            crate::libraries::presentation::vocabulary::RENDER,
-            cell.into(),
-        )])
+        crate::libraries::presentation::render(cell.into())
     })
     .with_detail(ID)
 }

@@ -138,7 +138,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
                     ),
                 ])
             } else {
-                Value::record([(presentation::vocabulary::RENDER, cell.into())])
+                presentation::render(cell.into())
             }
         );
         let selected = world.model.selection.as_ref().unwrap();

@@ -1679,10 +1679,7 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
                 workspace::vocabulary::PANES,
                 Value::record([(
                     workspace::vocabulary::LEFT,
-                    Value::list([Value::record([(
-                        presentation::vocabulary::RENDER,
-                        program.into(),
-                    )])]),
+                    Value::list([presentation::render(program.into())]),
                 )]),
             ),
         ])),

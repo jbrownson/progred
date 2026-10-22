@@ -479,8 +479,12 @@ panes and computed results. Entry intentionally follows cells to the first
 non-cell; this entry policy is separate from explicit projection scopes.
 The workspace does not interpret this
 wrapper. Raw exposes its stored fields in either view.
-Explicit `{render: expression}` values evaluate and project their result. They
-request an observed evaluation memo at their current view/path; hosts without a
+A render, `{isa: render, expression, fuel?}`, is the other thing a pane's entry
+presents: it evaluates its expression, with its own fuel when it gives one, and
+projects the result. Like a declaration, it isn't part of the ordinary
+projection, so anywhere but a pane's entry it's the record it is, its
+expression editable; a tutorial slot, a pane of its own, presents one too.
+A render requests an observed evaluation memo at its current view/path; hosts without a
 computation runtime evaluate directly. The existing Grap observer tracks cell
 definitions (including missing ones) and native observations. Untracked foreign
 reads, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel

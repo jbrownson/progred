@@ -18,7 +18,7 @@ fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> Driver {
                     workspace::vocabulary::PANES,
                     Value::record([(
                         workspace::vocabulary::LEFT,
-                        Value::list([Value::record([(presentation::vocabulary::RENDER, render)])]),
+                        Value::list([presentation::render(render)]),
                     )]),
                 ),
             ])),
@@ -26,6 +26,15 @@ fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> Driver {
         }),
         Driver::VIEWPORT,
     )
+}
+
+#[test]
+fn a_render_outside_a_pane_is_the_record_it_is() {
+    let driver = Driver::of(presentation::render(text::value("drawn")));
+    assert!(!driver.drawn(&crate::test_examples::result_path(&[])));
+    assert!(driver.drawn(&occurrence::of(&[Step::Key(
+        ::grap::vocabulary::EXPRESSION
+    )])));
 }
 
 /// The pane's result, and `rest` within it.

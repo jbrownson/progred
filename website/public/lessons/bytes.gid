@@ -5,7 +5,7 @@
     "utf8": 332529b8ea83a7ba10fd7f6d942e5016,
     "rgba": f77aef58bcc71dd838f089adc650e2d4,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
-    "render": 37cda4bdea0091349e305951564fbdf1,
+    "render": 2a93e331172d418c82f7c67e426a95f6,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
@@ -25,9 +25,9 @@
   },
   "root": {
     first: raw,
-    second: {render: {isa: call, function: quote, expression: {mystery: {isa: unquote_2, unquote: raw}}}},
-    third: {render: {isa: call, function: quote, expression: {utf8: {isa: unquote_2, unquote: raw}}}},
-    fourth: {render: {isa: call, function: quote, expression: {rgba: {isa: unquote_2, unquote: raw}}}},
-    fifth: {render: {isa: call, function: quote, expression: {f32: {isa: unquote_2, unquote: raw}}}},
+    second: {isa: render, expression: {isa: call, function: quote, expression: {mystery: {isa: unquote_2, unquote: raw}}}},
+    third: {isa: render, expression: {isa: call, function: quote, expression: {utf8: {isa: unquote_2, unquote: raw}}}},
+    fourth: {isa: render, expression: {isa: call, function: quote, expression: {rgba: {isa: unquote_2, unquote: raw}}}},
+    fifth: {isa: render, expression: {isa: call, function: quote, expression: {f32: {isa: unquote_2, unquote: raw}}}},
   },
 }

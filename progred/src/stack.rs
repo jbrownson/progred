@@ -188,9 +188,7 @@ fn projection(
 
 /// `projection` for a pane, whose entry may present its value instead.
 fn pane(projection: Projection) -> Projection {
-    projection.with_entry(crate::display::runtime_partial(
-        presentation::projected_display,
-    ))
+    projection.with_entry(crate::display::runtime_partial(presentation::pane_entry))
 }
 
 type BuildLibrary = fn() -> Library<crate::Editor, Hovered>;

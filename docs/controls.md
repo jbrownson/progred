@@ -186,7 +186,7 @@ The controls function, view function, and preview projection all run again on
 each projected frame; controls do not cache emitted widgets. The memo behind
 `tree program cursor` ([trees](trees.md#editor-collection)) takes no viewport
 dimensions or control state, so resizing rebuilds presentation without
-collecting the tree or recording its paths again. A surrounding `render` declaration
+collecting the tree or recording its paths again. A surrounding render
 can also reuse pure evaluation.
 The `with controls` constructor declares its reads tracked;
 it only evaluates arguments and returns data. Effects or untracked reads in

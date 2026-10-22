@@ -163,7 +163,7 @@ fn names() {
 #[test]
 fn bytes() {
     let mut bytes = page("bytes");
-    let reading = |bytes: &Embed, slot| bytes.rendered(&[bytes.key(slot)]);
+    let reading = |bytes: &Embed, slot| bytes.result(&[bytes.key(slot)]);
     let raw = [bytes.key("first"), FOLLOW];
 
     // Click the bytes at the top and type new hex digits: every reading

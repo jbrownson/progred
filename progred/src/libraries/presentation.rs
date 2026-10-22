@@ -1,9 +1,10 @@
 //! Projections for computed artifacts. A document may place one in a
-//! pane, whose view opts into applying its declared projection. The
-//! document view leaves that declaration editable. A projection function
-//! receives one argument under [`vocabulary::VALUE`] and returns a value;
-//! an absent result exposes its source. An explicit viewport function also
-//! receives the pane's assigned logical width and height.
+//! pane, whose view opts into presenting it: applying its declared
+//! projection, or drawing a render's result. The document view leaves that
+//! declaration editable. A projection function receives one argument under
+//! [`vocabulary::VALUE`] and returns a value; an absent result exposes its
+//! source. An explicit viewport function also receives the pane's assigned
+//! logical width and height.
 
 use crate::display::at;
 use crate::display::host::{Host, Layout, ProjectionInput};
@@ -17,7 +18,6 @@ pub const ID: gid::CellId = gid::CellId::from_u128(0xd22b834154d60b1df228f9bb4d3
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const RENDER: CellId = CellId::from_u128(0x37cda4bdea0091349e305951564fbdf1);
     pub use crate::workspace::vocabulary::PROJECTION;
     pub const VIEWPORT: CellId = CellId::from_u128(0x709c987e4c2a110931d8597c4da68f69);
     /// Optional size-independent preparation of a viewport's data input.
@@ -35,6 +35,9 @@ pub mod vocabulary {
         /// A record drawn as an outline of some of its own fields:
         /// `{isa: outline, sections, …fields}`.
         pub const OUTLINE: CellId = CellId::from_u128(0xefc8f00d14ad4fa8a768a234b8435311);
+        /// An expression a pane draws as its result: `{isa: render,
+        /// expression, fuel?}`.
+        pub const RENDER: CellId = CellId::from_u128(0x2a93e331172d418c82f7c67e426a95f6);
     }
 }
 
@@ -117,33 +120,27 @@ fn viewport_runtime_output(
     })
 }
 
-/// A render's own fuel and the expression it runs, when it gives both.
-fn fueled(render: &::grap::RuntimeValue) -> Option<(usize, ::grap::RuntimeValue)> {
-    Some((
-        ::grap::f64::to_usize(render.field(layout::vocabulary::FUEL)?.as_f64()?)?,
-        render.field(::grap::vocabulary::EXPRESSION)?,
-    ))
+/// A render of `expression`, which a pane draws as its result.
+pub fn render(expression: gid::Value) -> gid::Value {
+    ::grap::isa::record(
+        vocabulary::kind::RENDER,
+        [(::grap::vocabulary::EXPRESSION, expression)],
+    )
 }
 
-/// A render reads as its result, which what's drawn inside can run again to
-/// ask how it got there.
-pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let render = input.value?.field(vocabulary::RENDER)?;
-    let (expression, fuel, steps) = match fueled(&render) {
-        Some((fuel, expression)) => (
-            expression,
-            fuel,
-            vec![
-                Step::Key(vocabulary::RENDER),
-                Step::Key(::grap::vocabulary::EXPRESSION),
-            ],
-        ),
-        None => (
-            render,
-            ::grap::DEFAULT_FUEL,
-            vec![Step::Key(vocabulary::RENDER)],
-        ),
+/// A render reads as its expression's result, which what's drawn inside can
+/// run again to ask how it got there.
+fn render_display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    let render = input.value?;
+    (render.kind()? == vocabulary::kind::RENDER).then_some(())?;
+    let expression = render.field(::grap::vocabulary::EXPRESSION)?;
+    let fuel = match render.field(layout::vocabulary::FUEL) {
+        Some(fuel) => ::grap::f64::to_usize(fuel.as_f64()?)?,
+        None => ::grap::DEFAULT_FUEL,
     };
+    let steps = [Step::Key(::grap::vocabulary::EXPRESSION)];
     let result = input.env.evaluate_runtime_memo(&expression, fuel, &steps);
     Some(crate::display::at_evaluated(
         [Step::Key(vocabulary::RESULT)],
@@ -152,9 +149,17 @@ pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
     ))
 }
 
-/// Opt-in presentation of a declaration; not part of the library's
-/// ordinary authoring projection.
-pub fn projected_display<W: Host>(
+/// A pane's value presented: a render as its result, or a declaration as
+/// its projection draws it. Not part of the library's ordinary authoring
+/// projection, so elsewhere both are the records they are.
+pub fn pane_entry<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    render_display(input).or_else(|| projected_display(input))
+}
+
+/// A declaration as its projection function draws it.
+fn projected_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     let value = input.value?.field(vocabulary::VALUE)?;
@@ -170,7 +175,7 @@ pub fn library<W: Host>() -> Library<W> {
         ID,
         "presentation",
         [
-            (vocabulary::RENDER, "render"),
+            (vocabulary::kind::RENDER, "render"),
             (vocabulary::PROJECTION, "projection"),
             (vocabulary::VIEWPORT, "viewport"),
             (vocabulary::PREPARE, "prepare"),
@@ -181,7 +186,6 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
-    .with_projection(crate::display::runtime_partial(display))
     .with_projections_for([(
         vocabulary::kind::OUTLINE,
         crate::display::partial(outline::display),

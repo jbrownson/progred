@@ -25,8 +25,8 @@ fn projected_display(input: &ProjectionInput<'_>) -> Option<Layout> {
     project_runtime(super::projected_display, input)
 }
 
-fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
-    project_runtime(super::display, input)
+fn pane_entry(input: &ProjectionInput<'_>) -> Option<Layout> {
+    project_runtime(super::pane_entry, input)
 }
 
 #[test]
@@ -71,7 +71,6 @@ fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
         (vocabulary::VALUE, LEFT_VALUE.into()),
         (vocabulary::VIEWPORT, LEFT_VALUE.into()),
     ]);
-    assert!(projected(&declaration, &CheckArguments, display).is_none());
     assert!(matches!(
         (projected(&declaration, &CheckArguments, |input| viewport_display(
             input, 420.5, 160.25
@@ -292,7 +291,6 @@ fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source()
         (vocabulary::PROJECTION, Value::from(LEFT_VALUE)),
     ]);
     let result = Value::from(b"projected".to_vec());
-    assert!(projected(&value, &NoEval, display).is_none());
     assert!(
         matches!((projected(&value, &EvaluatesTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),
         Some(ProjectionCall::At { value, .. }) if value == result)
@@ -317,11 +315,11 @@ fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source()
 }
 
 #[test]
-fn render_projects_only_the_evaluation_result() {
+fn a_pane_draws_a_render_as_only_its_result() {
     let result = Value::from(b"picture".to_vec());
-    let value = Value::record([(vocabulary::RENDER, Value::from(LEFT_VALUE))]);
+    let value = render(Value::from(LEFT_VALUE));
     assert!(
-        matches!((projected(&value, &EvaluatesTo(result.clone()), display)).map(|layout| inspect(&layout)),
+        matches!((projected(&value, &EvaluatesTo(result.clone()), pane_entry)).map(|layout| inspect(&layout)),
             Some(ProjectionCall::At { value, .. }) if value == result
         )
     );

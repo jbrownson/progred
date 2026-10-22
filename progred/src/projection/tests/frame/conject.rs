@@ -139,8 +139,8 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
 
 #[test]
 fn nested_result_evaluations_use_their_own_allowance() {
-    use crate::libraries::{grap::control, layout, presentation};
-    use presentation::vocabulary::{RENDER, RESULT};
+    use crate::libraries::{editor::workspace, grap::control, layout, presentation};
+    use presentation::vocabulary::RESULT;
     let value = Value::list([f64::value(42.0)]);
     let expression = grap::call(
         control::vocabulary::DO.into(),
@@ -149,35 +149,39 @@ fn nested_result_evaluations_use_their_own_allowance() {
             Value::list(std::iter::repeat_n(Value::record([]), 10).chain([value.clone()])),
         )],
     );
-    for explicit in [false, true] {
-        let nested = if explicit {
-            Value::record([(
-                RENDER,
-                Value::record([
-                    (grap::vocabulary::EXPRESSION, expression.clone()),
-                    (layout::vocabulary::FUEL, f64::value(100.0)),
-                ]),
-            )])
-        } else {
-            crate::libraries::grap::evaluation(expression.clone())
-        };
-        // Returning this inert record is cheap; evaluating its expression is not.
-        let mut driver = Driver::of(Value::record([(
-            RENDER,
-            Value::record([
-                (grap::vocabulary::EXPRESSION, nested),
-                (layout::vocabulary::FUEL, f64::value(3.0)),
-            ]),
-        )]));
-        driver.select(&[
-            Step::Key(RESULT),
-            Step::Computed,
-            Step::Key(RESULT),
-            Step::Computed,
-        ]);
-        assert!(copy(&mut driver));
-        assert_eq!(driver.copied(), Some(value.clone()));
-    }
+    // Returning this inert evaluation is cheap; evaluating its expression is not.
+    let render = ::grap::isa::record(
+        presentation::vocabulary::kind::RENDER,
+        [
+            (
+                grap::vocabulary::EXPRESSION,
+                crate::libraries::grap::evaluation(expression),
+            ),
+            (layout::vocabulary::FUEL, f64::value(3.0)),
+        ],
+    );
+    let mut driver = Driver::of(Value::record([(
+        workspace::vocabulary::PANES,
+        Value::record([(workspace::vocabulary::LEFT, Value::list([render]))]),
+    )]));
+    let pane = driver.element(
+        &[
+            gid::Step::Key(workspace::vocabulary::PANES),
+            gid::Step::Key(workspace::vocabulary::LEFT),
+        ],
+        0,
+        &[],
+    );
+    let mut result = crate::test_examples::pane_root(&pane);
+    result.extend([
+        Step::Key(RESULT),
+        Step::Computed,
+        Step::Key(RESULT),
+        Step::Computed,
+    ]);
+    driver.select(&result);
+    assert!(copy(&mut driver));
+    assert_eq!(driver.copied(), Some(value));
 }
 
 #[test]

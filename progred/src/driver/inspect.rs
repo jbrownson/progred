@@ -64,12 +64,7 @@ impl<P> Driver<P> {
             .collect()
     }
 
-    /// What the `{render: …}` at `path` asks to draw.
-    pub(crate) fn rendered(&self, path: &[Step]) -> Value {
-        self.computed(path, crate::libraries::presentation::vocabulary::RENDER)
-    }
-
-    /// What the evaluation at `path` computes.
+    /// What the evaluation or render at `path` computes.
     pub(crate) fn result(&self, path: &[Step]) -> Value {
         self.computed(path, ::grap::vocabulary::EXPRESSION)
     }

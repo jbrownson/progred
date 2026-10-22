@@ -181,6 +181,17 @@ pub(crate) fn tutorial_slots(
                 projection.partial().clone(),
                 crate::display::runtime_partial(named_reference),
             ]);
+            // A slot is a pane of its own, so with the presentation library
+            // loaded it presents a render or declaration there, as a pane does.
+            let full_entry = libraries
+                .iter()
+                .any(|(id, _)| id == crate::libraries::presentation::ID)
+                .then(|| {
+                    crate::display::compose_partials([
+                        crate::display::runtime_partial(crate::libraries::presentation::pane_entry),
+                        projection.partial().clone(),
+                    ])
+                });
             let captioned = slots.windows(2).any(|pair| pair[0].1 != pair[1].1);
             let captions = [false, true].map(|same| {
                 [Level::Full, Level::Plain, Level::Raw].map(|level| level.caption(libraries, same))
@@ -195,7 +206,7 @@ pub(crate) fn tutorial_slots(
                             let view = match level {
                                 Level::Full => crate::display::descend(
                                     [Step::Key(*key)],
-                                    None,
+                                    full_entry.clone(),
                                     Some(full_inside.clone()),
                                 ),
                                 Level::Plain => crate::display::descend(

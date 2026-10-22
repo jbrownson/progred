@@ -31,10 +31,10 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         ),
         (::grap::vocabulary::VALUE, closure.clone()),
     ]);
-    let value = ::grap::RuntimeValue::record([(
-        crate::libraries::presentation::vocabulary::RENDER,
-        expression,
-    )]);
+    let value = ::grap::isa::runtime(
+        crate::libraries::presentation::vocabulary::kind::RENDER,
+        [(::grap::vocabulary::EXPRESSION, expression)],
+    );
     let visits = Rc::new(Cell::new(0));
     let child = d::runtime_partial({
         let visits = visits.clone();
@@ -55,7 +55,7 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
     });
     world.stack.projection = Projection::new([d::runtime_partial(move |_| {
         let children = d::compose_partials([
-            d::runtime_partial(crate::libraries::presentation::display),
+            d::runtime_partial(crate::libraries::presentation::pane_entry),
             child.clone(),
         ]);
         Some(d::at(
