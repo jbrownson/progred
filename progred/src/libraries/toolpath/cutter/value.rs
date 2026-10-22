@@ -7,7 +7,11 @@ use gid::{CellId, Value};
 
 pub mod vocabulary {
     use gid::CellId;
+    /// The tool `with tool` cuts with.
     pub const TOOL: CellId = CellId::from_u128(0xfbe28409798777a59a474570ec600c9a);
+    /// A tool's sections, in order, each `{cutting: profile}` or
+    /// `{non-cutting: profile}`.
+    pub const SECTIONS: CellId = CellId::from_u128(0x597f106baef34b199411828f4c870edc);
     pub const CUTTING: CellId = CellId::from_u128(0xd22a92c1020be6f690b5cb738b728fd3);
     pub const NON_CUTTING: CellId = CellId::from_u128(0x32ec688b8b412514e5a4ee4789b0e5d8);
     pub const RADIUS: CellId = CellId::from_u128(0x0c43e0deeecda93da913261dc2786878);
@@ -18,12 +22,21 @@ pub mod vocabulary {
     pub const SQUARE_MILL: CellId = CellId::from_u128(0xfe82f5a06ac17b08b4c42cc1a0a9f374);
     pub const BULL_MILL: CellId = CellId::from_u128(0xc614260c7754cd2d311d437fd6e22a19);
     pub const CORNER_RADIUS: CellId = CellId::from_u128(0x16528b8b5e24da34f153e36997b206d8);
+
+    pub mod kind {
+        use gid::CellId;
+
+        /// A cutter: `{isa: tool, sections}`.
+        pub const TOOL: CellId = CellId::from_u128(0x6a88f5f3f2b84c0e90c238309cce5e93);
+    }
 }
 use vocabulary::*;
 
 pub(crate) fn names() -> impl Iterator<Item = (CellId, &'static str)> {
     [
         (TOOL, "tool"),
+        (kind::TOOL, "tool"),
+        (SECTIONS, "sections"),
         (CUTTING, "cutting"),
         (NON_CUTTING, "non-cutting"),
         (RADIUS, "radius"),
@@ -166,23 +179,28 @@ pub trait ToolValue: Sized {
 impl ToolValue for Tool {
     fn value(&self) -> Value {
         let mut current = Point::new(0.0, 0.0);
-        Value::record([(
-            TOOL,
-            Value::list(self.sections().iter().map(|s| {
-                let kind = match s.kind {
-                    SectionKind::Cutting => CUTTING,
-                    SectionKind::NonCutting => NON_CUTTING,
-                };
-                Value::record([(kind, profile_value(s, &mut current))])
-            })),
-        )])
+        ::grap::isa::record(
+            kind::TOOL,
+            [(
+                SECTIONS,
+                Value::list(self.sections().iter().map(|s| {
+                    let kind = match s.kind {
+                        SectionKind::Cutting => CUTTING,
+                        SectionKind::NonCutting => NON_CUTTING,
+                    };
+                    Value::record([(kind, profile_value(s, &mut current))])
+                })),
+            )],
+        )
     }
 
     fn read(value: &Value) -> Option<Self> {
-        let fields = value.as_record()?;
+        let fields = value
+            .as_record()
+            .filter(|fields| ::grap::isa::of(fields) == Some(kind::TOOL))?;
         let mut current = Point::new(0.0, 0.0);
         let sections = fields
-            .get(&TOOL)?
+            .get(&SECTIONS)?
             .as_list()?
             .values()
             .map(|s| {

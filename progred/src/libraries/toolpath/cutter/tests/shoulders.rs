@@ -31,7 +31,7 @@ fn shoulder_inherits_height_and_survives_value_roundtrip() {
     let section = value
         .as_record()
         .unwrap()
-        .get(&TOOL)
+        .get(&SECTIONS)
         .unwrap()
         .as_list()
         .unwrap()
@@ -60,7 +60,7 @@ fn radius_only_and_explicit_same_height_moves_lower_to_shoulders() {
         let mut profile = value
             .as_record()
             .unwrap()
-            .get(&TOOL)
+            .get(&SECTIONS)
             .unwrap()
             .as_list()
             .unwrap()
@@ -77,10 +77,13 @@ fn radius_only_and_explicit_same_height_moves_lower_to_shoulders() {
             .cloned()
             .collect::<Vec<_>>();
         profile[2] = segment;
-        Tool::read(&Value::record([(
-            TOOL,
-            Value::list([Value::record([(CUTTING, Value::list(profile))])]),
-        )]))
+        Tool::read(&::grap::isa::record(
+            kind::TOOL,
+            [(
+                SECTIONS,
+                Value::list([Value::record([(CUTTING, Value::list(profile))])]),
+            )],
+        ))
     };
     for bad in [
         Value::record([(RADIUS, Value::record([]))]),

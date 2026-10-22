@@ -222,7 +222,8 @@ what the kind required when it was written. Open beside it:
   encoded under one primitive tag (numbers, text, booleans, colors, path
   steps) the exception. The projection stack draws a record as its kind
   provides first (see [projections](projections.md#projection-composition)),
-  and evaluation dispatches on Grap's kinds. Fidget's previews and scenes and toolpath's previews say theirs too. Still told by their
+  and evaluation dispatches on Grap's kinds. Fidget's previews and scenes and toolpath's previews and tools say theirs
+  too. Still told by their
   fields: the other libraries' records, and `{grap: cell}`, which is to go. Declining partials allocate while they probe, about 4,300 times a
   frame in the IoP source form, so the remaining probing has a cost to find.
 - **A kind's own description.** A kind's cell could be described by a record

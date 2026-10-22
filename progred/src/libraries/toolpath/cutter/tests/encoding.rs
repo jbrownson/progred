@@ -10,23 +10,29 @@ fn movement(fields: impl IntoIterator<Item = (gid::CellId, f64)>) -> Value {
 }
 
 fn read(moves: impl IntoIterator<Item = Value>) -> Option<Tool> {
-    Tool::read(&Value::record([(
-        TOOL,
-        Value::list([Value::record([(CUTTING, Value::list(moves))])]),
-    )]))
+    Tool::read(&::grap::isa::record(
+        kind::TOOL,
+        [(
+            SECTIONS,
+            Value::list([Value::record([(CUTTING, Value::list(moves))])]),
+        )],
+    ))
 }
 
 fn mixed(
     cutting: impl IntoIterator<Item = Value>,
     non_cutting: impl IntoIterator<Item = Value>,
 ) -> Value {
-    Value::record([(
-        TOOL,
-        Value::list([
-            Value::record([(CUTTING, Value::list(cutting))]),
-            Value::record([(NON_CUTTING, Value::list(non_cutting))]),
-        ]),
-    )])
+    ::grap::isa::record(
+        kind::TOOL,
+        [(
+            SECTIONS,
+            Value::list([
+                Value::record([(CUTTING, Value::list(cutting))]),
+                Value::record([(NON_CUTTING, Value::list(non_cutting))]),
+            ]),
+        )],
+    )
 }
 
 #[test]

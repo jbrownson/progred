@@ -43,8 +43,8 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         assert_eq!(value, tool.value());
         assert_eq!(
             value.as_record().unwrap().len(),
-            1,
-            "constructors return geometry only"
+            2,
+            "constructors return a tool, geometry only"
         );
         assert_eq!(Tool::read(&value), Some(tool));
         let mut fields = value.as_record().unwrap().clone();
@@ -77,7 +77,7 @@ fn section_tags_are_explicit_exclusive_and_open_to_metadata() {
     let section = value
         .as_record()
         .unwrap()
-        .get(&TOOL)
+        .get(&SECTIONS)
         .unwrap()
         .as_list()
         .unwrap()
@@ -90,7 +90,12 @@ fn section_tags_are_explicit_exclusive_and_open_to_metadata() {
     let shape = section.get(&CUTTING).unwrap().clone();
     assert_eq!(shape.as_list().unwrap().len(), 2);
     let name = crate::libraries::name::vocabulary::NAME;
-    let read_section = |section| Tool::read(&Value::record([(TOOL, Value::list([section]))]));
+    let read_section = |section| {
+        Tool::read(&::grap::isa::record(
+            kind::TOOL,
+            [(SECTIONS, Value::list([section]))],
+        ))
+    };
     for (tag, kind) in [
         (CUTTING, SectionKind::Cutting),
         (NON_CUTTING, SectionKind::NonCutting),
@@ -117,13 +122,16 @@ fn section_tags_are_explicit_exclusive_and_open_to_metadata() {
 fn arcs_use_named_bend_tags_and_reject_ambiguous_segments() {
     use vocabulary::*;
     let read_segment = |start: Point, segment| {
-        Tool::read(&Value::record([(
-            TOOL,
-            Value::list([Value::record([(
-                CUTTING,
-                Value::list([Value::record([(RADIUS, f64::value(start.radius))]), segment]),
-            )])]),
-        )]))
+        Tool::read(&::grap::isa::record(
+            kind::TOOL,
+            [(
+                SECTIONS,
+                Value::list([Value::record([(
+                    CUTTING,
+                    Value::list([Value::record([(RADIUS, f64::value(start.radius))]), segment]),
+                )])]),
+            )],
+        ))
     };
     for (bend, tag, radius) in [
         (Bend::Concave, CONCAVE_ARC, 0.2),

@@ -18,10 +18,10 @@ pub(crate) fn color(kind: SectionKind) -> [u8; 3] {
 pub(crate) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let value = input.value?;
-    value.field(vocabulary::TOOL)?;
-    let tool = Tool::read(value.as_value())?;
-    let fields = structure::Fields::default().record(input)?;
+    let tool = Tool::read(input.value?.as_value())?;
+    let fields = structure::Fields::default()
+        .shown_empty()
+        .rest(input, |key| key == ::grap::isa::ISA)?;
     let site = input.site();
     let picture = selectable(picture(&tool)?, &site);
     Some(aligned_row(

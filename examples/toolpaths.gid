@@ -203,6 +203,7 @@
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
     "scaled_point": dfb16dc785610b93fa62389983e57594,
     "scene": 9b819b6ad5c547e8952d8759531b9cd3,
+    "sections": 597f106baef34b199411828f4c870edc,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "sequence_paths": 1ecd44ed838a86892635ca2785826f2a,
     "settings_section": 0e23e86816dc8eb7d788c4e24d637514,
@@ -238,6 +239,7 @@
     "tilt": 6ebc95bf630e6b36be576e2b22834529,
     "to_f32": 73bd2225d2091ba893a5570e8e9bacff,
     "tool": fbe28409798777a59a474570ec600c9a,
+    "tool_2": 6a88f5f3f2b84c0e90c238309cce5e93,
     "tool_axis": c674bd24061031aff48153e907df4d59,
     "tool_diameter": d2f5197841dcac20dee27cf4cf3d7b1a,
     "tool_length": 147708f5640ec6a4f9b6f4e4ffd2f7ab,
@@ -3908,7 +3910,7 @@
       grap_value: {
         function: quote,
         expression: {
-          tool: [
+          sections: [
             0x55: {
               cutting: [
                 0x55: {
@@ -3955,6 +3957,7 @@
               ],
             },
           ],
+          isa: tool_2,
         },
         isa: call,
       },

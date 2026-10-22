@@ -517,6 +517,9 @@ pub fn library<W: Host>() -> Library<W> {
             kind::PATHS_REFINED_PREVIEW,
             crate::display::runtime_partial(refined::display),
         ),
+        (
+            cutter::vocabulary::kind::TOOL,
+            crate::display::runtime_partial(cutter::display),
+        ),
     ])
-    .with_projection(crate::display::runtime_partial(cutter::display))
 }
