@@ -59,15 +59,12 @@ Each stop draws something of its own, so selecting it looks different from
 selecting what's inside it, and every arrow press shows. Where what's inside
 would draw all of an occurrence, its projection marks it with a handle from the
 toolkit: a bar as tall as what it draws, before it, that a click on selects, as
-a notebook's record has. A quiet handle, thinner, shows only while it's hovered
-or the selection is on its occurrence or inside it, for one as common as a
-declaration's definition drawn as its name. It keeps its room on both sides of
-what it marks, so nothing moves under the pointer when it shows, and a name sits
-evenly in its parentheses. Other marks serve too: a notebook numbers its entries in its
-list's margin, and an entry shows its arrow before it has a result. A sweep
-selects each stop and checks that its box is neither the box of the stop around
-it nor of one just inside it, over the sample and a new notebook, and, ignored
-for its time, the larger examples.
+a notebook's record has, and a declaration's definition drawn as its name. It
+always shows: structure seen only once selected isn't visible. Other marks serve
+too: a notebook numbers its entries in its list's margin, and an entry shows its
+arrow before it has a result. A sweep selects each stop and checks that its box
+is neither the box of the stop around it nor of one just inside it, over the
+sample and a new notebook, and, ignored for its time, the larger examples.
 
 A selection on nothing drawn, such as one inside a value its projection draws
 whole, as a number draws its spelling rather than its encoding, leaves arrows

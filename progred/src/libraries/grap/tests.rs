@@ -226,7 +226,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                     .unwrap()
                     .record();
             let Recorded::Row { children, .. } = definition.content() else {
-                panic!("the compact definition is a quiet handle, then its name");
+                panic!("the compact definition is a handle, then its name");
             };
             let ProjectionCall::Descend {
                 steps,
