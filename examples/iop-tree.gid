@@ -39,7 +39,7 @@
     "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "dx": c96dfbe500e6a701033d92bc6c527398,
     "dy": 89d9b403fe0eba053af7048e29bf2f16,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
@@ -1948,36 +1948,35 @@
             body: {
               function: quote,
               expression: {
-                drawing: {
-                  descent: {
+                descent: {
+                  unquote: height,
+                  isa: unquote_2,
+                },
+                fuel: {
+                  f64: 0x0000000080843e41,
+                },
+                ascent: {
+                  f64: 0x0000000000000000,
+                },
+                program: {
+                  canvas_height: {
                     unquote: height,
                     isa: unquote_2,
                   },
-                  fuel: {
-                    f64: 0x0000000080843e41,
+                  function: {
+                    unquote: projection_value,
+                    isa: unquote_2,
                   },
-                  ascent: {
-                    f64: 0x0000000000000000,
-                  },
-                  program: {
-                    canvas_height: {
-                      unquote: height,
-                      isa: unquote_2,
-                    },
-                    function: {
-                      unquote: projection_value,
-                      isa: unquote_2,
-                    },
-                    canvas_width: {
-                      unquote: width,
-                      isa: unquote_2,
-                    },
-                    isa: call,
-                  },
-                  width: {
+                  canvas_width: {
                     unquote: width,
                     isa: unquote_2,
                   },
+                  isa: call,
+                },
+                isa: drawing,
+                width: {
+                  unquote: width,
+                  isa: unquote_2,
                 },
               },
               isa: call,

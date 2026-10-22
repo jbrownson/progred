@@ -38,7 +38,10 @@ pub(super) fn program(
     match context.field(call, ::grap::vocabulary::EXPRESSION) {
         Some(expression) => {
             let closure = context.closure([], expression, environment);
-            Ok(::grap::RuntimeValue::record([(LAYOUT_PROGRAM, closure)]))
+            Ok(::grap::isa::runtime(
+                kind::LAYOUT_PROGRAM,
+                [(PROGRAM, closure)],
+            ))
         }
         None => Ok(context.missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION)),
     }
@@ -100,7 +103,7 @@ pub fn run<W: Host>(
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let function = input.value?.field(LAYOUT_PROGRAM)?;
+    let function = input.value?.field(PROGRAM)?;
     let (evaluation, layout) = run(
         || input.site(),
         |scope| input.env.apply_runtime_scoped(&function, &[], Some(scope)),

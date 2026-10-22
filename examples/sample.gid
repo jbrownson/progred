@@ -28,7 +28,7 @@
     "double_pitch": e69c085ed00f5270f24a895cca9cd7d6,
     "draw_shape": fcaaadef14980397cce95363fc5a54f9,
     "draw_stroke": c2025f7714e1f74c8ad75f28ea00f616,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "edge": 2f74c8a1936e05bd4c17e2b98d60a5f4,
     "evaluation": 549dd85073474d6296d773c8df9c0526,
     "event": bd232b5fb4450b52e088470776ed2a01,
@@ -44,7 +44,6 @@
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "layout_radius": 6423c35e07d7a4ff536127d1f1d8eb53,
-    "layout_row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "line_width": a8e4d1cb2cd9f070eb428e013fecc5ef,
     "match": b3f6a62e4926889bcfcd338025f4a6f9,
@@ -54,7 +53,7 @@
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "name_face": 520e9b3c7ad6f18409cf25a7d8631be0,
     "of": 4544b0db160b6330f20a69dd3ce34e2d,
-    "on_event": 1b87f7de18e7c46c5fbfadea1f18aea4,
+    "on_event": b8eafe383f924449a980d74faea1996b,
     "origin": 065c608bbd1f53075b5c831cc4c5abd6,
     "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
@@ -71,6 +70,7 @@
     "roof": 06068f483e95e24492a0835caa2751cb,
     "rounded_rect": b07684708c0d04b7dfd66b9ec7ecf35b,
     "row": a791e4873aa95e21bc925dacbbbf6ea5,
+    "row_2": 4843d61b088a4e569fafe00f7a617c6a,
     "selection_path": a1005961125b04b7285b8d5aa54a0566,
     "selection_set": a12f30681dc2a8465da7673a7e2da9a8,
     "selection_value": 544d3b52ea73cd263c435ecddfe5e8bf,
@@ -82,7 +82,7 @@
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
     "swatch": f2aadbb9e548ea30aceb7fed5773ea8a,
     "tags": 41f5587d6560bfbebc9fb72fb0728e27,
-    "text": 08e64d1f3a92c5b7b7f0d38a165e29c4,
+    "text": fd00dc28f7f24065bc76a528fc941c66,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "value": 85e3b0d729c4165ffa1e0c5d49b3872e,
@@ -120,126 +120,120 @@
             expression: {
               function: quote,
               expression: {
-                on_event: {
-                  handler: {
-                    params: [
-                      0x80: event,
-                    ],
-                    body: {
-                      subject: event,
-                      function: match,
-                      cases: [
-                        0x55: {
-                          pattern: {
-                            button: primary,
-                            modifiers: [],
-                            event_kind: pointer_down,
+                handler: {
+                  params: [
+                    0x80: event,
+                  ],
+                  body: {
+                    subject: event,
+                    function: match,
+                    cases: [
+                      0x55: {
+                        pattern: {
+                          button: primary,
+                          modifiers: [],
+                          event_kind: pointer_down,
+                        },
+                        expression: {
+                          selection_value: {
+                            stage: edge,
                           },
-                          expression: {
-                            selection_value: {
-                              stage: edge,
-                            },
-                            function: selection_set,
-                            selection_path: {
-                              function: site_path,
-                              isa: call,
-                            },
+                          function: selection_set,
+                          selection_path: {
+                            function: site_path,
                             isa: call,
                           },
-                          isa: case,
+                          isa: call,
                         },
-                        0xaa: {
-                          pattern: {
-                            bind: event,
-                            isa: binder,
-                          },
-                          expression: {
-                            reason: declined,
-                            isa: absent,
-                          },
-                          isa: case,
-                        },
-                      ],
-                      isa: call,
-                    },
-                    isa: lambda,
-                  },
-                  child: {
-                    layout_row: {
-                      gap: {
-                        f64: 0x0000000000001040,
+                        isa: case,
                       },
-                      children: [
-                        0x33: {
-                          drawing: {
-                            descent: {
-                              f64: 0x0000000000000040,
+                      0xaa: {
+                        pattern: {
+                          bind: event,
+                          isa: binder,
+                        },
+                        expression: {
+                          reason: declined,
+                          isa: absent,
+                        },
+                        isa: case,
+                      },
+                    ],
+                    isa: call,
+                  },
+                  isa: lambda,
+                },
+                child: {
+                  gap: {
+                    f64: 0x0000000000001040,
+                  },
+                  isa: row_2,
+                  children: [
+                    0x33: {
+                      descent: {
+                        f64: 0x0000000000000040,
+                      },
+                      ascent: {
+                        f64: 0x0000000000002040,
+                      },
+                      commands: [
+                        0x80: {
+                          draw_stroke: {
+                            line_width: {
+                              f64: 0x000000000000f03f,
                             },
-                            ascent: {
-                              f64: 0x0000000000002040,
-                            },
-                            commands: [
-                              0x80: {
-                                draw_stroke: {
-                                  line_width: {
-                                    f64: 0x000000000000f03f,
-                                  },
-                                  paint: dim_face,
-                                  draw_shape: {
-                                    rounded_rect: {
-                                      x: {
-                                        f64: 0x000000000000e03f,
-                                      },
-                                      y: {
-                                        f64: 0x000000000000e03f,
-                                      },
-                                      layout_radius: {
-                                        f64: 0x0000000000000040,
-                                      },
-                                      height: {
-                                        f64: 0x0000000000002240,
-                                      },
-                                      width: {
-                                        f64: 0x0000000000002240,
-                                      },
-                                    },
-                                  },
+                            paint: dim_face,
+                            draw_shape: {
+                              rounded_rect: {
+                                x: {
+                                  f64: 0x000000000000e03f,
+                                },
+                                y: {
+                                  f64: 0x000000000000e03f,
+                                },
+                                layout_radius: {
+                                  f64: 0x0000000000000040,
+                                },
+                                height: {
+                                  f64: 0x0000000000002240,
+                                },
+                                width: {
+                                  f64: 0x0000000000002240,
                                 },
                               },
-                            ],
-                            width: {
-                              f64: 0x0000000000002440,
                             },
-                          },
-                        },
-                        0x66: {
-                          text: {
-                            content: {
-                              unquote: row,
-                              isa: unquote_2,
-                            },
-                            paint: name_face,
-                          },
-                        },
-                        0x99: {
-                          text: {
-                            content: "×",
-                            paint: dim_face,
-                          },
-                        },
-                        0xcc: {
-                          text: {
-                            content: {
-                              unquote: col,
-                              isa: unquote_2,
-                            },
-                            paint: name_face,
                           },
                         },
                       ],
+                      isa: drawing,
+                      width: {
+                        f64: 0x0000000000002440,
+                      },
                     },
-                  },
+                    0x66: {
+                      content: {
+                        unquote: row,
+                        isa: unquote_2,
+                      },
+                      paint: name_face,
+                      isa: text,
+                    },
+                    0x99: {
+                      content: "×",
+                      paint: dim_face,
+                      isa: text,
+                    },
+                    0xcc: {
+                      content: {
+                        unquote: col,
+                        isa: unquote_2,
+                      },
+                      paint: name_face,
+                      isa: text,
+                    },
+                  ],
                 },
+                isa: on_event,
               },
               isa: call,
             },

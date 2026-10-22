@@ -255,11 +255,8 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         }
         assert_eq!(calls.get(), expected);
         assert!(selected.borrow().is_empty());
-        // The drawing is the root's value, so its program is at `drawing/program`.
-        let program = [
-            gid::Step::Key(layout_data::vocabulary::DRAWING),
-            gid::Step::Key(layout_data::vocabulary::PROGRAM),
-        ];
+        // The drawing is the root's value, so its program is at `program`.
+        let program = [gid::Step::Key(layout_data::vocabulary::PROGRAM)];
         let source = SourceTrace::Stored(Rc::from(program.clone()));
         let Some((_, Claim::Direct(target))) = placed.claim.clone() else {
             panic!("expected a drawing source claim")

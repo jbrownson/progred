@@ -1,12 +1,18 @@
-//! Stored layout descriptions built for tests: each node a record under its
-//! marker key and each number in the f64 convention, as the layout library
-//! decodes them.
+//! Stored layout descriptions built for tests: each node a record of its
+//! kind, each drawing command and shape a record under its tag, and each
+//! number in the f64 convention, as the layout library decodes them.
 
 use super::{Place, decode_with, vocabulary};
 use crate::display::host::{Host, Layout};
 use crate::libraries::f64 as f64_convention;
 use gid::{CellId, Step, Value};
 
+/// A stored layout node of `kind`.
+pub fn layout_node(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+    ::grap::isa::record(kind, fields)
+}
+
+/// A drawing command, shape or path element under its tag.
 pub fn node(key: CellId, content: Value) -> Value {
     Value::record([(key, content)])
 }
@@ -16,38 +22,41 @@ pub fn number(value: f64) -> Value {
 }
 
 pub fn row(gap: f64, children: impl IntoIterator<Item = Value>) -> Value {
-    node(
-        vocabulary::ROW,
-        Value::record([
+    layout_node(
+        vocabulary::kind::ROW,
+        [
             (vocabulary::GAP, number(gap)),
             (vocabulary::CHILDREN, Value::list(children)),
-        ]),
+        ],
     )
 }
 
 pub fn col(baseline: usize, gap: f64, children: impl IntoIterator<Item = Value>) -> Value {
-    node(
-        vocabulary::COL,
-        Value::record([
+    layout_node(
+        vocabulary::kind::COL,
+        [
             (vocabulary::BASELINE, number(baseline as f64)),
             (vocabulary::GAP, number(gap)),
             (vocabulary::CHILDREN, Value::list(children)),
-        ]),
+        ],
     )
 }
 
 pub fn bracketed(delim: CellId, child: Value) -> Value {
-    node(
-        vocabulary::BRACKET,
-        Value::record([
+    layout_node(
+        vocabulary::kind::BRACKET,
+        [
             (vocabulary::DELIM, Value::Cell(delim)),
             (vocabulary::CHILD, child),
-        ]),
+        ],
     )
 }
 
 pub fn options(options: impl IntoIterator<Item = Value>) -> Value {
-    node(vocabulary::ALTERNATIVES, Value::list(options))
+    layout_node(
+        vocabulary::kind::ALTERNATIVES,
+        [(vocabulary::CHILDREN, Value::list(options))],
+    )
 }
 
 pub fn descend_key(key: CellId) -> Value {
@@ -59,19 +68,19 @@ pub fn descend_follow(resolution: gid::Resolution) -> Value {
 }
 
 pub fn descend_step(step: Step) -> Value {
-    node(
-        vocabulary::DESCEND,
-        Value::record([(vocabulary::STEP, ::grap::path::step_value(&step))]),
+    layout_node(
+        vocabulary::kind::DESCEND,
+        [(vocabulary::STEP, ::grap::path::step_value(&step))],
     )
 }
 
 pub fn text_leaf(content: &str, face: CellId) -> Value {
-    node(
-        vocabulary::TEXT,
-        Value::record([
+    layout_node(
+        vocabulary::kind::TEXT,
+        [
             (vocabulary::CONTENT, crate::libraries::text::value(content)),
             (vocabulary::PAINT, Value::Cell(face)),
-        ]),
+        ],
     )
 }
 
@@ -81,14 +90,14 @@ pub fn drawing(
     descent: f64,
     commands: impl IntoIterator<Item = Value>,
 ) -> Value {
-    node(
-        vocabulary::DRAWING,
-        Value::record([
+    layout_node(
+        vocabulary::kind::DRAWING,
+        [
             (vocabulary::WIDTH, number(width)),
             (vocabulary::ASCENT, number(ascent)),
             (vocabulary::DESCENT, number(descent)),
             (vocabulary::COMMANDS, Value::list(commands)),
-        ]),
+        ],
     )
 }
 
@@ -100,15 +109,15 @@ pub fn program_drawing(
     fuel: usize,
     program: Value,
 ) -> Value {
-    node(
-        vocabulary::DRAWING,
-        Value::record([
+    layout_node(
+        vocabulary::kind::DRAWING,
+        [
             (vocabulary::WIDTH, number(width)),
             (vocabulary::ASCENT, number(ascent)),
             (vocabulary::DESCENT, number(descent)),
             (vocabulary::FUEL, number(fuel as f64)),
             (vocabulary::PROGRAM, program),
-        ]),
+        ],
     )
 }
 
@@ -220,38 +229,29 @@ pub fn close() -> Value {
 }
 
 pub fn selectable_node(child: Value) -> Value {
-    node(
-        vocabulary::SELECTABLE,
-        Value::record([(vocabulary::CHILD, child)]),
-    )
+    layout_node(vocabulary::kind::SELECTABLE, [(vocabulary::CHILD, child)])
 }
 
 pub fn pick_target(child: Value, value: Value) -> Value {
-    node(
-        vocabulary::PICKABLE,
-        Value::record([(vocabulary::CHILD, child), (vocabulary::VALUE, value)]),
+    layout_node(
+        vocabulary::kind::PICKABLE,
+        [(vocabulary::CHILD, child), (vocabulary::VALUE, value)],
     )
 }
 
 pub fn hover_block(child: Value) -> Value {
-    node(
-        vocabulary::HOVER_BLOCK,
-        Value::record([(vocabulary::CHILD, child)]),
-    )
+    layout_node(vocabulary::kind::HOVER_BLOCK, [(vocabulary::CHILD, child)])
 }
 
 pub fn on(child: Value, handler: Value) -> Value {
-    node(
-        vocabulary::ON_EVENT,
-        Value::record([(vocabulary::CHILD, child), (vocabulary::HANDLER, handler)]),
+    layout_node(
+        vocabulary::kind::ON_EVENT,
+        [(vocabulary::CHILD, child), (vocabulary::HANDLER, handler)],
     )
 }
 
 pub fn bordered(child: Value) -> Value {
-    node(
-        vocabulary::BORDER,
-        Value::record([(vocabulary::CHILD, child)]),
-    )
+    layout_node(vocabulary::kind::BORDER, [(vocabulary::CHILD, child)])
 }
 
 /// Decode a layout value into the display language, attaching the

@@ -198,16 +198,9 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
         &[],
     );
     let stored_program = driver.element(
-        &[
-            pane.as_slice(),
-            &[Step::Key(vocabulary::ROW), Step::Key(vocabulary::CHILDREN)],
-        ]
-        .concat(),
+        &[pane.as_slice(), &[Step::Key(vocabulary::CHILDREN)]].concat(),
         1,
-        &[
-            Step::Key(vocabulary::DRAWING),
-            Step::Key(vocabulary::PROGRAM),
-        ],
+        &[Step::Key(vocabulary::PROGRAM)],
     );
     assert_eq!(driver.value(&stored_program), program);
     let [(dot, _, _)] = driver.circles().try_into().expect("the drawing's one dot");

@@ -53,7 +53,7 @@
     "c": bef5c84caf687d49fddbc6df7068f0e0,
     "d": 89c15bcfece2af517f84422dc1251a44,
     "e": 3402ede6030b18f75e8ac8a23340f0c8,
-    "layout_program": 120660d976130c8ba722d26b1a28c975,
+    "layout_program": e8d550f504354ddba74b2960bcda2d84,
     "row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "col": 9d04b6e1783f2ca5f17d09c4e6a2358b,
     "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
@@ -76,6 +76,7 @@
     "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "evaluation": 549dd85073474d6296d773c8df9c0526,
+    "program": bdf607810b274ad5b02bd409aef34b6a,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -257,7 +258,8 @@
     results: {isa: evaluation, expression: ["Computed text", ["Nested", "result"]]},
     deep: deep_outer,
     side_by_side: {
-      layout_program: top_columns,
+      isa: layout_program,
+      program: top_columns,
       a: "Left 1",
       b: ["Left 2a", ["Nested 2b", "Nested 2c"]],
       c: "Left 3",
@@ -265,7 +267,8 @@
       e: "Right 2",
     },
     after_label: {
-      layout_program: block_then_beside,
+      isa: layout_program,
+      program: block_then_beside,
       block: [
         "First item: a list long enough to stack vertically (narrow the window if it does not)",
         "Second item of the stacked list",
@@ -274,7 +277,8 @@
       beside: "Beside the first item",
     },
     after_value: {
-      layout_program: block_then_beside,
+      isa: layout_program,
+      program: block_then_beside,
       block: [
         "First item: a list long enough to stack vertically (narrow the window if it does not)",
         "Second item of the stacked list",
@@ -283,7 +287,8 @@
       beside: ["Single-line list beside the first item"],
     },
     baseline_case: {
-      layout_program: offset_columns,
+      isa: layout_program,
+      program: offset_columns,
       a: "Upper left",
       b: "Middle left",
       c: "Lower left",

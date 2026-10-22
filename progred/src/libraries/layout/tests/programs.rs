@@ -54,9 +54,9 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
         quote(layout::test_support::row(
             6.0,
             [
-                Value::record([(
-                    l::TEXT,
-                    Value::record([
+                layout::test_support::layout_node(
+                    l::kind::TEXT,
+                    [
                         (l::PAINT, l::NAME_FACE.into()),
                         (
                             l::CONTENT,
@@ -68,8 +68,8 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
                                 (control::UNQUOTE, LABEL.into()),
                             ]),
                         ),
-                    ]),
-                )]),
+                    ],
+                ),
                 layout::test_support::text_leaf("value", l::STRING_FACE),
             ],
         ))
@@ -183,7 +183,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
         100_000,
     );
     assert!(prepared.completed);
-    let function = prepared.result.field(l::LAYOUT_PROGRAM).unwrap();
+    let function = prepared.result.field(l::PROGRAM).unwrap();
     for fuel in [grap::DEFAULT_FUEL, 100_000] {
         let (evaluation, layout) = layout::scope::run::<crate::Editor>(
             || panic!("text-only layout needs no editing site"),

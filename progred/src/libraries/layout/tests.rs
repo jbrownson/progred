@@ -25,30 +25,33 @@ fn traversal_uses_the_path_library_for_every_step() {
         );
     }
     let child = text::value("child");
-    let value = node(
-        vocabulary::AT,
-        Value::record([
+    let value = layout_node(
+        vocabulary::kind::AT,
+        [
             (
                 vocabulary::STEPS,
                 crate::libraries::editor::path::value(&steps),
             ),
             (vocabulary::VALUE, child.clone()),
-        ]),
+        ],
     );
     assert!(matches!((decoded(&value)).map(|layout| inspect(&layout)),
         Some(ProjectionCall::At { steps: decoded, value, .. }) if decoded == steps && value == child
     ));
-    let value = node(
-        vocabulary::DESCEND_PATH,
-        crate::libraries::editor::path::value(&steps),
+    let value = layout_node(
+        vocabulary::kind::DESCEND_PATH,
+        [(
+            vocabulary::STEPS,
+            crate::libraries::editor::path::value(&steps),
+        )],
     );
     assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
         Some(ProjectionCall::Descend { steps: decoded, .. }) if decoded == steps
     ));
     let document = vec![Step::Key(gid::new_cell_id())];
-    let value = node(
-        vocabulary::JUMP,
-        Value::record([
+    let value = layout_node(
+        vocabulary::kind::JUMP,
+        [
             (
                 vocabulary::STEPS,
                 crate::libraries::editor::path::value(&steps),
@@ -57,7 +60,7 @@ fn traversal_uses_the_path_library_for_every_step() {
                 vocabulary::DOCUMENT_PATH,
                 crate::libraries::editor::path::value(&document),
             ),
-        ]),
+        ],
     );
     assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
         Some(ProjectionCall::Jump { steps: decoded, document: target, .. }) if decoded == steps && target == crate::location::Location::root(document.as_slice())
@@ -166,7 +169,7 @@ fn intents_and_leaves_decode() {
     );
     assert_eq!(
         crate::libraries::test_widgets::claim(
-            &decoded(&hover_block(node(vocabulary::SLOT, Value::record([])))).unwrap()
+            &decoded(&hover_block(layout_node(vocabulary::kind::SLOT, []))).unwrap()
         ),
         Some(puri::hover::Claim::Occludes)
     );
@@ -266,12 +269,12 @@ fn junk_falls_through_whole() {
         [text_leaf("ok", vocabulary::NAME_FACE), Value::record([])],
     );
     assert!(decoded(&broken).is_none());
-    let bad_face = node(
-        vocabulary::TEXT,
-        Value::record([
+    let bad_face = layout_node(
+        vocabulary::kind::TEXT,
+        [
             (vocabulary::CONTENT, text::value("x")),
             (vocabulary::PAINT, Value::Cell(vocabulary::GAP)),
-        ]),
+        ],
     );
     assert!(decoded(&bad_face).is_none());
 }
@@ -284,14 +287,14 @@ fn center_and_rule_decode_from_data_as_a_program_emits_them() {
         0,
         0.0,
         [
-            node(
-                vocabulary::CENTER,
-                Value::record([(vocabulary::CHILD, text_leaf("1", vocabulary::NAME_FACE))]),
+            layout_node(
+                vocabulary::kind::CENTER,
+                [(vocabulary::CHILD, text_leaf("1", vocabulary::NAME_FACE))],
             ),
-            node(vocabulary::RULE, Value::record([])),
-            node(
-                vocabulary::CENTER,
-                Value::record([(vocabulary::CHILD, text_leaf("2", vocabulary::NAME_FACE))]),
+            layout_node(vocabulary::kind::RULE, []),
+            layout_node(
+                vocabulary::kind::CENTER,
+                [(vocabulary::CHILD, text_leaf("2", vocabulary::NAME_FACE))],
             ),
         ],
     );

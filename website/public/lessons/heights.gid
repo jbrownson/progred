@@ -7,7 +7,7 @@
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "all": bc2f76148affd64e009a1a37a32aa2bf,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "program": bdf607810b274ad5b02bd409aef34b6a,
     "width": f33c672fef9d0d4561102410fd64129f,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
@@ -51,6 +51,6 @@
   "root": {
     first: recipe,
     second: calls,
-    third: {drawing: {width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000006440}, fuel: {f64: 0x0000000000408f40}, program: calls}},
+    third: {isa: drawing, width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000006440}, fuel: {f64: 0x0000000000408f40}, program: calls},
   },
 }

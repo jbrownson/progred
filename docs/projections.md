@@ -667,10 +667,12 @@ interface.
 ## Scoped layout programs
 
 The layout library's `layout program` function takes a raw `expression` and
-returns `{layout program: closure}`. This is an ordinary Grap closure with its
-lexical environment, not an opaque native value. The normal partial recognizes
-that record and runs the closure with a borrowed `ForeignOverlay` capturing a
-Rust layout output buffer. It adds no evaluator types or syntax.
+returns `{isa: layout program, program: closure}`. The closure is an ordinary
+Grap closure with its lexical environment, not an opaque native value. The
+library's projection for that kind runs the closure with a borrowed
+`ForeignOverlay` capturing a Rust layout output buffer; a record of the kind
+can carry the data its program descends into beside it. It adds no evaluator
+types or syntax.
 
 Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
 `children` expression. They evaluate it once into a fresh child buffer, then
@@ -698,8 +700,10 @@ stored drawing node does; it does not construct a list of draw commands. Its
 optional fuel argument configures the later drawing evaluation, as the stored
 node's does; omitting it uses the evaluator's ordinary default, not the layout
 call's remainder. Every construct is in both forms under one name and the same
-fields: a node of the stored form is a function of the same name in a layout
-program, and a wrapper's content is its `child` field in both.
+fields: a node of the stored form, `{isa: row, gap, children}` say, is a
+function of the same name in a layout program, and a wrapper's content is its
+`child` field in both. The node's kind and the function are separate cells
+sharing that name.
 Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
 and text paint to the ink face. Other required inputs are validated. Invalid
 builder calls return absents; containers propagate a failed child computation
@@ -710,9 +714,10 @@ with `{}` as its child computation; an empty `do` is not a successful computatio
 
 The explicit boundary matters for composition: pane/viewport projection
 functions return ordinary values, and no function changes meaning inside a
-secretly installed scope. A layout cell such as `drawing` or `border` is a
-layout construct only: a key in stored data, or a function a layout program
-calls. In ordinary evaluation it is no function at all.
+secretly installed scope. A layout function such as `drawing` or `border` is
+one only within a layout program; in ordinary evaluation it is no function at
+all. The stored form's nodes are data of their kinds, which the layout library
+draws as each kind provides.
 Grap can also return stored layout descriptions; a layout program avoids building
 and decoding them per node, but still allocates the chosen Rust
 layout representation and evaluates Grap code. It is not a cache or a guarantee

@@ -17,9 +17,9 @@ pub fn at_display_partial() -> Value {
         ])
     };
     let spliced_text = |binder| {
-        Value::record([(
-            layout::vocabulary::TEXT,
-            Value::record([
+        ::grap::isa::record(
+            layout::vocabulary::kind::TEXT,
+            [
                 (
                     layout::vocabulary::CONTENT,
                     control::unquote(Value::from(binder)),
@@ -28,8 +28,8 @@ pub fn at_display_partial() -> Value {
                     layout::vocabulary::PAINT,
                     Value::from(layout::vocabulary::NAME_FACE),
                 ),
-            ]),
-        )])
+            ],
+        )
     };
     let select_here = grap::lambda(
         [layout::vocabulary::EVENT],

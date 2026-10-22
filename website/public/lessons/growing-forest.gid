@@ -41,7 +41,7 @@
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "all": bc2f76148affd64e009a1a37a32aa2bf,
     "draw_scene": 760df9daea94f9ff58652a794d5295f3,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "drawing_with_controls": b6d47a6599ceb167d1950c1bd900ec04,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
@@ -1001,15 +1001,14 @@
       isa: call,
       function: quote,
       expression: {
-        drawing: {
-          width: {f64: 0x0000000000408540},
-          ascent: {f64: 0x0000000000000000},
-          descent: {f64: 0x0000000000c07240},
-          fuel: {f64: 0x00000000006a0841},
-          program: {
-            isa: call,
-            function: {isa: unquote_2, unquote: program}
-          }
+        isa: drawing,
+        width: {f64: 0x0000000000408540},
+        ascent: {f64: 0x0000000000000000},
+        descent: {f64: 0x0000000000c07240},
+        fuel: {f64: 0x00000000006a0841},
+        program: {
+          isa: call,
+          function: {isa: unquote_2, unquote: program}
         }
       }
     }
