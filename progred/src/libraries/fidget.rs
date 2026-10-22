@@ -52,7 +52,11 @@ const MAX_ZOOM: f32 = 20.0;
 pub mod vocabulary {
     use gid::CellId;
 
-    pub use crate::libraries::grap::numbers::vocabulary::{LEFT, OPERAND, RIGHT};
+    /// A node's operands: Fidget's own fields, whatever they share in
+    /// name with Grap numbers'.
+    pub const LEFT: CellId = CellId::from_u128(0x3cbf5357204947fdb4f26eadcbd777d6);
+    pub const RIGHT: CellId = CellId::from_u128(0x6ab1e9c9a6604d82b1aabddcfa03d0d8);
+    pub const OPERAND: CellId = CellId::from_u128(0xb66457fa59524110bb363bc28754cea0);
     pub const FIDGET: CellId = CellId::from_u128(0x5653d5cc6cf43eb2291f9943c29eeab4);
     pub const AXIS: CellId = CellId::from_u128(0xfb2b3baa73025ae4b7b2aa97d65d1643);
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);
@@ -104,29 +108,101 @@ pub mod vocabulary {
     pub const INVALID_COLOR: CellId = CellId::from_u128(0x91720fe73042065ac464952efa8dddd3);
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
     pub const INVALID_SIZE: CellId = CellId::from_u128(0x220fe6002d6a973da9c2ea1ff7fec98e);
+
+    /// The kinds of Fidget's nodes, each a cell of its own.
+    pub mod kind {
+        use gid::CellId;
+        pub const AXIS: CellId = CellId::from_u128(0xf82b802a154f47ab973d4a522fd3d034);
+        pub const SUM: CellId = CellId::from_u128(0x7300fd0088314a1b800a9cb15b015ba8);
+        pub const SUBTRACT: CellId = CellId::from_u128(0x4535d940d2f04affa350291dd96f06bc);
+        pub const MULTIPLY: CellId = CellId::from_u128(0x2b80236eda7245d6a63b0da98da25850);
+        pub const DIVIDE: CellId = CellId::from_u128(0x9f458eda134e4adc98661b07b5169223);
+        pub const MIN: CellId = CellId::from_u128(0x15260240eede4a64b39ebe15898f9b81);
+        pub const MAX: CellId = CellId::from_u128(0x968e2f1f111a4849a8449dbeddbe8412);
+        pub const UNION: CellId = CellId::from_u128(0x2c71c43b442847dfa9ce0b522bb7dc4a);
+        pub const INTERSECTION: CellId = CellId::from_u128(0xcb8c27ebd8374ca7a69ded3c7cd92686);
+        pub const DIFFERENCE: CellId = CellId::from_u128(0x10f86aecbad3474fa912858a56ebdf94);
+        pub const NEGATE: CellId = CellId::from_u128(0xbb4210cb36874d16bce9948bcabd4191);
+        pub const ABS: CellId = CellId::from_u128(0x119eddd0f1404b34a6e8653279b69feb);
+        pub const SQRT: CellId = CellId::from_u128(0xdb6e742a39104ba89f2216ad9ab75e99);
+        pub const SQUARE: CellId = CellId::from_u128(0xd4f866cfe9014192a360d5567df9cbef);
+        pub const SIN: CellId = CellId::from_u128(0x3e471136af054326b47891d045361fbc);
+        pub const COS: CellId = CellId::from_u128(0xfc89c17ecb5147158f928fe4e89da1e3);
+        pub const TRANSLATE: CellId = CellId::from_u128(0x25dba7fa2ee74c2b986ba6e28aa3cbdf);
+    }
 }
 
-/// Arithmetic on fields, which reads infix as a number's does.
-const ARITHMETIC: [(CellId, &str); 4] = [
-    (vocabulary::SUM, "+"),
-    (vocabulary::SUBTRACT, "-"),
-    (vocabulary::MULTIPLY, "*"),
-    (vocabulary::DIVIDE, "/"),
+/// The nodes of two operands: each kind, the Grap function that builds one,
+/// and its spelling.
+const BINARY: [(CellId, CellId, &str); 9] = [
+    (vocabulary::kind::SUM, vocabulary::SUM, "+"),
+    (vocabulary::kind::SUBTRACT, vocabulary::SUBTRACT, "-"),
+    (vocabulary::kind::MULTIPLY, vocabulary::MULTIPLY, "*"),
+    (vocabulary::kind::DIVIDE, vocabulary::DIVIDE, "/"),
+    (vocabulary::kind::MIN, vocabulary::MIN, "min"),
+    (vocabulary::kind::MAX, vocabulary::MAX, "max"),
+    (vocabulary::kind::UNION, vocabulary::UNION, "union"),
+    (
+        vocabulary::kind::INTERSECTION,
+        vocabulary::INTERSECTION,
+        "intersection",
+    ),
+    (
+        vocabulary::kind::DIFFERENCE,
+        vocabulary::DIFFERENCE,
+        "difference",
+    ),
 ];
 
-fn node(marker: CellId, content: Value) -> Value {
-    Value::record([(marker, content)])
+/// The nodes of one operand, as [`BINARY`] lists those of two.
+const UNARY: [(CellId, CellId, &str); 6] = [
+    (vocabulary::kind::NEGATE, vocabulary::NEGATE, "negate"),
+    (vocabulary::kind::ABS, vocabulary::ABS, "abs"),
+    (vocabulary::kind::SQRT, vocabulary::SQRT, "sqrt"),
+    (vocabulary::kind::SQUARE, vocabulary::SQUARE, "square"),
+    (vocabulary::kind::SIN, vocabulary::SIN, "sin"),
+    (vocabulary::kind::COS, vocabulary::COS, "cos"),
+];
+
+/// The kinds of node a field is built from.
+fn node_kinds() -> impl Iterator<Item = CellId> {
+    BINARY
+        .into_iter()
+        .chain(UNARY)
+        .map(|(kind, _, _)| kind)
+        .chain([vocabulary::kind::AXIS, vocabulary::kind::TRANSLATE])
 }
 
-fn unary(marker: CellId, operand: Value) -> Value {
-    node(marker, Value::record([(vocabulary::OPERAND, operand)]))
+/// Arithmetic, which reads infix as a number's does: those of [`BINARY`]
+/// spelled as a symbol.
+fn arithmetic() -> impl Iterator<Item = (CellId, CellId, &'static str)> {
+    BINARY
+        .into_iter()
+        .filter(|(_, _, spelling)| representation::Precedence::of_symbol(spelling).is_some())
 }
 
-fn binary(marker: CellId, left: Value, right: Value) -> Value {
-    node(
-        marker,
-        Value::record([(vocabulary::LEFT, left), (vocabulary::RIGHT, right)]),
-    )
+/// The kind of node `fields` says it is, if it's one of Fidget's.
+fn node_kind(fields: &gid::Record) -> Option<CellId> {
+    let kind = ::grap::isa::of(fields)?;
+    node_kinds()
+        .any(|candidate| candidate == kind)
+        .then_some(kind)
+}
+
+fn node(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+    ::grap::isa::record(kind, fields)
+}
+
+fn axis(axis: CellId) -> Value {
+    node(vocabulary::kind::AXIS, [(vocabulary::AXIS, axis.into())])
+}
+
+fn unary(kind: CellId, operand: Value) -> Value {
+    node(kind, [(vocabulary::OPERAND, operand)])
+}
+
+fn binary(kind: CellId, left: Value, right: Value) -> Value {
+    node(kind, [(vocabulary::LEFT, left), (vocabulary::RIGHT, right)])
 }
 
 fn evaluated(
@@ -165,7 +241,7 @@ fn preview_value(
             Some(size) => match bound_arguments(context, call, environment, bounds)?
                 .filter(|bounds| valid(bounds))
             {
-                Some(bounds) => node(
+                Some(bounds) => Value::record([(
                     marker,
                     Value::record(
                         [(vocabulary::FIELD, field)]
@@ -173,7 +249,7 @@ fn preview_value(
                             .chain(size)
                             .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
                     ),
-                ),
+                )]),
                 None => ::grap::absent::value(vocabulary::INVALID_BOUNDS),
             },
         },
@@ -224,18 +300,21 @@ fn bound_arguments(
         .collect()
 }
 
-fn unary_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::with_arguments([vocabulary::OPERAND], move |_, (operand,): (Value,)| {
-        unary(marker, operand)
-    })
+// The Grap functions take Grap numbers' operands and build Fidget's nodes.
+
+fn unary_function(kind: CellId) -> ForeignFunction {
+    ForeignFunction::with_arguments(
+        [crate::libraries::grap::numbers::vocabulary::OPERAND],
+        move |_, (operand,): (Value,)| unary(kind, operand),
+    )
     .tracked()
 }
 
-fn binary_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::with_arguments(
-        [vocabulary::LEFT, vocabulary::RIGHT],
-        move |_, (left, right): (Value, Value)| binary(marker, left, right),
-    )
+fn binary_function(kind: CellId) -> ForeignFunction {
+    use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
+    ForeignFunction::with_arguments([LEFT, RIGHT], move |_, (left, right): (Value, Value)| {
+        binary(kind, left, right)
+    })
     .tracked()
 }
 
@@ -255,8 +334,8 @@ fn radial_function(spelling: &str, squared_distance: Value) -> Value {
                     [(
                         ::grap::vocabulary::EXPRESSION,
                         binary(
-                            vocabulary::SUBTRACT,
-                            unary(vocabulary::SQRT, squared_distance),
+                            vocabulary::kind::SUBTRACT,
+                            unary(vocabulary::kind::SQRT, squared_distance),
                             control::unquote(vocabulary::RADIUS.into()),
                         ),
                     )],
@@ -291,8 +370,8 @@ fn translate_function(
     .collect::<Result<Option<Vec<_>>, _>>()?;
     Ok(match deltas {
         Some(deltas) => node(
-            vocabulary::TRANSLATE,
-            Value::record([(vocabulary::FIELD, field)].into_iter().chain(deltas)),
+            vocabulary::kind::TRANSLATE,
+            [(vocabulary::FIELD, field)].into_iter().chain(deltas),
         ),
         None => ::grap::absent::value(vocabulary::INVALID_FIELD),
     })
@@ -363,153 +442,99 @@ fn volume_preview_function(
 }
 
 fn functions() -> ForeignFunctions {
-    [
-        (vocabulary::SUM, binary_function(vocabulary::SUM)),
-        (vocabulary::SUBTRACT, binary_function(vocabulary::SUBTRACT)),
-        (vocabulary::MULTIPLY, binary_function(vocabulary::MULTIPLY)),
-        (vocabulary::DIVIDE, binary_function(vocabulary::DIVIDE)),
-        (vocabulary::MIN, binary_function(vocabulary::MIN)),
-        (vocabulary::MAX, binary_function(vocabulary::MAX)),
-        (vocabulary::UNION, binary_function(vocabulary::UNION)),
-        (
-            vocabulary::INTERSECTION,
-            binary_function(vocabulary::INTERSECTION),
-        ),
-        (
-            vocabulary::DIFFERENCE,
-            binary_function(vocabulary::DIFFERENCE),
-        ),
-    ]
-    .into_iter()
-    .chain([
-        (vocabulary::NEGATE, unary_function(vocabulary::NEGATE)),
-        (vocabulary::ABS, unary_function(vocabulary::ABS)),
-        (vocabulary::SQRT, unary_function(vocabulary::SQRT)),
-        (vocabulary::SQUARE, unary_function(vocabulary::SQUARE)),
-        (vocabulary::SIN, unary_function(vocabulary::SIN)),
-        (vocabulary::COS, unary_function(vocabulary::COS)),
-    ])
-    .fold(
-        ForeignFunctions::default(),
-        |functions, (cell, function)| functions.register(cell, function),
-    )
-    .register(
-        vocabulary::TRANSLATE,
-        ForeignFunction::from_value(translate_function)
-            .parameters([vocabulary::FIELD])
-            .tracked(),
-    )
-    .register(
-        vocabulary::PREVIEW,
-        ForeignFunction::from_value(preview_function)
-            .parameters([presentation::vocabulary::VALUE])
-            .tracked(),
-    )
-    .register(
-        vocabulary::PREVIEW_3D,
-        ForeignFunction::from_value(preview_3d_function)
-            .parameters([presentation::vocabulary::VALUE])
-            .tracked(),
-    )
-    .register(
-        vocabulary::PREVIEW_MESH,
-        ForeignFunction::from_value(mesh::preview)
-            .parameters([presentation::vocabulary::VALUE])
-            .tracked(),
-    )
+    BINARY
+        .into_iter()
+        .map(|(kind, function, _)| (function, binary_function(kind)))
+        .chain(
+            UNARY
+                .into_iter()
+                .map(|(kind, function, _)| (function, unary_function(kind))),
+        )
+        .fold(
+            ForeignFunctions::default(),
+            |functions, (cell, function)| functions.register(cell, function),
+        )
+        .register(
+            vocabulary::TRANSLATE,
+            ForeignFunction::from_value(translate_function)
+                .parameters([vocabulary::FIELD])
+                .tracked(),
+        )
+        .register(
+            vocabulary::PREVIEW,
+            ForeignFunction::from_value(preview_function)
+                .parameters([presentation::vocabulary::VALUE])
+                .tracked(),
+        )
+        .register(
+            vocabulary::PREVIEW_3D,
+            ForeignFunction::from_value(preview_3d_function)
+                .parameters([presentation::vocabulary::VALUE])
+                .tracked(),
+        )
+        .register(
+            vocabulary::PREVIEW_MESH,
+            ForeignFunction::from_value(mesh::preview)
+                .parameters([presentation::vocabulary::VALUE])
+                .tracked(),
+        )
 }
 
-fn one_marker(fields: &gid::Record) -> Option<CellId> {
-    one_marker_by(|marker| fields.contains_key(&marker))
-}
-
-fn one_marker_by(contains: impl Fn(CellId) -> bool) -> Option<CellId> {
-    let markers = [
-        vocabulary::AXIS,
-        vocabulary::SUM,
-        vocabulary::SUBTRACT,
-        vocabulary::MULTIPLY,
-        vocabulary::DIVIDE,
-        vocabulary::MIN,
-        vocabulary::MAX,
-        vocabulary::NEGATE,
-        vocabulary::ABS,
-        vocabulary::SQRT,
-        vocabulary::SQUARE,
-        vocabulary::SIN,
-        vocabulary::COS,
-        vocabulary::TRANSLATE,
-        vocabulary::UNION,
-        vocabulary::INTERSECTION,
-        vocabulary::DIFFERENCE,
-    ];
-    let mut present = markers.into_iter().filter(|marker| contains(*marker));
-    let marker = present.next()?;
-    present.next().is_none().then_some(marker)
-}
-
-fn parameters(marker: CellId) -> Option<&'static [CellId]> {
-    use vocabulary::*;
-    match marker {
-        SUM | SUBTRACT | MULTIPLY | DIVIDE | MIN | MAX | UNION | DIFFERENCE | INTERSECTION => {
-            Some(&[LEFT, RIGHT])
-        }
-        NEGATE | ABS | SQRT | SQUARE | SIN | COS => Some(&[OPERAND]),
-        _ => None,
+/// The fields a node of `kind` requires, when it's one of Fidget's
+/// operations.
+fn parameters(kind: CellId) -> Option<&'static [CellId]> {
+    if BINARY.iter().any(|(candidate, _, _)| *candidate == kind) {
+        Some(&[vocabulary::LEFT, vocabulary::RIGHT])
+    } else if UNARY.iter().any(|(candidate, _, _)| *candidate == kind) {
+        Some(&[vocabulary::OPERAND])
+    } else {
+        None
     }
 }
 
 fn tree(value: &Value) -> Option<Tree> {
+    use vocabulary::kind;
     if let Some(number) = f32::read(value) {
         return number.is_finite().then(|| Tree::constant(number));
     }
     let fields = value.as_record()?;
-    let marker = one_marker(fields)?;
-    let content = fields.get(&marker)?;
-    match marker {
-        vocabulary::AXIS => match content.as_cell()? {
+    let operand = |field| tree(fields.get(&field)?);
+    match node_kind(fields)? {
+        kind::AXIS => match fields.get(&vocabulary::AXIS)?.as_cell()? {
             vocabulary::X => Some(Tree::x()),
             vocabulary::Y => Some(Tree::y()),
             vocabulary::Z => Some(Tree::z()),
             _ => None,
         },
-        vocabulary::TRANSLATE => {
-            let fields = content.as_record()?;
-            let field = tree(fields.get(&vocabulary::FIELD)?)?;
+        kind::TRANSLATE => {
+            let field = operand(vocabulary::FIELD)?;
             let dx = f32::read(fields.get(&vocabulary::DELTA_X)?)?;
             let dy = f32::read(fields.get(&vocabulary::DELTA_Y)?)?;
             let dz = f32::read(fields.get(&vocabulary::DELTA_Z)?)?;
             Some(field.remap_xyz(Tree::x() - dx, Tree::y() - dy, Tree::z() - dz))
         }
-        vocabulary::NEGATE
-        | vocabulary::ABS
-        | vocabulary::SQRT
-        | vocabulary::SQUARE
-        | vocabulary::SIN
-        | vocabulary::COS => {
-            let operand = tree(content.as_record()?.get(&vocabulary::OPERAND)?)?;
-            match marker {
-                vocabulary::NEGATE => Some(-operand),
-                vocabulary::ABS => Some(operand.abs()),
-                vocabulary::SQRT => Some(operand.sqrt()),
-                vocabulary::SQUARE => Some(operand.square()),
-                vocabulary::SIN => Some(operand.sin()),
-                vocabulary::COS => Some(operand.cos()),
-                _ => None,
-            }
+        kind @ (kind::NEGATE | kind::ABS | kind::SQRT | kind::SQUARE | kind::SIN | kind::COS) => {
+            let operand = operand(vocabulary::OPERAND)?;
+            Some(match kind {
+                kind::NEGATE => -operand,
+                kind::ABS => operand.abs(),
+                kind::SQRT => operand.sqrt(),
+                kind::SQUARE => operand.square(),
+                kind::SIN => operand.sin(),
+                _ => operand.cos(),
+            })
         }
-        _ => {
-            let fields = content.as_record()?;
-            let left = tree(fields.get(&vocabulary::LEFT)?)?;
-            let right = tree(fields.get(&vocabulary::RIGHT)?)?;
-            match marker {
-                vocabulary::SUM => Some(left + right),
-                vocabulary::SUBTRACT => Some(left - right),
-                vocabulary::MULTIPLY => Some(left * right),
-                vocabulary::DIVIDE => Some(left / right),
-                vocabulary::MIN | vocabulary::UNION => Some(left.min(right)),
-                vocabulary::MAX | vocabulary::INTERSECTION => Some(left.max(right)),
-                vocabulary::DIFFERENCE => Some(left.max(-right)),
+        kind => {
+            let left = operand(vocabulary::LEFT)?;
+            let right = operand(vocabulary::RIGHT)?;
+            match kind {
+                kind::SUM => Some(left + right),
+                kind::SUBTRACT => Some(left - right),
+                kind::MULTIPLY => Some(left * right),
+                kind::DIVIDE => Some(left / right),
+                kind::MIN | kind::UNION => Some(left.min(right)),
+                kind::MAX | kind::INTERSECTION => Some(left.max(right)),
+                kind::DIFFERENCE => Some(left.max(-right)),
                 _ => None,
             }
         }
@@ -1091,49 +1116,43 @@ pub(crate) fn interactive_volume<W: Host, V>(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let square = |axis| {
-        unary(
-            vocabulary::SQUARE,
-            node(vocabulary::AXIS, Value::from(axis)),
-        )
-    };
+    let square = |cell| unary(vocabulary::kind::SQUARE, axis(cell));
     let radial = binary(
-        vocabulary::SUM,
+        vocabulary::kind::SUM,
         square(vocabulary::X),
         square(vocabulary::Y),
     );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
-    let infix: Rc<[_]> = ARITHMETIC
-        .into_iter()
-        .filter_map(|(cell, symbol)| Some((cell, representation::Precedence::of_symbol(symbol)?)))
+    let infix: Rc<[_]> = arithmetic()
+        .filter_map(|(_, function, symbol)| {
+            Some((function, representation::Precedence::of_symbol(symbol)?))
+        })
         .collect();
     // Calls of each infix operator draw infix.
     let operator = {
         let infix = infix.clone();
         crate::display::runtime_partial(move |input| representation::infix_display(&infix, input))
     };
-    let operators: Vec<_> = infix
+    let operators = infix
         .iter()
         .map(|(cell, _)| (*cell, operator.clone()))
-        .collect();
+        .collect::<Vec<_>>();
+    // Each of Fidget's nodes draws as its kind provides.
+    let nodes = node_kinds()
+        .map(|kind| (kind, crate::display::runtime_partial(projection::field)))
+        .collect::<Vec<_>>();
     name::library_named(
         ID,
         "fidget",
         [
             (vocabulary::FIDGET, "fidget"),
             (vocabulary::AXIS, "axis"),
-            (vocabulary::MIN, "min"),
-            (vocabulary::MAX, "max"),
-            (vocabulary::NEGATE, "negate"),
-            (vocabulary::ABS, "abs"),
-            (vocabulary::SQRT, "sqrt"),
-            (vocabulary::SQUARE, "square"),
-            (vocabulary::SIN, "sin"),
-            (vocabulary::COS, "cos"),
+            (vocabulary::kind::AXIS, "axis"),
+            (vocabulary::LEFT, "left"),
+            (vocabulary::RIGHT, "right"),
+            (vocabulary::OPERAND, "operand"),
             (vocabulary::TRANSLATE, "translate"),
-            (vocabulary::UNION, "union"),
-            (vocabulary::INTERSECTION, "intersection"),
-            (vocabulary::DIFFERENCE, "difference"),
+            (vocabulary::kind::TRANSLATE, "translate"),
             (vocabulary::PREVIEW, "preview"),
             (vocabulary::PREVIEW_3D, "preview 3d"),
             (vocabulary::PREVIEW_MESH, "preview mesh"),
@@ -1158,15 +1177,24 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::ZOOM, "zoom"),
         ]
         .into_iter()
+        .chain(
+            UNARY
+                .into_iter()
+                .chain(BINARY)
+                .filter(|(_, _, spelling)| {
+                    representation::Precedence::of_symbol(spelling).is_none()
+                })
+                .flat_map(|(kind, function, spelling)| [(kind, spelling), (function, spelling)]),
+        )
         .map(|(cell, spelling)| (cell, crate::libraries::text::value(spelling)))
-        .chain(ARITHMETIC.map(|(cell, spelling)| {
-            (
-                cell,
-                name::formatted([
-                    crate::libraries::text::value(spelling),
-                    name::subscript(vocabulary::FIDGET.into()),
-                ]),
-            )
+        // An arithmetic symbol carries Fidget's tag, telling it from a
+        // number's.
+        .chain(arithmetic().flat_map(|(kind, function, spelling)| {
+            let name = name::formatted([
+                crate::libraries::text::value(spelling),
+                name::subscript(vocabulary::FIDGET.into()),
+            ]);
+            [(kind, name.clone()), (function, name)]
         }))
         .chain(
             [
@@ -1193,7 +1221,13 @@ pub fn library<W: Host>() -> Library<W> {
         .map(|(cell, spelling)| {
             (
                 cell,
-                name::record(spelling, [(vocabulary::AXIS, Value::from(cell))]),
+                name::record(
+                    spelling,
+                    [
+                        (::grap::isa::ISA, vocabulary::kind::AXIS.into()),
+                        (vocabulary::AXIS, Value::from(cell)),
+                    ],
+                ),
             )
         })
         .into_iter()
@@ -1206,14 +1240,13 @@ pub fn library<W: Host>() -> Library<W> {
                 vocabulary::SPHERE,
                 radial_function(
                     "sphere",
-                    binary(vocabulary::SUM, radial, square(vocabulary::Z)),
+                    binary(vocabulary::kind::SUM, radial, square(vocabulary::Z)),
                 ),
             ),
         ]),
     )
-    .with_projections_for(operators)
+    .with_projections_for(operators.into_iter().chain(nodes))
     .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(projection::field),
         crate::display::runtime_partial(move |input| display(input, &renderer)),
         crate::display::runtime_partial(mesh::display),
     ]))

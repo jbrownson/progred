@@ -29,12 +29,17 @@ fn sample(tree: Tree, x: f32, y: f32, z: f32) -> f32 {
     evaluator.eval(&tape, &[x], &[y], &[z]).unwrap()[0]
 }
 
+/// A record holding `content` under its one `tag`.
+fn tagged(tag: CellId, content: Value) -> Value {
+    Value::record([(tag, content)])
+}
+
 fn colored(field: Value, rgb: [u8; 3]) -> Value {
     Value::record([
         (vocabulary::FIELD, field),
         (
             vocabulary::COLOR,
-            node(color::vocabulary::RGB, rgb.to_vec().into()),
+            tagged(color::vocabulary::RGB, rgb.to_vec().into()),
         ),
     ])
 }
@@ -95,7 +100,7 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
                 (vocabulary::FIELD, f32::value(0.0)),
                 (
                     vocabulary::COLOR,
-                    node(color::vocabulary::RGBA, vec![255, 0, 0, 128].into()),
+                    tagged(color::vocabulary::RGBA, vec![255, 0, 0, 128].into()),
                 ),
             ])]),
             vocabulary::INVALID_COLOR,
@@ -105,7 +110,7 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
                 (vocabulary::FIELD, f32::value(0.0)),
                 (
                     vocabulary::COLOR,
-                    node(color::vocabulary::RGB, vec![255].into()),
+                    tagged(color::vocabulary::RGB, vec![255].into()),
                 ),
             ])]),
             vocabulary::INVALID_COLOR,
@@ -115,18 +120,18 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
             vocabulary::PREVIEW_3D,
             [(
                 presentation::vocabulary::VALUE,
-                node(vocabulary::SCENE, objects),
+                tagged(vocabulary::SCENE, objects),
             )],
         ));
         assert_eq!(result, ::grap::absent::value(reason));
     }
-    let opaque = node(
+    let opaque = tagged(
         vocabulary::SCENE,
         Value::list([Value::record([
             (vocabulary::FIELD, f32::value(0.0)),
             (
                 vocabulary::COLOR,
-                node(color::vocabulary::RGBA, vec![1, 2, 3, 255].into()),
+                tagged(color::vocabulary::RGBA, vec![1, 2, 3, 255].into()),
             ),
         ])]),
     );
@@ -199,7 +204,7 @@ fn empty_scene_is_transparent() {
         vocabulary::PREVIEW_3D,
         [(
             presentation::vocabulary::VALUE,
-            node(vocabulary::SCENE, Value::list([])),
+            tagged(vocabulary::SCENE, Value::list([])),
         )],
     ));
     let preview = volume_preview(&value).unwrap();
@@ -272,21 +277,41 @@ fn gpu_colors_constants_and_workspace_reuse() {
 
 #[test]
 fn trigonometry_is_fidget_data_and_ordinary_grap_construction() {
-    let operand = name::record("phase", [(vocabulary::AXIS, vocabulary::X.into())]);
-    for (marker, operation) in [
-        (vocabulary::SIN, std::primitive::f32::sin as fn(f32) -> f32),
-        (vocabulary::COS, std::primitive::f32::cos as fn(f32) -> f32),
+    let operand = name::record(
+        "phase",
+        [
+            (::grap::isa::ISA, vocabulary::kind::AXIS.into()),
+            (vocabulary::AXIS, vocabulary::X.into()),
+        ],
+    );
+    for (kind, function, operation) in [
+        (
+            vocabulary::kind::SIN,
+            vocabulary::SIN,
+            std::primitive::f32::sin as fn(f32) -> f32,
+        ),
+        (
+            vocabulary::kind::COS,
+            vocabulary::COS,
+            std::primitive::f32::cos as fn(f32) -> f32,
+        ),
     ] {
-        let data = unary(marker, operand.clone());
+        let data = unary(kind, operand.clone());
         assert_eq!(
-            evaluate(&call(marker, [(vocabulary::OPERAND, operand.clone())])),
+            evaluate(&call(
+                function,
+                [(
+                    crate::libraries::grap::numbers::vocabulary::OPERAND,
+                    operand.clone()
+                )]
+            )),
             data,
         );
         let field = tree(&data).unwrap();
         for phase in [-3.0, -0.5, 0.0, 0.5, 3.0] {
             assert!((sample(field.clone(), phase, 0.0, 0.0) - operation(phase)).abs() < 1e-6);
         }
-        assert!(tree(&node(marker, Value::record([]))).is_none());
+        assert!(tree(&node(kind, [])).is_none());
     }
 }
 
@@ -319,20 +344,14 @@ fn radial_shapes_are_grap_functions_returning_fidget_arithmetic() {
 
         let field = evaluate(&call(shape, [(vocabulary::RADIUS, f32::value(10.0))]));
         assert_eq!(
-            one_marker(field.as_record().unwrap()),
-            Some(vocabulary::SUBTRACT)
+            node_kind(field.as_record().unwrap()),
+            Some(vocabulary::kind::SUBTRACT)
         );
         let tree = tree(&field).unwrap();
         assert_eq!(sample(tree.clone(), 0.0, 0.0, 0.0), -10.0);
         assert_eq!(sample(tree.clone(), 6.0, 8.0, 0.0), 0.0);
         assert_eq!(sample(tree, 0.0, 0.0, 20.0), at_z);
-        assert!(
-            super::tree(&node(
-                shape,
-                Value::record([(vocabulary::RADIUS, f32::value(10.0))])
-            ))
-            .is_none()
-        );
+        assert!(super::tree(&tagged(shape, f32::value(10.0))).is_none());
     }
 }
 
@@ -350,14 +369,7 @@ fn radial_templates_splice_the_radius_without_reencoding_it() {
         [(vocabulary::RADIUS, radius.clone())],
     ));
     assert_eq!(
-        field
-            .as_record()
-            .unwrap()
-            .get(&vocabulary::SUBTRACT)
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&vocabulary::RIGHT),
+        field.as_record().unwrap().get(&vocabulary::RIGHT),
         Some(&radius)
     );
     assert!(tree(&field).is_some());
@@ -508,7 +520,7 @@ fn cpu_previews_support_constant_fields() {
         (f32::value(1.0), false),
         (f32::value(-1.0), true),
         (
-            binary(vocabulary::SUM, f32::value(1.0), f32::value(-1.0)),
+            binary(vocabulary::kind::SUM, f32::value(1.0), f32::value(-1.0)),
             false,
         ),
     ] {

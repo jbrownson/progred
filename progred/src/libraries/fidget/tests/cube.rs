@@ -69,21 +69,20 @@ fn sample(field: &Value, point: [f32; 3]) -> f32 {
         return number;
     }
     let fields = field.as_record().unwrap();
-    if let Some(axis) = fields.get(&AXIS).and_then(Value::as_cell) {
-        return point[[X, Y, Z].iter().position(|id| *id == axis).unwrap()];
-    }
-    let (operation, arguments) = fields.iter().next().unwrap();
-    let arguments = arguments.as_record().unwrap();
-    let read = |key| sample(arguments.get(&key).unwrap(), point);
-    match *operation {
-        SUM => read(LEFT) + read(RIGHT),
-        SUBTRACT => read(LEFT) - read(RIGHT),
-        MULTIPLY => read(LEFT) * read(RIGHT),
-        DIVIDE => read(LEFT) / read(RIGHT),
-        MAX => read(LEFT).max(read(RIGHT)),
-        ABS => read(OPERAND).abs(),
-        SQUARE => read(OPERAND).powi(2),
-        _ => panic!("unexpected field operation: {operation:?}"),
+    let read = |key| sample(fields.get(&key).unwrap(), point);
+    match ::grap::isa::of(fields).unwrap() {
+        kind::AXIS => {
+            let axis = fields.get(&AXIS).and_then(Value::as_cell).unwrap();
+            point[[X, Y, Z].iter().position(|id| *id == axis).unwrap()]
+        }
+        kind::SUM => read(LEFT) + read(RIGHT),
+        kind::SUBTRACT => read(LEFT) - read(RIGHT),
+        kind::MULTIPLY => read(LEFT) * read(RIGHT),
+        kind::DIVIDE => read(LEFT) / read(RIGHT),
+        kind::MAX => read(LEFT).max(read(RIGHT)),
+        kind::ABS => read(OPERAND).abs(),
+        kind::SQUARE => read(OPERAND).powi(2),
+        operation => panic!("unexpected field operation: {operation:?}"),
     }
 }
 

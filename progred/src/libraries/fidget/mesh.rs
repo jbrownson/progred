@@ -34,13 +34,13 @@ pub(crate) fn preview(
                 .and_then(|r| r.get(&vocabulary::PREVIEW_MESH))
                 .and_then(Value::as_record)
             {
-                node(
+                Value::record([(
                     vocabulary::PREVIEW_MESH,
                     Value::record(fields.iter().map(|(k, v)| (*k, v.clone())).chain([(
                         vocabulary::MESH_DEPTH,
                         crate::libraries::u64::value(u64::from(depth)),
                     )])),
-                )
+                )])
             } else {
                 value
             }

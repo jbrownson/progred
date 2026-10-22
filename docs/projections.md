@@ -141,7 +141,7 @@ draws, handing their values to the drawing in order, and appends the rest. Missi
 without reserving the record or blocking later partials. A convention whose
 tags are mutually exclusive settles a record carrying several of them its own
 way: layout decoding takes the first tag in a fixed precedence and ignores the
-rest, while Fidget shapes decline. Records are identified by required positive
+rest. Records are identified by required positive
 evidence and stay open unless a domain explicitly defines a closed shape.
 Active field insertion can use the general presentation to keep its picker
 visible.
@@ -392,16 +392,21 @@ precedence order. Each remains an ordinary partial: malformed contents decline
 just like a missing required field, allowing the next partial to try. Recognition
 does not reserve a record or force structural fallback.
 
-The Fidget library projects field arithmetic as infix expressions, other scalar
-operations as named argument groups, and coordinates as shallow references.
+A Fidget field is Fidget's data: each node says its kind (`{isa: subtract, left,
+right}`, `{isa: sqrt, operand}`, `{isa: axis, axis: x}`, `{isa: translate,
+field, x, y, z}`) with Fidget's own kind cells and operand fields, and each kind
+provides its projection. The Fidget library projects field arithmetic as infix
+expressions, other scalar operations as named argument groups, and coordinates
+as shallow references.
 Grouping preserves the expression tree, including right-nested operations of
 equal precedence; it never reassociates floating-point arithmetic. Names come
 from ordinary definitions. Operands retain their stored paths and stock editing
 controls, while an operator targets its whole expression. Named fields expose
 their editable name beside the formula. Unrelated fields on an operation or its
-operand record do not block notation or change grouping. Incomplete forms and
-conflicting operation tags decline; translation keeps its explicit named
-parameters. These are source projections only, independent of the opt-in
+operand record do not block notation or change grouping. Incomplete forms
+decline; translation keeps its explicit named parameters. Fidget's Grap
+functions (`sum`, `sqrt`, `translate` and the rest) build these nodes from
+Grap numbers' operands. These are source projections only, independent of the opt-in
 rendered viewport.
 
 Grap calls of arithmetic and comparison, a number type's or Fidget's, read

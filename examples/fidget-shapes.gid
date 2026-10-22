@@ -1,9 +1,11 @@
 {
   "binders": {
     "abs": 9f71b219018a191fab7b726732645ab1,
+    "abs_2": 119eddd0f1404b34a6e8653279b69feb,
     "at": e90d25c8b64a37f1084b92d7f3a65c1e,
     "at_value": 85e3b0d729c4165ffa1e0c5d49b3872e,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "axis_2": f82b802a154f47ab973d4a522fd3d034,
     "baseline": 6cd28a4f91e057b3c2941e6a07f5d3b8,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
@@ -17,12 +19,13 @@
     "color": d6b4c91765541de967c02878c42d15ea,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
     "coordinate": 51c725afd7f69a39972f5e910066a235,
-    "cos": 68f159b5e393e2f827de486f95c2df6b,
+    "cos": fc89c17ecb5147158f928fe4e89da1e3,
     "cube": 650c98379ab879a6b902b0bc94305103,
     "delta_x": 671936a24eb2d9d6e47ac5915a3e38c4,
     "descend": 35c7a8e2f10d49b6d2f8016c4b9ea375,
     "difference": c621348e3c35e46e87c1994eb1a50965,
     "divide": f9b35090433ceb932fb6da18d0dcc9bf,
+    "divide_2": 9f458eda134e4adc98661b07b5169223,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
@@ -48,8 +51,10 @@
     "keys": bb30d215605f5599e31f6274641ca89f,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "left_2": 3cbf5357204947fdb4f26eadcbd777d6,
     "libraries": bc197ad66fea59a9bd97c4191c7845b2,
     "max": 7082a82b3fd6dbc575aa5c85adfacc76,
+    "max_2": 968e2f1f111a4849a8449dbeddbe8412,
     "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
     "max_y": c9e7268eb34af7bea225df94841c1c27,
     "max_z": da0ed6603210813bf52a20df7bf27c7d,
@@ -61,9 +66,11 @@
     "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
     "min_z": 392a615eb91c6d64df871ec95831f89a,
     "multiply": d2b341855e79890fc79bb562b109fcaf,
+    "multiply_2": 2b80236eda7245d6a63b0da98da25850,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
+    "operand_2": b66457fa59524110bb363bc28754cea0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "part": 7b36d5ef72f4bb686adc57fd311182cd,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
@@ -78,21 +85,25 @@
     "result": 11098129f74918af8a0924f94c37df4f,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
+    "right_2": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
     "ring": ec804b721f63fb7b8fea58b401ae4eed,
     "row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "scene": d6757ca4cb992116fe31ede39530709d,
     "selectable": 40b93f6e17d5a28c6a2df1905e83b7c4,
     "shape": ebeb131d69636b697e95536fd45fc70e,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
-    "sin": d9f6470a88f105fc9a54f65226afd55d,
+    "sin": 3e471136af054326b47891d045361fbc,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
     "sphere": c40de238820c3da73ec7780ddd438757,
-    "sqrt": f275fe836c9d66fed1e0de4325e134c6,
+    "sqrt": db6e742a39104ba89f2216ad9ab75e99,
     "square": 6164efe43a126d79bcd252a17a9453c1,
+    "square_2": d4f866cfe9014192a360d5567df9cbef,
     "step": 67a2d5e0b93c48f14e28b671d0a5c39f,
     "steps": 1298c6f4a7053edb09b64d2e8371fa5c,
     "subtract": 90e22494757f01a2ddf9bea409c186ae,
+    "subtract_2": 4535d940d2f04affa350291dd96f06bc,
     "sum": 208bf7b0ee1a002c66c86b34cf9eff3d,
+    "sum_2": 7300fd0088314a1b800a9cb15b015ba8,
     "tanglecube": 415da1b270e7a5e91da047b9f6feb1e0,
     "torus": 814313f344bbbb6d1d481aa56494a591,
     "translate": cc63ad1f4efa15b6f43f36b3cd11f3f6,
@@ -207,10 +218,12 @@
             right: {
               right: {
                 v: {
+                  isa: axis_2,
                   axis: z,
                 },
                 function: chamfer_pair,
                 u: {
+                  isa: axis_2,
                   axis: y,
                 },
                 isa: call,
@@ -218,10 +231,12 @@
               function: max,
               left: {
                 v: {
+                  isa: axis_2,
                   axis: z,
                 },
                 function: chamfer_pair,
                 u: {
+                  isa: axis_2,
                   axis: x,
                 },
                 isa: call,
@@ -231,10 +246,12 @@
             function: max,
             left: {
               v: {
+                isa: axis_2,
                 axis: y,
               },
               function: chamfer_pair,
               u: {
+                isa: axis_2,
                 axis: x,
               },
               isa: call,
@@ -246,13 +263,16 @@
             right: {
               right: {
                 v: {
+                  isa: axis_2,
                   axis: y,
                 },
                 normal: {
+                  isa: axis_2,
                   axis: z,
                 },
                 function: face_pair,
                 u: {
+                  isa: axis_2,
                   axis: x,
                 },
                 isa: call,
@@ -260,13 +280,16 @@
               function: max,
               left: {
                 v: {
+                  isa: axis_2,
                   axis: z,
                 },
                 normal: {
+                  isa: axis_2,
                   axis: y,
                 },
                 function: face_pair,
                 u: {
+                  isa: axis_2,
                   axis: x,
                 },
                 isa: call,
@@ -276,13 +299,16 @@
             function: max,
             left: {
               v: {
+                isa: axis_2,
                 axis: z,
               },
               normal: {
+                isa: axis_2,
                 axis: x,
               },
               function: face_pair,
               u: {
+                isa: axis_2,
                 axis: y,
               },
               isa: call,
@@ -560,184 +586,163 @@
       name: "gyroid sphere",
       params: [],
       body: {
-        max: {
-          right: {
-            subtract: {
-              right: {
-                f32: 0x0000c841,
-              },
-              left: {
-                sqrt: {
-                  operand: {
-                    sum: {
-                      right: {
-                        square: {
-                          operand: {
-                            multiply: {
-                              right: {
-                                f32: 0xcdcccc3e,
-                              },
-                              left: {
-                                axis: z,
-                              },
-                            },
-                          },
-                        },
+        left_2: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                left_2: {
+                  left_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: x,
                       },
-                      left: {
-                        sum: {
-                          right: {
-                            square: {
-                              operand: {
-                                multiply: {
-                                  right: {
-                                    f32: 0xcdcccc3e,
-                                  },
-                                  left: {
-                                    axis: y,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                          left: {
-                            square: {
-                              operand: {
-                                multiply: {
-                                  right: {
-                                    f32: 0xcdcccc3e,
-                                  },
-                                  left: {
-                                    axis: x,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
+                      right_2: {
+                        f32: 0xcdcccc3e,
                       },
+                      isa: multiply_2,
                     },
+                    isa: sin,
                   },
-                },
-              },
-            },
-          },
-          left: {
-            subtract: {
-              right: {
-                f32: 0xcdcc4c3e,
-              },
-              left: {
-                abs: {
-                  operand: {
-                    sum: {
-                      right: {
-                        multiply: {
-                          right: {
-                            cos: {
-                              operand: {
-                                multiply: {
-                                  right: {
-                                    f32: 0xcdcccc3e,
-                                  },
-                                  left: {
-                                    axis: x,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                          left: {
-                            sin: {
-                              operand: {
-                                multiply: {
-                                  right: {
-                                    f32: 0xcdcccc3e,
-                                  },
-                                  left: {
-                                    axis: z,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
+                  right_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: y,
                       },
-                      left: {
-                        sum: {
-                          right: {
-                            multiply: {
-                              right: {
-                                cos: {
-                                  operand: {
-                                    multiply: {
-                                      right: {
-                                        f32: 0xcdcccc3e,
-                                      },
-                                      left: {
-                                        axis: z,
-                                      },
-                                    },
-                                  },
-                                },
-                              },
-                              left: {
-                                sin: {
-                                  operand: {
-                                    multiply: {
-                                      right: {
-                                        f32: 0xcdcccc3e,
-                                      },
-                                      left: {
-                                        axis: y,
-                                      },
-                                    },
-                                  },
-                                },
-                              },
-                            },
-                          },
-                          left: {
-                            multiply: {
-                              right: {
-                                cos: {
-                                  operand: {
-                                    multiply: {
-                                      right: {
-                                        f32: 0xcdcccc3e,
-                                      },
-                                      left: {
-                                        axis: y,
-                                      },
-                                    },
-                                  },
-                                },
-                              },
-                              left: {
-                                sin: {
-                                  operand: {
-                                    multiply: {
-                                      right: {
-                                        f32: 0xcdcccc3e,
-                                      },
-                                      left: {
-                                        axis: x,
-                                      },
-                                    },
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
+                      right_2: {
+                        f32: 0xcdcccc3e,
                       },
+                      isa: multiply_2,
                     },
+                    isa: cos,
                   },
+                  isa: multiply_2,
                 },
+                right_2: {
+                  left_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: y,
+                      },
+                      right_2: {
+                        f32: 0xcdcccc3e,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: sin,
+                  },
+                  right_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: z,
+                      },
+                      right_2: {
+                        f32: 0xcdcccc3e,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: cos,
+                  },
+                  isa: multiply_2,
+                },
+                isa: sum_2,
               },
+              right_2: {
+                left_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: z,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: sin,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: cos,
+                },
+                isa: multiply_2,
+              },
+              isa: sum_2,
             },
+            isa: abs_2,
           },
+          right_2: {
+            f32: 0xcdcc4c3e,
+          },
+          isa: subtract_2,
         },
+        right_2: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                left_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: square_2,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: square_2,
+                },
+                isa: sum_2,
+              },
+              right_2: {
+                operand_2: {
+                  left_2: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  right_2: {
+                    f32: 0xcdcccc3e,
+                  },
+                  isa: multiply_2,
+                },
+                isa: square_2,
+              },
+              isa: sum_2,
+            },
+            isa: sqrt,
+          },
+          right_2: {
+            f32: 0x0000c841,
+          },
+          isa: subtract_2,
+        },
+        isa: max_2,
       },
       isa: lambda,
     },
@@ -869,148 +874,130 @@
       name: "tanglecube",
       params: [],
       body: {
-        sum: {
-          right: {
-            f32: 0xcdcc3c41,
-          },
-          left: {
-            sum: {
-              right: {
-                subtract: {
-                  right: {
-                    multiply: {
-                      right: {
-                        square: {
-                          operand: {
-                            divide: {
-                              right: {
-                                f32: 0x0000c841,
-                              },
-                              left: {
-                                axis: z,
-                              },
-                            },
-                          },
-                        },
-                      },
-                      left: {
-                        f32: 0x0000a040,
-                      },
+        left_2: {
+          left_2: {
+            left_2: {
+              left_2: {
+                operand_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
                     },
-                  },
-                  left: {
-                    square: {
-                      operand: {
-                        square: {
-                          operand: {
-                            divide: {
-                              right: {
-                                f32: 0x0000c841,
-                              },
-                              left: {
-                                axis: z,
-                              },
-                            },
-                          },
-                        },
-                      },
+                    right_2: {
+                      f32: 0x0000c841,
                     },
+                    isa: divide_2,
                   },
+                  isa: square_2,
                 },
+                isa: square_2,
               },
-              left: {
-                sum: {
-                  right: {
-                    subtract: {
-                      right: {
-                        multiply: {
-                          right: {
-                            square: {
-                              operand: {
-                                divide: {
-                                  right: {
-                                    f32: 0x0000c841,
-                                  },
-                                  left: {
-                                    axis: y,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                          left: {
-                            f32: 0x0000a040,
-                          },
-                        },
-                      },
-                      left: {
-                        square: {
-                          operand: {
-                            square: {
-                              operand: {
-                                divide: {
-                                  right: {
-                                    f32: 0x0000c841,
-                                  },
-                                  left: {
-                                    axis: y,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                  left: {
-                    subtract: {
-                      right: {
-                        multiply: {
-                          right: {
-                            square: {
-                              operand: {
-                                divide: {
-                                  right: {
-                                    f32: 0x0000c841,
-                                  },
-                                  left: {
-                                    axis: x,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                          left: {
-                            f32: 0x0000a040,
-                          },
-                        },
-                      },
-                      left: {
-                        square: {
-                          operand: {
-                            square: {
-                              operand: {
-                                divide: {
-                                  right: {
-                                    f32: 0x0000c841,
-                                  },
-                                  left: {
-                                    axis: x,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
+              right_2: {
+                left_2: {
+                  f32: 0x0000a040,
                 },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: multiply_2,
               },
+              isa: subtract_2,
             },
+            right_2: {
+              left_2: {
+                operand_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: square_2,
+              },
+              right_2: {
+                left_2: {
+                  f32: 0x0000a040,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: multiply_2,
+              },
+              isa: subtract_2,
+            },
+            isa: sum_2,
           },
+          right_2: {
+            left_2: {
+              operand_2: {
+                operand_2: {
+                  left_2: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  right_2: {
+                    f32: 0x0000c841,
+                  },
+                  isa: divide_2,
+                },
+                isa: square_2,
+              },
+              isa: square_2,
+            },
+            right_2: {
+              left_2: {
+                f32: 0x0000a040,
+              },
+              right_2: {
+                operand_2: {
+                  left_2: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  right_2: {
+                    f32: 0x0000c841,
+                  },
+                  isa: divide_2,
+                },
+                isa: square_2,
+              },
+              isa: multiply_2,
+            },
+            isa: subtract_2,
+          },
+          isa: sum_2,
         },
+        right_2: {
+          f32: 0xcdcc3c41,
+        },
+        isa: sum_2,
       },
       isa: lambda,
     },
@@ -1018,59 +1005,52 @@
       name: "torus",
       params: [],
       body: {
-        subtract: {
-          right: {
-            square: {
-              operand: {
-                f32: 0x00007041,
-              },
-            },
-          },
-          left: {
-            sum: {
-              right: {
-                square: {
-                  operand: {
-                    axis: z,
-                  },
-                },
-              },
-              left: {
-                square: {
-                  operand: {
-                    subtract: {
-                      right: {
-                        f32: 0x00003442,
-                      },
-                      left: {
-                        sqrt: {
-                          operand: {
-                            sum: {
-                              right: {
-                                square: {
-                                  operand: {
-                                    axis: y,
-                                  },
-                                },
-                              },
-                              left: {
-                                square: {
-                                  operand: {
-                                    axis: x,
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
+        left_2: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                operand_2: {
+                  left_2: {
+                    operand_2: {
+                      isa: axis_2,
+                      axis: x,
                     },
+                    isa: square_2,
                   },
+                  right_2: {
+                    operand_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    isa: square_2,
+                  },
+                  isa: sum_2,
                 },
+                isa: sqrt,
               },
+              right_2: {
+                f32: 0x00003442,
+              },
+              isa: subtract_2,
             },
+            isa: square_2,
           },
+          right_2: {
+            operand_2: {
+              isa: axis_2,
+              axis: z,
+            },
+            isa: square_2,
+          },
+          isa: sum_2,
         },
+        right_2: {
+          operand_2: {
+            f32: 0x00007041,
+          },
+          isa: square_2,
+        },
+        isa: subtract_2,
       },
       isa: lambda,
     },

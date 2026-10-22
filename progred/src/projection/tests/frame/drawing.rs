@@ -48,10 +48,13 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
             crate::libraries::f32::value(2.0),
         ),
     ];
-    let shape = Value::record([(
-        fidget::vocabulary::DIFFERENCE,
-        Value::record(arguments.clone()),
-    )]);
+    let shape = ::grap::isa::record(
+        fidget::vocabulary::kind::DIFFERENCE,
+        [
+            (fidget::vocabulary::LEFT, crate::libraries::f32::value(7.0)),
+            (fidget::vocabulary::RIGHT, crate::libraries::f32::value(2.0)),
+        ],
+    );
     for (function, result) in [
         (
             crate::libraries::grap::numbers::f32::SUBTRACT,

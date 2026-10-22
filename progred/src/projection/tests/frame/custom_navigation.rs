@@ -201,17 +201,14 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         ),
         (
             "fidget infix",
-            Value::record([(
-                fidget::vocabulary::SUM,
-                Value::record([
+            ::grap::isa::record(
+                fidget::vocabulary::kind::SUM,
+                [
                     (fidget::vocabulary::LEFT, crate::libraries::f32::value(1.0)),
                     (fidget::vocabulary::RIGHT, crate::libraries::f32::value(2.0)),
-                ]),
-            )]),
-            vec![
-                Step::Key(fidget::vocabulary::SUM),
-                Step::Key(fidget::vocabulary::LEFT),
-            ],
+                ],
+            ),
+            vec![Step::Key(fidget::vocabulary::LEFT)],
         ),
     ];
     for (label, value, first) in cases {

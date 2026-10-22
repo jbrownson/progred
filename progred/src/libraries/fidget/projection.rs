@@ -1,4 +1,4 @@
-use super::{one_marker, parameters, vocabulary::*};
+use super::{node_kind, parameters, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::hug;
 use crate::display::{
@@ -11,40 +11,33 @@ use gid::{CellId, Step, Value};
 #[cfg(test)]
 mod tests;
 
-fn precedence(marker: CellId) -> Option<Precedence> {
-    let (_, symbol) = super::ARITHMETIC
-        .into_iter()
-        .find(|(cell, _)| *cell == marker)?;
+fn precedence(kind: CellId) -> Option<Precedence> {
+    let (_, _, symbol) = super::arithmetic().find(|(candidate, _, _)| *candidate == kind)?;
     Precedence::of_symbol(symbol)
 }
 
-fn form(value: &Value) -> Option<(CellId, &Value)> {
+/// The kind of node `value` is, when it has the fields its kind requires.
+fn form(value: &Value) -> Option<CellId> {
     let fields = value.as_record()?;
-    let marker = one_marker(fields)?;
-    let content = fields.get(&marker)?;
-    if marker == AXIS {
-        content.as_cell()?;
+    let kind = node_kind(fields)?;
+    if kind == super::vocabulary::kind::AXIS {
+        fields.get(&AXIS)?.as_cell()?;
     } else {
-        let expected = parameters(marker)?;
-        let content = content.as_record()?;
-        expected
+        parameters(kind)?
             .iter()
-            .all(|key| content.contains_key(key))
+            .all(|key| fields.contains_key(key))
             .then_some(())?;
     }
-    Some((marker, content))
+    Some(kind)
 }
 
-/// Whether `value`, under `marker`'s `key`, needs parentheses: when it's
+/// Whether `value`, under `kind`'s `key`, needs parentheses: when it's
 /// named, so reads as `name = …`, or binds too loosely to stand there bare.
-fn grouped(marker: CellId, key: CellId, value: &Value) -> bool {
+fn grouped(kind: CellId, key: CellId, value: &Value) -> bool {
     value
         .as_record()
         .is_some_and(|fields| fields.contains_key(&name::vocabulary::NAME))
-        || match (
-            precedence(marker),
-            form(value).and_then(|(marker, _)| precedence(marker)),
-        ) {
+        || match (precedence(kind), form(value).and_then(precedence)) {
             (Some(parent), Some(nested)) => parent.groups(nested, key == RIGHT),
             _ => false,
         }
@@ -87,38 +80,33 @@ pub(super) fn field<W: Host>(
 ) -> Option<Layout<W>> {
     // An active new field needs the structural record's insertion control.
     input.pending.is_none().then_some(())?;
-    super::one_marker_by(|marker| input.value.is_some_and(|v| v.contains_field(marker)))?;
     let input = input.with_value(input.value.map(::grap::RuntimeValue::as_value));
-    let (marker, content) = form(input.value?)?;
-    let body = if marker == AXIS {
+    let kind = form(input.value?)?;
+    let body = if kind == super::vocabulary::kind::AXIS {
         crate::libraries::grap::shallow_path(&input, [Step::Key(AXIS)])
     } else {
         let site = input.site();
         let operator = selectable(
-            crate::display::structure::field_name(input.env, marker),
+            crate::display::structure::field_name(input.env, kind),
             &site,
         );
-        let fields = content.as_record()?;
-        if precedence(marker).is_some() {
-            representation::infix(operator, |key| {
+        let fields = input.value?.as_record()?;
+        if precedence(kind).is_some() {
+            representation::infix(operator, [LEFT, RIGHT], |key| {
                 (
-                    descend([Step::Key(marker), Step::Key(key)], None, None),
+                    descend([Step::Key(key)], None, None),
                     fields
                         .get(&key)
-                        .is_some_and(|value| grouped(marker, key, value)),
+                        .is_some_and(|value| grouped(kind, key, value)),
                 )
             })
         } else {
             hug(
                 operator,
                 arguments(
-                    parameters(marker)?
+                    parameters(kind)?
                         .iter()
-                        .map(|key| {
-                            fields.get(key)?;
-                            Some(descend([Step::Key(marker), Step::Key(*key)], None, None))
-                        })
-                        .collect::<Option<Vec<_>>>()?,
+                        .map(|key| descend([Step::Key(*key)], None, None)),
                 ),
                 0.0,
             )

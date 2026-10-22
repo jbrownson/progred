@@ -10,20 +10,17 @@ use puri::hover::Claim;
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
 fn sum(left: Value, right: Value) -> Value {
-    Value::record([(SUM, Value::record([(LEFT, left), (RIGHT, right)]))])
+    binary(kind::SUM, left, right)
 }
 
 #[test]
 fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression() {
     let doc = Document {
-        root: Some(sum(
-            Value::record([(AXIS, X.into())]),
-            crate::libraries::f32::value(25.0),
-        )),
+        root: Some(sum(axis(X), crate::libraries::f32::value(25.0))),
         cells: Cells::new(),
     };
-    let coordinate = [Step::Key(SUM), Step::Key(LEFT), Step::Key(AXIS)];
-    let number = vec![Step::Key(SUM), Step::Key(RIGHT)];
+    let coordinate = [Step::Key(LEFT), Step::Key(AXIS)];
+    let number = vec![Step::Key(RIGHT)];
     let (bench, _) = place(&doc, None, 400.0);
     let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
     let coordinate_rect = rect(&coordinate);

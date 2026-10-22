@@ -2,6 +2,7 @@
   "binders": {
     "abs": 9f71b219018a191fab7b726732645ab1,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "axis_2": f82b802a154f47ab973d4a522fd3d034,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
@@ -101,10 +102,12 @@
             right: {
               right: {
                 v: {
+                  isa: axis_2,
                   axis: z,
                 },
                 function: chamfer_pair,
                 u: {
+                  isa: axis_2,
                   axis: y,
                 },
                 isa: call,
@@ -112,10 +115,12 @@
               function: max,
               left: {
                 v: {
+                  isa: axis_2,
                   axis: z,
                 },
                 function: chamfer_pair,
                 u: {
+                  isa: axis_2,
                   axis: x,
                 },
                 isa: call,
@@ -125,10 +130,12 @@
             function: max,
             left: {
               v: {
+                isa: axis_2,
                 axis: y,
               },
               function: chamfer_pair,
               u: {
+                isa: axis_2,
                 axis: x,
               },
               isa: call,
@@ -140,13 +147,16 @@
             right: {
               right: {
                 v: {
+                  isa: axis_2,
                   axis: y,
                 },
                 normal: {
+                  isa: axis_2,
                   axis: z,
                 },
                 function: face_pair,
                 u: {
+                  isa: axis_2,
                   axis: x,
                 },
                 isa: call,
@@ -154,13 +164,16 @@
               function: max,
               left: {
                 v: {
+                  isa: axis_2,
                   axis: z,
                 },
                 normal: {
+                  isa: axis_2,
                   axis: y,
                 },
                 function: face_pair,
                 u: {
+                  isa: axis_2,
                   axis: x,
                 },
                 isa: call,
@@ -170,13 +183,16 @@
             function: max,
             left: {
               v: {
+                isa: axis_2,
                 axis: z,
               },
               normal: {
+                isa: axis_2,
                 axis: x,
               },
               function: face_pair,
               u: {
+                isa: axis_2,
                 axis: y,
               },
               isa: call,

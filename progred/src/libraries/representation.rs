@@ -80,6 +80,7 @@ pub(crate) fn infix_display<W: Host>(
     let precedence = binds(fields)?;
     let layout = infix(
         crate::libraries::grap::expression_path(input, [Step::Key(FUNCTION)]),
+        [LEFT, RIGHT],
         |field| {
             (
                 crate::libraries::grap::expression_path(input, [Step::Key(field)]),
@@ -99,13 +100,14 @@ pub(crate) fn infix_display<W: Host>(
 }
 
 /// `left operator right`, with `operand` giving the layout under each of
-/// `LEFT` and `RIGHT` and whether it needs parentheses. Too narrow for one
-/// line, the operator starts the second.
+/// the `operands` fields and whether it needs parentheses. Too narrow for
+/// one line, the operator starts the second.
 pub(crate) fn infix<W: Host>(
     operator: Layout<W>,
+    operands: [CellId; 2],
     operand: impl Fn(CellId) -> (Layout<W>, bool),
 ) -> Layout<W> {
-    let [left, right] = [LEFT, RIGHT].map(|field| {
+    let [left, right] = operands.map(|field| {
         let (child, grouped) = operand(field);
         shared(if grouped {
             selectable_bracket(Delim::Paren, child)

@@ -8,7 +8,7 @@ fn field(input: &ProjectionInput<'_>) -> Option<Layout> {
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::{ProjectionCall, inspect, unshared};
 use crate::display::{Env, Pending};
-use crate::libraries::fidget::{binary, node, unary};
+use crate::libraries::fidget::{axis, binary, node, unary};
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 
 struct Names;
@@ -69,7 +69,7 @@ fn number(n: f32) -> Value {
 
 #[test]
 fn operands_keep_their_paths_and_operator_targets_the_expression() {
-    let sum = binary(SUM, number(1.0), number(2.0));
+    let sum = binary(kind::SUM, number(1.0), number(2.0));
     let Recorded::Alternatives(options) = field(&projection_input(&Names, &sum))
         .unwrap()
         .record()
@@ -84,7 +84,7 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
     for (child, key) in [(&children[0], LEFT), (&children[2], RIGHT)] {
         assert!(
             matches!(&inspect(&(unshared(child))), ProjectionCall::Descend { steps, .. }
-            if *steps == [Step::Key(SUM), Step::Key(key)])
+            if *steps == [Step::Key(key)])
         );
     }
     assert_eq!(
@@ -97,14 +97,14 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
 
 #[test]
 fn grouping_preserves_the_expression_tree_without_reassociating() {
-    let sum = binary(SUM, number(1.0), number(2.0));
-    let product = binary(MULTIPLY, number(1.0), number(2.0));
+    let sum = binary(kind::SUM, number(1.0), number(2.0));
+    let product = binary(kind::MULTIPLY, number(1.0), number(2.0));
     for (parent, key, child, expected) in [
-        (MULTIPLY, LEFT, &sum, true),
-        (SUM, LEFT, &product, false),
-        (SUM, LEFT, &sum, false),
-        (SUM, RIGHT, &sum, true),
-        (DIVIDE, RIGHT, &product, true),
+        (kind::MULTIPLY, LEFT, &sum, true),
+        (kind::SUM, LEFT, &product, false),
+        (kind::SUM, LEFT, &sum, false),
+        (kind::SUM, RIGHT, &sum, true),
+        (kind::DIVIDE, RIGHT, &product, true),
     ] {
         assert_eq!(grouped(parent, key, child), expected);
     }
@@ -113,53 +113,41 @@ fn grouping_preserves_the_expression_tree_without_reassociating() {
 #[test]
 fn unrelated_fields_do_not_block_notation_or_change_grouping() {
     let extra = gid::new_cell_id();
-    for value in [
-        Value::record([
-            (
-                SUM,
-                Value::record([(LEFT, number(1.0)), (RIGHT, number(2.0))]),
-            ),
+    let value = node(
+        kind::SUM,
+        [
+            (LEFT, number(1.0)),
+            (RIGHT, number(2.0)),
             (extra, number(3.0)),
-        ]),
-        node(
-            SUM,
-            Value::record([
-                (LEFT, number(1.0)),
-                (RIGHT, number(2.0)),
-                (extra, number(3.0)),
-            ]),
-        ),
+        ],
+    );
+    assert!(field(&projection_input(&Names, &value)).is_some());
+    for (parent, key, expected) in [
+        (kind::MULTIPLY, LEFT, true),
+        (kind::SUM, LEFT, false),
+        (kind::SUM, RIGHT, true),
     ] {
-        assert!(field(&projection_input(&Names, &value)).is_some());
-        for (parent, key, expected) in [
-            (MULTIPLY, LEFT, true),
-            (SUM, LEFT, false),
-            (SUM, RIGHT, true),
-        ] {
-            assert_eq!(grouped(parent, key, &value), expected);
-        }
+        assert_eq!(grouped(parent, key, &value), expected);
     }
-    for value in [unary(SIN, number(1.0)), node(AXIS, X.into())] {
+    for value in [unary(kind::SIN, number(1.0)), axis(X)] {
         let enriched = Value::record(value.as_record().unwrap().update(extra, number(3.0)));
         assert!(field(&projection_input(&Names, &enriched)).is_some());
     }
 }
 
 #[test]
-fn incomplete_malformed_and_conflicting_forms_still_decline() {
+fn incomplete_malformed_and_unkinded_forms_still_decline() {
     for value in [
-        node(SUM, Value::record([(LEFT, number(1.0))])),
-        node(SUM, Value::record([(RIGHT, number(1.0))])),
-        node(SIN, number(1.0)),
-        node(AXIS, number(1.0)),
-        Value::record([
-            (AXIS, X.into()),
-            (SIN, Value::record([(OPERAND, number(1.0))])),
-        ]),
+        node(kind::SUM, [(LEFT, number(1.0))]),
+        node(kind::SUM, [(RIGHT, number(1.0))]),
+        node(kind::SIN, []),
+        node(kind::AXIS, [(AXIS, number(1.0))]),
+        // What would be a node, but says no kind.
+        Value::record([(AXIS, X.into()), (OPERAND, number(1.0))]),
     ] {
         assert!(field(&projection_input(&Names, &value)).is_none());
     }
-    let complete = unary(SIN, number(1.0));
+    let complete = unary(kind::SIN, number(1.0));
     assert!(
         field(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
@@ -173,11 +161,17 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
 
 #[test]
 fn coordinates_are_shallow_and_names_remain_editable_data() {
-    let axis = node(AXIS, X.into());
+    let axis = axis(X);
     assert!(
         matches!(inspect(&field(&projection_input(&Names, &axis)).unwrap()), ProjectionCall::Descend { steps, projection: Some(_), .. } if steps == [Step::Key(AXIS)])
     );
-    let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
+    let named = name::record(
+        "torus",
+        [
+            (::grap::isa::ISA, kind::SQUARE.into()),
+            (OPERAND, number(1.0)),
+        ],
+    );
     let Recorded::Alternatives(options) = field(&projection_input(&Names, &named))
         .unwrap()
         .record()
@@ -200,10 +194,11 @@ fn coordinates_are_shallow_and_names_remain_editable_data() {
 #[test]
 fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
     let library = crate::libraries::fidget::library();
+    use crate::libraries::grap::numbers::vocabulary as numbers;
     let reads_infix = |function: CellId| {
         let call = ::grap::call(
             Value::from(function),
-            [(LEFT, number(1.0)), (RIGHT, number(2.0))],
+            [(numbers::LEFT, number(1.0)), (numbers::RIGHT, number(2.0))],
         );
         let runtime = ::grap::RuntimeValue::from(&call);
         // What the function provides for calls of it.
@@ -220,7 +215,7 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
                     return false;
                 };
                 matches!(&inspect(&(unshared(&children[0]))),
-                    ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(LEFT)]
+                    ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(numbers::LEFT)]
                 )
             },
         )
