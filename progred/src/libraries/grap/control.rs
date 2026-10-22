@@ -618,7 +618,7 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
             let head = row(
                 4.0,
                 [
-                    crate::libraries::grap::shallow_path(
+                    crate::libraries::grap::expression_path(
                         input,
                         [Step::Key(::grap::vocabulary::FUNCTION)],
                     ),
@@ -737,7 +737,7 @@ fn bindings_form<W: Host>(
         )),
         None,
     ));
-    let function = shared(crate::libraries::grap::shallow_path(
+    let function = shared(crate::libraries::grap::expression_path(
         input,
         [Step::Key(::grap::vocabulary::FUNCTION)],
     ));
@@ -896,7 +896,7 @@ fn expression_list_display<W: Host>(
             Some(row(
                 4.0,
                 [
-                    crate::libraries::grap::shallow_path(
+                    crate::libraries::grap::expression_path(
                         input,
                         [Step::Key(::grap::vocabulary::FUNCTION)],
                     ),

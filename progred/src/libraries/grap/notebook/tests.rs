@@ -371,7 +371,11 @@ fn a_call_of_a_lambda_returning_a_lambda_shows_the_closure_with_what_it_closes_o
 
 #[test]
 fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
-    use crate::libraries::grap::numbers::{f64::SUM, vocabulary::LEFT};
+    use crate::libraries::grap::numbers::{
+        f64::{SUBTRACT, SUM},
+        vocabulary::LEFT,
+    };
+    use ::grap::vocabulary::FUNCTION;
     let mut driver = notebook(&[new_cell_id()], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
@@ -394,7 +398,19 @@ fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
     assert_eq!(driver.value(&slot), ::grap::call(SUM.into(), []));
     assert_eq!(
         driver.selection(),
-        occurrence::below(&[], &[slot, vec![Step::Key(LEFT)]].concat())
+        occurrence::below(&[], &[slot.clone(), vec![Step::Key(LEFT)]].concat())
     );
     assert_eq!(driver.stage(), Some(Stage::Pending));
+
+    // An existing call's function slot, an operator's too, offers the
+    // functions themselves.
+    let function = [slot, vec![Step::Key(FUNCTION)]].concat();
+    driver.select(&function);
+    driver.type_text("-");
+    assert_eq!(
+        driver.picker_detail("-f64").as_deref(),
+        Some("function · grap")
+    );
+    driver.choose("-f64");
+    assert_eq!(driver.value(&function), Value::from(SUBTRACT));
 }

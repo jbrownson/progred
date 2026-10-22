@@ -226,7 +226,9 @@ to show its ordinary empty picker; neither a body nor a name is fabricated.
 Beside it Grap offers `new call`, which inserts `{}` and opens its `function`
 field. A record whose `function` is being picked is a call being written, so
 the call projection draws it with its function slot open, an expression slot
-like any other: a binding, a lambda, or another call. There the functions in
+like any other: a binding, a lambda, or another call. A call drawn in a form of
+its own (an operator's, `let`'s, `match`'s) draws its function slot the same
+way, so typing over its function offers the others. There the functions in
 reach are offered as themselves, and picking one opens the call's first
 argument, as picking its call whole does elsewhere. Once the function is
 callable (a lambda needs its body), its parameters show as the call's argument

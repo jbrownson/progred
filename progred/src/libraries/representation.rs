@@ -78,7 +78,7 @@ pub(crate) fn infix_display<W: Host>(
     let fields = input.value?;
     let precedence = binds(fields)?;
     let layout = infix(
-        crate::libraries::grap::shallow_path(input, [Step::Key(FUNCTION)]),
+        crate::libraries::grap::expression_path(input, [Step::Key(FUNCTION)]),
         |field| {
             (
                 crate::libraries::grap::expression_path(input, [Step::Key(field)]),
