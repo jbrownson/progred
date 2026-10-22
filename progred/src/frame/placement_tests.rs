@@ -748,6 +748,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
         }),
         None,
         false,
+        false,
     );
     let widget = container::floating(
         widget::leaf(Extent::default(), |_, _| {}),
@@ -915,6 +916,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             secondary: None,
             selected: false,
             tab_stop: false,
+            required: false,
         }]);
         let event = primary_press(Point::new(5.0, 5.0), crate::test_support::command());
         assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(

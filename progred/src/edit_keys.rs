@@ -2,7 +2,7 @@
 //! and the clipboard.
 
 use crate::Editor;
-use crate::display::widget::navigation::{Geometry, landmark_at};
+use crate::display::widget::navigation::{Geometry, landmark_at, required_at};
 use crate::modifiers;
 use crate::navigate;
 use crate::occurrence::{Path, Step};
@@ -43,7 +43,8 @@ impl Editor {
 
     /// Deletes the selected edge and keeps its place selected as a hole,
     /// ready for a replacement — Backspace/Delete's action, and cut's
-    /// second half.
+    /// second half. Where what holds it requires it, the hole is written
+    /// in its place, so the shape keeps its field.
     pub(crate) fn delete_selected_edge(&mut self, geometry: Geometry<'_, Editor>) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
@@ -55,13 +56,21 @@ impl Editor {
                 // the open run, its frame (pre-run document, edge
                 // intact) already covers the deletion.
                 let covered = current.recorded();
+                let required = required_at(
+                    geometry.landmarks,
+                    Some(&crate::workspace::view_of(&path)),
+                    &path,
+                );
                 current.location().is_some_and(|location| {
                     let before = self.model.snapshot();
-                    crate::location::delete_edge(
-                        &mut self.model.doc,
-                        &self.stack.libraries,
-                        &location,
-                    ) && {
+                    let (doc, libraries) = (&mut self.model.doc, &self.stack.libraries);
+                    let written = if required {
+                        let hole = crate::libraries::hole::value();
+                        crate::location::set_value(doc, libraries, &location, hole)
+                    } else {
+                        crate::location::delete_edge(doc, libraries, &location)
+                    };
+                    written && {
                         if !covered {
                             self.model.history.record(before);
                             self.refresh_title();

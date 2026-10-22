@@ -128,6 +128,7 @@ fn pending_target<W: Host>(
         crate::display::widget::navigation::arrival(toolkit.site()),
         None,
         selected,
+        false,
     );
     before(child, move |p, placement| {
         let outline = text_frame::outline(scale, placement.rect);

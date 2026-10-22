@@ -63,6 +63,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             secondary: None,
             selected: false,
             tab_stop: false,
+            required: false,
         },
         Landmark {
             root: Some(root.clone()),
@@ -72,6 +73,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             secondary: None,
             selected: false,
             tab_stop: false,
+            required: false,
         },
     ];
     let regions = [ViewRegion {

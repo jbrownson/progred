@@ -159,7 +159,7 @@ pub enum ProjectionCall<W, H> {
         steps: Vec<Step>,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-        part: bool,
+        reached: widget::project::Reached,
     },
     Jump {
         steps: Vec<Step>,
@@ -212,13 +212,13 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         steps: &[Step],
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-        part: bool,
+        reached: widget::project::Reached,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::Descend {
             steps: steps.to_vec(),
             projection,
             default_projection,
-            part,
+            reached,
         })
     }
     fn descend_raw(
@@ -538,7 +538,7 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: &[Step],
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
-        _: bool,
+        _: widget::project::Reached,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected descent")
     }

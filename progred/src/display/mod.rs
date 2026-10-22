@@ -852,7 +852,23 @@ pub fn descend<World: 'static, Hover: 'static>(
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    walk(steps, overriding, default, false)
+    walk(steps, overriding, default, widget::project::Reached::Stop)
+}
+
+/// [`descend`] to what the shape here requires, such as a call's function:
+/// deleting it leaves a hole rather than removing the field, so the shape
+/// stays what it is.
+pub fn required<World: 'static, Hover: 'static>(
+    steps: impl AsRef<[Step]> + 'static,
+    overriding: Option<Partial<World, Hover>>,
+    default: Option<Partial<World, Hover>>,
+) -> Layout<World, Hover> {
+    walk(
+        steps,
+        overriding,
+        default,
+        widget::project::Reached::Required,
+    )
 }
 
 /// [`descend`], what's reached drawn as part of this occurrence: no stop,
@@ -863,14 +879,14 @@ pub fn part<World: 'static, Hover: 'static>(
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    walk(steps, overriding, default, true)
+    walk(steps, overriding, default, widget::project::Reached::Part)
 }
 
 fn walk<World: 'static, Hover: 'static>(
     steps: impl AsRef<[Step]> + 'static,
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
-    part: bool,
+    reached: widget::project::Reached,
 ) -> Layout<World, Hover> {
     Layout::program(Rc::new(move |context, build| {
         context.project.descend(
@@ -879,7 +895,7 @@ fn walk<World: 'static, Hover: 'static>(
             steps.as_ref(),
             overriding.clone(),
             default.clone(),
-            part,
+            reached,
         )
     }))
 }

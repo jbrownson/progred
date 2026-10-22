@@ -417,6 +417,29 @@ fn cells_evaluate_when_they_are_the_expression() {
 }
 
 #[test]
+fn a_hole_answers_its_absent_wherever_it_is_even_defined_or_called() {
+    let defined = |cell| (cell == crate::hole::HOLE).then(|| blob("not this"));
+    let alone = evaluate(
+        &Value::from(crate::hole::HOLE),
+        defined,
+        &ForeignFunctions::default(),
+        10,
+    );
+    assert_eq!(alone.result, crate::hole::absent());
+    let called = evaluate(
+        &crate::call(crate::hole::HOLE.into(), []),
+        defined,
+        &ForeignFunctions::default(),
+        10,
+    );
+    assert_eq!(
+        called.result,
+        crate::hole::absent(),
+        "a call of a hole answers the hole, not that it isn't callable"
+    );
+}
+
+#[test]
 fn graph_functions_match_parameter_labelled_fields() {
     let function_cell = new_cell_id();
     let x = new_cell_id();

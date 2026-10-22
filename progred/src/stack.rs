@@ -2,8 +2,8 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    absent, color, controls, declared, editor, f32, f64, fidget, grap as grap_library, layout,
-    list, logic, name, png, presentation, random, sequence, text, toolpath, tree, u64,
+    absent, color, controls, declared, editor, f32, f64, fidget, grap as grap_library, hole,
+    layout, list, logic, name, png, presentation, random, sequence, text, toolpath, tree, u64,
 };
 use crate::library::{Libraries, Library};
 use crate::projection::Partial;
@@ -169,6 +169,7 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (text::ID, text::library),
     (png::ID, png::library),
     (absent::ID, absent::library),
+    (hole::ID, hole::library),
     (color::ID, color::library),
     (controls::ID, controls::library),
     (tree::ID, tree::library),

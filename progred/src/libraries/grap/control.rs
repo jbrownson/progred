@@ -618,7 +618,7 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
             let head = row(
                 4.0,
                 [
-                    crate::libraries::grap::expression_path(
+                    crate::libraries::grap::required_expression_path(
                         input,
                         [Step::Key(::grap::vocabulary::FUNCTION)],
                     ),
@@ -737,7 +737,7 @@ fn bindings_form<W: Host>(
         )),
         None,
     ));
-    let function = shared(crate::libraries::grap::expression_path(
+    let function = shared(crate::libraries::grap::required_expression_path(
         input,
         [Step::Key(::grap::vocabulary::FUNCTION)],
     ));
@@ -856,22 +856,19 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
 
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
-/// A just-inserted unquote is already one, so its empty hole offers code.
+/// It requires its expression, so a new one holds a hole, which offers code.
 fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     record_form(input, [vocabulary::UNQUOTE], |[unquote]| {
-        match &input.pending {
-            Some(crate::display::Pending::Child(Step::Key(vocabulary::UNQUOTE))) => {
-                input.value?.record_len() == Some(0)
-            }
-            _ => unquote.is_some(),
-        }
-        .then_some(())?;
+        unquote?;
         let site = input.site();
         Some(row(
             2.0,
             [
                 selectable(dim("`"), &site),
-                crate::libraries::grap::expression_path(input, [Step::Key(vocabulary::UNQUOTE)]),
+                crate::libraries::grap::required_expression_path(
+                    input,
+                    [Step::Key(vocabulary::UNQUOTE)],
+                ),
             ],
         ))
     })
@@ -896,7 +893,7 @@ fn expression_list_display<W: Host>(
             Some(row(
                 4.0,
                 [
-                    crate::libraries::grap::expression_path(
+                    crate::libraries::grap::required_expression_path(
                         input,
                         [Step::Key(::grap::vocabulary::FUNCTION)],
                     ),

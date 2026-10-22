@@ -440,6 +440,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
                         secondary: None,
                         selected: false,
                         tab_stop: false,
+                        required: false,
                     });
                 });
             }

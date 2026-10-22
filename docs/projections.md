@@ -218,21 +218,21 @@ Library completion providers compose separately, so multiple libraries
 can contribute offers to one picker.
 
 Grap's expression slots offer a `new lambda` value completion (aliases `lambda`
-and `λ`). It inserts `{params: []}` and
+and `λ`). It inserts `{params: [], body: hole}` and
 opens its first parameter, whose slot offers a new one; Tab goes on to the
-missing body.
-The lambda projection accepts that unfinished shape and descends into the body
-to show its ordinary empty picker; neither a body nor a name is fabricated.
-Beside it Grap offers `new call`, which inserts `{}` and opens its `function`
-field. A record whose `function` is being picked is a call being written, so
-the call projection draws it with its function slot open, an expression slot
-like any other: a binding, a lambda, or another call. A call drawn in a form of
-its own (an operator's, `let`'s, `match`'s) draws its function slot the same
-way, so typing over its function offers the others. There the functions in
-reach are offered as themselves, and picking one opens the call's first
-argument, as picking its call whole does elsewhere. Once the function is
-callable (a lambda needs its body), its parameters show as the call's argument
-slots, which Tab visits next.
+body's hole, which draws its ordinary empty picker. No name is fabricated.
+Beside it Grap offers `new call`, which inserts `{function: hole}` and opens
+its function, so it's a call from the start and stays one if it's left
+unfinished, answering its hole's absent. The function slot is an expression
+slot like any other: a binding, a lambda, or another call. A call drawn in a
+form of its own (an operator's, `let`'s, `match`'s) draws its function slot
+the same way, so typing over its function offers the others. There the
+functions in reach are offered as themselves, and picking one opens the call's
+first argument, as picking its call whole does elsewhere. Once the function's
+parameters are known, a lambda's even while its body is a hole, they show as
+the call's argument slots, which Tab visits after the body. Each of these
+forms draws its function as required, as a lambda does its body and unquote
+its expression: deleting it leaves a hole, so the form stays what it is.
 An empty parameter slot offers only a new parameter, a new document cell: for
 whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
 parameter`, which has no name yet, and whose name is picked next.

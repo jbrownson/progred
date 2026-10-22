@@ -59,7 +59,7 @@ fn a_grap_program_offers_grap_suggestions() {
 }
 
 #[test]
-fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
+fn lambda_completion_writes_a_hole_for_its_body_and_keeps_the_name_editable() {
     use crate::libraries::grap::vocabulary::GRAP;
     use grap::vocabulary::{BODY, PARAMS};
 
@@ -80,7 +80,10 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         let mut world = activate_projected(&doc, &pending, entry);
         assert_eq!(
             crate::occurrence::read(&world.sources(), &path),
-            Some(&Value::record([(PARAMS, Value::list([]))]))
+            Some(&Value::record([
+                (PARAMS, Value::list([])),
+                (BODY, crate::libraries::hole::value())
+            ]))
         );
         let selected = world.model.selection.as_ref().unwrap();
         let body_path = path
@@ -99,7 +102,10 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
             [Step::Key(PARAMS), Step::Element(_)]
         ));
         assert_eq!(selected.stage(&world.sources()), Stage::Pending);
-        assert!(crate::occurrence::read(&world.sources(), &body_path).is_none());
+        assert_eq!(
+            crate::occurrence::read(&world.sources(), &body_path),
+            Some(&crate::libraries::hole::value())
+        );
         assert!(crate::occurrence::read(&world.sources(), &name_path).is_none());
         assert!(editing_frame(&mut world).completion.is_some());
 

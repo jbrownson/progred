@@ -421,7 +421,7 @@ impl ProjectionScope<'_, '_> {
         steps: &[gid::Step],
         current: Option<Partial>,
         default: Option<Partial>,
-        part: bool,
+        reached: crate::display::widget::project::Reached,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = self.cx;
         let mut path = self.path.clone();
@@ -478,7 +478,7 @@ impl ProjectionScope<'_, '_> {
             },
             current.as_ref(),
             default.as_ref(),
-            part,
+            reached,
             tcx,
             build,
         )
@@ -493,9 +493,9 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         steps: &[gid::Step],
         current: Option<Partial>,
         default: Option<Partial>,
-        part: bool,
+        reached: crate::display::widget::project::Reached,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        self.descend_path(text, build, steps, current, default, part)
+        self.descend_path(text, build, steps, current, default, reached)
     }
     #[cfg(any(test, target_arch = "wasm32"))]
     fn descend_raw(
@@ -517,7 +517,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             std::slice::from_ref(&step),
             Some(nothing.clone()),
             Some(nothing),
-            false,
+            crate::display::widget::project::Reached::Stop,
         )
     }
     fn jump(
@@ -576,7 +576,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             },
             current.as_ref(),
             default.as_ref(),
-            false,
+            crate::display::widget::project::Reached::Stop,
             text,
             build,
         )
@@ -609,7 +609,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             },
             current.as_ref(),
             default.as_ref(),
-            false,
+            crate::display::widget::project::Reached::Stop,
             text,
             build,
         )
@@ -785,7 +785,7 @@ fn prepare_project(
         },
         None,
         None,
-        false,
+        crate::display::widget::project::Reached::Stop,
         tcx,
         &mut build,
     );
@@ -884,14 +884,15 @@ fn ground_with(
 }
 
 /// The occurrence `scope` describes, drawn with `current_projection` when
-/// given, its children with `default_projection`; as a `part`, with no stop
-/// of its own unless a control drawn for it declares one, so it joins the
-/// stop of the occurrence that walked to it.
+/// given, its children with `default_projection`, as `reached` says: as a
+/// part, with no stop of its own unless a control drawn for it declares one,
+/// so it joins the stop of the occurrence that walked to it; as required, a
+/// stop whose deletion leaves a hole.
 fn prepare_value(
     scope: ProjectionScope<'_, '_>,
     current_projection: Option<&Partial>,
     default_projection: Option<&Partial>,
-    part: bool,
+    reached: crate::display::widget::project::Reached,
     tcx: &mut TextCtx,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -902,8 +903,11 @@ fn prepare_value(
         ancestors,
         ..
     } = scope;
-    // A picker over a value draws its hole instead.
-    let value = scope.value.filter(|_| !cx.pending_at(path));
+    // A picker over a value draws its hole instead, and a hole is drawn as
+    // the missing value it stands for.
+    let value = scope.value.filter(|value| {
+        !cx.pending_at(path) && value.as_cell() != Some(crate::libraries::hole::vocabulary::HOLE)
+    });
     let writable = ancestors.writable();
     let ground = ground(cx, path, value, writable);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
@@ -964,7 +968,7 @@ fn prepare_value(
                 layout,
                 build,
             );
-            if part {
+            if reached == crate::display::widget::project::Reached::Part {
                 let selected = cx.selected(path);
                 let scale = cx.styles.scale;
                 let palette = cx.styles.palette;
@@ -1032,6 +1036,7 @@ fn prepare_value(
                         select,
                         secondary,
                         selected,
+                        reached == crate::display::widget::project::Reached::Required,
                     );
                     let placed = match selected_value {
                         Some(value) => bind_selection(placed, landmark_path.clone(), value, scale),

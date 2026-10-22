@@ -152,7 +152,10 @@ impl Selection {
 
     pub fn stage(&self, sources: &Sources) -> Stage {
         match self.explicit_stage() {
-            Stage::Edge if self.value(sources).is_none() && self.writable(sources) => {
+            Stage::Edge
+                if self.value(sources).is_none_or(crate::libraries::hole::is)
+                    && self.writable(sources) =>
+            {
                 Stage::Pending
             }
             stage => stage,

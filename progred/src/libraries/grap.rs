@@ -357,6 +357,22 @@ pub(crate) fn expression_path<W: Host, V>(
     )
 }
 
+/// [`expression_path`] to code the shape here requires, such as a call's
+/// function: deleting it leaves a hole, so the shape keeps its field.
+pub(crate) fn required_expression_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    steps: impl AsRef<[Step]> + 'static,
+) -> Layout<W> {
+    crate::display::required(
+        steps,
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(expression),
+        )),
+        None,
+    )
+}
+
 /// A record naming a Grap program: the program its `grap` field names is
 /// code, so an empty one offers Grap's suggestions. Its other fields, and
 /// code further in, keep their ordinary projections.
@@ -474,15 +490,9 @@ pub(crate) fn call_with_function<W: Host>(
     // Enter; one being added some other way shows in the plain record view.
     (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
-    // One whose function is still being picked is a call too.
-    let function = match fields.field(FUNCTION) {
-        Some(function) => Some(function),
-        None => (input.pending == Some(Pending::Child(Step::Key(FUNCTION)))).then_some(None)?,
-    };
-    let parameters = function
-        .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)))
+    let parameters = function_parameters(&fields.field(FUNCTION)?, &|cell| input.env.resolve(cell))
         .unwrap_or_default();
-    let function = descend(
+    let function = crate::display::required(
         [Step::Key(FUNCTION)],
         Some(crate::display::first(
             input,
@@ -540,7 +550,11 @@ fn lambda_display<W: Host>(
             );
             let arrow = selectable(crate::display::arrow(), &body_site);
             let head = row(3.0, [lambda, params, arrow]);
-            Some(hug(head, expression_path(input, [Step::Key(BODY)]), 6.0))
+            Some(hug(
+                head,
+                required_expression_path(input, [Step::Key(BODY)]),
+                6.0,
+            ))
         },
     )
 }
@@ -772,7 +786,10 @@ fn constructs() -> [Completion; 2] {
     [
         crate::libraries::completion::insert(
             "new lambda",
-            Value::record([(PARAMS, Value::list([]))]),
+            Value::record([
+                (PARAMS, Value::list([])),
+                (BODY, crate::libraries::hole::value()),
+            ]),
             Some(crate::selection::pending_at(&[
                 Step::Key(PARAMS),
                 Step::Element(gid::position::between(None, None).expect("an empty list has room")),
@@ -782,7 +799,7 @@ fn constructs() -> [Completion; 2] {
         .with_detail(ID),
         crate::libraries::completion::insert(
             "new call",
-            Value::record([]),
+            ::grap::call(crate::libraries::hole::value(), []),
             Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
         )
         .with_detail(ID),

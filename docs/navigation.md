@@ -79,7 +79,10 @@ inside. The underlying data stays a view away, in Raw. Backspace landing on its
 container skips a part for the thing around it. The aim is that the domain
 views make an invalid state hard to reach and easy to leave: a parameter's
 definition can't be selected or deleted alone, and one with none is a hole
-whose offer, the name typed, defines it.
+whose offer, the name typed, defines it. What a shape requires, such as a
+call's function, is drawn `required`: deleting it leaves a hole, whose
+Backspace steps back rather than removing anything, so a call is never left
+an empty record.
 
 A selection on nothing drawn, such as one inside a value its projection draws
 whole, as a number draws its spelling rather than its encoding, leaves arrows
