@@ -211,8 +211,8 @@ display still to be designed.
 
 ## Kinds
 
-Grap's calls, lambdas, closures, value wrappers, unquotes, cases, bindings
-and binders say their kind (`isa`) since 22 October 2026 (see [model](model.md#data-and-resolution));
+Grap's calls, lambdas, closures, value wrappers, unquotes, cases, bindings,
+binders and absents say their kind (`isa`) since 22 October 2026 (see [model](model.md#data-and-resolution));
 before, a stored hole kept a shape's identifying field present, which recorded
 what the kind required when it was written. Open beside it:
 
@@ -222,8 +222,7 @@ what the kind required when it was written. Open beside it:
   steps) the exception. The projection stack draws a record as its kind
   provides first (see [projections](projections.md#projection-composition)),
   and evaluation dispatches on Grap's kinds. Still told by their fields:
-  absents (to become `{isa: absent, reason: …}`), `{evaluate: …}`, notebooks,
-  and the other libraries' records;
+  `{evaluate: …}`, notebooks, and the other libraries' records;
   `{ffi: cell}` and `{grap: cell}` are to go, a foreign function's value its
   cell. Declining partials allocate while they probe, about 4,300 times a
   frame in the IoP source form, so the remaining probing has a cost to find.

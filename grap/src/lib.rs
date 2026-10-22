@@ -481,7 +481,6 @@ impl RuntimeValue {
         }
     }
 
-    /// Why this value is absent, if it is.
     /// The kind its `isa` says it is.
     pub fn kind(&self) -> Option<CellId> {
         match &self.0 {
@@ -490,8 +489,10 @@ impl RuntimeValue {
         }
     }
 
+    /// Why this value is absent, if it is.
     pub fn absent_reason(&self) -> Option<CellId> {
-        self.field(absent::ABSENT)?.as_cell()
+        (self.kind()? == vocabulary::kind::ABSENT).then_some(())?;
+        self.field(absent::REASON)?.as_cell()
     }
 
     pub fn declines(&self) -> bool {

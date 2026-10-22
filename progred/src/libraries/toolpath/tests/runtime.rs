@@ -171,10 +171,7 @@ fn scopes_and_failures_keep_runtime_payloads() {
     .result;
     let reason = gid::new_cell_id();
     let detail = gid::new_cell_id();
-    let failure = RuntimeValue::record([
-        (::grap::absent::ABSENT, Value::from(reason).into()),
-        (detail, callback.clone()),
-    ]);
+    let failure = ::grap::absent::runtime(reason, [(detail, callback.clone())]);
     let tool = cutter::Tool::ball(0.125, 0.5).unwrap();
     for payload in [callback.clone(), failure.clone()] {
         for function in [MAP_POINTS, MAP_AXES, WITH_TOOL] {

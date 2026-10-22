@@ -166,7 +166,10 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
         let recovered = match_call(
             expression,
             [case_arm(
-                Value::record([(grap::absent::ABSENT, reason.into())]),
+                ::grap::isa::record(
+                    ::grap::vocabulary::kind::ABSENT,
+                    [(grap::absent::REASON, reason.into())],
+                ),
                 effect("recovered"),
             )],
         );

@@ -46,11 +46,9 @@ pub fn value(location: &Location) -> Value {
 pub fn not_found(location: &Location) -> Value {
     let described = value(location);
     let fields = described.as_record().expect("a location is a record");
-    Value::record(
-        fields
-            .iter()
-            .map(|(key, value)| (*key, value.clone()))
-            .chain([(::grap::absent::ABSENT, vocabulary::NOT_FOUND.into())]),
+    ::grap::absent::absent(
+        vocabulary::NOT_FOUND,
+        fields.iter().map(|(key, value)| (*key, value.clone())),
     )
 }
 

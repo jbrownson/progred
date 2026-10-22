@@ -116,10 +116,7 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
         );
         let payloads = callbacks.clone().map(|callback| {
             if fail {
-                RuntimeValue::record([
-                    (::grap::absent::ABSENT, Value::from(A).into()),
-                    (VALUE, callback),
-                ])
+                ::grap::absent::runtime(A, [(VALUE, callback)])
             } else {
                 callback
             }

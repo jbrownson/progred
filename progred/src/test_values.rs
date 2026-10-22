@@ -46,16 +46,11 @@ pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
 /// A function's arguments it couldn't use: "invalid arguments" for a call
 /// that's the evaluation's input, carrying why under each label.
 pub fn invalid_arguments(why: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    Value::record(
-        [
-            (
-                ::grap::absent::ABSENT,
-                ::grap::absent::INVALID_ARGUMENTS.into(),
-            ),
-            (::grap::absent::CALL, input_call()),
-        ]
-        .into_iter()
-        .chain(why),
+    ::grap::absent::absent(
+        ::grap::absent::INVALID_ARGUMENTS,
+        [(::grap::absent::CALL, input_call())]
+            .into_iter()
+            .chain(why),
     )
 }
 

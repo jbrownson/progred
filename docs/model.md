@@ -18,8 +18,9 @@ says only what the record is, never what it requires, so a record stays its
 kind while it's unfinished and whatever its kind comes to require. A kind is a
 cell of its own, apart from any field that shares its name: the `call` kind
 will carry the type of calls, an absent's `call` field the type of what it
-holds. Grap's calls, lambdas, closures, value wrappers and unquotes say their
-kinds, and a record that doesn't is data. A value encoded under one tag field,
+holds. Grap's calls, lambdas, closures, value wrappers, unquotes, `match`
+cases, bindings, binders and absents say their kinds, and a record that
+doesn't is data. A value encoded under one tag field,
 a number, text or a boolean, is told by that field.
 
 A cell may accidentally occur in several sources, for example when editing a

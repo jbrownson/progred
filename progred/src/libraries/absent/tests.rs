@@ -22,7 +22,10 @@ fn default_preserves_present_values_without_type_validation() {
         enriched,
         crate::libraries::text::value("not a number"),
         Value::record([]),
-        Value::record([(vocabulary::ABSENT, Value::from(vec![1]))]),
+        ::grap::isa::record(
+            vocabulary::kind::ABSENT,
+            [(vocabulary::REASON, Value::from(vec![1]))],
+        ),
     ] {
         let result = crate::test_support::test_evaluate(
             &or_default(value.clone(), new_cell_id().into()),
@@ -159,10 +162,10 @@ fn absence_is_an_open_tag_with_a_stable_reason() {
         "specific absence",
         []
     )));
-    assert!(!::grap::absent::is_absent(&Value::record([(
-        vocabulary::ABSENT,
-        Value::from(vec![1]),
-    )])));
+    assert!(!::grap::absent::is_absent(&::grap::isa::record(
+        vocabulary::kind::ABSENT,
+        [(vocabulary::REASON, Value::from(vec![1]))],
+    )));
 }
 
 #[test]

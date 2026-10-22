@@ -1,7 +1,11 @@
 use crate::SourceOrigin;
+use crate::isa::ISA;
+use crate::vocabulary::kind::ABSENT;
 use gid::{CellId, Value};
 
-pub const ABSENT: CellId = CellId::from_u128(0xd9c0a7145a38859a245640d3469cbcd4);
+/// Why a value is absent: a cell, the reason's stable, language-independent
+/// identity.
+pub const REASON: CellId = CellId::from_u128(0xc2a01958bce64151beb2b3992017de4c);
 pub const FUEL_EXHAUSTED: CellId = CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
 pub const MISSING_CELL: CellId = CellId::from_u128(0xa5a1b4e3d0df96bd11af00f0780136ff);
 pub const CELL_CYCLE: CellId = CellId::from_u128(0x150e0fc7e38d1670f41283c3d23a9b8d);
@@ -28,20 +32,42 @@ pub const CYCLE: CellId = CellId::from_u128(0x2776d28585d66ef8a747a8bc6dad7381);
 /// origin.
 pub const CALL: CellId = CellId::from_u128(0x31232e62ec458b0e6e201f3a7c1c10fe);
 
+/// An absent for `reason`, with `details`.
+pub fn absent(reason: CellId, details: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+    Value::record(
+        [(ISA, Value::from(ABSENT)), (REASON, Value::from(reason))]
+            .into_iter()
+            .chain(details),
+    )
+}
+
+/// An absent for `reason` with runtime `details`, such as a callable.
+pub fn runtime(
+    reason: CellId,
+    details: impl IntoIterator<Item = (CellId, crate::RuntimeValue)>,
+) -> crate::RuntimeValue {
+    crate::RuntimeValue::record(
+        [
+            (ISA, Value::from(ABSENT).into()),
+            (REASON, Value::from(reason).into()),
+        ]
+        .into_iter()
+        .chain(details),
+    )
+}
+
 pub fn with_detail(reason: CellId, field: CellId, detail: Value) -> Value {
-    Value::record([(ABSENT, Value::from(reason)), (field, detail)])
+    absent(reason, [(field, detail)])
 }
 
 /// Why a call has no argument under `cell`: carrying where the call is,
 /// when it has a source, so the argument's place can be found.
 pub fn missing_argument(cell: CellId, call: Option<&SourceOrigin>) -> Value {
-    Value::record(
-        [
-            (ABSENT, Value::from(MISSING_ARGUMENT)),
-            (CELL, Value::from(cell)),
-        ]
-        .into_iter()
-        .chain(call.map(|call| (CALL, crate::source::value(call)))),
+    absent(
+        MISSING_ARGUMENT,
+        [(CELL, Value::from(cell))]
+            .into_iter()
+            .chain(call.map(|call| (CALL, crate::source::value(call)))),
     )
 }
 
@@ -51,11 +77,13 @@ pub fn missing_field(field: CellId) -> Value {
 }
 
 pub fn value(reason: CellId) -> Value {
-    Value::record([(ABSENT, Value::from(reason))])
+    absent(reason, [])
 }
 
 pub fn reason(value: &Value) -> Option<CellId> {
-    value.as_record()?.get(&ABSENT).and_then(Value::as_cell)
+    let fields = value.as_record()?;
+    (crate::isa::of(fields)? == ABSENT).then_some(())?;
+    fields.get(&REASON)?.as_cell()
 }
 
 pub fn is_absent(value: &Value) -> bool {
@@ -91,10 +119,10 @@ pub fn caused_by_all(
     }
     match fields.iter().max_by_key(|(_, detail)| chain_length(detail)) {
         Some((_, longest)) if chain_length(longest) >= CHAIN_LIMIT => longest.clone(),
-        _ => Value::record(
-            [(ABSENT, Value::from(reason))]
+        _ => absent(
+            reason,
+            call.map(|call| (CALL, crate::source::value(call)))
                 .into_iter()
-                .chain(call.map(|call| (CALL, crate::source::value(call))))
                 .chain(fields),
         ),
     }
@@ -107,7 +135,7 @@ pub fn causes(value: &Value) -> impl Iterator<Item = &Value> {
         .flatten()
         .into_iter()
         .flat_map(|fields| fields.iter())
-        .filter(|(field, detail)| *field != ABSENT && is_absent(detail))
+        .filter(|(_, detail)| is_absent(detail))
         .map(|(_, detail)| detail)
 }
 
@@ -136,9 +164,6 @@ pub fn chain_length(value: &Value) -> usize {
 pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
     match <[Value; 1]>::try_from(causes.into_iter().collect::<Vec<_>>()) {
         Ok([cause]) => cause,
-        Err(causes) => Value::record([
-            (ABSENT, Value::from(NO_ALTERNATIVE)),
-            (CAUSES, Value::list(causes)),
-        ]),
+        Err(causes) => absent(NO_ALTERNATIVE, [(CAUSES, Value::list(causes))]),
     }
 }

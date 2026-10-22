@@ -110,10 +110,10 @@ pub(super) fn display<W: Host>(
             if evaluation.result.absent_reason().is_some() {
                 evaluation.result
             } else {
-                RuntimeValue::record([
-                    (::grap::absent::ABSENT, Value::from(INVALID_PROGRAM).into()),
-                    (::grap::absent::VALUE, evaluation.result),
-                ])
+                ::grap::absent::runtime(
+                    INVALID_PROGRAM,
+                    [(::grap::absent::VALUE, evaluation.result)],
+                )
             },
         )
     }))

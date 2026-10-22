@@ -53,7 +53,7 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
             glyphs(words),
             glyphs(number),
             driver.drawn(&[Step::Key(call), Step::Key(grap::vocabulary::FUNCTION)]),
-            driver.drawn(&[Step::Key(missing), Step::Key(absent::vocabulary::ABSENT)]),
+            driver.drawn(&[Step::Key(missing), Step::Key(absent::vocabulary::REASON)]),
         )
     };
     let (words_plain, number_plain, function_plain, reason_plain) = drawn(Preset::Plain);

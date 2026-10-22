@@ -1,5 +1,6 @@
-//! Tagged Grap absence values. The tag identifies the result as absent;
-//! its cell payload is the stable, language-independent reason identity.
+//! Grap's absent values, `{isa: absent, reason, …details}`: the kind says
+//! the value is absent, and the reason, a cell, is the stable,
+//! language-independent identity of why.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
@@ -12,7 +13,7 @@ pub const ID: CellId = CellId::from_u128(0x873c68ac371dbbb98a4f198546d60241);
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const ABSENT: CellId = ::grap::absent::ABSENT;
+    pub const REASON: CellId = ::grap::absent::REASON;
     pub const CELL: CellId = ::grap::absent::CELL;
     pub const VALUE: CellId = ::grap::absent::VALUE;
     pub const CYCLE: CellId = ::grap::absent::CYCLE;
@@ -27,6 +28,12 @@ pub mod vocabulary {
     pub const CALLERS: CellId = CellId::from_u128(0x8724595a170962636e05d4c6ea37d0f5);
     pub const OR_DEFAULT: CellId = CellId::from_u128(0x6a7a30847dd7d939448d0e7eaeb82893);
     pub const DEFAULT: CellId = CellId::from_u128(0xd8bdf7403b181a43fa73578bd976ba3b);
+
+    pub mod kind {
+        use gid::CellId;
+
+        pub const ABSENT: CellId = ::grap::vocabulary::kind::ABSENT;
+    }
 }
 
 /// An absent value reads as its reason, then any other fields, such as a
@@ -38,7 +45,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
     let absent = crate::display::structure::Fields::default()
         .parts([vocabulary::CALL])
         .child(call_field)
-        .after(input, |key| key == vocabulary::ABSENT, head(input, reason));
+        .after(input, is_head, head(input, reason));
     Some(on_red(match callers(input) {
         Some(callers) => crate::display::col(0, 2.0, [absent, callers]),
         None => absent,
@@ -201,7 +208,7 @@ fn missing_argument<W: Host>(
             .after(
                 input,
                 |key| {
-                    key == vocabulary::ABSENT
+                    is_head(key)
                         || key == vocabulary::CELL
                         || key == vocabulary::CALL && call.is_some()
                 },
@@ -226,6 +233,11 @@ fn location(origin: ::grap::SourceOrigin) -> Option<Location<'static>> {
         } => Some(Location::in_cell(cell, resolution, path)),
         ::grap::SourceOrigin::Input(_) => None,
     }
+}
+
+/// Whether `key` is one the head reads: what the absent is, and why.
+fn is_head(key: CellId) -> bool {
+    key == ::grap::isa::ISA || key == vocabulary::REASON
 }
 
 /// `reason`'s name; a click on it selects the absent drawn here.
@@ -285,7 +297,8 @@ pub fn library<W: Host>() -> Library<W> {
         ID,
         "absent",
         [
-            (vocabulary::ABSENT, "absent"),
+            (vocabulary::kind::ABSENT, "absent"),
+            (vocabulary::REASON, "reason"),
             (vocabulary::CELL, "cell"),
             (vocabulary::VALUE, "value"),
             (vocabulary::CYCLE, "cycle"),
@@ -300,10 +313,13 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
-    .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(missing_argument),
-        crate::display::runtime_partial(display),
-    ]))
+    .with_projections_for([(
+        vocabulary::kind::ABSENT,
+        crate::display::compose_partials([
+            crate::display::runtime_partial(missing_argument),
+            crate::display::runtime_partial(display),
+        ]),
+    )])
 }
 
 #[cfg(test)]

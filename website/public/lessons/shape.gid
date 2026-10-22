@@ -1,7 +1,7 @@
 {
   "binders": {
     "abs": 119eddd0f1404b34a6e8653279b69feb,
-    "absent": d9c0a7145a38859a245640d3469cbcd4,
+    "absent": 6509cd9921ab4cf28657ac75a9976d71,
     "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": e44590bd0560cc22dcf6397197ce5635,
@@ -210,6 +210,7 @@
     "binder": 81d57515ba3b44aab94e43d59a47fe9a,
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "case": 7ebb4ced7047479caafcd90b14499697,
+    "reason": c2a01958bce64151beb2b3992017de4c,
   },
   "cells": {
     model: {name: "Model"},
@@ -519,7 +520,7 @@
                   subject: {isa: call, right: state, function: less, left: rows},
                   function: match,
                   cases: [
-                    {isa: case, pattern: {bool: true}, expression: {absent: done}},
+                    {isa: case, pattern: {bool: true}, expression: {isa: absent, reason: done}},
                     {
                       isa: case,
                       pattern: {bool: false},
@@ -1205,7 +1206,7 @@
                   subject: {isa: call, right: state, function: less, left: segments},
                   function: match,
                   cases: [
-                    {isa: case, pattern: {bool: true}, expression: {absent: done}},
+                    {isa: case, pattern: {bool: true}, expression: {isa: absent, reason: done}},
                     {
                       isa: case,
                       pattern: {bool: false},

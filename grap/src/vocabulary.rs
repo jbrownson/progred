@@ -20,4 +20,7 @@ pub mod kind {
     pub const LAMBDA: CellId = CellId::from_u128(0xe4a0653134ca48379cab2e008bed03e7);
     pub const CLOSURE: CellId = CellId::from_u128(0x0e8180c5b2f0492291ce5150f2292697);
     pub const VALUE_WRAPPER: CellId = CellId::from_u128(0xf615f8d777294ffd9e5296faf34edd9d);
+    /// A value that isn't there: `{isa: absent, reason, …details}`, its
+    /// reason a cell (see [`crate::absent`]).
+    pub const ABSENT: CellId = CellId::from_u128(0x6509cd9921ab4cf28657ac75a9976d71);
 }

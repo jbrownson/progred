@@ -294,10 +294,7 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
     for fail in [false, true] {
         let payloads = callbacks.clone().map(|callback| {
             if fail {
-                RuntimeValue::record([
-                    (::grap::absent::ABSENT, Value::from(INVALID_INPUT).into()),
-                    (X, callback),
-                ])
+                ::grap::absent::runtime(INVALID_INPUT, [(X, callback)])
             } else {
                 callback
             }

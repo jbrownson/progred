@@ -52,10 +52,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     assert!(evaluation.result.same_result(&callback));
     assert!(layout.is_none());
 
-    let failure = RuntimeValue::record([
-        (::grap::absent::ABSENT, Value::from(INVALID_PROGRAM).into()),
-        (VALUE, callback.clone()),
-    ]);
+    let failure = ::grap::absent::runtime(INVALID_PROGRAM, [(VALUE, callback.clone())]);
     let program = RuntimeValue::record([
         (
             ::grap::isa::ISA,
@@ -320,7 +317,10 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
                     (::grap::isa::ISA, control::kind::CASE.into()),
                     (
                         control::PATTERN,
-                        Value::record([(absent::vocabulary::ABSENT, reason.into())]),
+                        ::grap::isa::record(
+                            absent::vocabulary::kind::ABSENT,
+                            [(absent::vocabulary::REASON, reason.into())],
+                        ),
                     ),
                     (::grap::vocabulary::EXPRESSION, text("recovered")),
                 ])]),

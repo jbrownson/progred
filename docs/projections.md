@@ -788,7 +788,7 @@ The Fidget example uses such a reference for its viewport function.
 
 A direct call uses the same resolver. A native definition invokes its Rust
 implementation; an ordinary value is evaluated as the callable.
-Every result is definitive, including `{absent: declined}`. A non-callable value
+Every result is definitive, including the `declined` absent. A non-callable value
 returns a not-callable absent with the offending value; it does not search other
 sources for an implementation. An absent callable is its own reason, so a call
 of one answers it unchanged, as an absent argument passes on. Scoped capability functions can override this
@@ -808,7 +808,8 @@ its starting count. This includes effects in strict arguments and nested calls,
 but excludes effects performed before that call began.
 
 A function must explicitly decline before performing effects. A decline after
-an effect halts evaluation with `{absent: effectful-decline, value: cause}`.
+an effect halts evaluation with
+`{isa: absent, reason: effectful-decline, value: cause}`.
 This contract remains useful to explicit compositions
 and event handlers, independently of cell resolution. It applies to Grap and Rust
 functions alike. Other absents remain ordinary results, including a non-callable
@@ -923,7 +924,7 @@ absent, makes it "invalid arguments" as for any function. This is an ordinary
 guard used in `do`, not evaluator syntax or a configurable bind mechanism.
 
 The list library's `iterate` finishes only when a step returns
-`{absent: iteration-finished}`, and then returns the previous state. An
+an `iteration-finished` absent, and then returns the previous state. An
 `unfold` step returns `{item, state}`: its item, if it has one, joins the list,
 and a step without a `state` is the last, so `{}` ends it. It returns the
 accumulated `list` and the last `state` it was given; a step that isn't a
@@ -983,18 +984,19 @@ they follow it as a trailing record, as does a field being added. These markers
 are display notation only, not new evaluator or text-bridge syntax.
 
 Grap likewise projects a `match` call with a subject and a
-case list as ordered `pattern → expression` cases, and projects `{bind: cell}`
-distinctly within patterns. Each arrow targets its expression the way a field
+case list as ordered `pattern → expression` cases, and projects
+`{isa: binder, bind: cell}` distinctly within patterns. Each arrow targets its expression the way a field
 head targets its value. A malformed call declines to the general Grap-call or
 structural projection; a malformed case declines to the ordinary element
 projection, so every value stays exposed.
 
-Semantic failure is an open GID record:
+Semantic failure is an open GID record of the absent kind:
 
 ```text
-{absent: reason-cell, ...occurrence-details...}
+{isa: absent, reason: reason-cell, ...occurrence-details...}
 ```
 
+The projection stack draws one as the absent library provides for its kind.
 The reason cell supplies names and other static metadata. Occurrence fields
 can identify a missing cell, invalid value, or cycle. Code inspects identities,
 not human-readable diagnostic text. Hosts and tests inspect the returned value;
@@ -1004,7 +1006,7 @@ producer chooses a reason, reusing library reasons and adding occurrence details
 where useful. Failed atomic-editor conversions include the invalid input.
 
 An unmatched `match` preserves one mismatch unchanged or combines several as
-`{absent: no-alternative, causes: [...]}`. This is an ordinary absent, not an
+`{isa: absent, reason: no-alternative, causes: [...]}`. This is an ordinary absent, not an
 implicit request to try another function definition. A handler using `match`
 can explicitly decline with a final catch-all case. A selected expression's
 result remains definitive within that match. Absence composition belongs only

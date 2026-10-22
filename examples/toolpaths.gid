@@ -1,7 +1,7 @@
 {
   "binders": {
     "abs": 119eddd0f1404b34a6e8653279b69feb,
-    "absent": d9c0a7145a38859a245640d3469cbcd4,
+    "absent": 6509cd9921ab4cf28657ac75a9976d71,
     "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
     "action": d61047fd27a4906d8cd0034d36ad55ad,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
@@ -189,6 +189,7 @@
     "quarter_turn": e86a2ca9f019eb01ffb42b2508fcb347,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radio": d3e46e8851004f6786bb6cf771ad1d87,
+    "reason": c2a01958bce64151beb2b3992017de4c,
     "require": cadca87ed76939f9c1ba3bb94495ad06,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -1541,7 +1542,8 @@
                         bool: true,
                       },
                       expression: {
-                        absent: done,
+                        reason: done,
+                        isa: absent,
                       },
                       isa: case,
                     },
@@ -1870,7 +1872,8 @@
                               bool: true,
                             },
                             expression: {
-                              absent: done,
+                              reason: done,
+                              isa: absent,
                             },
                             isa: case,
                           },
@@ -3567,7 +3570,8 @@
                         bool: true,
                       },
                       expression: {
-                        absent: done,
+                        reason: done,
+                        isa: absent,
                       },
                       isa: case,
                     },

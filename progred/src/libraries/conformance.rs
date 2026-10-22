@@ -131,13 +131,11 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
     let evaluation = evaluate(&expression, 10);
     assert_eq!(
         evaluation.result,
-        Value::record([
-            (
-                crate::libraries::absent::vocabulary::ABSENT,
-                Value::from(control::vocabulary::PATTERN_MISMATCH),
-            ),
-            (control::vocabulary::PATTERN, blob("other")),
-        ]),
+        ::grap::absent::with_detail(
+            control::vocabulary::PATTERN_MISMATCH,
+            control::vocabulary::PATTERN,
+            blob("other"),
+        ),
     );
 
     assert_eq!(evaluation.remaining_fuel, 7);
