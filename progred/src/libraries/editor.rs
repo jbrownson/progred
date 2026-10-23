@@ -7,14 +7,14 @@
 use crate::display::Host;
 use crate::display::host::{Layout, ProjectionInput};
 use crate::libraries::{Library, name};
-use gid::{CellId, Step};
+use gid::Step;
 
 pub mod path;
 pub mod selection;
 pub mod site;
 pub mod workspace;
 
-pub const ID: CellId = CellId::from_u128(0x6fe840ea1fa7bff4153b107f7d5683dc);
+pub use crate::workspace::EDITOR_LIBRARY as ID;
 
 pub fn library<W: Host>() -> Library<W> {
     name::named_library(

@@ -42,6 +42,11 @@ pub mod vocabulary {
     pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
 }
 
+/// The editor library, which names this vocabulary and the rest of the
+/// editor's. While an area shows it, a root row or column splits the area
+/// and a part that's a location shows that place.
+pub const EDITOR_LIBRARY: CellId = CellId::from_u128(0x6fe840ea1fa7bff4153b107f7d5683dc);
+
 /// The libraries an area shows: their projections, their offers and, for
 /// the name library, names. Those it leaves off keep their definitions
 /// loaded, so code still runs.
@@ -632,7 +637,7 @@ impl Workspace {
         let mut parts = Vec::new();
         for view in self.layout.views() {
             let whole = take(Area::whole(view.clone()));
-            let splits = whole.shown.shows(crate::libraries::editor::ID);
+            let splits = whole.shown.shows(EDITOR_LIBRARY);
             panes.push(whole);
             let Some(value) = view.value(sources, &[]).filter(|_| splits) else {
                 continue;
@@ -852,7 +857,7 @@ impl Workspace {
                 let whole = Area::whole(view.clone());
                 let splits = self
                     .pane(&whole)
-                    .is_some_and(|pane| pane.shown.shows(crate::libraries::editor::ID));
+                    .is_some_and(|pane| pane.shown.shows(EDITOR_LIBRARY));
                 match view
                     .value(sources, &[])
                     .filter(|value| splits && split(value).is_some())
