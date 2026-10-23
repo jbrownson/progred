@@ -1,5 +1,5 @@
 //! The editor's own vocabulary: its selection, each site's state and folds,
-//! paths as data, and the rows and columns of parts and the libraries a
+//! paths as data, the rows and columns of parts, and the libraries a
 //! document declares at its root. The editor defines these cells beside the
 //! code that interprets them, and supplies their effects while dispatching;
 //! this library names them.
@@ -63,10 +63,14 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
-    .with_projections_for([(
-        crate::library::vocabulary::kind::LIBRARY,
-        crate::display::runtime_partial(loaded_library),
-    )])
+    .with_projections_for(
+        [(
+            crate::library::vocabulary::kind::LIBRARY,
+            crate::display::runtime_partial(loaded_library),
+        )]
+        .into_iter()
+        .chain(workspace::projections()),
+    )
 }
 
 /// A loaded library: its name over its cells, each by its name, a reference

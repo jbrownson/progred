@@ -158,7 +158,8 @@ fn parts_of(value: &Value, at: &[Step]) -> Vec<(Path, bool)> {
 
 /// Where the document's panes are: the parts its `root` splits into, where
 /// it's a row or column, in order, a part that splits again giving its own.
-/// Only the root splits, so a row deeper in the document stays data.
+/// Only the root splits the window; a row deeper in the document is drawn
+/// inside it.
 #[cfg(any(test, feature = "cam-profile"))]
 pub fn panes(root: Option<&Value>) -> Vec<Path> {
     root.into_iter()

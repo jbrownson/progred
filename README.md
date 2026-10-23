@@ -50,9 +50,10 @@ clearance, or a safe machining plan.**
 
 - **Structural editing:** context-specific completions, editable names and
   literals, color swatches and pickers, PNG images shown as pictures,
-  two-dimensional number scrubbing, documents that split the window into rows
-  and columns, panes opened beside a document to look around without changing
-  it, multiple windows, copies other apps can paste as pictures, and undo/redo.
+  two-dimensional number scrubbing, rows and columns that split the window at
+  a document's root and lay out their parts anywhere inside one, panes opened
+  beside a document to look around without changing it, multiple windows,
+  copies other apps can paste as pictures, and undo/redo.
   A cell that shows up in a computed result, such as the one a missing-cell
   error names, can be edited or defined right there.
 - **A Grap notebook:** a starting point where each entry shows what it
@@ -89,9 +90,6 @@ There are also Linux and browser hosts. They do not yet have feature or performa
 - **Complete libraries in documents.** A document can declare a library that
   draws its own records, but the library can't offer completions yet, and other
   documents can't load it.
-- **Rows and columns inside a document.** Only a view's root splits the
-  window, the document's or one opened beside it; a row inside the document,
-  such as in a notebook entry, is still drawn as data.
 - **A full browser version.** The web editor saves a document as a download
   and opens one as an upload, and a reload loses anything unsaved. Its copy and
   paste stay inside the page, and IME and dictation don't work in it.

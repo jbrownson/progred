@@ -1299,7 +1299,15 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         let field_path =
             crate::occurrence::below(&path, &[Step::Key(presentation::vocabulary::VIEWPORT)]);
         assert!(placed.landmarks.landmark(&field_path).is_some());
-        place(model.workspace.document_pane(), None);
+        // Without the editor library the document's root shows whole, and
+        // the declaration in it stays editable data.
+        let whole = workspace::Pane {
+            area: model.workspace.document_area(),
+            shown: workspace::Shown::AllBut(vec![crate::libraries::editor::ID]),
+            annotations: Default::default(),
+            scroll: Vec2::ZERO,
+        };
+        place(&whole, None);
         assert!(
             calls.borrow().is_empty(),
             "the document leaves declarations editable"

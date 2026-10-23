@@ -78,6 +78,10 @@ pub fn viewport(value: &gid::Value) -> Option<(&gid::Value, &gid::Value)> {
     ))
 }
 
+/// The width and height, in points, a sized value draws at where nothing
+/// assigns it a size, as inside a row or column.
+pub const DEFAULT_SIZE: f64 = 256.0;
+
 /// A viewport function receives its assigned logical size, not a size
 /// inferred from its output. Its result uses the ordinary layout and handlers.
 pub fn viewport_display<W: Host>(

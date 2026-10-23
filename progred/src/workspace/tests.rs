@@ -180,11 +180,11 @@ fn a_root_row_or_column_splits_into_its_parts() {
     for (pane, value) in panes.iter().zip([&a, &b, &c]) {
         assert_eq!(crate::test_support::value_at(&root, pane), Some(value));
     }
-    // A row with no parts, any other root and no root at all are data.
+    // A row with no parts, any other root and no root at all don't split.
     assert!(self::panes(Some(&row([]))).is_empty());
     assert!(self::panes(Some(&a)).is_empty());
     assert!(self::panes(None).is_empty());
-    // So is a row deeper in the document.
+    // Nor does a row deeper in the document.
     let nested = Value::record([(gid::new_cell_id(), root)]);
     assert!(self::panes(Some(&nested)).is_empty());
 }

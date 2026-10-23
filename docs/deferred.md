@@ -524,30 +524,33 @@ lacks.
 
 ## Rows and columns
 
-A document whose root is a row or column splits its part of the window into its
-parts, and the editor's own row holds the document beside the panes it opened,
-which the document doesn't keep ([the model](model.md#panes)). This replaced
+A view whose root value is a row or column splits its part of the window into
+its parts, and the editor lays out its views, the document's and those it
+opened, in a tree of its own that the document doesn't keep
+([the model](model.md#panes)). Deeper in a value a row or column draws as its
+parts, side by side or stacked, so rows compose anywhere. This replaced
 October 2026's workspace record, `{main, panes: {left, right}}`, which only
 meant anything at the root and saved every pane, browsing included, into the
 document. Kept simple to start; what's left:
 
-- **Rows inside content.** Only the window splits: the root, and a part that's
-  itself a row or column. Elsewhere a row is data, so a notebook entry can't
-  yet show its code beside its preview. There a row has a width but no height
-  to divide, so it would be as tall as its tallest part, and a sized value
-  would need a height of its own.
-- **The editor's row as data.** It isn't a value yet, so it can't be opened or
-  edited as one, and it isn't remembered with the file. A command to keep an
-  opened pane by moving it into the document would turn looking around into
-  part of the work.
+- **The editor's layout as data.** It's Rust state, not a value, so it can't
+  be opened or edited as one, and it isn't remembered with the file. A command
+  to keep an opened view by moving it into the document would turn looking
+  around into part of the work.
+- **Documents as a monoid.** The owner's thought, on 23 October 2026: rows
+  compose anywhere now, and a document could too, one value among others
+  that a larger one lays out, the editor's layout included. Not pursued; views
+  and their layout stay concrete.
 - **Moving between rows.** Move Pane moves a part along its own row or column
-  only; nothing moves one into a neighbouring column, or an opened pane into
+  only; nothing moves one into a neighbouring column, or an opened view into
   the document.
-- **A location at a row.** A pane showing a place that holds a row draws the row
-  as data rather than splitting.
-- **The document's own view.** While the root splits, the document's view
-  isn't drawn, so View commands reach it only with nothing selected, as when
-  switching it to Raw to see the row whole.
+- **A location at a row.** A part that names a place holding a row draws the
+  row inside its pane rather than splitting the pane.
+- **A view's whole area.** While a view's root splits, its whole area isn't
+  drawn, so View commands reach the document's only with nothing selected, as
+  when switching it to Raw to see the row whole.
+- **Sizes inside content.** A sized value inside a row or column draws at 256
+  points square; nothing yet lets the row or the value say otherwise.
 - **Shares.** Parts start equal, so a starting point's preview takes half the
   window where it took a third beside the workspace's main value.
 - **The root's libraries.** A document still declares its own libraries in a

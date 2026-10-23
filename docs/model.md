@@ -542,9 +542,12 @@ lists are panes of their own:
 ```
 
 The editor's layout and a view's rows and columns are laid out in one walk.
-[`workspace`](../progred/src/workspace.rs) reads a row or column only at a
-view's root, so one deeper in the document is data, and a part that's itself
-a row or column splits again. A row or column with no parts has nothing to
+[`workspace`](../progred/src/workspace.rs) splits the window by a row or column
+only at a view's root, and a part that's itself a row or column splits again.
+Deeper in a value, the editor library draws one as its parts laid out the same
+way, so rows compose anywhere: a column stacks its parts, and a row sets them
+side by side, as tall as its tallest, since there's no height to divide. A
+sized value among them draws at 256 points square. A row or column with no parts has nothing to
 split into and is data too. A view splits while its whole area shows the
 editor library; Plain and Raw, or turning the editor library off in the
 Projections menu, show its root whole, rows and all. The document's view and
