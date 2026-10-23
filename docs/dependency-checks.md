@@ -22,6 +22,30 @@ to suggest one.
 
 ## Log
 
+- 2026-10-23 (`8574af63`).
+  - **Advisories:** Cargo still reports only RUSTSEC-2026-0192, `ttf-parser`
+    unmaintained, through winit; it waits on winit 0.31. Both npm lockfiles are
+    clean.
+  - **Applied:** compatible Cargo updates to 19 packages, through the sandboxed
+    `update`: patch and minor releases such as `cc` 1.8, `syn` 3.0.9,
+    `serde_json` 1.0.154, `zerocopy` 0.8.63 and `tokio` 1.53.3, with nothing new
+    entering the lockfile. `make test` passes and the browser build checks on
+    Rust 1.99.1, with no new warnings. `make perf` wasn't run, since none of
+    them plainly affects performance.
+  - **Toolchain:** stable is 1.99.1, and the browser's pinned nightly is
+    unchanged.
+  - **Fidget:** no release since 0.5.1, so the vendored patches stand.
+  - **Deferred:** Wrangler 4.152.0, inside the cutoff until 29 October;
+    playwright-core 1.64.1, past it, for a check on macOS, where
+    `make test-web-gpu` runs; compatible releases still inside the cutoff, ICU
+    2.4, `tokio` 1.54 and `cc` 1.9 among them. Breaking upgrades still wait:
+    parley 0.12, skrifa 0.49, which waits on Vello and parley, pollster 1.0,
+    getrandom 0.4 and base64 0.23.
+- 2026-10-15 (`553ecf64`), the Wrangler update due from the first check.
+  - **Applied:** the website's Wrangler from 4.136.1 to 4.149.0, through
+    `tools/npm-update`, which clears the `undici` and `sharp` advisories it
+    brought through miniflare. `make audit` now reports only RUSTSEC-2026-0192.
+    `npm ci` with install scripts off and a dry-run deploy both work.
 - 2026-10-11 (`21a3216b`), the first logged check.
   - **Advisories:** Cargo reports only RUSTSEC-2026-0192, `ttf-parser`
     unmaintained, through winit; it waits on winit 0.31. The website's Wrangler
@@ -45,8 +69,3 @@ to suggest one.
     0.48 waits on Vello and parley, which require 0.44.
   - **Also today:** Linux builds now run in a namespace sandbox like the macOS
     one.
-- 2026-10-15 (`553ecf64`), the Wrangler update due from the first check.
-  - **Applied:** the website's Wrangler from 4.136.1 to 4.149.0, through
-    `tools/npm-update`, which clears the `undici` and `sharp` advisories it
-    brought through miniflare. `make audit` now reports only RUSTSEC-2026-0192.
-    `npm ci` with install scripts off and a dry-run deploy both work.
