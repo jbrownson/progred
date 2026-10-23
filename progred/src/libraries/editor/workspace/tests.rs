@@ -120,3 +120,30 @@ fn a_sized_value_in_a_row_draws_at_the_default_size() {
     let default = presentation::DEFAULT_SIZE;
     assert!(sizes.borrow().contains(&(default, default)));
 }
+
+#[test]
+fn enter_on_a_part_adds_one_beside_it_in_a_row_or_column() {
+    use ui_events::keyboard::{Key, Modifiers, NamedKey};
+    let (mut driver, keys) = inside();
+    for key in keys {
+        let list = [Step::Key(key), Step::Key(vocabulary::PARTS)];
+        let [first, second] = [0, 1].map(|index| driver.element(&list, index, &[]));
+        driver.select(&first);
+        assert!(driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::default()));
+        // A part to write, between the two, drawn where it will go.
+        assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
+        let pending = driver.selection();
+        let [.., crate::occurrence::Step::Element(position)] = pending.as_slice() else {
+            panic!("a new part: {pending:?}")
+        };
+        let [.., Step::Element(before)] = first.as_slice() else {
+            unreachable!()
+        };
+        let [.., Step::Element(after)] = second.as_slice() else {
+            unreachable!()
+        };
+        assert!(before < position && position < after);
+        assert!(driver.drawn(&pending));
+        driver.keystroke(Key::Named(NamedKey::Escape), Modifiers::default());
+    }
+}

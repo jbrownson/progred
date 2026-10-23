@@ -33,42 +33,40 @@ pub(crate) fn projections<W: Host>() -> [(CellId, Partial<W>); 2] {
 
 /// A row: its parts side by side, the row as tall as its tallest.
 fn row_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    parts(
-        input,
-        vocabulary::kind::ROW,
-        crate::display::runtime_partial(|list| {
-            let parts = crate::display::structure::list_items(list, Some(sized_part()))?;
-            Some(crate::display::structure::authoring(
-                crate::display::aligned_row(
-                    crate::display::RowAlignment::Top { baseline: 0 },
-                    GAP,
-                    parts.into_iter().map(|(_, part)| part),
-                ),
-            ))
-        }),
-    )
+    parts(input, vocabulary::kind::ROW, |parts| {
+        crate::display::aligned_row(
+            crate::display::RowAlignment::Top { baseline: 0 },
+            GAP,
+            parts,
+        )
+    })
 }
 
 /// A column: its parts one above another.
 fn column_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    parts(
-        input,
-        vocabulary::kind::COLUMN,
-        crate::display::structure::list_column(GAP, Some(sized_part())),
-    )
+    parts(input, vocabulary::kind::COLUMN, |parts| {
+        crate::display::col(0, GAP, parts)
+    })
 }
 
-/// A row's or column's parts drawn by `list`, then any other fields it has.
-/// One with no parts is drawn as the record it is.
+/// A row's or column's parts laid out by `arrange`, a space apart as they
+/// are where they split the window, then any other fields it has. One with
+/// no parts is drawn as the record it is.
 fn parts<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     kind: CellId,
-    list: Partial<W>,
+    arrange: fn(Vec<Layout<W>>) -> Layout<W>,
 ) -> Option<Layout<W>> {
     crate::display::structure::kind_form(input, kind, [vocabulary::PARTS], |[parts]| {
         (!parts?.list_positions()?.is_empty()).then_some(())?;
+        let list = crate::display::runtime_partial(move |list| {
+            let parts = crate::display::structure::list_items(list, Some(sized_part()))?;
+            Some(crate::display::structure::authoring(arrange(
+                parts.into_iter().map(|(_, part)| part).collect(),
+            )))
+        });
         Some(crate::display::descend(
             [Step::Key(vocabulary::PARTS)],
             Some(list),
