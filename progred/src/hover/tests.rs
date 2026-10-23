@@ -36,7 +36,11 @@ fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
         .resolve_path(&path)
         .map(|value| match value.as_cell() {
             Some(cell) => Secondary::Cell(cell),
-            None => Secondary::from_location(sources, &Location::root(path.as_slice())),
+            None => Secondary::from_location(
+                sources,
+                &Location::root(path.as_slice()),
+                &crate::test_document(),
+            ),
         })
 }
 
@@ -102,7 +106,7 @@ fn definitions_have_distinct_source_traces_and_secondary_marks() {
                 )
             );
             assert_eq!(
-                Some(Secondary::from_trace(&trace)),
+                Some(Secondary::from_trace(&trace, &crate::test_document())),
                 secondary(&sources, left_path.clone())
             );
             assert_eq!(
@@ -211,16 +215,25 @@ fn entry_hover_marks_follow_the_visible_offers() {
     };
 
     assert_eq!(
-        hover_secondary(None, Some(&offers(Value::from(cell))), &Hover::Entry(0)),
+        hover_secondary(
+            None,
+            None,
+            Some(&offers(Value::from(cell))),
+            &Hover::Entry(0)
+        ),
         Some(Secondary::Cell(cell))
     );
     assert_eq!(
         hover_secondary(
+            None,
             None,
             Some(&offers(crate::libraries::text::value("offer"))),
             &Hover::Entry(0)
         ),
         None
     );
-    assert_eq!(hover_secondary::<()>(None, None, &Hover::Entry(0)), None);
+    assert_eq!(
+        hover_secondary::<()>(None, None, None, &Hover::Entry(0)),
+        None
+    );
 }

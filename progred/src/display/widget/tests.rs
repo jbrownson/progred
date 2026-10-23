@@ -1,7 +1,6 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
 use crate::display::widget::frame::{Attribution, HoverOutput, place};
-use crate::display::widget::view::ViewId;
 use crate::frame::Hovered;
 use gid::Document;
 use kurbo::{Affine, Point, Rect, Stroke};
@@ -131,7 +130,7 @@ fn placement_hover_render_and_dispatch_are_distinct_stages() {
                 true
             });
             output.on_arrival(
-                crate::occurrence::Trail::root(ViewId::Document),
+                crate::occurrence::Trail::root(crate::test_document()),
                 Rc::new(|state, _| {
                     state.push("select");
                     true

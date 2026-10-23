@@ -1,6 +1,5 @@
 use super::*;
 use crate::display::test_support::Landmarks;
-use crate::display::widget::view::ViewId;
 use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::frame::test_support::editing_frame;
@@ -122,7 +121,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         let plain = editing_frame(&mut world);
         assert!(!plain.landmarks.landmark(&path).is_some());
         world.model.selection = Some(pending_value(
-            ViewId::Document,
+            &crate::test_document(),
             crate::occurrence::of(&path),
         ));
         assert!(
@@ -221,7 +220,7 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
         };
         let (bench, _) = place(&doc, None, 900.0);
         let mut world = crate::test_editor(doc.clone());
-        world.model.workspace.document.shown = crate::workspace::Shown::RAW;
+        world.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
         let raw = editing_frame(&mut world);
         // The form draws the call's kind and the fields it consumes.
         for field in doc.root.as_ref().unwrap().as_record().unwrap().keys() {

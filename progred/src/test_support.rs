@@ -5,7 +5,6 @@
 
 use crate::display::CompletionKind;
 use crate::display::widget::offers::Entry;
-use crate::display::widget::view::ViewId;
 use crate::library::Libraries;
 use crate::selection::{Selection, pending_edge};
 use crate::sources::Sources;
@@ -43,9 +42,36 @@ pub(crate) fn test_editor_with_stack(doc: Document, stack: crate::stack::Stack) 
         Default::default(),
         None,
     );
-    editor.model.workspace.sync(editor.model.doc.root.as_ref());
+    editor.model.workspace = crate::workspace::Workspace::new(test_document());
+    editor.sync_views();
     editor.focused = true;
     editor
+}
+
+/// A model of `doc` whose document view is the test document's, its panes
+/// reconciled with it.
+pub(crate) fn test_model(doc: Document) -> crate::model::Model {
+    let mut model = crate::model::Model::new(doc);
+    model.workspace = crate::workspace::Workspace::new(test_document());
+    sync_model(&mut model);
+    model
+}
+
+/// Reconciles `model`'s panes with its document, read without libraries.
+pub(crate) fn sync_model(model: &mut crate::model::Model) {
+    model.workspace.sync(&Sources {
+        doc: &model.doc,
+        libraries: &Libraries::default(),
+    });
+}
+
+/// The document's view of every test editor on this thread, so a selection
+/// made before its editor is in that editor's document view.
+pub(crate) fn test_document() -> Rc<crate::workspace::View> {
+    thread_local! {
+        static DOCUMENT: Rc<crate::workspace::View> = Rc::new(crate::workspace::View::of_root());
+    }
+    DOCUMENT.with(Rc::clone)
 }
 
 /// A Grap host resolving each cell through its function.
@@ -265,7 +291,7 @@ pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a
 
 /// A selection of what's drawn at the document path `path`.
 pub(crate) fn make_selection(path: Path) -> Selection {
-    Selection::edge(ViewId::Document, crate::occurrence::of(&path))
+    Selection::edge(&crate::test_document(), crate::occurrence::of(&path))
 }
 
 /// The value `spine`'s Key and Element steps reach within `value`; a Follow
@@ -378,12 +404,14 @@ pub(crate) fn test_entry(
                 cells: Cells::new(),
             });
             world.model.selection = Some(match kind {
-                CompletionKind::Value => crate::selection::pending_value(ViewId::Document, vec![]),
+                CompletionKind::Value => {
+                    crate::selection::pending_value(&crate::test_document(), vec![])
+                }
                 CompletionKind::Field => pending_edge(
                     &crate::editing::Read {
                         sources: world.sources(),
                     },
-                    ViewId::Document,
+                    &crate::test_document(),
                     vec![],
                 )
                 .unwrap(),

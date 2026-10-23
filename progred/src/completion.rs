@@ -21,7 +21,7 @@ pub(crate) fn commit(
     if let Some(selection) = &model.selection
         && let Some(state) = model
             .workspace
-            .view_at_mut(selection.view(), selection.path())
+            .pane_at_mut(selection.view(), selection.path())
         && let Some(prepared) = prepare(
             &Sources {
                 doc: &model.doc,
@@ -34,7 +34,7 @@ pub(crate) fn commit(
             on_commit.as_ref(),
         )
     {
-        let view = selection.view();
+        let view = selection.view().clone();
         if prepared.document_changed {
             model.doc = prepared.document;
             model.history.record(before);
@@ -45,7 +45,7 @@ pub(crate) fn commit(
                 doc: &model.doc,
                 libraries,
             },
-            view,
+            &view,
             &prepared.path,
             &mut state.annotations,
             &mut model.selection,

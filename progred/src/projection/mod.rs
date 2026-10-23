@@ -346,8 +346,8 @@ impl crate::display::Env for Occurrence<'_> {
         crate::workspace::libraries(&self.cx.sources)
     }
 
-    fn occurrence(&self) -> &Trail {
-        self.path
+    fn occurrence(&self) -> Option<&Trail> {
+        Some(self.path)
     }
 
     fn read_from(&self, start: crate::location::Start, path: &[gid::Step]) -> Option<&Value> {
@@ -726,7 +726,7 @@ pub struct ProjectDescription<'a> {
     pub sources: Sources<'a>,
     /// The view the projection draws in, which every occurrence it draws is
     /// in.
-    pub view: crate::display::widget::view::ViewId,
+    pub view: Rc<crate::workspace::View>,
     pub root: Option<&'a Value>,
     pub root_path: &'a [Step],
     /// Selection belonging to this editable view.
@@ -1033,8 +1033,9 @@ fn prepare_value(
                     // A reference names its cell even in a computed result.
                     Some(Secondary::Cell(cell))
                 } else {
-                    path.location()
-                        .map(|location| Secondary::from_location(&cx.sources, &location))
+                    path.location().map(|location| {
+                        Secondary::from_location(&cx.sources, &location, path.view())
+                    })
                 };
                 // A landmark, not a target: highlight and keyboard reach span
                 // the full bounds, while clicks belong to the content each arm

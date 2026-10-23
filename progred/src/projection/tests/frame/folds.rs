@@ -9,7 +9,7 @@ fn view_annotations(world: &crate::Editor) -> Annotations {
     world
         .model
         .workspace
-        .view(&world.model.workspace.document_area())
+        .pane(&world.model.workspace.document_area())
         .unwrap()
         .annotations
         .clone()
@@ -130,7 +130,7 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
         cells,
     });
     let follow = Step::Follow(gid::Resolution::Document);
-    world.model.workspace.document.shown = crate::workspace::Shown::RAW;
+    world.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
     let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
     // The cell the document reaches opens, and a cell holding cells inside
@@ -169,7 +169,7 @@ fn inside_a_cell_only_cells_holding_cells_start_closed() {
         cells,
     });
     let follow = Step::Follow(gid::Resolution::Document);
-    world.model.workspace.document.shown = crate::workspace::Shown::RAW;
+    world.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
     let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
     let inner_of = |key| {

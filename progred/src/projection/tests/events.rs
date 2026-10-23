@@ -1,5 +1,4 @@
 use super::*;
-use crate::display::widget::view::ViewId;
 use puri::handler::test_support::DispatchShorthands;
 
 #[test]
@@ -22,7 +21,7 @@ fn native_annotation_handler_retains_the_projected_site() {
                     context.toolkit.styles().scale,
                     move |world: &mut crate::Editor, delta| {
                         crate::editing::Edit::new(world.session()).annotate(
-                            ViewId::Document,
+                            &crate::test_document(),
                             &path,
                             f64::value(delta.y),
                         );
@@ -56,7 +55,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     assert!(outcome.handled());
     assert!(outcome.remaining.is_none());
     assert_eq!(
-        writes.model.workspace.document.annotations.at(&path),
+        writes.model.workspace.document_pane().annotations.at(&path),
         Some(&f64::value(40.0))
     );
 }

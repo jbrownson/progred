@@ -20,7 +20,7 @@ fn only_root_declarations_followed_through_stable_definitions_are_viewports() {
             doc: &doc,
             libraries: &libraries,
         },
-        &[],
+        &crate::location::Location::root(Vec::new()),
     )
     .unwrap();
     assert_eq!(resolved.value, &declaration);
@@ -38,7 +38,7 @@ fn only_root_declarations_followed_through_stable_definitions_are_viewports() {
                     doc: &doc,
                     libraries: &libraries
                 },
-                &[]
+                &crate::location::Location::root(Vec::new()),
             )
             .is_none()
         );
@@ -51,7 +51,7 @@ fn only_root_declarations_followed_through_stable_definitions_are_viewports() {
                 doc: &doc,
                 libraries: &libraries
             },
-            &[]
+            &crate::location::Location::root(Vec::new()),
         )
         .is_none()
     );

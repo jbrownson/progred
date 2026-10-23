@@ -1,11 +1,11 @@
 //! Selection and collapse. Selection paths name projected occurrences, and
 //! say where the data a mutation writes is.
 
-use crate::display::widget::view::ViewId;
 use crate::editing::Read;
 use crate::location::Location;
 use crate::occurrence::{Path, Step};
 use crate::sources::Sources;
+use crate::workspace::View;
 use ::grap::text;
 use gid::{Position, Resolution, Value, position};
 use puri::edit::LineEditState;
@@ -29,7 +29,7 @@ pub(crate) struct Editor {
 /// the completion view's query, not the editor's current text.
 pub struct Selection {
     /// The view the path is in.
-    view: ViewId,
+    view: Rc<View>,
     /// Where: the value's path for edge and pending stages, the
     /// parent record's for a label stage.
     path: Path,
@@ -60,7 +60,7 @@ impl Selection {
     /// from the stored payload.
     pub(crate) fn from_payload(
         sources: &Sources,
-        view: ViewId,
+        view: &Rc<View>,
         path: Path,
         payload: Value,
     ) -> Self {
@@ -76,7 +76,7 @@ impl Selection {
                     None => (payload, None),
                 };
                 Self {
-                    view,
+                    view: view.clone(),
                     path,
                     payload,
                     editor,
@@ -89,9 +89,9 @@ impl Selection {
     }
 
     /// The value at `path` in `view`.
-    pub(crate) fn edge(view: ViewId, path: Path) -> Self {
+    pub(crate) fn edge(view: &Rc<View>, path: Path) -> Self {
         Self {
-            view,
+            view: view.clone(),
             path,
             payload: payload::edge(),
             editor: None,
@@ -134,8 +134,8 @@ impl Selection {
     }
 
     /// The view the selection is in.
-    pub fn view(&self) -> ViewId {
-        self.view
+    pub fn view(&self) -> &Rc<View> {
+        &self.view
     }
 
     pub(crate) fn relocate(&mut self, path: Path) {
@@ -321,22 +321,22 @@ fn mount(payload: &Value, text: &str, query: bool) -> (Value, Editor) {
 
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
-pub(crate) fn pending_value(view: ViewId, path: Path) -> Selection {
+pub(crate) fn pending_value(view: &Rc<View>, path: Path) -> Selection {
     pending_with_query(view, path, "")
 }
 
 /// A value pending with `seed` already typed as its query, as typing over a
 /// selected value opens one.
-pub(crate) fn pending_with_query(view: ViewId, path: Path, seed: &str) -> Selection {
+pub(crate) fn pending_with_query(view: &Rc<View>, path: Path, seed: &str) -> Selection {
     query_selection(view, path, payload::pending(seed))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
 /// end of the query when no offset was supplied.
-fn query_selection(view: ViewId, path: Path, payload: Value) -> Selection {
+fn query_selection(view: &Rc<View>, path: Path, payload: Value) -> Selection {
     let (payload, editor) = mount(&payload, payload::query(&payload).unwrap_or(""), true);
     Selection {
-        view,
+        view: view.clone(),
         path,
         payload,
         editor: Some(editor),
@@ -345,7 +345,7 @@ fn query_selection(view: ViewId, path: Path, payload: Value) -> Selection {
 }
 
 /// A new field on a writable record, following a cell if needed.
-pub(crate) fn pending_edge(read: &Read<'_>, view: ViewId, parent: Path) -> Option<Selection> {
+pub(crate) fn pending_edge(read: &Read<'_>, view: &Rc<View>, parent: Path) -> Option<Selection> {
     let value = read.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
@@ -364,7 +364,7 @@ pub(crate) fn pending_edge(read: &Read<'_>, view: ViewId, parent: Path) -> Optio
 
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
-pub(crate) fn pending_follow(read: &Read<'_>, view: ViewId, path: &[Step]) -> Option<Selection> {
+pub(crate) fn pending_follow(read: &Read<'_>, view: &Rc<View>, path: &[Step]) -> Option<Selection> {
     let cell = read.resolve_path(path)?.as_cell()?;
     read.sources.resolve(cell).is_none().then_some(())?;
     let mut followed = path.to_vec();
@@ -376,7 +376,12 @@ pub(crate) fn pending_follow(read: &Read<'_>, view: ViewId, path: &[Step]) -> Op
 /// A pending sibling next to the element at `path` (which must sit at
 /// an element step), minted between it and its neighbor. The list
 /// projection's gesture.
-fn pending_beside(read: &Read<'_>, view: ViewId, path: &[Step], after: bool) -> Option<Selection> {
+fn pending_beside(
+    read: &Read<'_>,
+    view: &Rc<View>,
+    path: &[Step],
+    after: bool,
+) -> Option<Selection> {
     let (parent_path, position) = match path {
         [parent_path @ .., Step::Element(position)] => Some((parent_path, position)),
         _ => None,
@@ -405,7 +410,7 @@ fn pending_beside(read: &Read<'_>, view: ViewId, path: &[Step], after: bool) -> 
 /// [`pending_edge`].
 pub(crate) fn pending_into(
     read: &Read<'_>,
-    view: ViewId,
+    view: &Rc<View>,
     path: &[Step],
     end: bool,
 ) -> Option<Selection> {
@@ -442,7 +447,7 @@ pub(crate) fn pending_into(
 /// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(
     read: &Read<'_>,
-    view: ViewId,
+    view: &Rc<View>,
     path: &[Step],
     starts: &[Step],
     before: bool,
@@ -467,7 +472,7 @@ pub(crate) fn pending_enter(
 /// prepend. Atoms other than links have no within and decline.
 pub(crate) fn pending_insert(
     read: &Read<'_>,
-    view: ViewId,
+    view: &Rc<View>,
     path: &[Step],
     front: bool,
 ) -> Option<Selection> {
@@ -480,12 +485,12 @@ pub(crate) fn pending_insert(
     }
 }
 
-/// A pending root for an empty document, in its view.
-pub fn pending_root(sources: &Sources) -> Option<Selection> {
+/// A pending root for an empty document, in its view, `document`.
+pub fn pending_root(sources: &Sources, document: &Rc<View>) -> Option<Selection> {
     sources
         .root()
         .is_none()
-        .then(|| pending_value(ViewId::Document, Vec::new()))
+        .then(|| pending_value(document, Vec::new()))
 }
 
 /// The value a pending query resolves to: a leading quote forces

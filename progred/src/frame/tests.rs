@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::source::Secondary;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::occurrence::{Step as Occurs, Trail};
 use crate::test_support::key_down;
 use gid::{CellId, Cells, Document, Step, Value};
@@ -15,7 +15,7 @@ const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
 fn scrolling_a_view_that_no_longer_exists_declines() {
     use ui_events::pointer::PointerScrollEvent;
     let mut editor = crate::editor_of(Value::record([]));
-    let gone = Area::part(ViewId::Document, vec![Step::Key(gid::new_cell_id())]);
+    let gone = Area::part(crate::test_document(), vec![Step::Key(gid::new_cell_id())]);
     let event = PointerScrollEvent {
         pointer: crate::display::test_support::mouse(),
         delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
@@ -46,7 +46,7 @@ fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
             .dispatch
             .view_regions
             .iter()
-            .find(|region| region.area == Area::whole(ViewId::Document))
+            .find(|region| region.area == Area::whole(crate::test_document()))
             .expect("document view");
         let content = region
             .content
@@ -153,7 +153,7 @@ fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
     let (place, cell) = (Secondary::Cell(gid::new_cell_id()), gid::new_cell_id());
     // The pending slot, selected, shares its place.
     let landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
-        path: Trail::ROOT.clone(),
+        path: Trail::root(crate::test_document()),
         area: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
         select: Rc::new(|_, _| true),
@@ -217,9 +217,9 @@ fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
                     },
                     move |output, placement| {
                         let target = Hovered::Tree(if (value as u64).is_multiple_of(2) {
-                            hover::Hover::Value(Trail::root(ViewId::Document))
+                            hover::Hover::Value(Trail::root(crate::test_document()))
                         } else {
-                            hover::Hover::Toggle(Trail::root(ViewId::Document))
+                            hover::Hover::Toggle(Trail::root(crate::test_document()))
                         });
                         output.claim(Probe::exact(placement, target));
                         output.after_hover(move |_, effects| {
@@ -322,7 +322,7 @@ fn pointer_hover_reactions_that_change_geometry_wait_for_paint_before_reacting_a
     assert_eq!(
         runner.frame.hover,
         Some(Hovered::Tree(hover::Hover::Toggle(Trail::root(
-            ViewId::Document
+            crate::test_document()
         ))))
     );
     assert!(paint_hover_frame(&mut runner));
@@ -447,8 +447,8 @@ fn hover_notifications_include_view_ownership_and_are_reset_with_the_document() 
         }
     });
     runner.frame.hover = Some(Hovered::Blocked);
-    let first = Area::whole(ViewId::Document);
-    let second = Area::part(ViewId::Document, vec![Step::Key(gid::new_cell_id())]);
+    let first = Area::whole(crate::test_document());
+    let second = Area::part(crate::test_document(), vec![Step::Key(gid::new_cell_id())]);
     runner.frame.dispatch.pointer_area = Some(first.clone());
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
@@ -514,7 +514,7 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
         dispatch.geometry(1.0).arrive(editor, &target, None)
     }));
     assert_eq!(projected.replace(0), per_frame);
-    assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+    assert!(runner.editor.model.workspace.document_pane().scroll.y > 0.0);
     let target = runner.frame.dispatch.landmarks.landmark(&path).unwrap();
     assert!((0.0..viewport.height).contains(&target.rect.y0));
 
@@ -535,7 +535,10 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
             )
             .handled()
     });
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
     assert_eq!(projected.get(), per_frame);
 }
 
@@ -572,8 +575,8 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         .unwrap()
         .rect;
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
-    runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
-    crate::editing::Edit::new(runner.editor.session()).select(ViewId::Document, previous);
+    runner.editor.model.workspace.document_pane_mut().scroll.y = target.rect.center().y - region.y1;
+    crate::editing::Edit::new(runner.editor.session()).select(&crate::test_document(), previous);
     runner.refresh_frame(1.0, viewport);
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
@@ -603,12 +606,21 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
         .unwrap()
         .path
         .to_vec();
-    runner.editor.model.selection = Some(crate::selection::Selection::edge(ViewId::Document, path));
+    runner.editor.model.selection = Some(crate::selection::Selection::edge(
+        &crate::test_document(),
+        path,
+    ));
 
     runner.refresh_frame(1.0, viewport);
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
     runner.update_frame(1.0, viewport, |_, _, _| true);
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
 }
 
 #[test]
@@ -627,16 +639,25 @@ fn selection_changes_do_not_implicitly_request_reveal() {
         .path
         .to_vec();
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        crate::editing::Edit::new(editor.session()).select(ViewId::Document, &path);
+        crate::editing::Edit::new(editor.session()).select(&crate::test_document(), &path);
         true
     });
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
 
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        editor.model.selection = Some(crate::selection::pending_value(ViewId::Document, path));
+        editor.model.selection = Some(crate::selection::pending_value(
+            &crate::test_document(),
+            path,
+        ));
         true
     });
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
 }
 
 fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> crate::occurrence::Path {
@@ -648,7 +669,7 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> crate::occurre
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap();
     let path = target.path.to_vec();
-    crate::editing::Edit::new(runner.editor.session()).select(ViewId::Document, &path);
+    crate::editing::Edit::new(runner.editor.session()).select(&crate::test_document(), &path);
     path
 }
 
@@ -663,14 +684,17 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         let path = select_offscreen(&mut runner, viewport);
         if key == NamedKey::Backspace {
             runner.editor.model.selection = Some(crate::selection::pending_value(
-                ViewId::Document,
+                &crate::test_document(),
                 path.clone(),
             ));
         }
         // Include the selected widget's installed delete handler, not only
         // the shell's structural fallback.
         runner.refresh_frame(1.0, viewport);
-        assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+        assert_eq!(
+            runner.editor.model.workspace.document_pane().scroll,
+            Vec2::ZERO
+        );
         projected.set(0);
         assert!(runner.keyboard_event(&key_down(key, Modifiers::empty()), 1.0, viewport));
         let selection = runner.editor.model.selection.as_ref().unwrap();
@@ -684,7 +708,7 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         } else {
             assert_ne!(selection.path(), path);
         }
-        assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+        assert!(runner.editor.model.workspace.document_pane().scroll.y > 0.0);
         assert_eq!(
             projected.get(),
             if key == NamedKey::Delete { 39 } else { 40 }
@@ -781,13 +805,13 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
 fn raw_switches_every_library_off() {
     let stack = crate::stack::load();
     let document = Document::default();
-    let view = |shown| workspace::View {
-        area: Area::whole(ViewId::Document),
+    let view = |shown| workspace::Pane {
+        area: Area::whole(crate::test_document()),
         shown,
         annotations: Default::default(),
         scroll: Vec2::ZERO,
     };
-    let starters = |view: &workspace::View| {
+    let starters = |view: &workspace::Pane| {
         let provider = completions(&stack, view);
         crate::test_support::ask_over(
             &crate::test_support::src(&document, &stack.libraries),
@@ -838,7 +862,7 @@ fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
             });
         }
         assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
-        assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
+        assert!(runner.editor.model.workspace.document_pane().scroll.y > 0.0);
     }
 }
 
@@ -865,28 +889,37 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
     runner.update_frame(1.0, viewport, |editor, dispatch, _| {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);
         editor.model.selection = Some(crate::selection::Selection::edge(
-            ViewId::Document,
+            &crate::test_document(),
             crate::occurrence::of(&path),
         ));
         dispatch.geometry(1.0).reveal_selection(&mut editor.model);
         true
     });
     assert_eq!(projected.replace(0), 41);
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
     let target = runner.frame.dispatch.landmarks.landmark(&path).unwrap();
     assert!(target.rect.y0 > viewport.height);
 
     runner.refresh_frame(1.0, viewport);
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
     assert_eq!(projected.replace(0), 41);
     runner.update_frame(1.0, viewport, |_, _, _| true);
-    assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll,
+        Vec2::ZERO
+    );
     assert_eq!(projected.get(), 41);
 }
 
 #[test]
 fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
-    let code = Hovered::Tree(hover::Hover::Value(Trail::root(ViewId::Document)));
+    let code = Hovered::Tree(hover::Hover::Value(Trail::root(crate::test_document())));
     let drawing = Hovered::Tree(hover::Hover::Source(SourceTrace::Stored(Rc::from([]))));
 
     assert!(source_hover_visible(Some(&code), false));
@@ -919,7 +952,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         doc: &doc,
         libraries: &libraries,
     };
-    let root = Area::whole(ViewId::Document);
+    let root = Area::whole(crate::test_document());
     let targets = [
         (gid::Resolution::Document, Rect::new(10.0, 20.0, 30.0, 40.0)),
         (
@@ -982,7 +1015,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     cells.set_value(alias, Value::from(linked));
     let mut library_cells = Cells::new();
     library_cells.set_value(linked, declaration.clone());
-    let mut model = Model::new(Document {
+    let mut model = crate::test_support::test_model(Document {
         root: Some(workspace::row([
             declaration,
             Value::from(alias),
@@ -991,15 +1024,17 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         ])),
         cells,
     });
-    model.workspace.sync(model.doc.root.as_ref());
-    // An opened pane at the root shows the row's parts as data, where they're
-    // stored.
-    let everything = crate::location::Location::root(Vec::new());
-    let opened = model
-        .workspace
-        .open(workspace::Side::Left, crate::location::value(&everything));
-    let in_opened =
-        |path: &[Step]| crate::occurrence::below(&[Occurs::jump(everything.clone())], path);
+    crate::test_support::sync_model(&mut model);
+    // A view the editor opened on the row's parts, a list, shows them as
+    // data, where they're stored. One on the row itself would split as the
+    // document's view does.
+    let parts = crate::location::Location::root(vec![Step::Key(workspace::vocabulary::PARTS)]);
+    let opened = Area::whole(
+        model
+            .workspace
+            .open(workspace::Side::Left, workspace::Entry::Place(parts)),
+    );
+    let in_opened = |path: &[Step]| crate::occurrence::of(path);
     let panes = workspace::panes(model.doc.root.as_ref());
     let calls = Rc::new(Cell::new(0));
     let result = Rc::new(RefCell::new(source.clone()));
@@ -1065,7 +1100,11 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         let mut stored = path.clone();
         stored.extend(steps.iter().cloned());
         let drawn = crate::occurrence::below(&crate::occurrence::of(path), &steps);
-        (Area::part(ViewId::Document, path.clone()), stored, drawn)
+        (
+            Area::part(crate::test_document(), path.clone()),
+            stored,
+            drawn,
+        )
     })
     .collect();
     let shown = place(&model);
@@ -1098,7 +1137,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     for path in &panes {
         model
             .workspace
-            .view_mut(&Area::part(ViewId::Document, path.clone()))
+            .pane_mut(&Area::part(crate::test_document(), path.clone()))
             .unwrap()
             .shown = workspace::Shown::RAW;
     }
@@ -1120,7 +1159,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     for path in &panes {
         model
             .workspace
-            .view_mut(&Area::part(ViewId::Document, path.clone()))
+            .pane_mut(&Area::part(crate::test_document(), path.clone()))
             .unwrap()
             .shown = workspace::Shown::ALL;
     }
@@ -1165,13 +1204,13 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             ),
         ),
     );
-    let mut model = Model::new(Document {
+    let mut model = crate::test_support::test_model(Document {
         root: Some(workspace::row([declaration.clone()])),
         cells: Cells::new(),
     });
-    model.workspace.sync(model.doc.root.as_ref());
-    let pane_root = Area::part(ViewId::Document, crate::test_examples::part(0, 1));
-    model.workspace.view_mut(&pane_root).unwrap().scroll = Vec2::new(75.0, 150.0);
+    crate::test_support::sync_model(&mut model);
+    let pane_root = Area::part(crate::test_document(), crate::test_examples::part(0, 1));
+    model.workspace.pane_mut(&pane_root).unwrap().scroll = Vec2::new(75.0, 150.0);
     let calls = Rc::new(RefCell::new(Vec::new()));
     let mut stack = stack::load();
     stack.libraries.insert(
@@ -1201,7 +1240,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             ),
         ),
     );
-    let pane = model.workspace.view(&pane_root).unwrap();
+    let pane = model.workspace.pane(&pane_root).unwrap();
     let path = crate::occurrence::of(pane.area.path());
     for (size, scale) in [
         (Size::new(300.0, 500.0), 1.0),
@@ -1244,11 +1283,11 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         ));
         assert!(place(pane, Some(Point::new(29.5, 40.5))).claim.is_none());
         assert_eq!(
-            model.workspace.view(&pane_root).unwrap().scroll,
+            model.workspace.pane(&pane_root).unwrap().scroll,
             Vec2::new(75.0, 150.0)
         );
 
-        let raw = workspace::View {
+        let raw = workspace::Pane {
             area: pane.area.clone(),
             shown: workspace::Shown::RAW,
             annotations: Default::default(),
@@ -1260,7 +1299,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         let field_path =
             crate::occurrence::below(&path, &[Step::Key(presentation::vocabulary::VIEWPORT)]);
         assert!(placed.landmarks.landmark(&field_path).is_some());
-        place(&model.workspace.document, None);
+        place(model.workspace.document_pane(), None);
         assert!(
             calls.borrow().is_empty(),
             "the document leaves declarations editable"
@@ -1273,24 +1312,24 @@ fn rows_and_columns_are_editor_geometry_with_independent_view_regions() {
     let cell = CellId::from_u128(1);
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(b"pane".to_vec()));
-    let mut model = Model::new(Document {
+    let mut model = crate::test_support::test_model(Document {
         root: Some(workspace::row([
             workspace::column([Value::from(cell), Value::from(cell)]),
             Value::record([]),
         ])),
         cells,
     });
-    model.workspace.sync(model.doc.root.as_ref());
+    crate::test_support::sync_model(&mut model);
     let column = crate::test_examples::part(0, 2);
     let upper = Area::part(
-        ViewId::Document,
+        crate::test_document(),
         [column.clone(), crate::test_examples::part(0, 2)].concat(),
     );
     let lower = Area::part(
-        ViewId::Document,
+        crate::test_document(),
         [column, crate::test_examples::part(1, 2)].concat(),
     );
-    let main = Area::part(ViewId::Document, crate::test_examples::main_part());
+    let main = Area::part(crate::test_document(), crate::test_examples::main_part());
     let stack = crate::stack::load();
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::display::test_support::Fonts::new();
@@ -1464,8 +1503,8 @@ fn a_hovered_target_shows_the_cursor_it_asked_for() {
 fn divider() -> workspace::Divider {
     workspace::Divider {
         direction: workspace::Direction::Across,
-        before: workspace::Slot::Document,
-        after: workspace::Slot::Part(Vec::new()),
+        before: workspace::Slot::Layout(vec![0]),
+        after: workspace::Slot::Part(Area::part(crate::test_document(), Vec::new())),
     }
 }
 
@@ -1543,7 +1582,7 @@ fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
     let mut runner = EditorRunner::new(crate::test_editor(gid::Document::default()));
     let prior = Hovered::Tree(hover::Hover::Entry(7));
     runner.frame.hover = Some(prior.clone());
-    let prior_root = Area::whole(ViewId::Document);
+    let prior_root = Area::whole(crate::test_document());
     runner.frame.dispatch.pointer_area = Some(prior_root.clone());
     let frame =
         runner
@@ -1566,7 +1605,7 @@ fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
 fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
     let editor = crate::test_editor(gid::Document::default());
     let root = editor.model.workspace.document_area();
-    let prior_root = Area::part(ViewId::Document, vec![Step::Key(gid::new_cell_id())]);
+    let prior_root = Area::part(crate::test_document(), vec![Step::Key(gid::new_cell_id())]);
     let prior = Hovered::Tree(hover::Hover::Entry(7));
     for pressed in [true, false] {
         let calls = Rc::new(std::cell::Cell::new(0));

@@ -1,5 +1,4 @@
 use super::*;
-use crate::display::widget::view::ViewId;
 use crate::libraries::{f64, name};
 use crate::selection::payload as selection_payload;
 use crate::test_support::{core_libraries, doc_of, library_of, make_selection, src};
@@ -26,8 +25,12 @@ fn replacing_query_text_settles_completion_state_before_the_next_edit() {
             f64::value(30.0),
         ),
     ]);
-    let mut selected =
-        Selection::from_payload(&src(&doc, &libraries), ViewId::Document, vec![], payload);
+    let mut selected = Selection::from_payload(
+        &src(&doc, &libraries),
+        &crate::test_document(),
+        vec![],
+        payload,
+    );
     assert_eq!(selected.choice(), 0);
     assert_eq!(selected.completion_scroll(), 0.0);
     selected.edit_query(|line| {
@@ -53,7 +56,7 @@ fn a_shadowing_document_definition_stays_editable() {
             &Read {
                 sources: src(&doc, &lib)
             },
-            ViewId::Document,
+            &crate::test_document(),
             vec![]
         )
         .is_none()
@@ -66,7 +69,7 @@ fn a_shadowing_document_definition_stays_editable() {
         &Read {
             sources: src(&doc, &lib),
         },
-        ViewId::Document,
+        &crate::test_document(),
         vec![],
     )
     .unwrap();
@@ -76,7 +79,7 @@ fn a_shadowing_document_definition_stays_editable() {
             &Read {
                 sources: src(&doc, &lib)
             },
-            ViewId::Document,
+            &crate::test_document(),
             vec![Step::Follow(gid::Resolution::Library(CellId::from_u128(1)))],
         )
         .is_none()
@@ -89,7 +92,7 @@ fn a_shadowing_document_definition_stays_editable() {
         &Read {
             sources: src(&doc, &lib),
         },
-        ViewId::Document,
+        &crate::test_document(),
         &[],
         true,
     )
@@ -133,11 +136,11 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.
-    let on_cell = pending_edge(&sources, ViewId::Document, vec![]).unwrap();
+    let on_cell = pending_edge(&sources, &crate::test_document(), vec![]).unwrap();
     assert_eq!(on_cell.path(), &[Step::Follow(gid::Resolution::Document)]);
     let inline = pending_edge(
         &sources,
-        ViewId::Document,
+        &crate::test_document(),
         vec![Step::Follow(gid::Resolution::Document), key("at").into()],
     )
     .unwrap();
@@ -152,7 +155,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_edge(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             vec![Step::Follow(gid::Resolution::Document), key("tags").into()]
         )
         .is_none()
@@ -160,7 +163,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_edge(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             vec![Step::Follow(gid::Resolution::Document), key("s").into()]
         )
         .is_some()
@@ -168,7 +171,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_edge(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             vec![Step::Follow(gid::Resolution::Document), key("lib").into()]
         )
         .is_none()
@@ -176,7 +179,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_edge(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             vec![
                 Step::Follow(gid::Resolution::Document),
                 key("material").into()
@@ -189,7 +192,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // within-gesture's meaning there.
     let filling = pending_follow(
         &sources,
-        ViewId::Document,
+        &crate::test_document(),
         &[
             Step::Follow(gid::Resolution::Document),
             key("material").into(),
@@ -207,7 +210,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_follow(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             &[Step::Follow(gid::Resolution::Document), key("lib").into()]
         )
         .is_none()
@@ -215,7 +218,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_follow(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             &[Step::Follow(gid::Resolution::Document), key("at").into()]
         )
         .is_none()
@@ -224,7 +227,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // Into a list through its link, appended at the end.
     let into = pending_into(
         &sources,
-        ViewId::Document,
+        &crate::test_document(),
         &[Step::Follow(gid::Resolution::Document), key("tags").into()],
         true,
     )
@@ -234,11 +237,11 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // The within chord: fields on records, elements into lists,
     // first values into bare cells.
-    assert!(pending_insert(&sources, ViewId::Document, &[], false).is_some());
+    assert!(pending_insert(&sources, &crate::test_document(), &[], false).is_some());
     assert!(
         pending_insert(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             &[Step::Follow(gid::Resolution::Document), key("tags").into()],
             false
         )
@@ -247,7 +250,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_insert(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             &[
                 Step::Follow(gid::Resolution::Document),
                 key("material").into()
@@ -259,7 +262,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     assert!(
         pending_insert(
             &sources,
-            ViewId::Document,
+            &crate::test_document(),
             &[Step::Follow(gid::Resolution::Document), key("s").into()],
             false
         )
@@ -339,7 +342,7 @@ fn selecting_an_empty_value_slot_pends() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    let mut pending = crate::selection::pending_with_query(ViewId::Document, Vec::new(), "");
+    let mut pending = crate::selection::pending_with_query(&crate::test_document(), Vec::new(), "");
     pending.set_completion_view(24.0, 2);
     pending.edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
     assert_eq!(pending.choice(), 0);

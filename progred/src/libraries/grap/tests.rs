@@ -1,6 +1,5 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
-use crate::display::widget::view::ViewId;
 use crate::projection::test_support::ProjectionInput;
 
 use crate::display::Env;
@@ -1477,7 +1476,7 @@ fn a_form_draws_a_field_being_added_among_its_others() {
     let note = crate::test_values::label("note");
     let mut world = crate::editor_of(::grap::lambda([], crate::libraries::f64::value(1.0)));
     world.model.selection = Some(crate::selection::pending_value(
-        ViewId::Document,
+        &crate::test_document(),
         crate::occurrence::of(&[Step::Key(note)]),
     ));
     let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);

@@ -5,12 +5,12 @@
 //! above them. What wants the whole path walks the parents.
 
 use super::{Path, Step};
-use crate::display::widget::view::ViewId;
+use crate::workspace::View;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct Trail {
-    view: ViewId,
+    view: Rc<View>,
     link: Option<Rc<Link>>,
 }
 
@@ -27,31 +27,26 @@ struct Link {
 }
 
 impl Trail {
-    /// The trail of the document view's root, which has no steps.
-    pub const ROOT: &'static Self = &Self {
-        view: ViewId::Document,
-        link: None,
-    };
-
     /// The trail of `view`'s root, which has no steps.
-    pub fn root(view: ViewId) -> Self {
+    pub fn root(view: Rc<View>) -> Self {
         Self { view, link: None }
     }
 
     /// The occurrence at `path` in `view`.
-    pub fn in_view(view: ViewId, path: &[Step]) -> Self {
+    pub fn in_view(view: Rc<View>, path: &[Step]) -> Self {
         path.iter()
             .fold(Self::root(view), |trail, step| trail.push(step.clone()))
     }
 
-    /// The occurrence at `path` in the document's view.
+    /// In tests, the occurrence at `path` in the test document's view.
+    #[cfg(test)]
     pub fn of(path: &[Step]) -> Self {
-        Self::in_view(ViewId::Document, path)
+        Self::in_view(crate::test_document(), path)
     }
 
     /// The view this occurrence is drawn in.
-    pub fn view(&self) -> ViewId {
-        self.view
+    pub fn view(&self) -> &Rc<View> {
+        &self.view
     }
 
     /// This trail with `step` after it.
@@ -67,7 +62,7 @@ impl Trail {
             _ => (marker, computed),
         };
         Self {
-            view: self.view,
+            view: self.view.clone(),
             link: Some(Rc::new(Link {
                 step,
                 parent: self.clone(),
@@ -244,24 +239,28 @@ where
     }
 }
 
+#[cfg(test)]
 impl From<&[Step]> for Trail {
     fn from(path: &[Step]) -> Self {
         Self::of(path)
     }
 }
 
+#[cfg(test)]
 impl<const N: usize> From<[Step; N]> for Trail {
     fn from(path: [Step; N]) -> Self {
         Self::of(&path)
     }
 }
 
+#[cfg(test)]
 impl From<&Path> for Trail {
     fn from(path: &Path) -> Self {
         Self::of(path)
     }
 }
 
+#[cfg(test)]
 impl From<Path> for Trail {
     fn from(path: Path) -> Self {
         Self::of(&path)

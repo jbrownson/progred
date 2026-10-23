@@ -409,9 +409,9 @@ pub trait Env {
         Vec::new()
     }
 
-    /// Where the value being projected occurs.
-    fn occurrence(&self) -> &crate::occurrence::Trail {
-        crate::occurrence::Trail::ROOT
+    /// Where the value being projected occurs: nowhere outside a frame.
+    fn occurrence(&self) -> Option<&crate::occurrence::Trail> {
+        None
     }
 
     /// The stored value `path` reaches from `start`: what a projection reads

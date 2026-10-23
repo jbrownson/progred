@@ -3,13 +3,14 @@
 
 use crate::Editor;
 use crate::display::widget::navigation::{Geometry, landmark_at};
-use crate::display::widget::view::ViewId;
 use crate::modifiers;
 use crate::navigate;
 use crate::occurrence::{Path, Step};
 use crate::selection::{self, Selection};
+use crate::workspace::View;
 use gid::Value;
 use puri::edit::TextClipboard;
+use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
@@ -17,7 +18,7 @@ impl Editor {
     fn select_landmark_or_edge(
         &mut self,
         geometry: Geometry<'_, Editor>,
-        view: ViewId,
+        view: &Rc<View>,
         path: Path,
     ) {
         let area = self.model.workspace.area_of(view, &path);
@@ -55,7 +56,7 @@ impl Editor {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
             Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
-                let (view, path) = (current.view(), current.path().to_vec());
+                let (view, path) = (current.view().clone(), current.path().to_vec());
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
@@ -72,7 +73,7 @@ impl Editor {
                             self.model.history.record(before);
                             self.refresh_title();
                         }
-                        self.model.selection = Some(selection::pending_value(view, path));
+                        self.model.selection = Some(selection::pending_value(&view, path));
                         geometry.reveal_selection(&mut self.model);
                         true
                     }
@@ -162,9 +163,9 @@ impl Editor {
                     // Pasting what's there already stays off the undo stack, as
                     // every write that changes nothing does.
                     current.value(&self.sources()) == Some(&value) || {
-                        let (view, path) = (current.view(), current.path().to_vec());
+                        let (view, path) = (current.view().clone(), current.path().to_vec());
                         crate::editing::Edit::new(self.session()).replace(&path, value) && {
-                            self.model.selection = Some(Selection::edge(view, path));
+                            self.model.selection = Some(Selection::edge(&view, path));
                             true
                         }
                     }

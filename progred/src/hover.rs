@@ -142,16 +142,18 @@ pub(crate) fn from_grap(
 
 /// The secondary target a hover refers to. A `Value` hover's is what its
 /// landmark was drawn sharing, which a computed occurrence has without a
-/// stored source; an `Entry` hover reads the exact completion offers
+/// stored source; a `Source` hover's is its source, drawn in the area the
+/// pointer is in; an `Entry` hover reads the exact completion offers
 /// emitted by the current frame.
 pub(crate) fn hover_secondary<C>(
     landmark: Option<&crate::display::widget::navigation::Landmark<C>>,
+    area: Option<&crate::display::widget::view::Area>,
     completion: Option<&Offers<C>>,
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
         Hover::Value(_) => landmark?.secondary.clone(),
-        Hover::Source(source) => Some(Secondary::from_trace(source)),
+        Hover::Source(source) => Some(Secondary::from_trace(source, &area?.view)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
         Hover::Toggle(_) | Hover::Label(_) => None,

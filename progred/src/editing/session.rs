@@ -3,17 +3,18 @@
 //! the text tools a line editor needs. Nothing reachable from it leads to the
 //! window or the menus; the shell shows what changed once dispatch returns.
 
-use crate::display::widget::view::ViewId;
 use crate::gesture::Active;
 use crate::library::Libraries;
 use crate::model::Model;
 use crate::occurrence::Step;
 use crate::sources::Sources;
 use crate::timers::Timers;
+use crate::workspace::View;
 use kurbo::Point;
 use parley::{FontContext, LayoutContext};
 use peniko::Brush;
 use puri::edit::TextClipboard;
+use std::rc::Rc;
 
 /// Its fields are the core's, which acts on the model through them.
 pub(crate) struct Session<'a> {
@@ -88,7 +89,7 @@ impl Session<'_> {
     /// needed to change it. A change ends any drag.
     pub(crate) fn set_folded(
         &mut self,
-        view: ViewId,
+        view: &Rc<View>,
         path: &[Step],
         default: bool,
         closed: Option<bool>,

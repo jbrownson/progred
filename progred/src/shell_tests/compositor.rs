@@ -41,10 +41,13 @@ fn cam_hover_compositor_pixels() {
     let mut editor = crate::test_editor(doc);
     // The preview takes seven tenths of the width.
     let preview = crate::workspace::panes(editor.model.doc.root.as_ref()).remove(0);
-    editor
-        .model
-        .workspace
-        .set_share(crate::workspace::Slot::Part(preview), 7.0 / 3.0);
+    editor.model.workspace.set_share(
+        crate::workspace::Slot::Part(crate::display::widget::view::Area::part(
+            crate::test_document(),
+            preview,
+        )),
+        7.0 / 3.0,
+    );
     let jobs = Arc::new(Mutex::new(VecDeque::<incremental::background::Job>::new()));
     editor.computations = crate::computations::Computations::new(
         incremental::background::Executor::new({

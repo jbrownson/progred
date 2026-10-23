@@ -77,15 +77,17 @@ definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
 
 Where something is drawn has two tiers. The first is the view it's in, a
-[`ViewId`](../progred/src/display/widget/view.rs): the document's, or a pane the
-editor opened beside it ([panes](#panes)). The second is the occurrence path
-within that view, unchanged from what the view alone would draw. A selection,
-a landmark, hover and computations carry the view beside the path, so two
-views drawing the same stored data at the same path keep separate focus,
-scroll, folds and results. A view is the editor's, not a GID cell. Where the
-document's root splits into a row or column, each part is drawn in its own
-area of the document's view, an `Area` naming the view and the part's path;
-which area a path is in follows from the path, the part whose path leads it.
+[`View`](../progred/src/workspace.rs) the editor lays out: the document's, or
+one it opened beside it ([panes](#panes)). A view is the editor's, not GID
+data, and it's known by its address, an `Rc<View>`, so two views of one place
+are two views. The second tier is the occurrence path within the view,
+unchanged from what the view alone would draw. A selection, a landmark, hover
+and computations carry the view beside the path, so two views drawing the
+same stored data at the same path keep separate focus, scroll, folds and
+results. Where a view's root value is a row or column, each part is drawn in
+its own area of the view, an [`Area`](../progred/src/display/widget/view.rs)
+naming the view and the part's path below its root; which area a path is in
+follows from the path, the part whose path leads it.
 
 [`SourceTrace`](../progred/src/display/widget/source.rs) serves source-linked
 widgets, drawing, and highlighting. It is a location in the form it is stored
@@ -138,11 +140,10 @@ each occurrence holds its own step and a link to the trail of the occurrence
 it's drawn inside, so descending adds one link, siblings share what's above
 them, and what wants the whole path walks the parents. A selection, made
 rarely, holds its path whole. Its steps are the document's own, `Key`, `Element` and `Follow`,
-plus four of the editor's: a **jump** restarts the path at a location, as a
-projection's `jump` does, a **computed** step stops it, as `at` does for a
-supplied value, a **pane** step marks where a document pane starts, and an
-**opened** step, first in its path, names the opened pane it's drawn in; only
-the frame writes the last two. Resolving a path starts from the document's root, or from its
+plus two of the editor's: a **jump** restarts the path at a location, as a
+projection's `jump` does, and a **computed** step stops it, as `at` does for
+a supplied value. Which view the path is in sits beside it, not in it.
+Resolving a path starts from the document's root, or from its
 last jump's location, and follows the data steps after it; past a computed step
 there's no location until a jump. A cell followed inside a computed value has
 no stored route to it, so following it jumps to its definition, which starts a
@@ -527,33 +528,40 @@ Enter must not then fall through to inserting the raw query.
 
 ## Panes
 
-The editor lays out its window as a row of parts: the document's, and the panes
-it opened beside it. A document whose root is a row or column splits its part
-the same way, so the parts it lists are panes of their own:
+The editor lays out its window as a tree of views, a
+[`Layout`](../progred/src/workspace.rs): one view filling it, or a row or
+column of layouts, each with its share. It starts as the document's view
+alone, which shows the document's root and can't be closed, and the views the
+editor opens go at either end of its row. A view whose root value is a row or
+column splits its part of the window the same way, so the parts that value
+lists are panes of their own:
 
 ```text
 {isa: row, parts: [...values...]}      side by side
 {isa: column, parts: [...values...]}   one above another
 ```
 
-[`workspace`](../progred/src/workspace.rs) reads these at the root only, so a
-row deeper in the document is data, and a part that's itself a row or column
-splits again. A row or column with no parts has nothing to split into and is
-data too. The document's part splits while the document's view shows the
+The editor's layout and a view's rows and columns are laid out in one walk.
+[`workspace`](../progred/src/workspace.rs) reads a row or column only at a
+view's root, so one deeper in the document is data, and a part that's itself
+a row or column splits again. A row or column with no parts has nothing to
+split into and is data too. A view splits while its whole area shows the
 editor library; Plain and Raw, or turning the editor library off in the
-Projections menu, show the root whole, rows and all. A starting point that
-opens a preview begins as a row of the preview and the record it shows.
+Projections menu, show its root whole, rows and all. The document's view and
+an opened view on a row split alike. A starting point that opens a preview
+begins as a row of the preview and the record it shows.
 
 Parts take equal shares of their row or column at first, a rule apart, and
 dragging the rule moves share from one neighbour to the other. Shares are
-session state, as are each view's libraries shown, folds and scroll; a share
-too small for the minimum width or height draws at the minimum without being
-rewritten.
+session state, as are the layout and each pane's libraries shown, folds and
+scroll; a share too small for the minimum width or height draws at the
+minimum without being rewritten.
 
-A document pane is an area of the document's view and draws its part at the
-part's own path, so a pane showing its part reads and writes it, and its state,
-folds and scroll included, is kept by that path. A part can name a [location](#data-and-resolution) as data: `{isa: location,
-steps: [...]}` from the document's root, or `{isa: location, in: cell, follow:
+A part's pane is an area of its view and draws its part at the part's own
+path below the view's root, so a pane showing its part reads and writes it,
+and its state, folds and scroll included, is kept by that path. A part can
+name a [location](#data-and-resolution) as data: `{isa: location, steps:
+[...]}` from the document's root, or `{isa: location, in: cell, follow:
 source, steps: [...]}` inside a cell's definition, with the steps and source in
 the path convention's encoding. A pane tells what its part is by its kind, so
 any other value, a record that happens to have a `steps` field included, shows
@@ -561,29 +569,32 @@ as it is. While its pane shows the editor library, the pane jumps to that place
 at the part's path and draws and edits it there, so it stays in sync with the
 document; Plain and Raw show the location itself.
 
-Opened panes are the editor's and the document doesn't keep them, so opening,
+Opened views are the editor's and the document doesn't keep them, so opening,
 closing and moving one never edits the document, marks it changed, or enters
-its history. Open Value on Left and Right open the selection's place, starting
-at its nearest cell, so a cell is a location with no steps, at that end of the
-editor's row; a computed value has no place and opens as a copy, read-only. An
-opened pane is a view of its own, so its paths start afresh: a jump to its
-place, or a computed step for a copy or while the editor library is off. A place
+its history. What a view shows, its entry, is Rust state too: a place, or a
+copy of a computed value. Open Value on Left and Right open the selection's
+place, starting at its nearest cell, so a cell is a location with no steps, at
+that end of the editor's row; a computed value has no place and opens as a
+copy, read-only. A view starts drawing where its entry is: a place from the
+document's root along the place's own steps, as the document's view would
+draw it, one inside a cell from a jump there, and a copy as computed. A place
 that's only empty, as after its value was deleted, draws as any empty place
 does, ready to write; one that can't be reached, as after its container was
 deleted, draws a read-only `place not found` absent carrying the location. The
 Libraries menu opens a loaded library the same way, as a location at its own
-cell, which is read-only like every library value, or selects the pane already
+cell, which is read-only like every library value, or selects the view already
 showing it; Open Value on a cell it lists opens that cell's definition beside
 it. An empty document stays empty, so its root still offers the starting
 points.
 
-Close Pane closes an opened pane, or removes a document pane's part from its row
-or column, which is an edit of the document and undoes as one; a location
-pane's place stays as it is. Move Pane moves an opened pane along the editor's
-row, or a document pane's part along its row or column: left and right in a
-row, up and down in a column. Moving a part gives it a new list position and
-retargets the selection and the pane's share, while its path-keyed folds reset.
-A part that leaves keeps no view state; one that stays keeps its own.
+Close Pane closes a view the editor opened, or removes a part from its row or
+column, which writes the view's value where it's stored and undoes as one; a
+view's place stays as it is when the view closes. Move Pane moves a view along
+the editor's row, the document's included, or a part along its row or column
+in the view's value: left and right in a row, up and down in a column. Moving
+a part gives it a new list position and retargets the selection and the
+pane's share, while its path-keyed folds reset. A part that leaves keeps no
+pane state; one that stays keeps its own.
 
 `{isa: projected value, value: source, projection: function}` is a
 presentation-library convention,
@@ -664,10 +675,10 @@ too; optimization level is not a distribution feature flag.
 recording a new branch clears redo. The editor's snapshot contains its shared
 document, the selection's path, and per-view folds. Collapse and expand
 record steps without editing the document. Undo restores fold overrides to
-their views, including when a deleted pane returns; it leaves current
+their panes, including when a deleted part returns; it leaves current
 scroll positions, shown libraries, and unrelated annotations alone in surviving
-views. The selection's path names its view, so Undo restores it there rather
-than in whichever pane happens to be selected when Undo is invoked.
+panes. The selection keeps its view beside its path, so Undo restores it there
+rather than in whichever pane happens to be selected when Undo is invoked.
 
 The editor holds its current and saved documents as `Rc<Document>`. Dirty state
 is pointer inequality, constant-time at any document size. Successful writes use

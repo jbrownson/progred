@@ -1,5 +1,6 @@
 use crate::location::{Location, Start};
 use crate::sources::Sources;
+use crate::workspace::View;
 use gid::{CellId, Resolution, Step};
 use std::rc::Rc;
 
@@ -57,7 +58,8 @@ impl SourceTrace {
 
 /// What makes two projected locations secondary copies. Cell values
 /// match wherever that cell is referenced. Other values match only
-/// at the same path inside the same nearest enclosing definition.
+/// at the same path inside the same nearest enclosing definition, whichever
+/// views draw them.
 #[derive(Clone, Debug)]
 pub enum Secondary {
     Cell(CellId),
@@ -94,11 +96,13 @@ impl Secondary {
         }
     }
 
-    pub fn from_trace(trace: &SourceTrace) -> Self {
+    /// What `trace`'s data shares, drawn in `view`.
+    pub fn from_trace(trace: &SourceTrace, view: &Rc<View>) -> Self {
+        let trail = |path: &[Step]| {
+            crate::occurrence::Trail::in_view(view.clone(), &crate::occurrence::of(path))
+        };
         match trace {
-            SourceTrace::Stored(path) => {
-                Self::Stored(crate::occurrence::Trail::of(&crate::occurrence::of(path)))
-            }
+            SourceTrace::Stored(path) => Self::Stored(trail(path)),
             SourceTrace::InCell {
                 cell,
                 resolution,
@@ -106,15 +110,16 @@ impl Secondary {
             } => Self::InCell {
                 cell: *cell,
                 resolution: *resolution,
-                path: crate::occurrence::Trail::of(&crate::occurrence::of(path)),
+                path: trail(path),
                 relative_from: 0,
             },
         }
     }
 
-    /// What a value other than a reference shares: where it's stored.
-    pub fn from_location(sources: &Sources, location: &Location) -> Self {
-        Self::from_trace(&SourceTrace::from_location(sources, location))
+    /// What a value other than a reference shares, drawn in `view`: where
+    /// it's stored.
+    pub fn from_location(sources: &Sources, location: &Location, view: &Rc<View>) -> Self {
+        Self::from_trace(&SourceTrace::from_location(sources, location), view)
     }
 }
 
@@ -122,7 +127,7 @@ impl PartialEq for Secondary {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Cell(left), Self::Cell(right)) => left == right,
-            (Self::Stored(left), Self::Stored(right)) => left == right,
+            (Self::Stored(left), Self::Stored(right)) => left.same_after(0, right, 0),
             (
                 Self::InCell {
                     cell: left_cell,

@@ -89,8 +89,9 @@ There are also Linux and browser hosts. They do not yet have feature or performa
 - **Complete libraries in documents.** A document can declare a library that
   draws its own records, but the library can't offer completions yet, and other
   documents can't load it.
-- **Rows and columns inside a document.** Only a document's root splits the
-  window; a row inside it, such as in a notebook entry, is still drawn as data.
+- **Rows and columns inside a document.** Only a view's root splits the
+  window, the document's or one opened beside it; a row inside the document,
+  such as in a notebook entry, is still drawn as data.
 - **A full browser version.** The web editor saves a document as a download
   and opens one as an upload, and a reload loses anything unsaved. Its copy and
   paste stay inside the page, and IME and dictation don't work in it.

@@ -147,6 +147,7 @@ impl<'a> Sources<'a> {
     }
 
     /// The value at `path` from the document's root.
+    #[cfg(test)]
     pub fn resolve_path(&self, path: &[Step]) -> Option<&'a Value> {
         self.read_from(Start::Root, path)
     }

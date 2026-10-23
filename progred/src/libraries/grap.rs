@@ -62,7 +62,10 @@ fn reference<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> O
 fn scope_around<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<std::collections::BTreeMap<CellId, suggestions::Binding>> {
-    let path = input.env.occurrence().to_vec();
+    let path = input
+        .env
+        .occurrence()
+        .map_or_else(Vec::new, crate::occurrence::Trail::to_vec);
     let value_of = |cell| input.env.resolve(cell).map(|definition| definition.value);
     let (scope, _) = match crate::occurrence::location(&path) {
         Some(location) => suggestions::scope(

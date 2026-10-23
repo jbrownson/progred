@@ -1,6 +1,6 @@
 //! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::location::{Location, Start};
 use crate::{Editor, selection::Stage};
 use ::grap::path;
@@ -54,16 +54,17 @@ pub(crate) fn peeled(
     Ok(stack)
 }
 
-/// The document view's content height in CSS pixels from the top of the
-/// editor. The first frame is built before winit has measured the canvas, in
+/// The content height of the document's whole area, `document`, in CSS
+/// pixels from the top of the editor. The first frame is built before winit has measured the canvas, in
 /// an empty window, so its layout says nothing and reports none.
 pub(crate) fn content_height(
     regions: &[crate::display::widget::frame::ViewRegion],
+    document: &Area,
     scale: f64,
 ) -> Option<f64> {
     regions.iter().find_map(|region| {
         let content = region.content?;
-        (region.area == Area::whole(ViewId::Document) && region.rect.area() > 0.0)
+        (region.area == *document && region.rect.area() > 0.0)
             .then(|| (region.rect.y0 / scale + content.y).ceil())
     })
 }
@@ -259,7 +260,9 @@ fn named_reference(
 
 #[derive(PartialEq, Eq)]
 struct Selection {
-    view: ViewId,
+    /// Whether it's in the document's view rather than one the editor
+    /// opened.
+    document: bool,
     path: crate::occurrence::Path,
     /// Where the selected data is stored.
     source: Option<Location<'static>>,
@@ -291,7 +294,7 @@ struct Changes {
 impl Changes {
     fn sample(&mut self, editor: &Editor) -> Option<String> {
         let selection = editor.model.selection.as_ref().map(|selected| Selection {
-            view: selected.view(),
+            document: *selected.view() == editor.model.workspace.document,
             path: selected.path().to_vec(),
             source: selected
                 .location()
@@ -314,10 +317,7 @@ impl Changes {
             let state = serde_json::json!({
                 "document": &*editor.model.doc,
                 "selection": selection.as_ref().map(|selected| serde_json::json!({
-                    "view": match selected.view {
-                        ViewId::Document => serde_json::json!("document"),
-                        ViewId::Opened(id) => serde_json::json!({"opened": id.to_string()}),
-                    },
+                    "view": if selected.document { "document" } else { "opened" },
                     "path": crate::occurrence::value(&selected.path),
                     "source": selected.source.as_ref().map(source),
                     "stage": match selected.stage {

@@ -1,7 +1,6 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
-use crate::display::widget::view::ViewId;
 use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::frame::test_support::{editing_frame, settle};
@@ -95,7 +94,10 @@ fn body(entry: &[occurrence::Step], key: CellId) -> occurrence::Path {
 }
 
 fn hidden(world: &crate::Editor, path: &[occurrence::Step]) -> bool {
-    crate::annotations::folded(world.model.workspace.document.annotations.at(path), false)
+    crate::annotations::folded(
+        world.model.workspace.document_pane().annotations.at(path),
+        false,
+    )
 }
 
 /// Click `path` at `point`, where the pointer lands on it.
@@ -151,7 +153,7 @@ fn cam_outline_draws_in_its_part_beside_the_preview() {
     ]);
     for (position, value) in entries {
         world.session().set_folded(
-            ViewId::Document,
+            &crate::test_document(),
             &section(
                 &drawn(&[Step::Key(SECTIONS), Step::Element(position)]),
                 value.as_cell().unwrap(),
@@ -207,7 +209,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             for (path, folded) in [(&a_section, false), (&b_section, b_folded)] {
                 editor
                     .session()
-                    .set_folded(ViewId::Document, path, false, Some(folded));
+                    .set_folded(&crate::test_document(), path, false, Some(folded));
             }
             Driver::new(editor, kurbo::Size::new(700.0, 600.0))
         };
@@ -323,7 +325,7 @@ fn outline_library_tint_stops_at_the_heading() {
     let heading_path = entry(&world, &[], key);
     let body_path = body(&heading_path, key);
     world.session().set_folded(
-        ViewId::Document,
+        &crate::test_document(),
         &section(&heading_path, key),
         false,
         Some(false),
@@ -379,7 +381,13 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     driver.select(&b_path);
     driver.type_text("5");
     assert_eq!(driver.value(&[Step::Key(b)]), f64::value(35.0));
-    driver.runner.editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
+    driver
+        .runner
+        .editor
+        .model
+        .workspace
+        .document_pane_mut()
+        .shown = crate::workspace::Shown::RAW;
     let raw = editing_frame(&mut driver.runner.editor);
     for field in [a, b, extra, SECTIONS] {
         stop(&raw, &[Step::Key(field)]);
@@ -607,7 +615,7 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
     let mut editor = crate::test_editor(doc);
     let e = entry(&editor, &[], a);
     editor.model.selection = Some(pending_value(
-        ViewId::Document,
+        &crate::test_document(),
         occurrence::of(&[Step::Key(extra)]),
     ));
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
@@ -672,7 +680,7 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
         &crate::editing::Read {
             sources: world.sources(),
         },
-        ViewId::Document,
+        &crate::test_document(),
         Vec::new(),
     );
     assert!(editing_frame(&mut world).completion.is_some());

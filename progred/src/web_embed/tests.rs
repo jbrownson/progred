@@ -1,19 +1,30 @@
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::selection;
 use gid::{Step, Value};
 
 #[test]
 fn content_height_waits_for_a_measured_window() {
     let region = |rect| crate::display::widget::frame::ViewRegion {
-        area: Area::whole(ViewId::Document),
+        area: Area::whole(crate::test_document()),
         rect,
         maximum: kurbo::Vec2::ZERO,
         content: Some(kurbo::Vec2::new(300.0, 120.5)),
     };
-    assert_eq!(content_height(&[region(kurbo::Rect::ZERO)], 2.0), None);
     assert_eq!(
-        content_height(&[region(kurbo::Rect::new(0.0, 40.0, 600.0, 400.0))], 2.0),
+        content_height(
+            &[region(kurbo::Rect::ZERO)],
+            &Area::whole(crate::test_document()),
+            2.0
+        ),
+        None
+    );
+    assert_eq!(
+        content_height(
+            &[region(kurbo::Rect::new(0.0, 40.0, 600.0, 400.0))],
+            &Area::whole(crate::test_document()),
+            2.0,
+        ),
         Some(141.0)
     );
 }
@@ -126,7 +137,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     let positions: Vec<_> = list.keys().cloned().collect();
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
     editor.model.selection = Some(selection::Selection::edge(
-        ViewId::Document,
+        &crate::test_document(),
         crate::occurrence::of(&[Step::Element(position.clone())]),
     ));
     let pending: serde_json::Value =
@@ -144,7 +155,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
         committed["selection"]["value"],
         serde_json::to_value(crate::libraries::text::value("peaches")).unwrap()
     );
-    editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
+    editor.model.selection = Some(selection::Selection::edge(&crate::test_document(), vec![]));
     let whole: serde_json::Value = serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
     assert_eq!(whole["selection"]["path"], serde_json::json!({"list": []}));
     assert!(changes.sample(&editor).is_none());

@@ -2,7 +2,6 @@
 
 use crate::display as d;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
-use crate::display::widget::view::ViewId;
 use crate::driver::Driver;
 use crate::frame::test_support::editing_frame;
 use crate::libraries::{f64, name, text};
@@ -305,7 +304,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
     };
     let mut world = crate::editor_of(Value::record([(source, text::value("shared"))]));
     world.model.selection = Some(crate::selection::Selection::edge(
-        ViewId::Document,
+        &crate::test_document(),
         jumped(first),
     ));
     world.stack.projection = Projection::new([
@@ -537,7 +536,10 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
         );
         let mut world = crate::test_editor(document.clone());
         let before = world.model.doc.clone();
-        world.model.selection = Some(crate::selection::Selection::edge(ViewId::Document, heading));
+        world.model.selection = Some(crate::selection::Selection::edge(
+            &crate::test_document(),
+            heading,
+        ));
         for (direction, path) in [
             (NavigationDirection::Down, &body),
             (NavigationDirection::Down, &first),

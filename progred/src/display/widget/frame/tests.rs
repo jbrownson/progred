@@ -1,6 +1,6 @@
 use super::super::leaf;
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use puri::handler::test_support::DispatchShorthands;
 use std::{cell::RefCell, rc::Rc};
 
@@ -8,8 +8,11 @@ use std::{cell::RefCell, rc::Rc};
 fn view_scope_hides_other_views_hover_without_hiding_input() {
     use puri::handler::{Event, EventOutcome};
     use ui_events::pointer::{PointerState, PointerUpdate};
-    let own = Area::whole(ViewId::Document);
-    let other = Area::part(ViewId::Document, vec![gid::Step::Key(gid::new_cell_id())]);
+    let own = Area::whole(crate::test_document());
+    let other = Area::part(
+        crate::test_document(),
+        vec![gid::Step::Key(gid::new_cell_id())],
+    );
     let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> =
         HoverPass::new(&Default::default(), Rect::ZERO);
     for (id, root) in [(1, own.clone()), (2, other)] {
@@ -170,8 +173,8 @@ fn nested_floaters_follow_their_parent_before_later_siblings() {
 
 #[test]
 fn retained_probes_preserve_order_clipping_retention_shapes_and_view_ownership() {
-    let root = Area::whole(ViewId::Document);
-    let front = Area::whole(ViewId::Document);
+    let root = Area::whole(crate::test_document());
+    let front = Area::whole(crate::test_document());
     let layout = |pass: &mut HoverPass<(), u8>| {
         pass.in_view(root.clone(), |pass| {
             pass.visit(|output| {

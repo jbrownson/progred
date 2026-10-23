@@ -178,10 +178,10 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
     // An opened pane draws the picture; the document, read raw, draws its
     // source.
     let mut editor = crate::editor_of(picture);
-    editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
+    editor.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
     editor.model.workspace.open(
         crate::workspace::Side::Left,
-        crate::location::value(&crate::location::Location::root(Vec::new())),
+        crate::workspace::Entry::Place(crate::location::Location::root(Vec::new())),
     );
     let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
     let stored_program = driver.element(

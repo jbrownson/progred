@@ -98,7 +98,7 @@ pub(crate) fn initial_navigation(
     undrawn: Option<Path>,
 ) -> Option<puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>> {
     let target = root_target(landmarks, area)?;
-    let (view, path) = (target.path.view(), target.path.to_vec());
+    let (view, path) = (target.path.view().clone(), target.path.to_vec());
     Some(puri::handler::Handler::from_function(
         move |editor: &mut crate::Editor, event, _| {
             if matches!(event, puri::handler::Event::Navigate(_))
@@ -109,7 +109,7 @@ pub(crate) fn initial_navigation(
                     .map(|selection| selection.path())
                     == undrawn.as_deref()
             {
-                crate::editing::Edit::new(editor.session()).select(view, &path);
+                crate::editing::Edit::new(editor.session()).select(&view, &path);
                 puri::handler::EventOutcome::accept()
             } else {
                 puri::handler::EventOutcome::decline(event)
@@ -132,7 +132,7 @@ pub fn select_all<'a, World>(
 }
 
 /// What's drawn at the root of `area`: its outermost value, such as a
-/// document pane's part, or the place a pane shows.
+/// part's, or the place a view shows.
 fn root_target<'a, World>(
     landmarks: &'a [Landmark<World>],
     area: &Area,

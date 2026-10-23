@@ -1,5 +1,4 @@
 use super::*;
-use crate::display::widget::view::ViewId;
 use crate::driver::Driver;
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
@@ -57,8 +56,12 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
     }
     let editor = driver.editor();
     let payload = editor.model.selection.as_ref().unwrap().payload();
-    let selection =
-        Selection::from_payload(&editor.sources(), ViewId::Document, vec![], payload.clone());
+    let selection = Selection::from_payload(
+        &editor.sources(),
+        &crate::test_document(),
+        vec![],
+        payload.clone(),
+    );
     assert_eq!(selection.payload(), payload);
     assert_eq!(selection.edit().unwrap().text(), "abc");
 }
@@ -235,7 +238,7 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
     let mut editor = crate::editor_of(text::value("ab"));
     let selection = Selection::from_payload(
         &editor.sources(),
-        ViewId::Document,
+        &crate::test_document(),
         vec![],
         Value::record([
             (selection_payload::vocabulary::ANCHOR, f64::value(1.0)),
@@ -338,7 +341,7 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
         let mut editor = crate::editor_of(value);
         editor.stack.libraries = libraries.clone();
         if raw {
-            editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
+            editor.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
         }
         editor.model.selection = Some(make_selection(path));
         let mut driver = Driver::new(editor, Driver::VIEWPORT);
@@ -397,7 +400,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
     assert!(!write_text(&mut doc, &libraries, &mut selection));
     let reified = Selection::from_payload(
         &src(&doc, &libraries),
-        ViewId::Document,
+        &crate::test_document(),
         path,
         selection.payload(),
     );
@@ -694,7 +697,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
             let mut editor = crate::test_editor(doc.clone());
             editor.model.selection = Some(Selection::from_payload(
                 &src(&doc, &libraries),
-                ViewId::Document,
+                &crate::test_document(),
                 path.clone(),
                 payload.clone(),
             ));

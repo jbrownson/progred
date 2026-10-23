@@ -1,5 +1,4 @@
 use super::*;
-use crate::display::widget::view::ViewId;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
 use gid::Step;
@@ -319,7 +318,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     let glyphs = |selection: Option<Selection>, annotations: Annotations| {
         let mut world = crate::editor_of(Value::from(vec![7u8]));
         world.model.selection = selection;
-        world.model.workspace.document.annotations = annotations;
+        world.model.workspace.document_pane_mut().annotations = annotations;
         world.stack.projection = projection.clone();
         let frame = editing_frame(&mut world);
         crate::display::test_support::painted(&settle(frame, &world.sources()).list.0)
@@ -332,7 +331,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     let cold = glyphs(None, Annotations::default());
     let selected = glyphs(
         Some(crate::selection::Selection::edge(
-            ViewId::Document,
+            &crate::test_document(),
             Vec::new(),
         )),
         Annotations::default(),

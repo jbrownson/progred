@@ -2,7 +2,7 @@ use super::*;
 use crate::display::test_support::ResolveForDispatch;
 use crate::display::test_support::primary_press;
 use crate::display::widget::placed::leaf;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::libraries::f64 as f64_convention;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
 use crate::selection::{Stage, pending_value};
@@ -42,7 +42,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         );
         let mut world = crate::editor_of(f64_convention::value(1.0));
         if pending {
-            world.model.selection = Some(pending_value(ViewId::Document, vec![]));
+            world.model.selection = Some(pending_value(&crate::test_document(), vec![]));
         }
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
@@ -55,7 +55,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
                 },
             ),
             &mut crate::frame::DispatchContext::new(
-                owns_view.then(|| Area::whole(ViewId::Document)),
+                owns_view.then(|| Area::whole(crate::test_document())),
                 Some(hover(vec![])),
             ),
         );
@@ -79,7 +79,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         let mut world = crate::editor_of(value.clone());
         if pending {
             world.model.selection = Some(pending_value(
-                ViewId::Document,
+                &crate::test_document(),
                 crate::occurrence::of(&[Step::Key(field)]),
             ));
         }
@@ -130,7 +130,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             },
         );
         let frame = crate::display::widget::frame::place(
-            crate::display::widget::view::in_view(node, Area::whole(ViewId::Document)),
+            crate::display::widget::view::in_view(node, Area::whole(crate::test_document())),
             Placement::root(extent.rect_at(Point::ZERO)),
             &Default::default(),
         );
@@ -138,7 +138,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             &mut world,
             &primary_press(Point::new(5.0, 5.0), crate::test_support::command()),
             &mut crate::frame::DispatchContext::new(
-                Some(Area::whole(ViewId::Document)),
+                Some(Area::whole(crate::test_document())),
                 Some(hover(vec![]))
             ),
         ));

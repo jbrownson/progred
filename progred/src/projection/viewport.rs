@@ -2,18 +2,22 @@
 
 use super::Projection;
 use crate::libraries::presentation;
+use crate::location::Location;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
 use kurbo::Size;
 
+/// A sized value a pane fills itself with: the value, and the cells
+/// followed from the pane's place to reach it.
 pub(crate) struct Entry<'a> {
     pub value: &'a Value,
     pub path: Path,
 }
 
-pub(crate) fn entry<'a>(sources: Sources<'a>, path: &[Step]) -> Option<Entry<'a>> {
-    let mut value = sources.resolve_path(path)?;
-    let mut path = path.to_vec();
+/// The sized value at `place`, past any cells it names.
+pub(crate) fn entry<'a>(sources: Sources<'a>, place: &Location) -> Option<Entry<'a>> {
+    let mut value = sources.read(place)?;
+    let mut path = Vec::new();
     let mut seen = Vec::new();
     while let Some(cell) = value.as_cell() {
         if seen.contains(&cell) {

@@ -46,20 +46,20 @@ impl<W> Geometry<'_, W> {
     }
 
     pub fn reveal_rect(self, model: &mut Model, area: &Area, rect: Rect) {
-        if let (Some(region), Some(view)) = (
+        if let (Some(region), Some(pane)) = (
             self.view_regions.iter().find(|region| &region.area == area),
-            model.workspace.view_mut(area),
+            model.workspace.pane_mut(area),
         ) {
-            view.scroll = Vec2::new(
+            pane.scroll = Vec2::new(
                 reveal_axis(
-                    view.scroll.x,
+                    pane.scroll.x,
                     region.maximum.x,
                     (rect.x0, rect.x1),
                     (region.rect.x0, region.rect.x1),
                     self.scale,
                 ),
                 reveal_axis(
-                    view.scroll.y,
+                    pane.scroll.y,
                     region.maximum.y,
                     (rect.y0, rect.y1),
                     (region.rect.y0, region.rect.y1),

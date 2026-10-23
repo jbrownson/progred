@@ -92,7 +92,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
             .editor
             .model
             .workspace
-            .document
+            .document_pane_mut()
             .annotations
             .set_field(
                 &[
@@ -279,7 +279,7 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
             .editor
             .model
             .workspace
-            .document
+            .document_pane_mut()
             .annotations
             .set_field(
                 &[
@@ -412,7 +412,7 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
         .editor
         .model
         .workspace
-        .document
+        .document_pane_mut()
         .annotations
         .set_field(
             &[

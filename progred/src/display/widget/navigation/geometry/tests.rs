@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use std::rc::Rc;
 
 #[test]
@@ -54,11 +54,14 @@ fn reveal_clamps_an_offset_left_stale_by_a_resize() {
 fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     let mut editor = crate::test_editor(gid::Document::default());
     let root = editor.model.workspace.document_area();
-    let other = Area::part(ViewId::Document, vec![gid::Step::Key(gid::new_cell_id())]);
+    let other = Area::part(
+        crate::test_document(),
+        vec![gid::Step::Key(gid::new_cell_id())],
+    );
     let landmarks: [Landmark<()>; 2] = [
         Landmark {
             area: Some(other.clone()),
-            path: crate::occurrence::Trail::root(ViewId::Document),
+            path: crate::occurrence::Trail::root(crate::test_document()),
             rect: Rect::new(0.0, 0.0, 20.0, 20.0),
             select: Rc::new(|_, _| false),
             secondary: None,
@@ -67,7 +70,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
         },
         Landmark {
             area: Some(root.clone()),
-            path: crate::occurrence::Trail::root(ViewId::Document),
+            path: crate::occurrence::Trail::root(crate::test_document()),
             rect: Rect::new(0.0, 1_000.0, 20.0, 1_060.0),
             select: Rc::new(|_, _| false),
             secondary: None,
@@ -87,10 +90,10 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
         scale: 2.0,
     };
     geometry.reveal_path(&mut editor.model, &other, &[]);
-    assert_eq!(editor.model.workspace.document.scroll, Vec2::ZERO);
+    assert_eq!(editor.model.workspace.document_pane().scroll, Vec2::ZERO);
     geometry.reveal_path(&mut editor.model, &root, &[]);
     assert_eq!(
-        editor.model.workspace.document.scroll,
+        editor.model.workspace.document_pane().scroll,
         Vec2::new(0.0, 442.0)
     );
 }

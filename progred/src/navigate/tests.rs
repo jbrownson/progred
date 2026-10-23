@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::test_support::key_down;
 use crate::test_values::key;
 use kurbo::Rect;
@@ -62,10 +62,10 @@ fn navigation_direction_accepts_modifiers_but_excludes_other_keys_and_releases()
 
 #[test]
 fn command_a_selects_the_current_views_root() {
-    let document = Area::whole(ViewId::Document);
+    let document = Area::whole(crate::test_document());
     let pane_path = vec![key("pane")];
-    let pane = Area::part(ViewId::Document, pane_path.clone());
-    let other_pane = Area::part(ViewId::Document, pane_path.clone());
+    let pane = Area::part(crate::test_document(), pane_path.clone());
+    let other_pane = Area::part(crate::test_document(), pane_path.clone());
     let child_path = vec![key("pane"), key("child")];
     let landmarks: Vec<_> = [
         (&document, child_path.clone()),

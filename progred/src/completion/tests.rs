@@ -1,6 +1,5 @@
 use super::*;
 use crate::annotations::Annotations;
-use crate::display::widget::view::ViewId;
 use crate::libraries::{fidget, grap::control, presentation, text};
 use crate::selection::{Stage, pending_edge};
 use crate::test_support::{
@@ -13,7 +12,8 @@ use std::rc::Rc;
 fn completion_insertion_never_invents_or_overwrites_selection_policy() {
     let libraries = core_libraries();
     let doc = Document::default();
-    let pending = crate::selection::pending_with_query(ViewId::Document, vec![], "original query");
+    let pending =
+        crate::selection::pending_with_query(&crate::test_document(), vec![], "original query");
     let old_payload = pending.payload();
     for continuation in [
         None,
@@ -73,7 +73,7 @@ fn label_offer_explicitly_opens_its_missing_value() {
         &crate::editing::Read {
             sources: src(&doc, &libraries),
         },
-        ViewId::Document,
+        &crate::test_document(),
         vec![],
     )
     .unwrap();
@@ -184,7 +184,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         cells: Cells::new(),
     };
     let pending = crate::selection::pending_value(
-        ViewId::Document,
+        &crate::test_document(),
         crate::occurrence::of(&[Step::Key(field)]),
     );
     let offer = root_completions(&stack)
@@ -193,7 +193,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         .unwrap();
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
-        ViewId::Document,
+        &crate::test_document(),
         crate::occurrence::of(&[Step::Key(field)]),
     ));
     (offer.activate)(&mut world.session());

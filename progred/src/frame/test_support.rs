@@ -59,7 +59,7 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
             computations: &world.computations,
             completions: Some(&completions),
             sources,
-            view: view.area.view,
+            view: view.area.view.clone(),
             root: shown.root.as_deref(),
             root_path: &shown.root_path,
             selection,
@@ -155,9 +155,9 @@ impl ProfileView {
             crate::display::widget::style::Theme::Light.palette(),
             self.scale,
         );
-        let view = crate::workspace::View {
+        let view = crate::workspace::Pane {
             area: crate::display::widget::view::Area::part(
-                crate::display::widget::view::ViewId::Document,
+                crate::test_document(),
                 self.root
                     .as_deref()
                     .and_then(crate::occurrence::document)

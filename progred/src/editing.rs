@@ -162,7 +162,7 @@ pub(crate) fn enter_pending(
             }
             .map(|pending| pending.with_origin(current.path().to_vec()))
         }
-        None => selection::pending_root(&sources),
+        None => selection::pending_root(&sources, &session.model.workspace.document),
     }
 }
 

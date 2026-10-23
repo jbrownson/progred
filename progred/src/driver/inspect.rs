@@ -267,6 +267,22 @@ impl<P> Driver<P> {
         self.landmark(path).is_some()
     }
 
+    /// Whether the last frame draws `path` in `view`, of the views that may
+    /// draw the same path.
+    pub(crate) fn drawn_in<S: Clone + Into<Occurs>>(
+        &self,
+        view: &std::rc::Rc<crate::workspace::View>,
+        path: &[S],
+    ) -> bool {
+        let path = occurrence(path);
+        self.runner
+            .frame
+            .dispatch
+            .landmarks
+            .iter()
+            .any(|landmark| landmark.path.view() == view && landmark.path == path)
+    }
+
     /// What the last frame draws at `path`, if anything.
     pub(crate) fn landmark<S: Clone + Into<Occurs>>(
         &self,

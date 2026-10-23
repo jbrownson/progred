@@ -302,7 +302,7 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
                 .editor()
                 .model
                 .workspace
-                .view(&root)
+                .pane(&root)
                 .unwrap()
                 .annotations
                 .at(path),

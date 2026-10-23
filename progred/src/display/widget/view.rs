@@ -1,51 +1,45 @@
-//! A view's identity, and the widgets that mark where a view is drawn.
+//! Areas of the window, and the widgets that mark where a view is drawn.
 
 use super::HoverPass;
 use super::container;
 use super::frame::ViewRegion;
-use gid::{CellId, Path, Step};
+use crate::workspace::View;
+use gid::{Path, Step};
 use kurbo::Vec2;
 use measured::Measured;
 use puri::handler::ScrollOutcome;
 use std::rc::Rc;
 use ui_events::pointer::PointerScrollEvent;
 
-/// Which view something is in: the document's, or a pane the editor opened
-/// beside it. It's the first tier of where something is drawn; the path
-/// within the view, a document path, is the second.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ViewId {
-    Document,
-    Opened(CellId),
-}
-
 /// An area of the window that draws one value of a view: the view's whole
 /// area, or, where its root value is a row or column, the area of the part
-/// at `part`, a path in the view.
+/// at `part` below its root. The view is the first tier of where something
+/// is drawn; the path within it is the second.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Area {
-    pub view: ViewId,
+    pub view: Rc<View>,
     part: Rc<[Step]>,
 }
 
 impl Area {
     /// `view`'s whole area.
-    pub fn whole(view: ViewId) -> Self {
+    pub fn whole(view: Rc<View>) -> Self {
         Self {
             view,
             part: Rc::from([]),
         }
     }
 
-    /// The area of `view`'s part at `path`.
-    pub fn part(view: ViewId, path: Path) -> Self {
+    /// The area of `view`'s part at `path` below its root.
+    pub fn part(view: Rc<View>, path: Path) -> Self {
         Self {
             view,
             part: Rc::from(path),
         }
     }
 
-    /// Where in its view the area's part is: no steps for the whole view.
+    /// Where the area's part is below its view's root: no steps for the
+    /// whole view.
     pub fn path(&self) -> &[Step] {
         &self.part
     }

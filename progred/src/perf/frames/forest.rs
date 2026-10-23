@@ -58,7 +58,7 @@ fn forest_slider_profile_loop() {
             .editor
             .model
             .workspace
-            .document
+            .document_pane_mut()
             .annotations
             .set_field(
                 &crate::test_examples::result_path(&[gid::Step::Key(names["second"])]),

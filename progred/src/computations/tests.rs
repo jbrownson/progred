@@ -1,5 +1,4 @@
 use super::*;
-use crate::display::widget::view::ViewId;
 
 #[test]
 fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects() {
@@ -49,7 +48,12 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         let run = |doc: &Document, data: &Value| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
             computations
-                .apply_runtime(Trail::ROOT, &callable, &[(argument, data.clone())], 100)
+                .apply_runtime(
+                    &Trail::root(crate::test_document()),
+                    &callable,
+                    &[(argument, data.clone())],
+                    100,
+                )
                 .into_value()
         };
         let first = run(&doc, &data);
@@ -115,7 +119,12 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     let run = |doc: &Document| {
         computations.begin(Rc::new(doc.clone()), libraries.clone());
         computations
-            .evaluate_runtime(Trail::ROOT, &(&expression).into(), 100, None)
+            .evaluate_runtime(
+                &Trail::root(crate::test_document()),
+                &(&expression).into(),
+                100,
+                None,
+            )
             .into_value()
     };
     let missing = run(&doc);
@@ -139,7 +148,12 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     let other_expression = grap::call(function.into(), [(input, Value::record([]))]);
     assert_eq!(
         computations
-            .evaluate_runtime(Trail::ROOT, &(&other_expression).into(), 100, None)
+            .evaluate_runtime(
+                &Trail::root(crate::test_document()),
+                &(&other_expression).into(),
+                100,
+                None
+            )
             .into_value(),
         Value::record([])
     );
@@ -147,14 +161,24 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     assert_eq!(
         grap::absent::reason(
             &computations
-                .evaluate_runtime(Trail::ROOT, &(&other_expression).into(), 0, None)
+                .evaluate_runtime(
+                    &Trail::root(crate::test_document()),
+                    &(&other_expression).into(),
+                    0,
+                    None
+                )
                 .into_value()
         ),
         Some(grap::absent::FUEL_EXHAUSTED)
     );
     assert_eq!(
         computations
-            .evaluate_runtime(Trail::ROOT, &(&other_expression).into(), 100, None)
+            .evaluate_runtime(
+                &Trail::root(crate::test_document()),
+                &(&other_expression).into(),
+                100,
+                None
+            )
             .into_value(),
         Value::record([])
     );
@@ -192,7 +216,12 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
             ),
             (grap::vocabulary::VALUE, closure.clone()),
         ]);
-        let result = computations.evaluate_runtime(Trail::ROOT, &expression, 100, None);
+        let result = computations.evaluate_runtime(
+            &Trail::root(crate::test_document()),
+            &expression,
+            100,
+            None,
+        );
         assert!(result.same_result(closure));
     }
 }
@@ -202,8 +231,8 @@ fn occurrences_in_different_views_have_independent_root_lifetimes() {
     let computations = Computations::default();
     // The document view's root and an opened pane's: the same path, in
     // different views.
-    let document = Trail::root(ViewId::Document);
-    let pane = Trail::root(ViewId::Opened(gid::new_cell_id()));
+    let document = Trail::root(crate::test_document());
+    let pane = Trail::root(std::rc::Rc::new(crate::workspace::View::of_root()));
     let first = computations.at(&document, || computations.runtime.input(1));
     let second = computations.at(&pane, || computations.runtime.input(2));
     first.set(3);

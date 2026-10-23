@@ -31,7 +31,7 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
     // field is drawn as a field of its own.
     let drawn = |preset: Preset| {
         let mut editor = crate::test_editor(doc.clone());
-        editor.model.workspace.document.shown = preset.shown();
+        editor.model.workspace.document_pane_mut().shown = preset.shown();
         let driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
         let glyphs = |field| {
             let rect = driver.rect(&[Step::Key(field)]);

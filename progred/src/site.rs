@@ -1,10 +1,10 @@
 //! Interpret site and selection effects while applying a Grap callable.
 //! Reads observe staged writes; a declined handler commits neither.
 
-use crate::display::widget::view::ViewId;
 use crate::occurrence::{Path, Step};
 use crate::selection::Selection;
 use crate::sources::Sources;
+use crate::workspace::View;
 use gid::Value;
 use grap::absent;
 use std::cell::RefCell;
@@ -115,7 +115,7 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 /// committing any pending annotation or selection change.
 pub(crate) fn apply_scoped_event(
     session: &mut crate::editing::Session<'_>,
-    view: ViewId,
+    view: &Rc<View>,
     path: Path,
     function: grap::RuntimeValue,
     event: Value,
@@ -129,7 +129,7 @@ pub(crate) fn apply_scoped_event(
     let annotation = session
         .model
         .workspace
-        .view_at(view, &path)
+        .pane_at(view, &path)
         .and_then(|state| state.annotations.at(&path))
         .cloned();
     let mut staged = PendingChanges {
@@ -146,7 +146,7 @@ pub(crate) fn apply_scoped_event(
         &mut staged,
     );
     let model = &mut *session.model;
-    if handled && let Some(state) = model.workspace.view_at_mut(view, &path) {
+    if handled && let Some(state) = model.workspace.pane_at_mut(view, &path) {
         install_scoped(
             staged,
             &Sources {
@@ -167,7 +167,7 @@ pub(crate) fn apply_scoped_event(
 pub(crate) fn install_scoped(
     staged: PendingChanges,
     sources: &Sources,
-    view: ViewId,
+    view: &Rc<View>,
     path: &[Step],
     annotations: &mut crate::annotations::Annotations,
     selection: &mut Option<Selection>,

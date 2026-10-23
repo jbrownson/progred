@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::occurrence::{Step, Trail};
 use gid::CellId;
 use puri::handler::NavigationDirection;
@@ -421,8 +421,11 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
     use super::super::Landmark;
     let paths: [Trail; 2] = std::array::from_fn(|_| Trail::from([Step::Key(gid::new_cell_id())]));
     let views = [
-        Area::whole(ViewId::Document),
-        Area::part(ViewId::Document, vec![gid::Step::Key(gid::new_cell_id())]),
+        Area::whole(crate::test_document()),
+        Area::part(
+            crate::test_document(),
+            vec![gid::Step::Key(gid::new_cell_id())],
+        ),
     ];
     let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput::default(), kurbo::Rect::ZERO);
     for (view, root) in views.into_iter().enumerate() {

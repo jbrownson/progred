@@ -23,7 +23,7 @@ fn last_event(world: &crate::Editor) -> &Record {
     world
         .model
         .workspace
-        .document
+        .document_pane()
         .annotations
         .at(&[])
         .unwrap()

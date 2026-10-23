@@ -1,6 +1,5 @@
 use super::*;
 use crate::display::test_support::{mouse, primary_press};
-use crate::display::widget::view::ViewId;
 use crate::display::{Layout, partial, widget};
 use crate::libraries::{f64, text};
 use crate::projection::Projection;
@@ -115,7 +114,7 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
     }));
     runner.refresh_frame(1.0, VIEWPORT);
     runner.editor.model.selection = Some(selection::Selection::edge(
-        ViewId::Document,
+        &crate::test_document(),
         cell_path.clone(),
     ));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -189,7 +188,7 @@ fn arrows_edit_text_before_routing_and_arrive_at_the_near_text_edge() {
         .collect();
     let mut runner = EditorRunner::new(crate::editor_of(list));
     runner.editor.model.selection = Some(selection::Selection::edge(
-        ViewId::Document,
+        &crate::test_document(),
         paths[0].clone(),
     ));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -249,7 +248,7 @@ fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
         let mut editor = crate::editor_of(list);
         editor.command_modifier = command;
         editor.model.selection = Some(selection::Selection::edge(
-            ViewId::Document,
+            &crate::test_document(),
             paths[1].clone(),
         ));
         let mut runner = EditorRunner::new(editor);
@@ -293,7 +292,7 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
         .collect();
     let mut runner = EditorRunner::new(crate::editor_of(list));
     runner.editor.model.selection = Some(selection::Selection::edge(
-        ViewId::Document,
+        &crate::test_document(),
         name_path.clone(),
     ));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -363,7 +362,8 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
 #[test]
 fn focus_changes_clear_selection_cancel_gestures_and_gate_keyboard_input() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
-    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
+    runner.editor.model.selection =
+        Some(selection::Selection::edge(&crate::test_document(), vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.keyboard_event(&key(), 1.0, VIEWPORT));
     let document = runner.editor.model.doc.clone();
@@ -401,7 +401,8 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     runner.refresh_frame(1.0, VIEWPORT);
     assert_eq!(runner.frame.input_area, None);
-    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
+    runner.editor.model.selection =
+        Some(selection::Selection::edge(&crate::test_document(), vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     let area = runner
         .frame
@@ -416,7 +417,8 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
 #[test]
 fn a_picker_query_offers_a_composition_area() {
     let mut runner = EditorRunner::new(crate::test_editor(Document::default()));
-    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
+    runner.editor.model.selection =
+        Some(selection::Selection::edge(&crate::test_document(), vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.frame.input_area.is_some());
 }
@@ -424,7 +426,8 @@ fn a_picker_query_offers_a_composition_area() {
 #[test]
 fn focus_loss_ends_ime_composition_without_changing_committed_text() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
-    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
+    runner.editor.model.selection =
+        Some(selection::Selection::edge(&crate::test_document(), vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.ime_event(
         &ImeEvent::Preedit("draft".into(), Some((5, 5))),
@@ -716,13 +719,13 @@ fn scrolling_delivers_one_batch_and_builds_one_successor() {
             assert_eq!(events.len(), 2);
             puri::scroll::each(events, |event| {
                 let (next, outcome) = crate::display::widget::scroll::offset(
-                    editor.model.workspace.document.scroll,
+                    editor.model.workspace.document_pane().scroll,
                     event,
                     1.0,
                     VIEWPORT,
                     kurbo::Vec2::new(0.0, 100.0),
                 );
-                editor.model.workspace.document.scroll = next;
+                editor.model.workspace.document_pane_mut().scroll = next;
                 outcome
             })
         });
@@ -731,7 +734,7 @@ fn scrolling_delivers_one_batch_and_builds_one_successor() {
     }
     assert!(log.borrow().is_empty());
     assert!(runner.flush_pending_continuous());
-    assert_eq!(runner.editor.model.workspace.document.scroll.y, 10.0);
+    assert_eq!(runner.editor.model.workspace.document_pane().scroll.y, 10.0);
     assert_eq!(
         log.take(),
         [("project", 0.0), ("hover", 0.0), ("bind", 0.0)]

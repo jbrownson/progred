@@ -1002,9 +1002,12 @@ impl App {
                 if let Some(observer) = &mut self.web_observer {
                     observer.notify(&runner.editor);
                 }
-                if let Some(height) =
-                    web_embed::content_height(&runner.frame.dispatch.view_regions, scale)
-                        .filter(|height| self.reported_height != Some(*height))
+                if let Some(height) = web_embed::content_height(
+                    &runner.frame.dispatch.view_regions,
+                    &runner.editor.model.workspace.document_area(),
+                    scale,
+                )
+                .filter(|height| self.reported_height != Some(*height))
                 {
                     self.reported_height = Some(height);
                     crate::web::report_content_height(height);

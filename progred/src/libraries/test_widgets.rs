@@ -4,7 +4,7 @@ use crate::display::test_support::with_context;
 use crate::display::test_support::{place_decoration, primary_press};
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
 use crate::{Editor, frame::Hovered};
@@ -25,7 +25,10 @@ pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
 /// An empty document's editor, its missing root a pending hole.
 fn pending_root() -> Editor {
     let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::pending_value(ViewId::Document, vec![]));
+    world.model.selection = Some(crate::selection::pending_value(
+        &crate::test_document(),
+        vec![],
+    ));
     world
 }
 
@@ -70,7 +73,10 @@ pub fn point_update(
     )
     .expect("a point-control wrapper");
     let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::Selection::edge(ViewId::Document, vec![]));
+    world.model.selection = Some(crate::selection::Selection::edge(
+        &crate::test_document(),
+        vec![],
+    ));
     assert!(output.handler.unwrap().dispatch_pointer_down(
         &mut world,
         &primary_press(Point::new(50.0, 50.0), Modifiers::empty())
@@ -162,7 +168,7 @@ pub fn hover(path: Vec<gid::Step>) -> Hovered {
 /// A projection test's occurrence: the root of the test view, so a site
 /// below it hovers and selects the steps it's given.
 pub fn test_site() -> crate::editing::Site {
-    crate::editing::Site::new(crate::occurrence::Trail::root(ViewId::Document))
+    crate::editing::Site::new(crate::occurrence::Trail::root(crate::test_document()))
 }
 
 /// `value` projected writably at scale 1 through `env`, with no default
@@ -221,7 +227,13 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
             ..Default::default()
         },
     );
-    world.model.workspace.document.annotations.at(&[]).cloned()
+    world
+        .model
+        .workspace
+        .document_pane()
+        .annotations
+        .at(&[])
+        .cloned()
 }
 
 pub fn gesture_place(
@@ -266,7 +278,7 @@ pub fn drag_frame(
         Rect::new(0.0, 0.0, 10.0, 20.0),
     );
     let placed = crate::display::widget::frame::place(
-        crate::display::widget::view::in_view(node, Area::whole(ViewId::Document)),
+        crate::display::widget::view::in_view(node, Area::whole(crate::test_document())),
         placement,
         &Default::default(),
     );

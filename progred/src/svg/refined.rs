@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::libraries::{
     controls::vocabulary::STATE, fidget::vocabulary as f, toolpath::vocabulary as t,
 };
@@ -25,7 +25,7 @@ fn readme_svg_captures() {
     let view = editor
         .model
         .workspace
-        .view_mut(&Area::part(ViewId::Document, path.clone()))
+        .pane_mut(&Area::part(crate::test_document(), path.clone()))
         .unwrap();
     view.annotations
         .set_field(&result_path(&path), STATE, Some(cam_position(0.3)));
@@ -154,7 +154,7 @@ fn editor_toolpath_refined_svg_captures() {
         .editor
         .model
         .workspace
-        .view_mut(&Area::part(ViewId::Document, path.clone()))
+        .pane_mut(&Area::part(crate::test_document(), path.clone()))
         .unwrap()
         .annotations
         .set_field(
@@ -173,7 +173,7 @@ fn editor_toolpath_refined_svg_captures() {
         .editor
         .model
         .workspace
-        .view_mut(&Area::part(ViewId::Document, path.clone()))
+        .pane_mut(&Area::part(crate::test_document(), path.clone()))
         .unwrap()
         .annotations
         .set_field(&result_path(&path), STATE, Some(cam_position(0.7)));

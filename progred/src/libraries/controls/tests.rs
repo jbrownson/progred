@@ -1,6 +1,5 @@
 use super::*;
 use crate::display::test_support::{mouse, primary_press};
-use crate::display::widget::view::ViewId;
 use crate::projection::Partial;
 use gid::Cells;
 use kurbo::Point;
@@ -500,7 +499,7 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
     let mut editor = crate::test_editor(gid::Document::default());
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
     crate::editing::Edit::new(editor.session()).annotate(
-        ViewId::Document,
+        &crate::test_document(),
         &[],
         Value::record([(camera, A.into())]),
     );
@@ -523,7 +522,13 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
             .resolve_for_dispatch()
             .dispatch_pointer_down(&mut editor, &event)
     );
-    let annotation = editor.model.workspace.document.annotations.at(&[]).unwrap();
+    let annotation = editor
+        .model
+        .workspace
+        .document_pane()
+        .annotations
+        .at(&[])
+        .unwrap();
     assert_eq!(f64::read(&current_state(Some(annotation))), Some(0.5));
     assert_eq!(
         annotation.as_record().unwrap().get(&camera),
@@ -591,17 +596,17 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
         )
     }
     let mut editor = crate::test_editor(gid::Document::default());
-    let site = crate::editing::Site::new(crate::occurrence::Trail::root(ViewId::Document));
+    let site = crate::editing::Site::new(crate::occurrence::Trail::root(crate::test_document()));
     let first = field_update(A, B);
     let second = field_update(B, A);
     for (handler, value) in [(&first, 0.2), (&second, 0.8), (&first, 0.4)] {
         apply_change(&mut editor, &site, handler, f64::value(value));
     }
     assert_eq!(
-        current_state(editor.model.workspace.document.annotations.at(&[])),
+        current_state(editor.model.workspace.document_pane().annotations.at(&[])),
         Value::record([(A, f64::value(0.4)), (B, f64::value(0.8))])
     );
-    let previous = current_state(editor.model.workspace.document.annotations.at(&[]));
+    let previous = current_state(editor.model.workspace.document_pane().annotations.at(&[]));
     let rejected = ::grap::lambda(
         [VALUE, UPDATE],
         ::grap::call(
@@ -617,7 +622,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
     );
     apply_change(&mut editor, &site, &rejected, f64::value(0.9));
     assert_eq!(
-        current_state(editor.model.workspace.document.annotations.at(&[])),
+        current_state(editor.model.workspace.document_pane().annotations.at(&[])),
         previous
     );
     let recovered = ::grap::lambda(
@@ -635,7 +640,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
     );
     apply_change(&mut editor, &site, &recovered, f64::value(0.6));
     assert_eq!(
-        current_state(editor.model.workspace.document.annotations.at(&[])),
+        current_state(editor.model.workspace.document_pane().annotations.at(&[])),
         f64::value(0.6)
     );
 }
@@ -699,7 +704,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
             computations.begin(Rc::new(doc.clone()), libraries.clone());
             let result = computations
                 .evaluate_runtime(
-                    crate::occurrence::Trail::ROOT,
+                    &crate::occurrence::Trail::root(crate::test_document()),
                     &(&expression).into(),
                     1000,
                     None,
@@ -832,7 +837,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
         editor
             .model
             .workspace
-            .document
+            .document_pane()
             .annotations
             .at(&[])
             .is_none(),
@@ -860,7 +865,7 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
     let camera_value = Value::record([(A, f64::value(0.3))]);
     crate::editing::Edit::new(editor.session()).annotate(
-        ViewId::Document,
+        &crate::test_document(),
         &[],
         Value::record([
             (camera, camera_value.clone()),
@@ -899,7 +904,7 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
     assert!(!dispatch.dispatch_pointer_down(&mut editor, &event));
     event.state.position = (extent.width - PADDING_X - 1.0, extent.height() / 2.0).into();
     assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
-    let state = editor.model.workspace.document.annotations.at(&[]);
+    let state = editor.model.workspace.document_pane().annotations.at(&[]);
     assert_eq!(read_state(state, B), Some(&second));
     assert_eq!(read_state(state, A).and_then(f64::read), Some(0.35));
     assert_eq!(
@@ -915,7 +920,7 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
     let original = editor.model.doc.clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
     crate::editing::Edit::new(editor.session()).annotate(
-        ViewId::Document,
+        &crate::test_document(),
         &[],
         Value::record([(camera, Value::record([]))]),
     );
@@ -940,19 +945,27 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
             .dispatch_pointer_down(&mut editor, &event)
     );
     assert_eq!(
-        read_state(editor.model.workspace.document.annotations.at(&[]), A).and_then(f64::read),
+        read_state(
+            editor.model.workspace.document_pane().annotations.at(&[]),
+            A
+        )
+        .and_then(f64::read),
         Some(0.5)
     );
     editor.advance_gesture(&[Point::new(-100.0, -100.0), Point::new(1000.0, -100.0)]);
     assert_eq!(
-        read_state(editor.model.workspace.document.annotations.at(&[]), A).and_then(f64::read),
+        read_state(
+            editor.model.workspace.document_pane().annotations.at(&[]),
+            A
+        )
+        .and_then(f64::read),
         Some(1.0)
     );
     assert!(
         editor
             .model
             .workspace
-            .document
+            .document_pane()
             .annotations
             .at(&[])
             .unwrap()
@@ -961,7 +974,10 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
             .contains_key(&camera)
     );
     assert_eq!(
-        read_state(editor.model.workspace.document.annotations.at(&[]), B),
+        read_state(
+            editor.model.workspace.document_pane().annotations.at(&[]),
+            B
+        ),
         None
     );
     assert!(Rc::ptr_eq(&editor.model.doc, &original));
@@ -1132,7 +1148,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
             editor
                 .model
                 .workspace
-                .view(&root)
+                .pane(&root)
                 .unwrap()
                 .annotations
                 .at(&[]),
@@ -1154,7 +1170,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
             editor
                 .model
                 .workspace
-                .view(&root)
+                .pane(&root)
                 .unwrap()
                 .annotations
                 .at(&[]),
@@ -1251,12 +1267,20 @@ fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
             .unwrap()
             .dispatch_pointer_down(&mut editor, &event)
     );
-    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let state = read_state(
+        editor.model.workspace.document_pane().annotations.at(&[]),
+        A,
+    )
+    .unwrap();
     let selection = tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE));
     assert_eq!(selection.leaves, 2..4);
     assert_eq!(selection.intent[0], puri_widgets::tree_slider::Intent::All);
     editor.advance_gesture(&[Point::new(20.0, 15.0)]);
-    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let state = read_state(
+        editor.model.workspace.document_pane().annotations.at(&[]),
+        A,
+    )
+    .unwrap();
     let selection = tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE));
     assert_eq!(selection.leaves, 0..4);
     assert_eq!(
@@ -1284,7 +1308,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
             Value::record([(A, old.clone()), (B, f64::value(0.35))]),
         ),
     ]);
-    crate::editing::Edit::new(editor.session()).annotate(ViewId::Document, &[], annotation);
+    crate::editing::Edit::new(editor.session()).annotate(&crate::test_document(), &[], annotation);
     let selection = tree_range::Selection::new(&tree, Some(&old));
     let control = selection.widgets(A, 180.0, None).last().unwrap();
     let measured = with_context(&Output::default(), |context| control(context));
@@ -1300,7 +1324,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
             .resolve_for_dispatch()
             .dispatch_pointer_down(&mut editor, &event)
     );
-    let state = editor.model.workspace.document.annotations.at(&[]);
+    let state = editor.model.workspace.document_pane().annotations.at(&[]);
     let chosen = read_state(state, A).unwrap();
     assert_eq!(chosen, &original_selection.select(1, 1..2, None).state());
     assert_eq!(tree_range::Selection::new(&tree, Some(chosen)).leaves, 2..4);
@@ -1311,7 +1335,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
     assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
     assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
     editor.advance_gesture(&[Point::new(150.0, 0.0), Point::new(-100.0, -100.0)]);
-    let state = editor.model.workspace.document.annotations.at(&[]);
+    let state = editor.model.workspace.document_pane().annotations.at(&[]);
     assert_eq!(
         read_state(state, A),
         Some(&original_selection.select(1, 0..2, None).state())
@@ -1345,7 +1369,7 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
             };
             let camera = crate::libraries::fidget::vocabulary::CAMERA;
             crate::editing::Edit::new(editor.session()).annotate(
-                ViewId::Document,
+                &crate::test_document(),
                 &[],
                 Value::record([
                     (camera, Value::record([])),
@@ -1396,7 +1420,7 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
             } else {
                 expected.state()
             };
-            let state = editor.model.workspace.document.annotations.at(&[]);
+            let state = editor.model.workspace.document_pane().annotations.at(&[]);
             assert_eq!(read_state(state, A), Some(&expected));
             assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
             assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
@@ -1425,7 +1449,7 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             let old = tree_range::cursor_state(&selection, position);
             let annotation = set_state(None, A, old.clone());
             crate::editing::Edit::new(editor.session()).annotate(
-                ViewId::Document,
+                &crate::test_document(),
                 &[],
                 annotation.clone(),
             );
@@ -1450,7 +1474,11 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
                 },
             };
             assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
-            let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+            let state = read_state(
+                editor.model.workspace.document_pane().annotations.at(&[]),
+                A,
+            )
+            .unwrap();
             let (_, result) =
                 tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
             assert_eq!(
@@ -1459,7 +1487,7 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             );
             if x == 50.0 && count == 1 {
                 assert_eq!(
-                    editor.model.workspace.document.annotations.at(&[]),
+                    editor.model.workspace.document_pane().annotations.at(&[]),
                     Some(&annotation)
                 );
                 assert_eq!(
@@ -1468,20 +1496,26 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
                 );
                 editor.advance_gesture(&[Point::new(55.0, height / 2.0)]);
                 assert_eq!(
-                    editor.model.workspace.document.annotations.at(&[]),
+                    editor.model.workspace.document_pane().annotations.at(&[]),
                     Some(&annotation)
                 );
                 editor.advance_gesture(&[Point::new(150.0, height / 2.0)]);
-                let state =
-                    read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+                let state = read_state(
+                    editor.model.workspace.document_pane().annotations.at(&[]),
+                    A,
+                )
+                .unwrap();
                 assert_eq!(
                     tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE))
                         .leaves,
                     0..4
                 );
                 editor.advance_gesture(&[Point::new(50.0, height / 2.0)]);
-                let state =
-                    read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+                let state = read_state(
+                    editor.model.workspace.document_pane().annotations.at(&[]),
+                    A,
+                )
+                .unwrap();
                 assert_eq!(
                     tree_range::Selection::new(&tree, state.as_record().unwrap().get(&RANGE))
                         .leaves,
@@ -1527,7 +1561,11 @@ fn tree_cursor_updates_range_and_position_together() {
     ]);
     let (widgets, _) = tree_range::cursor::<crate::Editor>(&tree, None, 2.75, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 150.0, 1);
-    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let state = read_state(
+        editor.model.workspace.document_pane().annotations.at(&[]),
+        A,
+    )
+    .unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(2.75));
     let (widgets, result) =
         tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
@@ -1536,11 +1574,19 @@ fn tree_cursor_updates_range_and_position_together() {
         Some(&tree_range::encode(2..4))
     );
     click(&mut editor, &widgets[0], 100.0, 1);
-    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let state = read_state(
+        editor.model.workspace.document_pane().annotations.at(&[]),
+        A,
+    )
+    .unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(3.0));
     let (widgets, _) = tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 50.0, 1);
-    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let state = read_state(
+        editor.model.workspace.document_pane().annotations.at(&[]),
+        A,
+    )
+    .unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(0.0));
     assert_eq!(
         tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None)
@@ -1552,7 +1598,11 @@ fn tree_cursor_updates_range_and_position_together() {
     );
     let (widgets, _) = tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 50.0, 2);
-    let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
+    let state = read_state(
+        editor.model.workspace.document_pane().annotations.at(&[]),
+        A,
+    )
+    .unwrap();
     assert_eq!(
         state.as_record().unwrap().get(&RANGE),
         Some(&Value::list([ALL.into(), ALL.into()]))

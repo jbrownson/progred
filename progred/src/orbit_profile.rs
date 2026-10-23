@@ -81,7 +81,8 @@ impl OrbitProfile {
             Default::default(),
             None,
         );
-        editor.model.workspace.sync(editor.model.doc.root.as_ref());
+        editor.sync_views();
+        let document = editor.model.workspace.document.clone();
         if collapsed {
             let outline = libraries::presentation::vocabulary::SECTIONS;
             let sections: Vec<_> = editor
@@ -101,7 +102,7 @@ impl OrbitProfile {
                 .collect();
             for (position, key) in sections {
                 editor.session().set_folded(
-                    crate::display::widget::view::ViewId::Document,
+                    &document,
                     &crate::occurrence::of(&[
                         Step::Key(outline),
                         Step::Element(position),
@@ -115,8 +116,8 @@ impl OrbitProfile {
         editor
             .model
             .workspace
-            .view_mut(&crate::display::widget::view::Area::part(
-                crate::display::widget::view::ViewId::Document,
+            .pane_mut(&crate::display::widget::view::Area::part(
+                document,
                 panes[0].clone(),
             ))
             .unwrap()

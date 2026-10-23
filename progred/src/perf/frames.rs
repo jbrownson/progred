@@ -154,7 +154,7 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
             doc: &doc,
             libraries: &context.stack.libraries,
         },
-        crate::display::widget::view::ViewId::Document,
+        &crate::test_document(),
         Vec::new(),
         payload,
     );
@@ -230,7 +230,7 @@ fn cam_source_profile(scrolling: bool) {
             "CAM source, 600x900 @2"
         },
         |index| {
-            let mut frame = view.frame(doc, &editor.model.workspace.document.annotations);
+            let mut frame = view.frame(doc, &editor.model.workspace.document_pane().annotations);
             if scrolling {
                 // Sweep a fixed 1200-point span and back, with a fixed viewport.
                 let step = index % 240;
@@ -254,7 +254,7 @@ fn cam_editor_scroll_profile_loop() {
         let start = Instant::now();
         let step = index % 240;
         let y = if step <= 120 { step } else { 240 - step };
-        runner.editor.model.workspace.document.scroll.y = y as f64 * 10.0;
+        runner.editor.model.workspace.document_pane_mut().scroll.y = y as f64 * 10.0;
         runner.refresh_frame(scale, size);
         let mut output = DrawList::default();
         puri::frame::render(runner.prepare_paint(scale, size).renders, &mut output);

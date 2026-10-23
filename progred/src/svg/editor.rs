@@ -2,7 +2,7 @@
 //! preview while its computations run, and the website's images.
 
 use super::*;
-use crate::display::widget::view::{Area, ViewId};
+use crate::display::widget::view::Area;
 use crate::test_examples::{cam_editor, cam_position, result_path};
 use gid::{CellId, Value};
 #[test]
@@ -188,7 +188,7 @@ fn capture_cam_async(mode: CellId) {
         .editor
         .model
         .workspace
-        .view_mut(&Area::part(ViewId::Document, path.clone()))
+        .pane_mut(&Area::part(crate::test_document(), path.clone()))
         .unwrap()
         .annotations;
     annotations.set_field(&result_path(&path), STATE, Some(cam_position(0.7)));

@@ -2,7 +2,6 @@
 //! few checks of what they draw.
 
 use super::*;
-use crate::display::widget::view::ViewId;
 use crate::editing::Read;
 use crate::libraries::{f64, name};
 use crate::projection::test_support::make_projected_selection;
@@ -134,7 +133,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     // The engaged twin: same slot, same rect, selection blue.
     let (_, engaged) = render(
         &empty,
-        Some(&pending_value(ViewId::Document, Vec::new())),
+        Some(&pending_value(&crate::test_document(), Vec::new())),
         320.0,
         "raw_placeholder_engaged.svg",
     );
@@ -155,7 +154,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     let (typed, typed_extent) = render(
         &empty,
         Some(&crate::selection::pending_with_query(
-            ViewId::Document,
+            &crate::test_document(),
             Vec::new(),
             "\"asdf\"",
         )),
@@ -168,7 +167,7 @@ fn svg_bench_renders_the_placeholder_notation() {
             cells: Cells::new(),
         },
         Some(&crate::selection::Selection::edge(
-            ViewId::Document,
+            &crate::test_document(),
             Vec::new(),
         )),
         320.0,
@@ -189,7 +188,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::libraries::text::value("")),
         cells: Cells::new(),
     };
-    let sel = Selection::edge(ViewId::Document, Vec::new());
+    let sel = Selection::edge(&crate::test_document(), Vec::new());
     let (_, string) = render(
         &empty_string,
         Some(&sel),
@@ -242,7 +241,7 @@ fn svg_bench_renders_a_pending_edge() {
                 libraries: &library,
             },
         },
-        ViewId::Document,
+        &crate::test_document(),
         crate::occurrence::of(&[Step::Key(crate::test_values::label("shape"))]),
     )
     .unwrap();
@@ -265,7 +264,7 @@ fn svg_bench_renders_a_pending_edge() {
                     libraries: &library,
                 },
             },
-            ViewId::Document,
+            &crate::test_document(),
             Vec::new(),
         )
         .unwrap(),
