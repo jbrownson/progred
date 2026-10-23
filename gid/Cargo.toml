@@ -1,0 +1,13 @@
+[package]
+name = "gid"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+getrandom.workspace = true
+imbl = "7"
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "puri-web"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+js-sys = "0.3"
+kurbo.workspace = true
+peniko.workspace = true
+puri.workspace = true
+skrifa.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = [
+    "CanvasGradient",
+    "CanvasRenderingContext2d",
+    "Document",
+    "HtmlCanvasElement",
+    "ImageData",
+    "Path2d",
+    "Window",
+] }

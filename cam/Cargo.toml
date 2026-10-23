@@ -1,0 +1,12 @@
+[package]
+name = "cam"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+fidget-engine.workspace = true
+nalgebra = "0.35"
+
+[dev-dependencies]
+fidget-engine = { workspace = true, features = ["mesh"] }

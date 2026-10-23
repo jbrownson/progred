@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Print the commit stamp passed to builds as PROGRED_COMMIT. Build code
+# cannot read Git. Tracked changes append -dirty. When Git is unavailable,
+# use the first eight characters of WORKERS_CI_COMMIT_SHA.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+
+if commit=$(git -C "$project_root" rev-parse --short=8 HEAD 2>/dev/null); then
+    if ! git -C "$project_root" diff --quiet HEAD -- 2>/dev/null; then
+        commit="$commit-dirty"
+    fi
+    printf '%s\n' "$commit"
+    exit 0
+fi
+
+if [ -n "${WORKERS_CI_COMMIT_SHA-}" ]; then
+    printf '%.8s\n' "$WORKERS_CI_COMMIT_SHA"
+fi

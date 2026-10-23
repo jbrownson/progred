@@ -1,0 +1,18 @@
+#!/bin/sh
+
+set -eu
+
+cat >&2 <<'EOF'
+error: an unsandboxed Rust build was refused by this repository
+
+Cargo build scripts and procedural macros execute native dependency code.
+Use one of the repository's entry points instead, for example:
+
+    make run
+    make check
+    make test
+    ./tools/sandbox-cargo <cargo command> [arguments...]   (macOS, sandboxed)
+    ./tools/linux-cargo <cargo command> [arguments...]     (Linux, sandboxed)
+EOF
+
+exit 86

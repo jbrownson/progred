@@ -1,0 +1,16 @@
+//! GID's native logical data model: durable cell identities, structural
+//! values, documents, and traversal. Text notation is an external bridge.
+
+mod blob;
+mod cell_id;
+mod cells;
+mod document;
+pub mod position;
+mod value;
+
+pub use blob::Blob;
+pub use cell_id::{CellId, ParseCellIdError, new_cell_id};
+pub use cells::Cells;
+pub use document::{Document, Path};
+pub use position::Position;
+pub use value::{List, Record, Resolution, Step, Value, hex_string, read_hex, sorted_entries};

@@ -1,0 +1,143 @@
+pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
+    use ::grap::{call, vocabulary as g};
+    use gid::Value;
+    Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::CLOSURE).into(),
+        ),
+        (
+            g::LAMBDA,
+            Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
+                ),
+                (g::PARAMS, Value::list([])),
+                (
+                    g::BODY,
+                    call(
+                        vocabulary::SET.into(),
+                        [
+                            (
+                                vocabulary::PATH,
+                                call(
+                                    crate::libraries::list::vocabulary::CONCAT.into(),
+                                    [
+                                        (
+                                            crate::libraries::grap::numbers::vocabulary::LEFT,
+                                            call(
+                                                crate::libraries::editor::site::vocabulary::PATH
+                                                    .into(),
+                                                [],
+                                            ),
+                                        ),
+                                        (
+                                            crate::libraries::grap::numbers::vocabulary::RIGHT,
+                                            crate::libraries::editor::path::value(path),
+                                        ),
+                                    ],
+                                ),
+                            ),
+                            (
+                                crate::libraries::editor::site::vocabulary::VALUE,
+                                crate::libraries::editor::site::vocabulary::VALUE.into(),
+                            ),
+                        ],
+                    ),
+                ),
+            ]),
+        ),
+        (
+            g::ENVIRONMENT,
+            Value::record([(crate::libraries::editor::site::vocabulary::VALUE, payload)]),
+        ),
+    ])
+}
+
+use super::*;
+use gid::Value;
+
+#[test]
+fn the_vocabulary_alone_grants_no_selection_access() {
+    let library = crate::libraries::editor::library::<crate::Editor>();
+    assert_eq!(
+        crate::test_support::test_evaluate(
+            &::grap::call(Value::from(vocabulary::GET), []),
+            |cell| library.definitions.value(cell).cloned(),
+            &crate::test_support::foreign_functions(&library),
+            10,
+        )
+        .result,
+        ::grap::absent::with_detail(
+            ::grap::absent::NOT_CALLABLE,
+            ::grap::absent::VALUE,
+            library.definitions.value(vocabulary::GET).unwrap().clone()
+        )
+    );
+}
+
+#[test]
+fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
+    use std::cell::RefCell;
+    let site = vec![gid::Step::Element(
+        gid::position::between(None, None).unwrap(),
+    )];
+    let child = gid::Step::Key(gid::new_cell_id());
+    let writes = RefCell::new(Vec::new());
+    let interpret = |function,
+                     context: &mut ::grap::Context,
+                     call: &::grap::Expression,
+                     environment: &::grap::Environment| {
+        if function == crate::libraries::editor::site::vocabulary::PATH {
+            Ok(crate::libraries::editor::path::value(&site))
+        } else {
+            let path = context.field(call, vocabulary::PATH).unwrap();
+            let path = context.eval_to_value(path, environment)?;
+            let value = context
+                .field(call, crate::libraries::editor::site::vocabulary::VALUE)
+                .unwrap();
+            let value = context.eval_to_value(value, environment)?;
+            Ok(context.effect(|| {
+                writes
+                    .borrow_mut()
+                    .push((crate::libraries::editor::path::read(&path).unwrap(), value));
+                Value::record([])
+            }))
+        }
+    };
+    let functions =
+        crate::test_support::foreign_functions(&crate::libraries::list::library::<crate::Editor>());
+    let overlay = ::grap::ForeignOverlay::from_value(
+        &[
+            crate::libraries::editor::site::vocabulary::PATH,
+            vocabulary::SET,
+        ],
+        &interpret,
+    );
+    let result = ::grap::apply_value(
+        &grap_at(
+            std::slice::from_ref(&child),
+            crate::selection::payload::empty_pending(),
+        ),
+        [],
+        &crate::test_support::TestHost(|cell| {
+            functions.get(cell).cloned().map(|function| {
+                (
+                    gid::Resolution::Document,
+                    ::grap::Definition::foreign(cell, gid::Value::record([]), function),
+                )
+            })
+        }),
+        Some(&overlay),
+        100,
+    );
+    assert_eq!(result.result, Value::record([]));
+    assert_eq!(
+        writes.into_inner(),
+        vec![(
+            site.into_iter().chain([child]).collect(),
+            Value::record([(vocabulary::STAGE, vocabulary::PENDING.into())])
+        )],
+    );
+}

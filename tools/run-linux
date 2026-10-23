@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Build Progred in the Linux build sandbox, then run it outside, since the
+# sandbox hides the display and GPU the app needs.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+
+"$tool_dir/linux-cargo" build --release -p progred
+exec "$project_root/target/sandbox/build/release/progred" "$@"

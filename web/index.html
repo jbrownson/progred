@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Progred</title>
+    <link rel="icon" href="./icon.svg" />
+    <script type="module" src="../analytics.js"></script>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        color-scheme: light;
+        background: #ffffff;
+      }
+
+      html[data-theme="dark"], html[data-theme="dark"] body {
+        color-scheme: dark;
+        background: #151b2c;
+      }
+      html[data-theme="dark"] #loading { color: #a0aec9; }
+
+      body {
+        min-height: 100dvh;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        outline: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #666;
+        font: 15px system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="progred"></canvas>
+    <div id="loading">Loading Progred…</div>
+    <script type="module">
+      import { loadEditor } from "./load.mjs";
+      import { startWorker } from "./worker-host.js";
+      import { commandIsMeta } from "./platform.mjs";
+      import { isTheme, savedTheme } from "./theme.mjs";
+      import { forwardModifiers } from "./modifiers.mjs";
+      import { routeWheel } from "./scroll.mjs";
+      import { routeKeyboard } from "./keyboard.mjs";
+
+      const loading = document.querySelector("#loading");
+      let wasm;
+      const fail = (error) => {
+        console.error(error);
+        loading.hidden = false;
+        loading.style.display = "grid";
+        loading.textContent = `Progred could not continue: ${error.message}. Reload to retry.`;
+      };
+      try {
+        const params = new URLSearchParams(location.search);
+        let theme = params.get("theme") ?? savedTheme(window);
+        if (!isTheme(theme)) throw new Error("theme must be 'light' or 'dark'");
+        let ready = false;
+        document.documentElement.dataset.theme = theme;
+        const libraries = params.get("libraries") ?? undefined;
+        let peel;
+        window.addEventListener("message", (event) => {
+          if (event.origin !== location.origin || event.source !== window.parent) return;
+          if (event.data?.type === "progred:theme" && isTheme(event.data.theme)) {
+            theme = event.data.theme;
+            document.documentElement.dataset.theme = theme;
+            if (ready) wasm.set_theme(theme);
+          } else if (event.data?.type === "progred:projections" && typeof event.data.projections === "string"
+              && typeof event.data.names === "boolean") {
+            peel = event.data;
+            if (ready) wasm.set_projections(peel.projections, peel.names);
+          }
+        });
+        const canvas = document.querySelector("#progred");
+        // Winit focuses the canvas on every press. A plain focus() scrolls the
+        // embedding page to show the whole frame, so keep the page where it is.
+        if (typeof canvas.focus === "function") {
+          const focus = canvas.focus;
+          canvas.focus = (options) => focus.call(canvas, { ...options, preventScroll: true });
+        }
+        const wheel = params.get("wheel") ?? "editor";
+        if (wheel === "page" || wheel === "auto") {
+          document.documentElement.style.overscrollBehavior = "auto";
+          document.body.style.overscrollBehavior = "auto";
+          if (wheel === "page") {
+            canvas.addEventListener("wheel", (event) => event.stopImmediatePropagation(),
+              { capture: true, passive: true });
+          } else {
+            routeWheel(canvas, (...event) => ready && wasm.browser_captures_scroll(...event));
+          }
+        } else if (wheel !== "editor") {
+          throw new Error("wheel must be 'editor', 'auto', or 'page'");
+        }
+        const documentUrl = params.get("document");
+        let source;
+        if (documentUrl !== null) {
+          const response = await fetch(new URL(documentUrl, location.href));
+          if (!response.ok) throw new Error(`Could not load the example (${response.status})`);
+          source = await response.text();
+        }
+        const threads = params.has("threads") ? Number(params.get("threads")) : undefined;
+        // threads=0 runs the fallback build, as a page without isolation does.
+        const threaded = globalThis.crossOriginIsolated === true && threads !== 0;
+        let url;
+        ({ wasm, url } = await loadEditor(threaded));
+        const example = params.get("example");
+        if (example !== null) {
+          if (documentUrl !== null) throw new Error("Choose either a document or an example");
+          source = wasm.example_source(example);
+          if (source === undefined) throw new Error(`There's no example named ${example}`);
+        }
+        if (threaded) {
+          await startWorker(wasm, url, wasm.computation_finished, fail, threads);
+        }
+        const renderer = await wasm.prepare_renderer(canvas);
+        console.info(`Progred presentation: ${renderer}; `
+          + (threaded ? `${wasm.worker_threads()} render workers`
+            : globalThis.crossOriginIsolated === true ? "no render workers (threads=0)"
+            : "no render workers (the page isn't cross-origin isolated)"));
+        const channel = params.get("observe");
+        const onChange = channel === null ? undefined : (state) => {
+          window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);
+        };
+        wasm.start_editor(source, params.get("menu") !== "hidden", onChange,
+          libraries, params.get("tutorial-slots") ?? undefined,
+          commandIsMeta(navigator.platform), theme);
+        forwardModifiers(canvas, window, wasm.browser_modifiers_changed);
+        routeKeyboard(canvas, wasm.browser_keyboard);
+        ready = true;
+        if (peel) wasm.set_projections(peel.projections, peel.names);
+        window.parent.postMessage({ type: "progred:ready" }, location.origin);
+        window.addEventListener("focus", wasm.browser_focus_changed);
+        window.addEventListener("blur", wasm.browser_focus_changed);
+        wasm.browser_focus_changed();
+        loading.style.display = "none";
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+      }
+    </script>
+  </body>
+</html>

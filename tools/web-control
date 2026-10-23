@@ -1,0 +1,278 @@
+#!/usr/bin/env node
+// The website in a headless browser, driven the way a person would drive it,
+// one action of Anthropic's computer-use tool at a time. `serve` builds and
+// serves the site locally, opens PAGE in a 1280 x 800 window, and listens on
+// target/web-control/browser.sock; every other command sends it one action
+// and prints `done`, the saved screenshot's path, or why it couldn't happen.
+// The session's actions, with their timing, go to
+// target/web-control/session.jsonl, which tools/playtest-video replays as a
+// narrated video; `say` adds a tester's thinking aloud to it.
+//
+//   tools/web-control serve [PAGE]
+//   tools/web-control screenshot [FILE]
+//   tools/web-control mouse_move X Y
+//   tools/web-control left_click X Y [MODIFIERS]
+//   tools/web-control double_click X Y [MODIFIERS]
+//   tools/web-control triple_click X Y [MODIFIERS]
+//   tools/web-control left_click_drag X1 Y1 X2 Y2 [MODIFIERS]
+//   tools/web-control scroll X Y up|down|left|right AMOUNT [MODIFIERS]
+//   tools/web-control key KEYS            (for example Return, ctrl+z, shift+Tab)
+//   tools/web-control type TEXT
+//   tools/web-control wait SECONDS
+//   tools/web-control say TEXT            (what you're thinking, for the video)
+//
+// Coordinates are pixels from the window's top left; modifiers are
+// `+`-joined names such as ctrl or ctrl+shift. It drives the installed
+// Chrome, or the browser at $CHROMIUM. With $WEB_CONTROL_DIR set, the socket,
+// log and screenshots go there instead of target/web-control, so two
+// sessions can run at once.
+const fs = require("node:fs");
+const net = require("node:net");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+
+const ROOT = path.resolve(__dirname, "..");
+const STATE = path.resolve(process.env.WEB_CONTROL_DIR || path.join(ROOT, "target", "web-control"));
+const SOCKET = path.join(STATE, "browser.sock");
+const SESSION = path.join(STATE, "session.jsonl");
+const SCREENSHOTS = path.join(STATE, "screenshots");
+const WINDOW = { width: 1280, height: 800 };
+const SETTLE = 400;
+const WHEEL_CLICK = 100;
+
+// The comment above, for usage errors.
+const SOURCE = fs.readFileSync(__filename, "utf8").split("\n");
+const USAGE = SOURCE.slice(1, SOURCE.findIndex((line, index) => index > 0 && !line.startsWith("//")))
+  .map((line) => line.replace(/^\/\/ ?/, "")).join("\n");
+
+const MODIFIERS = {
+  ctrl: "Control", control: "Control", shift: "Shift", alt: "Alt", option: "Alt",
+  super: "Meta", cmd: "Meta", command: "Meta", meta: "Meta",
+};
+const KEYS = {
+  return: "Enter", enter: "Enter", tab: "Tab", escape: "Escape", esc: "Escape",
+  backspace: "Backspace", delete: "Delete", insert: "Insert", space: "Space",
+  up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight",
+  home: "Home", end: "End", page_up: "PageUp", pageup: "PageUp", prior: "PageUp",
+  page_down: "PageDown", pagedown: "PageDown", next: "PageDown", plus: "+", minus: "-",
+  control_l: "ControlLeft", control_r: "ControlRight", shift_l: "ShiftLeft", shift_r: "ShiftRight",
+  alt_l: "AltLeft", alt_r: "AltRight", super_l: "MetaLeft", super_r: "MetaRight",
+};
+
+function modifiers(text) {
+  return (text ?? "").split("+").filter(Boolean).map((name) => {
+    const modifier = MODIFIERS[name.toLowerCase()];
+    if (!modifier) throw new Error(`unknown modifier: ${name}`);
+    return modifier;
+  });
+}
+
+// The last `+`-separated part is the key, so ctrl++ holds Control and types +,
+// and a modifier alone, such as ctrl, is tapped.
+function chord(text) {
+  const split = text.lastIndexOf("+", text.length - 2);
+  const name = text.slice(split + 1);
+  const key = KEYS[name.toLowerCase()] ?? MODIFIERS[name.toLowerCase()]
+    ?? (/^f([1-9]|1[0-2])$/i.test(name) ? name.toUpperCase() : [...name].length === 1 ? name : null);
+  if (!key) throw new Error(`unknown key: ${name}`);
+  return { held: modifiers(split > 0 ? text.slice(0, split) : ""), key };
+}
+
+function point(x, y) {
+  const at = { x: Number(x), y: Number(y) };
+  if (!(at.x >= 0 && at.x < WINDOW.width && at.y >= 0 && at.y < WINDOW.height)) {
+    throw new Error(`outside the window: ${x} ${y}`);
+  }
+  return at;
+}
+
+async function holding(page, held, act) {
+  for (const key of held) await page.keyboard.down(key);
+  try {
+    await act();
+  } finally {
+    for (const key of [...held].reverse()) await page.keyboard.up(key);
+  }
+}
+
+function screenshotPath(file) {
+  if (file) return path.resolve(file);
+  fs.mkdirSync(SCREENSHOTS, { recursive: true });
+  const taken = fs.readdirSync(SCREENSHOTS).filter((name) => /^screenshot-\d+\.png$/.test(name)).length;
+  return path.join(SCREENSHOTS, `screenshot-${String(taken + 1).padStart(3, "0")}.png`);
+}
+
+async function perform(page, [action, ...args]) {
+  const settle = () => page.waitForTimeout(SETTLE);
+  switch (action) {
+    case "screenshot": {
+      const file = screenshotPath(args[0]);
+      await page.screenshot({ path: file });
+      return file;
+    }
+    case "mouse_move": {
+      const at = point(args[0], args[1]);
+      await page.mouse.move(at.x, at.y);
+      await settle();
+      return "done";
+    }
+    case "left_click":
+    case "double_click":
+    case "triple_click": {
+      const at = point(args[0], args[1]);
+      const clickCount = { left_click: 1, double_click: 2, triple_click: 3 }[action];
+      await holding(page, modifiers(args[2]), () => page.mouse.click(at.x, at.y, { clickCount }));
+      await settle();
+      return "done";
+    }
+    case "left_click_drag": {
+      const from = point(args[0], args[1]);
+      const to = point(args[2], args[3]);
+      await holding(page, modifiers(args[4]), async () => {
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(to.x, to.y, { steps: 10 });
+        await page.mouse.up();
+      });
+      await settle();
+      return "done";
+    }
+    case "scroll": {
+      const at = point(args[0], args[1]);
+      const clicks = Number(args[3]);
+      const delta = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[args[2]];
+      if (!delta || !(clicks > 0)) throw new Error("scroll needs a direction and a positive amount");
+      await page.mouse.move(at.x, at.y);
+      await holding(page, modifiers(args[4]), () =>
+        page.mouse.wheel(delta[0] * clicks * WHEEL_CLICK, delta[1] * clicks * WHEEL_CLICK));
+      await settle();
+      return "done";
+    }
+    case "key": {
+      const { held, key } = chord(args[0] ?? "");
+      await holding(page, held, () => page.keyboard.press(key));
+      await settle();
+      return "done";
+    }
+    case "type":
+      await page.keyboard.type(args[0] ?? "", { delay: 30 });
+      await settle();
+      return "done";
+    case "wait":
+      await page.waitForTimeout(Math.min(Number(args[0]) || 1, 30) * 1000);
+      return "done";
+    case "say":
+      if (!args[0]?.trim()) throw new Error("say needs something to say");
+      return "done";
+    default:
+      throw new Error(`unknown action: ${action}\n${USAGE}`);
+  }
+}
+
+// The site built and served locally; resolves to the server and its address.
+async function preview(build = true) {
+  const server = spawn("python3", [
+    "-B", "website/preview.py", "--no-open", "--port", "0", ...(build ? [] : ["--no-build"]),
+  ], { cwd: ROOT, stdio: ["ignore", "pipe", "inherit"] });
+  const url = await new Promise((resolve, reject) => {
+    let output = "";
+    server.stdout.on("data", (chunk) => {
+      output += chunk;
+      const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
+      if (match) resolve(match[1]);
+    });
+    server.once("exit", (code) => reject(new Error(`the preview server exited: ${code}`)));
+  });
+  return { server, url };
+}
+
+function launch() {
+  const { chromium } = require("playwright-core");
+  return chromium.launch(process.env.CHROMIUM
+    ? { executablePath: process.env.CHROMIUM, headless: true }
+    : { channel: "chrome", headless: true });
+}
+
+async function serve(pagePath) {
+  const { server, url } = await preview();
+  const browser = await launch();
+  const page = await browser.newPage({ viewport: WINDOW });
+  await page.goto(new URL(pagePath, url).href);
+  fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
+  if (fs.existsSync(SOCKET)) fs.unlinkSync(SOCKET);
+  // Each action as it happened: when, for how long, and what came of it.
+  const started = Date.now();
+  const session = fs.openSync(SESSION, "w", 0o600);
+  const record = (entry) => fs.writeSync(session, JSON.stringify(entry) + "\n");
+  record({ page: pagePath, window: WINDOW, started: new Date(started).toISOString() });
+  // One action at a time, in the order they arrive.
+  let queue = Promise.resolve();
+  const listener = net.createServer((connection) => {
+    let request = "";
+    connection.on("data", (chunk) => {
+      request += chunk;
+      if (!request.includes("\n")) return;
+      queue = queue.then(async () => {
+        const at = Date.now() - started;
+        let action = request.trim();
+        let reply;
+        try {
+          action = JSON.parse(action);
+          reply = { result: await perform(page, action) };
+        } catch (error) {
+          reply = { error: error.message };
+        }
+        record({ at, took: Date.now() - started - at, action, ...reply });
+        connection.end(JSON.stringify(reply) + "\n");
+      });
+    });
+  });
+  listener.listen(SOCKET, () => {
+    fs.chmodSync(SOCKET, 0o600);
+    console.log(`web-control: ${new URL(pagePath, url).href} on ${SOCKET}`);
+  });
+  const stop = async () => {
+    listener.close();
+    fs.closeSync(session);
+    await browser.close();
+    server.kill("SIGTERM");
+    process.exit(0);
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+}
+
+function send(args) {
+  const connection = net.createConnection(SOCKET);
+  let reply = "";
+  connection.on("error", () => {
+    console.error(`no browser is listening on ${SOCKET}; start one with tools/web-control serve`);
+    process.exit(1);
+  });
+  connection.on("data", (chunk) => { reply += chunk; });
+  connection.on("end", () => {
+    const { result, error } = JSON.parse(reply);
+    if (error) {
+      console.error(error);
+      process.exit(1);
+    }
+    console.log(result);
+  });
+  connection.write(JSON.stringify(args) + "\n");
+}
+
+module.exports = { ROOT, STATE, SESSION, WINDOW, SETTLE, WHEEL_CLICK, modifiers, chord, holding, preview, launch };
+if (require.main !== module) return;
+
+const [command, ...args] = process.argv.slice(2);
+if (!command) {
+  console.error(USAGE);
+  process.exit(2);
+} else if (command === "serve") {
+  serve(args[0] ?? "").catch((error) => {
+    console.error(`web-control: ${error.message}`);
+    process.exit(1);
+  });
+} else {
+  send([command, ...args]);
+}

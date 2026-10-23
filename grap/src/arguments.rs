@@ -1,0 +1,214 @@
+//! How a function written in Rust reads its arguments: each found, evaluated
+//! and parsed into the Rust type the function works with. The function runs
+//! when every one parses; otherwise its result is "invalid arguments",
+//! carrying under its label why each that didn't couldn't: a missing
+//! argument, its type's reason ("not f64", carrying the value), or the absent
+//! it already was, passed on unchanged as the cause. Like a primitive's, the
+//! arguments are found once per call site rather than on every call, and so
+//! is the absence of one that's missing.
+//!
+//! ```ignore
+//! ForeignFunction::with_arguments([START, END], |_, (start, end): (f64, f64)| {
+//!     RuntimeValue::f64(end - start)
+//! })
+//! ```
+
+use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
+use gid::CellId;
+use std::rc::Rc;
+
+/// An argument as a call site gives it: its expression, or, where it gives
+/// none, the missing argument.
+pub type Argument = Result<Expression, RuntimeValue>;
+
+/// A Rust type an argument parses into.
+pub trait Parse: Sized {
+    /// `value` as this type, or why it isn't one: an absent `value` as it
+    /// is, since what failed before it is the reason.
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue>;
+
+    /// `expression`'s value as this type. A type overrides it where it reads
+    /// faster without the value being built.
+    fn eval(
+        context: &mut Context,
+        expression: Expression,
+        environment: &Environment,
+    ) -> Result<Result<Self, RuntimeValue>, Halt> {
+        context.eval(expression, environment).map(Self::parse)
+    }
+}
+
+/// Why `value` isn't what a type needs: `reason`, carrying it, unless it's
+/// already absent.
+#[cold]
+pub fn not(reason: CellId, value: RuntimeValue) -> RuntimeValue {
+    if value.absent_reason().is_some() {
+        value
+    } else {
+        absent::with_detail(reason, absent::VALUE, value.into_value()).into()
+    }
+}
+
+/// Arguments that parse together: a tuple of [`Parse`] types, one for each
+/// label.
+pub trait Signature<const N: usize>: Sized {
+    /// Each of `call`'s arguments, given under its label or not, parsed as
+    /// its type; or "invalid arguments" carrying why each that didn't parse
+    /// couldn't.
+    fn parse(
+        context: &mut Context,
+        call: &Expression,
+        arguments: [(CellId, &Argument); N],
+        environment: &Environment,
+    ) -> Result<Result<Self, RuntimeValue>, Halt>;
+}
+
+impl ForeignFunction {
+    /// A function of the arguments under `labels`, which it declares as its
+    /// parameters, parsed as `S`: `body` runs only when they all parse, and
+    /// otherwise the call is "invalid arguments". A call site finds its
+    /// arguments once, when the call is first prepared.
+    pub fn with_arguments<S, R, const N: usize>(
+        labels: [CellId; N],
+        body: impl Fn(&mut Context, S) -> R + 'static,
+    ) -> Self
+    where
+        S: Signature<N> + 'static,
+        R: Into<RuntimeValue>,
+    {
+        let body = Rc::new(body);
+        Self::staged(move |context, call| {
+            let arguments = labels.map(|label| (label, context.argument(call, label)));
+            let (call, body) = (call.clone(), body.clone());
+            Rc::new(move |context, environment| {
+                let arguments = arguments
+                    .each_ref()
+                    .map(|(label, argument)| (*label, argument));
+                Ok(match S::parse(context, &call, arguments, environment)? {
+                    Ok(values) => body(context, values).into(),
+                    Err(invalid) => invalid,
+                })
+            })
+        })
+        .parameters(labels)
+    }
+}
+
+#[inline]
+fn argument<T: Parse>(
+    context: &mut Context,
+    argument: &Argument,
+    environment: &Environment,
+) -> Result<Result<T, RuntimeValue>, Halt> {
+    match argument {
+        Ok(expression) => T::eval(context, expression.clone(), environment),
+        Err(missing) => Ok(Err(missing.clone())),
+    }
+}
+
+/// "invalid arguments" for `call`, carrying why each argument couldn't be
+/// used under its label: off the path a call takes when its arguments are
+/// fine, so where the call is is found only here.
+#[cold]
+#[inline(never)]
+fn invalid_arguments(call: &Expression, invalid: Vec<(CellId, RuntimeValue)>) -> RuntimeValue {
+    absent::caused_by_all(
+        absent::INVALID_ARGUMENTS,
+        crate::source::origin(call).as_ref(),
+        invalid
+            .into_iter()
+            .map(|(label, why)| (label, why.into_value())),
+    )
+    .into()
+}
+
+macro_rules! signature {
+    ($count:literal: $($type:ident $label:ident $value:ident),+) => {
+        impl<$($type: Parse),+> Signature<$count> for ($($type,)+) {
+            #[inline]
+            fn parse(
+                context: &mut Context,
+                call: &Expression,
+                [$(($label, $value)),+]: [(CellId, &Argument); $count],
+                environment: &Environment,
+            ) -> Result<Result<Self, RuntimeValue>, Halt> {
+                // Only each argument's value stays live, so the values that
+                // parse aren't moved through the results around them.
+                let mut invalid = Vec::new();
+                $(
+                    let $value = match argument::<$type>(context, $value, environment)? {
+                        Ok(value) => Some(value),
+                        Err(why) => {
+                            invalid.push(($label, why));
+                            None
+                        }
+                    };
+                )+
+                Ok(match ($($value,)+) {
+                    ($(Some($value),)+) => Ok(($($value,)+)),
+                    _ => Err(invalid_arguments(call, invalid)),
+                })
+            }
+        }
+    };
+}
+
+signature!(1: A a_label a);
+signature!(2: A a_label a, B b_label b);
+signature!(3: A a_label a, B b_label b, C c_label c);
+signature!(4: A a_label a, B b_label b, C c_label c, D d_label d);
+
+impl Parse for f64 {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        value
+            .as_f64()
+            .ok_or_else(|| not(crate::f64::NOT_F64, value))
+    }
+
+    #[inline]
+    fn eval(
+        context: &mut Context,
+        expression: Expression,
+        environment: &Environment,
+    ) -> Result<Result<Self, RuntimeValue>, Halt> {
+        Ok(context
+            .eval_f64_or_value(expression, environment)?
+            .map_err(|value| not(crate::f64::NOT_F64, value)))
+    }
+}
+
+impl Parse for f32 {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        value
+            .as_f32()
+            .ok_or_else(|| not(crate::f32::NOT_F32, value))
+    }
+}
+
+impl Parse for u64 {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        value
+            .as_u64()
+            .ok_or_else(|| not(crate::u64::NOT_U64, value))
+    }
+}
+
+/// Any value at all, absent or not: an argument the function takes as it is.
+impl Parse for RuntimeValue {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        Ok(value)
+    }
+}
+
+/// Any value at all, as GID.
+impl Parse for gid::Value {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        Ok(value.into_value())
+    }
+}
+
+impl Parse for bool {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        crate::logic::read(&value.to_value()).ok_or_else(|| not(crate::logic::NOT_BOOL, value))
+    }
+}

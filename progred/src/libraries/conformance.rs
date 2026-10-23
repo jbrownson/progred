@@ -1,0 +1,379 @@
+//! An executable slice of Grap's cross-evaluator contract. Each
+//! program pins its result and exact remaining fuel
+//! under the burn model documented on `Context::burn`; a conforming
+//! evaluator reproduces every tuple. Expectations are hand-derived
+//! from the naive evaluation shape, never copied from a run.
+
+use crate::libraries::{f32, f64, grap::control, list};
+use ::grap;
+use ::grap::ForeignFunctions;
+use gid::{CellId, Value, new_cell_id};
+
+fn functions() -> ForeignFunctions {
+    ForeignFunctions::merge_all([
+        crate::test_support::foreign_functions(&crate::libraries::grap::library::<crate::Editor>()),
+        crate::test_support::foreign_functions(&list::library::<crate::Editor>()),
+    ])
+}
+
+fn blob(text: &str) -> Value {
+    Value::from(text.as_bytes().to_vec())
+}
+
+fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
+    crate::test_support::test_evaluate(expression, |_| None, &functions(), fuel)
+}
+
+fn evaluate_resolving(
+    expression: &Value,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    fuel: usize,
+) -> grap::Evaluation<gid::Value> {
+    crate::test_support::test_evaluate(expression, resolve, &functions(), fuel)
+}
+
+/// call(1) + lambda(1) + argument(1) + body cell, bound(1) = 4.
+#[test]
+fn a_lambda_call_burns_its_call_function_argument_and_body() {
+    let x = new_cell_id();
+    let expression = grap::call(grap::lambda([x], Value::from(x)), [(x, blob("bound"))]);
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, blob("bound"));
+
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+/// Shadowing costs nothing extra: the same four burns even when the
+/// parameter is a registered foreign function's cell.
+#[test]
+fn shadowing_a_foreign_function_burns_like_any_binding() {
+    let expression = grap::call(
+        grap::lambda(
+            [crate::libraries::grap::numbers::f64::SUM],
+            Value::from(crate::libraries::grap::numbers::f64::SUM),
+        ),
+        [(crate::libraries::grap::numbers::f64::SUM, blob("bound"))],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, blob("bound"));
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+/// Each link in a cell chain is one evaluation: A(1) + B(1) + blob(1).
+#[test]
+fn a_cell_chain_burns_one_per_link() {
+    let first = new_cell_id();
+    let second = new_cell_id();
+    let evaluation = evaluate_resolving(
+        &Value::from(first),
+        |cell| match cell {
+            cell if cell == first => Some(Value::from(second)),
+            cell if cell == second => Some(blob("end")),
+            _ => None,
+        },
+        10,
+    );
+    assert_eq!(evaluation.result, blob("end"));
+    assert_eq!(evaluation.remaining_fuel, 7);
+}
+
+/// A missing cell burns its one evaluation and reports exactly once.
+#[test]
+fn a_missing_cell_burns_once_and_carries_its_identity() {
+    let missing = new_cell_id();
+    let evaluation = evaluate(&Value::from(missing), 10);
+    assert_eq!(
+        evaluation.result,
+        grap::absent::with_detail(
+            grap::absent::MISSING_CELL,
+            grap::absent::CELL,
+            missing.into()
+        ),
+    );
+    assert_eq!(evaluation.remaining_fuel, 9);
+}
+
+/// do never evaluates its expression list, only the elements:
+/// call(1) + function(1) + first(1) + second(1) = 4.
+#[test]
+fn a_do_sequence_burns_only_its_elements() {
+    let expression = grap::call(
+        Value::from(control::vocabulary::DO),
+        [(
+            control::vocabulary::EXPRESSIONS,
+            Value::list([blob("first"), blob("second")]),
+        )],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, blob("second"));
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+/// A match with no matching case still pays for its subject; like do's
+/// expressions, its cases are read, never evaluated: call(1) +
+/// function(1) + subject(1) = 3.
+#[test]
+fn an_unmatched_subject_burns_everything_but_an_arm() {
+    let expression = grap::call(
+        Value::from(control::vocabulary::MATCH),
+        [
+            (control::vocabulary::VALUE, blob("subject")),
+            (
+                control::vocabulary::CASES,
+                Value::list([Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+                    (control::vocabulary::PATTERN, blob("other")),
+                    (grap::vocabulary::EXPRESSION, blob("never")),
+                ])]),
+            ),
+        ],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(
+        evaluation.result,
+        ::grap::absent::with_detail(
+            control::vocabulary::PATTERN_MISMATCH,
+            control::vocabulary::PATTERN,
+            blob("other"),
+        ),
+    );
+
+    assert_eq!(evaluation.remaining_fuel, 7);
+}
+
+/// Quote walks its template without burning; only the unquote body
+/// evaluates: call(1) + function(1) + unquoted blob(1) = 3.
+#[test]
+fn a_quote_burns_only_its_unquotes() {
+    let field = new_cell_id();
+    let expression = grap::call(
+        Value::from(control::vocabulary::QUOTE),
+        [(
+            grap::vocabulary::EXPRESSION,
+            Value::record([(
+                field,
+                Value::record([
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(control::vocabulary::kind::UNQUOTE).into(),
+                    ),
+                    (control::vocabulary::UNQUOTE, blob("spliced")),
+                ]),
+            )]),
+        )],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, Value::record([(field, blob("spliced"))]));
+    assert_eq!(evaluation.remaining_fuel, 7);
+}
+
+/// An enriched number — extra fields beside the f64 — answers record
+/// patterns exactly as its stored form would, however the
+/// implementation carries it: call(1) + function(1) + subject(1) +
+/// arm(1) = 4.
+#[test]
+fn an_enriched_number_matches_record_patterns_like_its_data() {
+    let note = new_cell_id();
+    let binder = new_cell_id();
+    let subject = Value::record([
+        (
+            f64::vocabulary::F64,
+            Value::from(1.0f64.to_le_bytes().to_vec()),
+        ),
+        (note, blob("annotated")),
+    ]);
+    let expression = grap::call(
+        Value::from(control::vocabulary::MATCH),
+        [
+            (control::vocabulary::VALUE, subject),
+            (
+                control::vocabulary::CASES,
+                Value::list([Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+                    (
+                        control::vocabulary::PATTERN,
+                        Value::record([(
+                            note,
+                            Value::record([
+                                (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                                (control::vocabulary::BIND, Value::from(binder)),
+                            ]),
+                        )]),
+                    ),
+                    (grap::vocabulary::EXPRESSION, Value::from(binder)),
+                ])]),
+            ),
+        ],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, blob("annotated"));
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+#[test]
+fn callable_record_patterns_are_transparent_to_lowering() {
+    let binder = new_cell_id();
+    let subject = grap::lambda([], blob("body"));
+    let field = grap::vocabulary::LAMBDA;
+    let evaluated = evaluate(&subject, 100).result;
+    // The subject is evaluated at a different location inside `match`,
+    // so its body origin differs; this open pattern compares the callable,
+    // the lambda as written, not that annotation.
+    let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
+    for pattern in [Value::record([]), Value::record([(field, contents)])] {
+        let cases = Value::list([
+            Value::record([
+                (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+                (control::vocabulary::PATTERN, pattern),
+                (grap::vocabulary::EXPRESSION, blob("record")),
+            ]),
+            Value::record([
+                (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+                (
+                    control::vocabulary::PATTERN,
+                    Value::record([
+                        (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                        (control::vocabulary::BIND, Value::from(binder)),
+                    ]),
+                ),
+                (grap::vocabulary::EXPRESSION, blob("other")),
+            ]),
+        ]);
+        let expression = grap::call(
+            Value::from(control::vocabulary::MATCH),
+            [
+                (control::vocabulary::VALUE, subject.clone()),
+                (control::vocabulary::CASES, cases),
+            ],
+        );
+        assert_eq!(evaluate(&expression, 100).result, blob("record"));
+    }
+}
+
+/// Clauses are their form's own syntax, read where they're written, so a
+/// clause list behind a cell isn't one, and nothing is evaluated for it:
+/// call(1) + function(1) = 2.
+#[test]
+fn clause_lists_behind_cells_are_invalid() {
+    let binder = new_cell_id();
+    let cases = Value::list([
+        Value::record([
+            (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+            (control::vocabulary::PATTERN, blob("other")),
+            (grap::vocabulary::EXPRESSION, blob("never")),
+        ]),
+        Value::record([
+            (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+            (
+                control::vocabulary::PATTERN,
+                Value::record([
+                    (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                    (control::vocabulary::BIND, Value::from(binder)),
+                ]),
+            ),
+            (grap::vocabulary::EXPRESSION, Value::from(binder)),
+        ]),
+    ]);
+    let bindings = Value::list([Value::record([
+        (::grap::isa::ISA, control::vocabulary::kind::BINDING.into()),
+        (control::vocabulary::BIND, Value::from(binder)),
+        (control::vocabulary::VALUE, blob("bound")),
+    ])]);
+    let matches = |clauses: Value| {
+        grap::call(
+            Value::from(control::vocabulary::MATCH),
+            [
+                (control::vocabulary::VALUE, blob("subject")),
+                (control::vocabulary::CASES, clauses),
+            ],
+        )
+    };
+    let lets = |clauses: Value| {
+        grap::call(
+            Value::from(control::vocabulary::LET),
+            [
+                (control::vocabulary::BINDINGS, clauses),
+                (grap::vocabulary::EXPRESSION, Value::from(binder)),
+            ],
+        )
+    };
+    let check = |program: &dyn Fn(Value) -> Value, clauses: Value, invalid: CellId| {
+        let reference = new_cell_id();
+        let referenced = evaluate_resolving(
+            &program(Value::from(reference)),
+            |cell| (cell == reference).then(|| clauses.clone()),
+            20,
+        );
+        assert_eq!(referenced.result, grap::absent::value(invalid));
+        assert_eq!(referenced.remaining_fuel, 18);
+    };
+    check(&matches, cases, control::vocabulary::INVALID_CASES);
+    check(&lets, bindings, control::vocabulary::INVALID_BINDINGS);
+}
+
+/// Arithmetic burns like any strict call: call(1) + function(1) +
+/// left(1) + right(1) = 4, whatever numeric fast path the
+/// implementation takes.
+#[test]
+fn arithmetic_burns_its_call_function_and_operands() {
+    let expression = grap::call(
+        Value::from(crate::libraries::grap::numbers::f64::SUM),
+        [
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                f64::value(1.0),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                f64::value(2.0),
+            ),
+        ],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, f64::value(3.0));
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+/// A representation without the evaluator's fast path burns the same
+/// shape: call(1) + function(1) + left(1) + right(1) = 4.
+#[test]
+fn single_precision_arithmetic_burns_like_f64() {
+    let expression = grap::call(
+        Value::from(crate::libraries::grap::numbers::f32::SUM),
+        [
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                f32::value(1.0),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                f32::value(2.0),
+            ),
+        ],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, f32::value(3.0));
+    assert_eq!(evaluation.remaining_fuel, 6);
+}
+
+/// The prepared-call shortcut stays burn-invisible: an iterate step
+/// that immediately finishes costs call(1) + function(1) + initial(1) +
+/// step lambda(1) + prepared call and function(2) + state bind(1) +
+/// body(1) = 8.
+#[test]
+fn an_iterate_step_burns_like_an_ordinary_call() {
+    let state = list::vocabulary::STATE;
+    let expression = grap::call(
+        Value::from(list::vocabulary::ITERATE),
+        [
+            (list::vocabulary::INITIAL, blob("start")),
+            (
+                list::vocabulary::STEP,
+                grap::lambda([state], ::grap::absent::value(list::vocabulary::FINISHED)),
+            ),
+        ],
+    );
+    let evaluation = evaluate(&expression, 20);
+    assert_eq!(evaluation.result, blob("start"));
+    assert_eq!(evaluation.remaining_fuel, 12);
+}

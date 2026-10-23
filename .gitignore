@@ -1,0 +1,12 @@
+.DS_Store
+/.claude/*
+!/.claude/settings.json
+/target
+/web/pkg
+/web/pkg-fallback
+/web/*-pkg
+/website/node_modules
+/tools/node_modules
+/tools/__pycache__
+/website/.wrangler
+/website/__pycache__

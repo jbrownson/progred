@@ -1,0 +1,406 @@
+{
+  "binders": {
+    "a_value": 2f18db9829ab562571641b9b6e25b9b2,
+    "add_result": 1b49f9da65e4093654db337e6e0c477a,
+    "b_value": 9194b2ed0a54573b7cb33495cc930043,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "case": 7ebb4ced7047479caafcd90b14499697,
+    "cases": a9aadcb44755963498c743fa114f0f00,
+    "circle": d5b1987b1c5d06e6cd92a93dc031e5fb,
+    "circle_result": d3c65193be0a6f2a79d7d159252bab8d,
+    "contains_call": 32994f52e9af60be47619b6f15366ac7,
+    "demo": 91af60b2a8d1d93fe4de7551004fe50c,
+    "environment": e910025c710c25c43d0a5b296378f374,
+    "evaluate": acfc5e50881292518dab3cec77cf43ee,
+    "evaluate_result": 164b6921e7f168ce5ebe60e22c9d1f30,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "generated_value": 52d9a658f31a5cf25cba67442686f9f6,
+    "graph_expression": abbe2ebb6e77fd640835e864eacc2456,
+    "graph_function_result": 856c0b3c6eb8e393abcb2ef030ce5977,
+    "inert_data": 8a852d6431ce568a4ed5ae8c896e9902,
+    "input_a": 06057d0aebe175f07bfb9a9a357afa87,
+    "input_b": f0599427844678cc902efa15f63f9af8,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "lambda": 2ef86729dbd93e2bf8e39dd7b07546bb,
+    "lambda_2": e4a0653134ca48379cab2e008bed03e7,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "make_cases": 081f58d511f442082309dea10e264d6a,
+    "match": b3f6a62e4926889bcfcd338025f4a6f9,
+    "match_result": c1444b3f64296e7a995b42218598ab0a,
+    "matched_radius": e84540a266d157054aa08db2a2590d01,
+    "metadata_call": 593532224a22c20bbac82ab13f97175b,
+    "missing_argument": c33ce0dfb1fd77c4a7ae99c754d89cc4,
+    "multiply": d6f384c439d9d69996d545df422efd79,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "nested_result": bce2fe206445192cfec01702b59fd9fb,
+    "not_callable": 81e144d4655ea57a02ce5389c0c9d811,
+    "note": 96264bd943a7259dbbad378b9293f607,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "quote_generator": b4d0601d7c58b203646a3bf8e7d5681d,
+    "quoted_cases": c1f6c6ab6c929a0a0dcf08cf6ce9aab6,
+    "radius": c56b7e320d753ea059eb5d7eacb49f10,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "scale": ccba1404490345dcf33d8a19ddaa5bd1,
+    "scale_and_add": b952167aa1bbf114a8586a966591b373,
+    "scale_and_add_expression": 3e54f01b50f5abbfc3895327881a404d,
+    "scale_parameter": a205c013d36ef3f8fa047295793e61b4,
+    "scale_value": 222efe84b66ed6181846198960a9f317,
+    "sum": 201af445eb7e2c270bb5ead10b781fc1,
+    "type_absent": add1c43228ee478194bd066b83608685,
+    "unquote": da48703c290e3b35d7353c38110bc953,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "value": 00dafdc01c7e014edd857e174c6c8b6f,
+    "x_parameter": 6044a6b79a55f0fd8bc522787f213b50,
+    "y_parameter": d678763cbd961acd0c4808b30e9be10b,
+  },
+  "cells": {
+    metadata_call: {
+      name: "call with metadata",
+    },
+    circle: {
+      name: "circle",
+      params: [
+        0x80: radius,
+      ],
+      body: {
+        function: quote,
+        expression: {
+          circle: {
+            radius: {
+              unquote: radius,
+              isa: unquote_2,
+            },
+          },
+        },
+        isa: call,
+      },
+      isa: lambda_2,
+    },
+    circle_result: {
+      name: "circle result",
+    },
+    contains_call: {
+      name: "contains a call",
+    },
+    demo: {
+      name: "demo",
+    },
+    evaluate_result: {
+      name: "evaluate result",
+    },
+    scale_parameter: {
+      name: "factor",
+    },
+    generated_value: {
+      name: "generated value",
+    },
+    graph_expression: {
+      name: "graph expression",
+    },
+    graph_function_result: {
+      name: "graph function result",
+    },
+    inert_data: {
+      name: "inert data",
+    },
+    input_a: {
+      name: "input a",
+    },
+    input_b: {
+      name: "input b",
+    },
+    lambda: {
+      name: "lambda",
+    },
+    make_cases: {
+      name: "make cases",
+      params: [
+        0x80: generated_value,
+      ],
+      body: {
+        function: quote,
+        expression: [
+          0x80: {
+            pattern: "subject",
+            expression: {
+              unquote: generated_value,
+              isa: unquote_2,
+            },
+            isa: case,
+          },
+        ],
+        isa: call,
+      },
+      isa: lambda_2,
+    },
+    match_result: {
+      name: "match result",
+    },
+    matched_radius: {
+      name: "matched radius",
+    },
+    missing_argument: {
+      name: "missing argument",
+    },
+    nested_result: {
+      name: "nested result",
+    },
+    not_callable: {
+      name: "not callable",
+    },
+    note: {
+      name: "note",
+    },
+    quote_generator: {
+      name: "quote generator",
+    },
+    quoted_cases: {
+      name: "quoted cases",
+    },
+    radius: {
+      name: "radius",
+    },
+    scale: {
+      name: "scale",
+    },
+    scale_and_add: {
+      name: "scale and add",
+      params: [
+        0x40: x_parameter,
+        0x80: y_parameter,
+        0xc0: scale_parameter,
+      ],
+      body: {
+        right: y_parameter,
+        function: sum,
+        left: {
+          right: scale_parameter,
+          function: multiply,
+          left: x_parameter,
+          isa: call,
+        },
+        isa: call,
+      },
+      isa: lambda_2,
+    },
+    scale_and_add_expression: {
+      name: "scale and add expression",
+      x_parameter: a_value,
+      function: scale_and_add,
+      scale_parameter: scale_value,
+      y_parameter: b_value,
+      isa: call,
+    },
+    add_result: {
+      name: "sum",
+    },
+    type_absent: {
+      name: "type absent",
+    },
+    x_parameter: {
+      name: "x",
+    },
+    y_parameter: {
+      name: "y",
+    },
+    scale_value: {
+      f64: 0x0000000000002440,
+    },
+    a_value: {
+      f64: 0x0000000000000840,
+    },
+    b_value: {
+      f64: 0x0000000000001040,
+    },
+  },
+  "root": [
+    0x0c: {
+      demo: "Edit the inputs; normal view shows {evaluate: expression → result}, while Raw shows the stored expression.",
+    },
+    0x19: {
+      input_a: a_value,
+    },
+    0x26: {
+      input_b: b_value,
+    },
+    0x33: {
+      scale: scale_value,
+    },
+    0x40: {
+      add_result: {
+        expression: {
+          right: b_value,
+          function: sum,
+          left: a_value,
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0x4c: {
+      nested_result: {
+        expression: {
+          right: scale_value,
+          function: multiply,
+          left: {
+            right: b_value,
+            function: sum,
+            left: a_value,
+            isa: call,
+          },
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0x59: {
+      evaluate_result: {
+        expression: {
+          function: evaluate,
+          expression: {
+            right: b_value,
+            function: sum,
+            left: a_value,
+            isa: call,
+          },
+          isa: call,
+          environment: {},
+        },
+        isa: evaluation,
+      },
+    },
+    0x66: {
+      lambda: scale_and_add,
+    },
+    0x73: {
+      quote_generator: make_cases,
+    },
+    0x80: {
+      graph_expression: scale_and_add_expression,
+    },
+    0x8c: {
+      graph_function_result: {
+        expression: scale_and_add_expression,
+        isa: evaluation,
+      },
+    },
+    0x99: {
+      circle_result: {
+        expression: {
+          function: circle,
+          radius: {
+            x_parameter: a_value,
+            function: scale_and_add,
+            scale_parameter: scale_value,
+            y_parameter: b_value,
+            isa: call,
+          },
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0xa6: {
+      match_result: {
+        expression: {
+          value: {
+            function: circle,
+            radius: a_value,
+            isa: call,
+          },
+          function: match,
+          cases: [
+            0x80: {
+              pattern: {
+                circle: {
+                  radius: {
+                    bind: matched_radius,
+                    isa: binder,
+                  },
+                },
+              },
+              expression: matched_radius,
+              isa: case,
+            },
+          ],
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0xb3: {
+      quoted_cases: {
+        expression: {
+          generated_value: a_value,
+          function: make_cases,
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0xc0: {
+      metadata_call: {
+        expression: {
+          right: b_value,
+          function: sum,
+          left: a_value,
+          note: "extra fields remain visible and do not prevent evaluation",
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0xcc: {
+      inert_data: {
+        expression: {
+          contains_call: {
+            right: b_value,
+            function: sum,
+            left: a_value,
+            isa: call,
+          },
+          note: "this record is data, so its call-shaped child remains data",
+        },
+        isa: evaluation,
+      },
+    },
+    0xd9: {
+      type_absent: {
+        expression: {
+          right: b_value,
+          function: sum,
+          left: "three",
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0xe6: {
+      missing_argument: {
+        expression: {
+          function: sum,
+          left: a_value,
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+    0xf3: {
+      not_callable: {
+        expression: {
+          function: a_value,
+          isa: call,
+        },
+        isa: evaluation,
+      },
+    },
+  ],
+}

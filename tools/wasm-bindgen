@@ -1,0 +1,40 @@
+#!/bin/sh
+# Runs the wasm-bindgen CLI matching Cargo.lock, downloading that release once
+# into target/tools. The CLI and the crate must match exactly, so a globally
+# installed CLI breaks whenever either one is upgraded.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+version=$(awk '$0 == "name = \"wasm-bindgen\"" { getline; gsub(/version = |"/, ""); print; exit }' \
+    "$project_root/Cargo.lock")
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) triple=aarch64-apple-darwin ;;
+    Darwin-x86_64) triple=x86_64-apple-darwin ;;
+    Linux-x86_64) triple=x86_64-unknown-linux-musl ;;
+    Linux-aarch64 | Linux-arm64) triple=aarch64-unknown-linux-musl ;;
+    *)
+        echo "wasm-bindgen $version has no release for $(uname -s) $(uname -m)" >&2
+        exit 1
+        ;;
+esac
+root="$project_root/target/tools/wasm-bindgen-$version-$triple"
+if [ ! -x "$root/wasm-bindgen" ]; then
+    archive="wasm-bindgen-$version-$triple.tar.gz"
+    release="https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$version"
+    mkdir -p "$root"
+    curl -fLsS --retry 3 "$release/$archive" -o "$root/$archive"
+    curl -fLsS --retry 3 "$release/$archive.sha256sum" -o "$root/$archive.sha256sum"
+    (
+        cd "$root"
+        digest=$(cut -d ' ' -f 1 "$archive.sha256sum")
+        if command -v sha256sum >/dev/null 2>&1; then
+            printf '%s  %s\n' "$digest" "$archive" | sha256sum -c - >/dev/null
+        else
+            printf '%s  %s\n' "$digest" "$archive" | shasum -a 256 -c - >/dev/null
+        fi
+        tar -xzf "$archive" --strip-components=1
+    )
+fi
+exec "$root/wasm-bindgen" "$@"

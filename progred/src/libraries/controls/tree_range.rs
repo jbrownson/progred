@@ -1,0 +1,379 @@
+//! Nested lists supply structure; everything else is an uninterpreted leaf.
+//! Selection is occurrence-based, so repeated values remain independent.
+use super::*;
+use crate::libraries::editor::path;
+use puri_widgets::range_slider::{self, RangeSlider};
+use puri_widgets::tree_slider::{self, Cursor, Intent};
+use std::ops::Range;
+
+type Key = Vec<gid::Position>;
+type Decoration<W> = widget::Decoration<W, <W as Host>::Hover>;
+pub(crate) type ItemDecoration<W> = Rc<dyn Fn(&[gid::Position]) -> Option<Decoration<W>>>;
+
+pub(crate) fn encode(range: Range<usize>) -> Value {
+    Value::list([f64::value(range.start as f64), f64::value(range.end as f64)])
+}
+
+fn tree(value: &Value, key: Key) -> tree_slider::Tree<Key> {
+    use tree_slider::Tree;
+    match value.as_list() {
+        Some(list) => Tree::group(
+            key.clone(),
+            list.iter().map(|(position, value)| {
+                tree(
+                    value,
+                    key.iter().cloned().chain([position.clone()]).collect(),
+                )
+            }),
+        ),
+        None => Tree::leaf(key),
+    }
+}
+
+pub(super) fn emitted_tree(node: &tree::Node, key: Key) -> tree_slider::Tree<Key> {
+    match &node.children {
+        Some(children) => tree_slider::Tree::group(
+            key.clone(),
+            children.iter().map(|(position, child)| {
+                emitted_tree(
+                    child,
+                    key.iter().cloned().chain([position.clone()]).collect(),
+                )
+            }),
+        ),
+        None => tree_slider::Tree::leaf(key),
+    }
+}
+
+fn key_value(key: &Key) -> Value {
+    path::value(
+        &key.iter()
+            .cloned()
+            .map(gid::Step::Element)
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn read_key(value: &Value) -> Option<Key> {
+    path::read(value)?
+        .into_iter()
+        .map(|step| match step {
+            gid::Step::Element(position) => Some(position),
+            _ => None,
+        })
+        .collect()
+}
+
+fn intent_value(intent: &Intent<Key>) -> Value {
+    match intent {
+        Intent::All => ALL.into(),
+        Intent::Between { first, last } => Value::list([key_value(first), key_value(last)]),
+    }
+}
+
+fn read_intent(value: &Value) -> Option<Intent<Key>> {
+    if value.as_cell() == Some(ALL) {
+        Some(Intent::All)
+    } else if let [(_, first), (_, last)] = value.as_list()?.iter().as_slice() {
+        let (first, last) = (read_key(first)?, read_key(last)?);
+        (first <= last).then_some(Intent::Between { first, last })
+    } else {
+        None
+    }
+}
+
+fn read_cursor(value: &Value) -> Option<Cursor<Key>> {
+    match value.as_list()?.iter().as_slice() {
+        [(_, item), (_, fraction)] => Some(Cursor {
+            item: read_key(item)?,
+            fraction: f64::read(fraction)?,
+        }),
+        _ => None,
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct Selection {
+    tree: Rc<tree_slider::Tree<Key>>,
+    selected: Rc<tree_slider::Selection<Key>>,
+}
+
+impl std::ops::Deref for Selection {
+    type Target = tree_slider::Selection<Key>;
+    fn deref(&self) -> &Self::Target {
+        &self.selected
+    }
+}
+
+impl Selection {
+    pub fn new(items: &Value, state: Option<&Value>) -> Self {
+        Self::from_tree(tree(items, Vec::new()), state)
+    }
+
+    fn from_tree(tree: tree_slider::Tree<Key>, state: Option<&Value>) -> Self {
+        let tree = Rc::new(tree);
+        let stored: Vec<_> = state
+            .and_then(Value::as_list)
+            .map(|list| {
+                list.values()
+                    .map(|value| read_intent(value).unwrap_or_default())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let selected = Rc::new(tree_slider::Selection::new(&tree, &stored));
+        Self { tree, selected }
+    }
+
+    pub fn select(&self, level: usize, range: Range<usize>, current: Option<usize>) -> Self {
+        Self {
+            tree: self.tree.clone(),
+            selected: Rc::new(self.selected.select(&self.tree, level, range, current)),
+        }
+    }
+
+    pub fn select_all(&self, level: usize) -> Self {
+        Self {
+            tree: self.tree.clone(),
+            selected: Rc::new(self.selected.select_all(&self.tree, level)),
+        }
+    }
+
+    pub fn state(&self) -> Value {
+        Value::list(self.intent.iter().map(intent_value))
+    }
+
+    pub fn widgets<W: Host>(
+        &self,
+        key: CellId,
+        width: f64,
+        decorate: Option<ItemDecoration<W>>,
+    ) -> impl Iterator<Item = Widget<W>> + '_ {
+        self.range_widgets(key, width, None, decorate)
+    }
+
+    fn range_widgets<W: Host>(
+        &self,
+        key: CellId,
+        width: f64,
+        position: Option<f64>,
+        decorate: Option<ItemDecoration<W>>,
+    ) -> impl Iterator<Item = Widget<W>> + '_ {
+        self.rows.iter().rev().map(move |row| {
+            range_widget(
+                key,
+                row.slider.clone(),
+                row.level,
+                self.clone(),
+                position,
+                width,
+                decorate.as_ref().map_or_else(Vec::new, |decorate| {
+                    row.keys().map(|key| decorate(key)).collect()
+                }),
+            )
+        })
+    }
+}
+
+pub(crate) fn cursor_state(selection: &Selection, position: f64) -> Value {
+    Value::record([
+        (vocabulary::RANGE, selection.state()),
+        (
+            vocabulary::POSITION,
+            selection
+                .selected
+                .cursor(&selection.tree, position)
+                .map(|cursor| Value::list([key_value(&cursor.item), f64::value(cursor.fraction)]))
+                .unwrap_or_else(|| Value::list([])),
+        ),
+    ])
+}
+
+/// What a range control stores: its range, with its cursor's `position` when
+/// it has one.
+fn control_state(selection: &Selection, position: Option<f64>) -> Value {
+    position.map_or_else(
+        || selection.state(),
+        |position| cursor_state(selection, position),
+    )
+}
+
+pub(super) fn cursor<W: Host>(
+    items: &Value,
+    state: Option<&Value>,
+    initial: f64,
+    key: CellId,
+    width: f64,
+    decorate: Option<ItemDecoration<W>>,
+) -> (Vec<Widget<W>>, Value) {
+    let (widgets, fields) = cursor_from_tree(
+        tree(items, Vec::new()),
+        state,
+        initial,
+        key,
+        width,
+        decorate,
+    );
+    (widgets, Value::record(fields))
+}
+
+/// The cursor's widgets, and the fields of what it returns: its range and
+/// its position.
+pub(super) fn cursor_from_tree<W: Host>(
+    tree: tree_slider::Tree<Key>,
+    state: Option<&Value>,
+    initial: f64,
+    key: CellId,
+    width: f64,
+    decorate: Option<ItemDecoration<W>>,
+) -> (Vec<Widget<W>>, [(CellId, Value); 2]) {
+    let state = state.and_then(Value::as_record);
+    let selection =
+        Selection::from_tree(tree, state.and_then(|state| state.get(&vocabulary::RANGE)));
+    let position = selection.position(
+        state
+            .and_then(|state| state.get(&vocabulary::POSITION))
+            .and_then(read_cursor)
+            .and_then(|cursor| selection.tree.position(&cursor))
+            .unwrap_or(initial),
+    );
+    let widgets = selection
+        .slider(position)
+        .map(|slider| {
+            let selection = selection.clone();
+            keyed_slider(key, slider, width, selection.ticks(), move |position| {
+                cursor_state(&selection, position)
+            })
+        })
+        .into_iter()
+        .chain(selection.range_widgets(key, width, Some(position), decorate))
+        .collect();
+    (
+        widgets,
+        [
+            (vocabulary::RANGE, encode(selection.leaves.clone())),
+            (vocabulary::POSITION, f64::value(position)),
+        ],
+    )
+}
+
+struct RangeDrag {
+    site: crate::editing::Site,
+    key: CellId,
+    slider: RangeSlider,
+    drag: range_slider::Drag,
+    current: Option<usize>,
+    level: usize,
+    selection: Selection,
+    position: Option<f64>,
+    rect: Rect,
+    scale: f64,
+}
+
+impl widget::gesture::Gesture for RangeDrag {
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
+        if let Some(point) = samples.last() {
+            let selected = self
+                .slider
+                .dragged(self.drag, self.rect, self.scale, *point);
+            self.selection = self.selection.select(self.level, selected, self.current);
+            self.position = self.position.map(|p| self.selection.position(p));
+            store(
+                session,
+                &self.site,
+                self.key,
+                control_state(&self.selection, self.position),
+            );
+        }
+        false
+    }
+}
+
+fn range_widget<W: Host>(
+    key: CellId,
+    slider: RangeSlider,
+    level: usize,
+    selection: Selection,
+    position: Option<f64>,
+    width: f64,
+    decorations: Vec<Option<Decoration<W>>>,
+) -> Widget<W> {
+    let current = position.and_then(|position| selection.current_item(level, position));
+    Rc::new(move |context| {
+        let scale = context.viewing().scale();
+        let site = context.site();
+        let slider = slider.clone();
+        let selection = selection.clone();
+        let decorations: Vec<_> = decorations
+            .iter()
+            .map(|decorate| decorate.as_ref().map(|decorate| decorate(context)))
+            .collect();
+        let leaf = widget::leaf(
+            Extent {
+                width: width.max(0.0) * scale,
+                ascent: range_slider::HEIGHT * scale,
+                descent: 0.0,
+            },
+            move |output, placement| {
+                output.claim(puri::hover::Probe::occludes(placement));
+                let painted = slider.clone();
+                let painted_slider = slider.clone();
+                output
+                    .render(move |canvas, _| painted.draw(canvas, placement.rect, scale, current));
+                output
+                    .handler()
+                    .on_pointer_down(move |world: &mut W, event| {
+                        let point = Point::new(event.state.position.x, event.state.position.y);
+                        if !puri::interact::is_primary_contact(event) || !placement.contains(point)
+                        {
+                            return false;
+                        }
+                        if event.state.count == 2 {
+                            let selection = selection.select_all(level);
+                            store(
+                                &mut world.session(),
+                                &site,
+                                key,
+                                control_state(&selection, position.map(|p| selection.position(p))),
+                            );
+                        } else {
+                            let drag = slider.begin(placement.rect, scale, point);
+                            world.session().start_gesture(
+                                Box::new(RangeDrag {
+                                    site: site.clone(),
+                                    key,
+                                    drag,
+                                    current: match drag {
+                                        range_slider::Drag::Span { anchor }
+                                            if Some(anchor) == current =>
+                                        {
+                                            current
+                                        }
+                                        _ => None,
+                                    },
+                                    slider: slider.clone(),
+                                    level,
+                                    selection: selection.clone(),
+                                    position,
+                                    rect: placement.rect,
+                                    scale,
+                                }),
+                                &[point],
+                            );
+                        }
+                        true
+                    });
+                for (item, decorate) in decorations.into_iter().enumerate() {
+                    if let Some(decorate) = decorate
+                        && let Some(rect) = painted_slider.item_rect(placement.rect, scale, item)
+                    {
+                        decorate(output, uig::Placement::new(rect, placement.clip_rect));
+                    }
+                }
+            },
+        );
+        measured::pad((PADDING_X * scale, 0.0).into(), leaf)
+    })
+}
+
+#[cfg(test)]
+mod tests;

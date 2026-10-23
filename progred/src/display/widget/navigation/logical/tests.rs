@@ -1,0 +1,469 @@
+use super::*;
+use crate::display::widget::view::Area;
+use crate::occurrence::{Step, Trail};
+use gid::CellId;
+use puri::handler::NavigationDirection;
+use std::rc::Rc;
+
+/// A chosen layout, traversed the way `ObserveLayout` reports it.
+#[derive(Clone)]
+enum Shape {
+    Empty,
+    Stop(usize),
+    Row(RowAlignment, Vec<Shape>),
+    Column(usize, Vec<Shape>),
+    Enclosed(usize, Box<Shape>),
+}
+use Shape::*;
+
+fn row(children: impl IntoIterator<Item = Shape>) -> Shape {
+    Row(RowAlignment::Baseline, children.into_iter().collect())
+}
+
+fn column(baseline: usize, stops: impl IntoIterator<Item = usize>) -> Shape {
+    Column(baseline, stops.into_iter().map(Stop).collect())
+}
+
+fn enclosed(stop: usize, child: Shape) -> Shape {
+    Enclosed(stop, Box::new(child))
+}
+
+fn path(stop: usize) -> Trail {
+    Trail::from([Step::Key(CellId::from_u128(stop as u128))])
+}
+
+fn index(path: &Trail) -> usize {
+    match path.to_vec().as_slice() {
+        [Step::Key(cell)] => u128::from_be_bytes(*cell.as_bytes()) as usize,
+        _ => unreachable!(),
+    }
+}
+
+fn build(shape: &Shape, selected: usize, collector: &mut Collector) {
+    let layout = |composition, children: &[Shape], collector: &mut Collector| {
+        collector.begin(composition);
+        for child in children {
+            collector.begin(Composition::Row(RowAlignment::Baseline));
+            build(child, selected, collector);
+            collector.end();
+        }
+        collector.end();
+    };
+    match shape {
+        Empty => {}
+        Stop(stop) => collector.stop(path(*stop), *stop == selected),
+        Row(alignment, children) => layout(Composition::Row(*alignment), children, collector),
+        Column(baseline, children) => layout(
+            Composition::Column {
+                baseline: *baseline,
+            },
+            children,
+            collector,
+        ),
+        Enclosed(stop, child) => {
+            collector.begin_landmark(path(*stop), *stop == selected);
+            build(child, selected, collector);
+            collector.end_landmark();
+        }
+    }
+}
+
+/// The stops `destinations` lead to, left, right, up and down.
+fn indices(destinations: Destinations) -> [Option<usize>; 4] {
+    [
+        destinations.left,
+        destinations.right,
+        destinations.up,
+        destinations.down,
+    ]
+    .map(|target| target.as_ref().map(index))
+}
+
+fn destinations(shape: &Shape, selected: usize) -> [Option<usize>; 4] {
+    let mut collector = Collector::default();
+    build(shape, selected, &mut collector);
+    indices(collector.current.lines.destinations().unwrap())
+}
+
+fn stops(shape: &Shape) -> Vec<usize> {
+    match shape {
+        Empty => vec![],
+        Stop(stop) => vec![*stop],
+        Row(_, children) | Column(_, children) => children.iter().flat_map(stops).collect(),
+        Enclosed(stop, child) => [*stop].into_iter().chain(stops(child)).collect(),
+    }
+}
+
+/// Navigation lines, read back from every stop's destinations: reading order
+/// follows Right from the one stop with no Left, and the stops of one line
+/// share their Up and Down.
+fn lines(shape: &Shape) -> Vec<Vec<usize>> {
+    let all: Vec<_> = stops(shape)
+        .into_iter()
+        .map(|stop| (stop, destinations(shape, stop)))
+        .collect();
+    let find = |stop: usize| all.iter().find(|(s, _)| *s == stop).unwrap().1;
+    let mut next = all
+        .iter()
+        .find(|(_, [left, ..])| left.is_none())
+        .map(|(s, _)| *s);
+    let mut lines: Vec<(Option<usize>, Option<usize>, Vec<usize>)> = vec![];
+    while let Some(stop) = next {
+        let [_, right, up, down] = find(stop);
+        match lines.last_mut() {
+            Some((u, d, line)) if (*u, *d) == (up, down) => line.push(stop),
+            _ => lines.push((up, down, vec![stop])),
+        }
+        next = right;
+    }
+    assert_eq!(
+        lines.iter().map(|(.., line)| line.len()).sum::<usize>(),
+        all.len()
+    );
+    lines.into_iter().map(|(.., line)| line).collect()
+}
+
+#[test]
+fn long_single_line_keeps_only_boundaries_and_the_selected_neighbors() {
+    let mut collector = Collector::default();
+    for stop in 0..10_000 {
+        collector.stop(path(stop), stop == 5000);
+    }
+    let lines = collector.current.lines;
+    assert_eq!(lines.rows.len(), 1);
+    assert!(lines.rows[0].block.is_none());
+    assert_eq!(
+        indices(lines.destinations().unwrap()),
+        [Some(4999), Some(5001), None, None]
+    );
+}
+
+#[test]
+fn baseline_row_grouping_does_not_change_logical_order() {
+    let children = vec![
+        Stop(7),
+        enclosed(0, column(1, [1, 2])),
+        Empty,
+        Stop(3),
+        enclosed(8, column(0, [4, 5, 6])),
+        Stop(9),
+    ];
+    let flat = lines(&row(children.clone()));
+    for split in 0..=children.len() {
+        let (left, right) = children.split_at(split);
+        let grouped = row([row(left.to_vec()), row(right.to_vec())]);
+        assert_eq!(lines(&grouped), flat);
+    }
+}
+
+fn groupings(children: &[Shape]) -> Vec<Shape> {
+    match children {
+        [child] => vec![child.clone()],
+        _ => (1..children.len())
+            .flat_map(|split| {
+                let (left, right) = children.split_at(split);
+                let rights = groupings(right);
+                groupings(left).into_iter().flat_map(move |left| {
+                    rights
+                        .clone()
+                        .into_iter()
+                        .map(move |right| row([left.clone(), right]))
+                })
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn every_grouping_of_a_row_with_unequal_blocks_navigates_the_same() {
+    let labelled = |stop: usize| {
+        enclosed(
+            stop,
+            row([
+                Stop(stop + 1),
+                enclosed(stop + 2, column(0, [stop + 3, stop + 4])),
+            ]),
+        )
+    };
+    let children = [
+        Stop(30),
+        labelled(0),
+        Stop(31),
+        enclosed(10, column(0, [11, 12])),
+        Stop(32),
+        labelled(20),
+        Stop(33),
+    ];
+    let flat = lines(&row(children.clone()));
+    let wrapped = |shape: Shape| enclosed(40, shape);
+    let labelled_wrapped = |shape: Shape| row([Stop(41), enclosed(40, shape)]);
+    let (flat_wrapped, flat_labelled) = (
+        lines(&wrapped(row(children.clone()))),
+        lines(&labelled_wrapped(row(children.clone()))),
+    );
+    for grouped in groupings(&children) {
+        assert_eq!(lines(&grouped), flat);
+        assert_eq!(lines(&wrapped(grouped.clone())), flat_wrapped);
+        assert_eq!(lines(&labelled_wrapped(grouped)), flat_labelled);
+    }
+}
+
+#[test]
+fn an_enclosing_stop_precedes_a_deeper_block_beside_its_first_block() {
+    let deeper = enclosed(
+        4,
+        enclosed(5, row([Stop(6), enclosed(7, column(0, [8, 9]))])),
+    );
+    let shape = enclosed(0, row([enclosed(1, column(0, [2, 3])), deeper.clone()]));
+    assert_eq!(
+        lines(&shape),
+        [vec![0, 4, 5], vec![1, 6, 7], vec![2, 8], vec![3, 9]]
+    );
+    // A label before the container still precedes it on the same line.
+    let labelled = row([Stop(10), shape]);
+    assert_eq!(lines(&labelled)[0], [10, 0, 4, 5]);
+}
+
+#[test]
+fn rows_align_the_declared_column_baselines() {
+    let shape = row([column(2, [0, 1, 2]), column(0, [3, 4])]);
+    assert_eq!(lines(&shape), [vec![0], vec![1], vec![2, 3], vec![4]]);
+    assert_eq!(
+        destinations(&shape, 3),
+        [Some(2), Some(4), Some(1), Some(4)]
+    );
+}
+
+#[test]
+fn column_baselines_follow_children_not_stop_counts_or_decorative_gaps() {
+    let nested = Column(3, vec![Empty, column(0, [0, 1]), Empty, column(1, [2, 3])]);
+    assert_eq!(
+        lines(&row([nested, Stop(4)])),
+        [vec![0], vec![1], vec![2], vec![3, 4]]
+    );
+    let gap = Column(1, vec![Stop(0), Empty, Stop(1)]);
+    assert_eq!(lines(&row([gap, Stop(2)])), [vec![0], vec![1, 2]]);
+}
+
+#[test]
+fn container_wrappers_do_not_change_content_alignment() {
+    let shape = row([enclosed(0, column(1, [1, 2])), Stop(3)]);
+    assert_eq!(lines(&shape), [vec![0], vec![1], vec![2, 3]]);
+}
+
+#[test]
+fn a_label_and_multiline_container_are_peers_before_entering_contents() {
+    let shape = enclosed(4, row([Stop(0), enclosed(1, column(0, [2, 3]))]));
+    assert_eq!(lines(&shape), [vec![4], vec![0, 1], vec![2], vec![3]]);
+    // Up from the label selects its enclosing call, not the neighboring list.
+    assert_eq!(
+        destinations(&shape, 0),
+        [Some(4), Some(1), Some(4), Some(2)]
+    );
+    assert_eq!(
+        destinations(&shape, 1),
+        [Some(0), Some(2), Some(4), Some(2)]
+    );
+}
+
+#[test]
+fn content_after_a_block_stays_on_the_line_it_is_drawn_on() {
+    let shape = row([enclosed(0, column(0, [1, 2])), Stop(3)]);
+    assert_eq!(lines(&shape), [vec![0], vec![1, 3], vec![2]]);
+    assert_eq!(
+        destinations(&shape, 3),
+        [Some(1), Some(2), Some(0), Some(2)]
+    );
+
+    let shape = row([enclosed(0, column(0, [1, 2])), enclosed(3, Stop(4))]);
+    assert_eq!(lines(&shape), [vec![0], vec![1, 3, 4], vec![2]]);
+
+    let shape = row([
+        Stop(0),
+        enclosed(1, column(0, [2, 3])),
+        Stop(4),
+        enclosed(5, column(0, [6, 7])),
+    ]);
+    assert_eq!(lines(&shape), [vec![0, 1, 5], vec![2, 4, 6], vec![3, 7]]);
+}
+
+#[test]
+fn nested_wrappers_share_one_vertical_entrance_but_keep_each_horizontal_stop() {
+    let shape = enclosed(0, enclosed(1, enclosed(2, column(0, [3, 4]))));
+    assert_eq!(lines(&shape), [vec![0, 1, 2], vec![3], vec![4]]);
+    for stop in 0..3 {
+        let destinations = destinations(&shape, stop);
+        assert_eq!(destinations[1], Some(stop + 1));
+        assert_eq!(destinations[2], None);
+        assert_eq!(destinations[3], Some(3));
+    }
+    assert_eq!(
+        destinations(&shape, 3),
+        [Some(2), Some(4), Some(0), Some(4)]
+    );
+}
+
+#[test]
+fn unequal_container_depths_do_not_displace_neighboring_content_lines() {
+    let shape = row([
+        enclosed(0, enclosed(1, column(0, [2, 3]))),
+        enclosed(4, column(0, [5, 6])),
+    ]);
+    assert_eq!(lines(&shape), [vec![0, 1, 4], vec![2, 5], vec![3, 6]]);
+}
+
+#[test]
+fn multiline_children_can_start_on_later_lines_of_a_parent_container() {
+    let shape = enclosed(0, Column(0, vec![Stop(1), enclosed(2, column(0, [3, 4]))]));
+    assert_eq!(lines(&shape), [vec![0], vec![1], vec![2], vec![3], vec![4]]);
+}
+
+#[test]
+fn empty_containers_are_single_stops() {
+    assert_eq!(lines(&row([Stop(0), enclosed(1, Empty)])), [vec![0, 1]]);
+}
+
+#[test]
+fn top_aligned_rows_keep_top_alignment_and_export_the_selected_baseline() {
+    let top = Row(
+        RowAlignment::Top { baseline: 1 },
+        vec![Empty, column(1, [0, 1]), Stop(2)],
+    );
+    assert_eq!(lines(&top), [vec![0, 2], vec![1]]);
+    assert_eq!(lines(&row([top, Stop(3)])), [vec![0, 2], vec![1, 3]]);
+}
+
+#[test]
+fn multiline_container_precedes_its_first_line_and_reading_order_wraps() {
+    let shape = enclosed(0, Column(0, vec![row([Stop(1), Stop(2)]), Stop(3)]));
+    assert_eq!(lines(&shape), [vec![0], vec![1, 2], vec![3]]);
+    assert_eq!(destinations(&shape, 0), [None, Some(1), None, Some(1)]);
+    assert_eq!(
+        destinations(&shape, 1),
+        [Some(0), Some(2), Some(0), Some(3)]
+    );
+    assert_eq!(
+        destinations(&shape, 2),
+        [Some(1), Some(3), Some(0), Some(3)]
+    );
+}
+
+#[test]
+fn single_line_containers_do_not_add_vertical_steps() {
+    let shape = Column(0, vec![enclosed(0, enclosed(1, Stop(2))), Stop(3)]);
+    assert_eq!(lines(&shape), [vec![0, 1, 2], vec![3]]);
+    assert_eq!(destinations(&shape, 0), [None, Some(1), None, Some(3)]);
+}
+
+#[test]
+fn a_row_with_multiline_content_is_multiline_but_empty_decorations_add_no_lines() {
+    let content = Column(0, vec![Empty, Stop(1), Empty, Stop(2)]);
+    let shape = enclosed(0, row([Empty, content]));
+    assert_eq!(lines(&shape), [vec![0], vec![1], vec![2]]);
+}
+
+/// The destinations of `selected` among stops a test declares directly.
+fn declared(selected: usize, declare: impl Fn(&mut Collector, usize)) -> [Option<usize>; 4] {
+    let mut collector = Collector::default();
+    declare(&mut collector, selected);
+    indices(collector.current.lines.destinations().unwrap())
+}
+
+#[test]
+fn a_landmark_s_own_stop_stays_where_its_control_declares_it() {
+    // A named number: the name, then the number's own stop at its spelling.
+    let number = |collector: &mut Collector, selected: usize| {
+        collector.stop(path(0), selected == 0);
+        collector.begin_landmark(path(1), selected == 1);
+        collector.begin_landmark(path(2), selected == 2);
+        collector.stop(path(2), selected == 2);
+        collector.end_landmark();
+        collector.stop(path(1), selected == 1);
+        collector.end_landmark();
+    };
+    assert_eq!(declared(2, number), [Some(0), Some(1), None, None]);
+    assert_eq!(declared(1, number), [Some(2), None, None, None]);
+}
+
+#[test]
+fn a_landmark_with_no_stop_of_its_own_stops_before_its_contents() {
+    let wrapped = |collector: &mut Collector, selected: usize| {
+        collector.stop(path(0), selected == 0);
+        collector.begin_landmark(path(1), selected == 1);
+        collector.stop(path(2), selected == 2);
+        collector.end_landmark();
+    };
+    assert_eq!(declared(1, wrapped), [Some(0), Some(2), None, None]);
+}
+
+#[test]
+fn landmarks_nested_at_one_occurrence_share_its_stop() {
+    for own in [false, true] {
+        let nested = |collector: &mut Collector, selected: usize| {
+            collector.stop(path(0), selected == 0);
+            collector.begin_landmark(path(1), selected == 1);
+            collector.begin_landmark(path(1), selected == 1);
+            if own {
+                collector.stop(path(1), selected == 1);
+            }
+            collector.end_landmark();
+            collector.end_landmark();
+            collector.stop(path(2), selected == 2);
+        };
+        assert_eq!(declared(1, nested), [Some(0), Some(2), None, None]);
+        assert_eq!(declared(2, nested), [Some(1), None, None, None]);
+    }
+}
+
+#[test]
+fn views_with_identical_paths_arrive_through_their_own_landmarks() {
+    use super::super::super::{HoverInput, HoverPass};
+    use super::super::Landmark;
+    let paths: [Trail; 2] = std::array::from_fn(|_| Trail::from([Step::Key(gid::new_cell_id())]));
+    let views = [
+        Area::whole(crate::test_document()),
+        Area::part(
+            crate::test_document(),
+            vec![gid::Step::Key(gid::new_cell_id())],
+        ),
+    ];
+    let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput::default(), kurbo::Rect::ZERO);
+    for (view, root) in views.into_iter().enumerate() {
+        pass.in_view(root, |pass| {
+            for (index, path) in paths.iter().enumerate() {
+                pass.visit(|output| {
+                    output.navigation_stop(path.clone(), view == 0 && index == 0);
+                    output.output.landmarks.push(Landmark {
+                        area: None,
+                        path: path.clone(),
+                        rect: Default::default(),
+                        select: Rc::new(move |visits: &mut Vec<usize>, _| {
+                            visits.push(view * 10 + index);
+                            true
+                        }),
+                        secondary: None,
+                        selected: false,
+                        tab_stop: false,
+                    });
+                });
+            }
+        });
+    }
+    let frame = pass.finish().bind(Default::default());
+    let handler = frame.handler.unwrap();
+    let mut visits = vec![];
+    let mut dispatch = crate::display::widget::frame::DispatchContext {
+        landmarks: frame.landmarks.into(),
+        ..Default::default()
+    };
+    assert!(
+        handler
+            .dispatch(
+                &mut visits,
+                Event::Navigate(NavigationDirection::Right),
+                &mut dispatch
+            )
+            .handled()
+    );
+    assert_eq!(visits, [1]);
+}

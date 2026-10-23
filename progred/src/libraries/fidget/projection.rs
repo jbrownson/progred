@@ -1,0 +1,135 @@
+use super::{node_kind, parameters, vocabulary::*};
+use crate::display::host::{Host, Layout, ProjectionInput};
+use crate::display::hug;
+use crate::display::{
+    Delim, alternatives, col, descend, dim, row, selectable, selectable_bracket, shared,
+};
+use crate::libraries::name;
+use crate::libraries::representation::{self, Precedence};
+use gid::{CellId, Step, Value};
+
+#[cfg(test)]
+mod tests;
+
+fn precedence(kind: CellId) -> Option<Precedence> {
+    let (_, symbol) = super::arithmetic().find(|(candidate, _)| *candidate == kind)?;
+    Precedence::of_symbol(symbol)
+}
+
+/// The kind of node `value` is, when it has the fields its kind requires.
+fn form(value: &Value) -> Option<CellId> {
+    let fields = value.as_record()?;
+    let kind = node_kind(fields)?;
+    if kind == super::vocabulary::kind::AXIS {
+        fields.get(&AXIS)?.as_cell()?;
+    } else {
+        parameters(kind)?
+            .iter()
+            .all(|key| fields.contains_key(key))
+            .then_some(())?;
+    }
+    Some(kind)
+}
+
+/// Whether `value`, under `kind`'s `key`, needs parentheses: when it's
+/// named, so reads as `name = …`, or binds too loosely to stand there bare.
+fn grouped(kind: CellId, key: CellId, value: &Value) -> bool {
+    value
+        .as_record()
+        .is_some_and(|fields| fields.contains_key(&name::vocabulary::NAME))
+        || match (precedence(kind), form(value).and_then(precedence)) {
+            (Some(parent), Some(nested)) => parent.groups(nested, key == RIGHT),
+            _ => false,
+        }
+}
+
+fn arguments<W: Host>(children: impl IntoIterator<Item = Layout<W>>) -> Layout<W> {
+    let children: Vec<_> = children.into_iter().map(shared).collect();
+    selectable_bracket(
+        Delim::Paren,
+        match children.as_slice() {
+            [child] => child.clone(),
+            _ => alternatives([
+                row(
+                    0.0,
+                    children.iter().enumerate().flat_map(|(i, child)| {
+                        (i > 0)
+                            .then(|| dim(", "))
+                            .into_iter()
+                            .chain([child.clone()])
+                    }),
+                ),
+                col(
+                    0,
+                    2.0,
+                    children.iter().enumerate().map(|(i, child)| {
+                        if i == 0 {
+                            child.clone()
+                        } else {
+                            row(0.0, [dim(", "), child.clone()])
+                        }
+                    }),
+                ),
+            ]),
+        },
+    )
+}
+
+pub(super) fn field<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    // An active new field needs the structural record's insertion control.
+    input.pending.is_none().then_some(())?;
+    let input = input.with_value(input.value.map(::grap::RuntimeValue::as_value));
+    let kind = form(input.value?)?;
+    let body = if kind == super::vocabulary::kind::AXIS {
+        crate::libraries::grap::shallow_path(&input, [Step::Key(AXIS)])
+    } else {
+        let site = input.site();
+        let operator = selectable(
+            crate::display::structure::field_name(input.env, kind),
+            &site,
+        );
+        let fields = input.value?.as_record()?;
+        if precedence(kind).is_some() {
+            representation::infix(operator, [LEFT, RIGHT], |key| {
+                (
+                    descend([Step::Key(key)], None, None),
+                    fields
+                        .get(&key)
+                        .is_some_and(|value| grouped(kind, key, value)),
+                )
+            })
+        } else {
+            hug(
+                operator,
+                arguments(
+                    parameters(kind)?
+                        .iter()
+                        .map(|key| descend([Step::Key(*key)], None, None)),
+                ),
+                0.0,
+            )
+        }
+    };
+    Some(
+        match input.value?.as_record()?.get(&name::vocabulary::NAME) {
+            Some(_) => hug(
+                row(
+                    6.0,
+                    [
+                        crate::display::descend(
+                            [Step::Key(name::vocabulary::NAME)],
+                            Some(crate::display::first(&input, name::projection(None))),
+                            None,
+                        ),
+                        dim("="),
+                    ],
+                ),
+                body,
+                6.0,
+            ),
+            None => body,
+        },
+    )
+}

@@ -1,0 +1,116 @@
+use super::*;
+use crate::display::widget::source::SourceTrace;
+use crate::hover::Hover;
+use crate::libraries::controls;
+use kurbo::Point;
+use puri::hover::Claim;
+use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
+
+const SIZE: kurbo::Size = kurbo::Size::new(720.0, 684.0);
+
+fn paint(runner: &mut crate::EditorRunner) {
+    let mut output = DrawList::default();
+    puri::frame::render(runner.prepare_paint(1.0, SIZE).renders, &mut output);
+    std::hint::black_box(&output);
+    runner.frame_presented();
+}
+
+/// Times frames after five warm-up ones. Each frame names the metric its time
+/// counts toward, so interleaved kinds of frame get medians of their own: one
+/// median across two kinds would be the slowest frame of the faster kind.
+fn measure(label: &str, mut frame: impl FnMut(usize) -> &'static str) {
+    let mut samples = Vec::new();
+    for index in 0..iterations() + 5 {
+        let start = Instant::now();
+        let metric = frame(index);
+        if index >= 5 {
+            samples.push((metric, start.elapsed()));
+        }
+    }
+    let metrics: std::collections::BTreeSet<_> =
+        samples.iter().map(|(metric, _)| *metric).collect();
+    for metric in metrics {
+        let times = || {
+            samples
+                .iter()
+                .filter(|(kind, _)| *kind == metric)
+                .map(|(_, time)| *time)
+        };
+        let label = if metric.is_empty() {
+            label.to_owned()
+        } else {
+            format!("{label}, {metric}")
+        };
+        distribution(&label, times());
+        crate::perf::record(metric, times());
+    }
+}
+
+/// Complete successor frames for changing slider values, not slider hit testing
+/// or GPU rendering.
+#[test]
+#[ignore = "opt-in headless frame profile"]
+fn forest_slider_profile_loop() {
+    let (editor, names) = crate::test_examples::growing_forest_editor();
+    let mut runner = crate::EditorRunner::new(editor);
+    measure("forest slider-value frame", |index| {
+        runner
+            .editor
+            .model
+            .workspace
+            .document_pane_mut()
+            .annotations
+            .set_field(
+                &crate::test_examples::result_path(&[gid::Step::Key(names["second"])]),
+                controls::vocabulary::STATE,
+                Some(crate::libraries::f64::value((index % 101) as f64 / 100.0)),
+            );
+        runner.refresh_frame(1.0, SIZE);
+        paint(&mut runner);
+        ""
+    });
+}
+
+/// Real pointer dispatch against installed geometry, source linking, successor
+/// build, and headless painting. No app window or platform renderer is needed.
+#[test]
+#[ignore = "opt-in headless frame profile"]
+fn forest_source_hover_profile_loop() {
+    let (editor, names) = crate::test_examples::growing_forest_editor();
+    let mut runner = crate::EditorRunner::new(editor);
+    let modifiers = crate::test_support::command_keys(runner.editor.command_modifier);
+    runner.editor.modifiers = modifiers;
+    runner.refresh_frame(1.0, SIZE);
+    paint(&mut runner);
+    let point = (20..300).step_by(10).find_map(|y| {
+        (20..690).step_by(10).find_map(|x| {
+            let point = Point::new(x as f64, y as f64);
+            let (_, claim) = runner.frame.dispatch.hover_geometry.probe(Some(point), None, 0.0)?;
+            let Claim::Direct(Hovered::Tree(Hover::Calls(calls))) = claim else { return None; };
+            calls.sources().any(|source| matches!(source, SourceTrace::InCell { cell, .. } if cell == names["growing_tree"])).then_some(point)
+        })
+    }).expect("a tree shape has a captured call chain");
+    measure("forest source-hover event and frame", |index| {
+        let (metric, point) = if index % 2 == 0 {
+            ("hover", point)
+        } else {
+            ("leave", Point::new(1.0, 1.0))
+        };
+        runner.pointer_event(
+            &PointerEvent::Move(PointerUpdate {
+                pointer: crate::display::test_support::mouse(),
+                current: PointerState {
+                    position: (point.x, point.y).into(),
+                    modifiers,
+                    ..Default::default()
+                },
+                coalesced: Vec::new(),
+                predicted: Vec::new(),
+            }),
+            1.0,
+            SIZE,
+        );
+        paint(&mut runner);
+        metric
+    });
+}

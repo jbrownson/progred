@@ -1,0 +1,115 @@
+//! Stable single-shape fixtures for rendering regressions and performance
+//! canaries, and the example editors captures and canaries share.
+
+use gid::{CellId, Step, Value};
+
+pub const SPHERES: &str = include_str!("../../examples/fidget.gid");
+pub const TORUS: &str = include_str!("../../examples/fidget-torus.gid");
+pub const TANGLECUBE: &str = include_str!("../../examples/fidget-tanglecube.gid");
+pub const GYROID: &str = include_str!("../../examples/fidget-gyroid.gid");
+pub const CUBE: &str = include_str!("../../examples/fidget-cube.gid");
+
+/// The keyboard-navigation fixture, opened from disk rather than the
+/// Examples menu.
+pub const NAVIGATION: &str = include_str!("../../examples/navigation.gid");
+
+pub const FIDGET: [(&str, &str); 5] = [
+    ("spheres", SPHERES),
+    ("torus", TORUS),
+    ("tanglecube", TANGLECUBE),
+    ("gyroid", GYROID),
+    ("cube", CUBE),
+];
+
+/// The CAM example with its panes declared, drawing its preview as `mode`.
+pub fn cam_editor(mode: CellId) -> crate::Editor {
+    // Exercise each public preview using the same document, without adding a
+    // renderer-selection control to the production example.
+    let source = crate::command::Example::Toolpaths.source().replace(
+        &crate::libraries::toolpath::vocabulary::PREVIEW_REFINED.to_string(),
+        &mode.to_string(),
+    );
+    let (doc, _) = crate::gid_text::parse(&source).unwrap();
+    crate::test_editor(doc)
+}
+
+/// Where the `index`th of a row's `count` parts is, its list positions
+/// spread as a new list's.
+pub fn part(index: usize, count: usize) -> gid::Path {
+    vec![
+        Step::Key(crate::workspace::vocabulary::PARTS),
+        Step::Element(gid::position::spread(count).remove(index)),
+    ]
+}
+
+/// Where a starting point's or example's row keeps its main value: beside
+/// the preview, its second part.
+pub fn main_part() -> gid::Path {
+    part(1, 2)
+}
+
+/// Where a presentation at `path` in the document view draws its result:
+/// computed, beneath the presentation's result step.
+pub fn result_path(path: &[Step]) -> crate::occurrence::Path {
+    let mut result = crate::occurrence::of(path);
+    result.extend([
+        crate::occurrence::Step::Key(crate::libraries::presentation::vocabulary::RESULT),
+        crate::occurrence::Step::Computed,
+    ]);
+    result
+}
+
+pub fn cam_position(progress: f64) -> Value {
+    use crate::libraries::controls::tree_range;
+    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
+    let libraries = crate::stack::load().libraries;
+    let sources = crate::sources::Sources {
+        doc: &doc,
+        libraries: &libraries,
+    };
+    let tree = crate::libraries::tree::build(
+        &Value::from(names["program_tree"]).into(),
+        &sources,
+        3_000_000,
+    )
+    .unwrap();
+    let selection = tree_range::Selection::new(tree.items.as_value(), None);
+    Value::record([
+        (
+            names["focus"],
+            tree_range::cursor_state(&selection, progress * selection.leaves.end as f64),
+        ),
+        (names["preview_mode"], names["stock"].into()),
+    ])
+}
+
+/// The growing forest with all of its code, its two trees' slots fixed, as
+/// the browser editor embeds it.
+pub fn growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
+    use crate::libraries::{
+        absent, color, controls, f64, grap, layout, name, presentation, sequence,
+    };
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../examples/growing-forest.gid")).unwrap();
+    let libraries = [
+        name::ID,
+        absent::ID,
+        color::ID,
+        grap::ID,
+        f64::ID,
+        layout::ID,
+        presentation::ID,
+        sequence::ID,
+        controls::ID,
+    ]
+    .map(|id| id.to_string())
+    .join(",");
+    let slots = format!("{},{}", names["second"], names["first"]);
+    let mut stack = crate::web_embed::libraries(Some(&libraries)).unwrap();
+    stack.projection =
+        crate::web_embed::tutorial_slots(Some(&slots), stack.projection, &stack.libraries).unwrap();
+    let mut editor = crate::test_editor_with_stack(doc, stack);
+    editor.command_modifier = puri::keyboard::CommandModifier::Control;
+    editor.drawn_menu = false;
+    (editor, names)
+}

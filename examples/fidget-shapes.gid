@@ -1,0 +1,1214 @@
+{
+  "binders": {
+    "abs_2": 119eddd0f1404b34a6e8653279b69feb,
+    "at": e90d25c8b64a37f1084b92d7f3a65c1e,
+    "at_value": 85e3b0d729c4165ffa1e0c5d49b3872e,
+    "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "axis_2": f82b802a154f47ab973d4a522fd3d034,
+    "baseline": 6cd28a4f91e057b3c2941e6a07f5d3b8,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
+    "bindings": f6fb0062e8a14f808e416a9edece2a9d,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "center_depth": 0006e7b3a692dacf923c343f440997b4,
+    "chamfer": c8d941b591fe167eddf75746f1715e3b,
+    "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
+    "children": e10b73d5482f96ca7d3852c0f16b49ea,
+    "color": d6b4c91765541de967c02878c42d15ea,
+    "control_depth": 65ad865257a071f944d92b08fec98ebf,
+    "coordinate": 51c725afd7f69a39972f5e910066a235,
+    "cos": fc89c17ecb5147158f928fe4e89da1e3,
+    "cube": 650c98379ab879a6b902b0bc94305103,
+    "delta_x": 671936a24eb2d9d6e47ac5915a3e38c4,
+    "descend": 35c7a8e2f10d49b6d2f8016c4b9ea375,
+    "difference": 10f86aecbad3474fa912858a56ebdf94,
+    "divide_2": 9f458eda134e4adc98661b07b5169223,
+    "do": b1fc4cb45c58b1a662c431feef5bd140,
+    "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "expressions": 5fab151c006ae1487c28837f2003f43c,
+    "f32": 64810cfeb0631ca8875e282d1ad4af79,
+    "f32_divide": fbf1ebc4eeeea21f86af583f6ad85e71,
+    "f32_subtract": 5cd7408dab067d8b92c7a1bd9cda7b05,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "face_pair": 111895a6b630ea7972df149951c62b9b,
+    "field": 66bad5269b830181b840cf23a391b10e,
+    "figure": 0b28a8dd5ee8f60d7394fb7f9d411158,
+    "figure_layout": 21cae7fb0597a5195d36c8a11f9bd24c,
+    "figure_view": b99645084a80c86dbc18fbc2eadc8d1a,
+    "figures": 20d01ef06b50dc37b0660d7237a6eb97,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "functions": e180cc460ec3879c7b331c8e734be0af,
+    "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
+    "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
+    "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
+    "half_size": f6e416437259d6867c11eced7923bf1c,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "key": f12dea12c741fe36312750a264f3a235,
+    "keys": bb30d215605f5599e31f6274641ca89f,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "left_2": 3cbf5357204947fdb4f26eadcbd777d6,
+    "libraries": bc197ad66fea59a9bd97c4191c7845b2,
+    "max_2": 968e2f1f111a4849a8449dbeddbe8412,
+    "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
+    "max_y": c9e7268eb34af7bea225df94841c1c27,
+    "max_z": da0ed6603210813bf52a20df7bf27c7d,
+    "mesh": 307f51c54065c16ea881ec0b165389b5,
+    "mesh_depth": 47114a01984bb53e1538906f13333f84,
+    "mesh_view": 149f69e043d1ea5f15bf999006d86505,
+    "meshed": 2194649f4eeaf42295677a87957e1eef,
+    "min_x": f7906c57fc0b9f4b7013b19eef775c2d,
+    "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
+    "min_z": 392a615eb91c6d64df871ec95831f89a,
+    "multiply_2": 2b80236eda7245d6a63b0da98da25850,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "normal": 4b3db08982e1a337f2d43489f59b82a9,
+    "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
+    "operand_2": b66457fa59524110bb363bc28754cea0,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "part": 7b36d5ef72f4bb686adc57fd311182cd,
+    "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "picture": 8d3cd70d83afd75ce409ee8b360605f9,
+    "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
+    "preview_mesh": 95eec28ff8cc6ba67153f9dfc4021139,
+    "projection": 873503e2e37a1722a0dd21399be9ee7f,
+    "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "radius": 68e4448ea36297de8afe4eb68fe867c8,
+    "rendered": fd8dff435545f303e72627ee3a347ca5,
+    "result": 11098129f74918af8a0924f94c37df4f,
+    "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "right_2": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
+    "ring": ec804b721f63fb7b8fea58b401ae4eed,
+    "row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
+    "scene": 9b819b6ad5c547e8952d8759531b9cd3,
+    "selectable": 40b93f6e17d5a28c6a2df1905e83b7c4,
+    "shape": ebeb131d69636b697e95536fd45fc70e,
+    "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
+    "sin": 3e471136af054326b47891d045361fbc,
+    "size": f8ddfd6772816a66d2bc9c4d11df6625,
+    "sphere": dd714924e851e1bdd05c84c88ccff765,
+    "sqrt": db6e742a39104ba89f2216ad9ab75e99,
+    "square_2": d4f866cfe9014192a360d5567df9cbef,
+    "step": 67a2d5e0b93c48f14e28b671d0a5c39f,
+    "steps": 1298c6f4a7053edb09b64d2e8371fa5c,
+    "subtract_2": 4535d940d2f04affa350291dd96f06bc,
+    "sum_2": 7300fd0088314a1b800a9cb15b015ba8,
+    "tanglecube": 415da1b270e7a5e91da047b9f6feb1e0,
+    "torus": 814313f344bbbb6d1d481aa56494a591,
+    "translate": 25dba7fa2ee74c2b986ba6e28aa3cbdf,
+    "u": c55bbadf3e61435c3aeab495079d1b19,
+    "u64": fc77282178c2fa31b80aed2b8b6f7888,
+    "unquote": da48703c290e3b35d7353c38110bc953,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "v": 2029830ebecc5accb54f884443f9ae07,
+    "value": 00dafdc01c7e014edd857e174c6c8b6f,
+    "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
+    "x": 0192bad40c32c951e2237679084528bc,
+    "y": 213e54dd15ac9c9750308f35a606f56f,
+    "z": c93e6bb743a9d90f85f8cdea3aabf5c1,
+  },
+  "cells": {
+    center_depth: {
+      name: "center depth",
+    },
+    chamfer: {
+      name: "chamfer",
+    },
+    chamfer_pair: {
+      name: "chamfer pair",
+    },
+    control_depth: {
+      name: "control depth",
+    },
+    coordinate: {
+      name: "coordinate",
+    },
+    ring: {
+      name: "cutaway spheres",
+      params: [],
+      body: {
+        function: quote,
+        expression: {
+          objects: [
+            0x55: {
+              field: {
+                left_2: {
+                  unquote: {
+                    radius: {
+                      f32: 0x00008042,
+                    },
+                    function: sphere,
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                right_2: {
+                  field: {
+                    unquote: {
+                      radius: {
+                        f32: 0x0000c041,
+                      },
+                      function: sphere,
+                      isa: call,
+                    },
+                    isa: unquote_2,
+                  },
+                  delta_x: {
+                    f32: 0x00004042,
+                  },
+                  isa: translate,
+                },
+                isa: difference,
+              },
+              color: {
+                rgb: 0x5096dc,
+              },
+            },
+            0xaa: {
+              field: {
+                field: {
+                  unquote: {
+                    radius: {
+                      f32: 0x00006041,
+                    },
+                    function: sphere,
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                delta_x: {
+                  f32: 0x00004042,
+                },
+                isa: translate,
+              },
+              color: {
+                rgb: 0xf0ae50,
+              },
+            },
+          ],
+          isa: scene,
+        },
+        isa: call,
+      },
+      isa: lambda,
+    },
+    edge_limit: {
+      name: "edge limit",
+    },
+    face_pair: {
+      name: "face pair",
+    },
+    cube: {
+      name: "fidget cube",
+      params: [],
+      body: {
+        function: where,
+        expression: {
+          function: quote,
+          expression: {
+            left_2: {
+              left_2: {
+                unquote: {
+                  v: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  normal: {
+                    isa: axis_2,
+                    axis: x,
+                  },
+                  function: face_pair,
+                  u: {
+                    isa: axis_2,
+                    axis: y,
+                  },
+                  isa: call,
+                },
+                isa: unquote_2,
+              },
+              right_2: {
+                left_2: {
+                  unquote: {
+                    v: {
+                      isa: axis_2,
+                      axis: z,
+                    },
+                    normal: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    function: face_pair,
+                    u: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                right_2: {
+                  unquote: {
+                    v: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    normal: {
+                      isa: axis_2,
+                      axis: z,
+                    },
+                    function: face_pair,
+                    u: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                isa: max_2,
+              },
+              isa: max_2,
+            },
+            right_2: {
+              left_2: {
+                unquote: {
+                  v: {
+                    isa: axis_2,
+                    axis: y,
+                  },
+                  function: chamfer_pair,
+                  u: {
+                    isa: axis_2,
+                    axis: x,
+                  },
+                  isa: call,
+                },
+                isa: unquote_2,
+              },
+              right_2: {
+                left_2: {
+                  unquote: {
+                    v: {
+                      isa: axis_2,
+                      axis: z,
+                    },
+                    function: chamfer_pair,
+                    u: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                right_2: {
+                  unquote: {
+                    v: {
+                      isa: axis_2,
+                      axis: z,
+                    },
+                    function: chamfer_pair,
+                    u: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    isa: call,
+                  },
+                  isa: unquote_2,
+                },
+                isa: max_2,
+              },
+              isa: max_2,
+            },
+            isa: max_2,
+          },
+          isa: call,
+        },
+        isa: call,
+        bindings: [
+          0x17: {
+            value: {
+              f32: 0x0000803f,
+            },
+            bind: size,
+            isa: binding,
+          },
+          0x2e: {
+            value: {
+              f32: 0xcdcccc3d,
+            },
+            bind: chamfer,
+            isa: binding,
+          },
+          0x45: {
+            value: {
+              f32: 0x0000003f,
+            },
+            bind: control_depth,
+            isa: binding,
+          },
+          0x5d: {
+            value: {
+              right: {
+                f32: 0x00000040,
+              },
+              function: f32_divide,
+              left: size,
+              isa: call,
+            },
+            bind: half_size,
+            isa: binding,
+          },
+          0x74: {
+            value: {
+              right: chamfer,
+              function: f32_subtract,
+              left: half_size,
+              isa: call,
+            },
+            bind: half_face,
+            isa: binding,
+          },
+          0x8b: {
+            value: {
+              right: {
+                f32: 0x00008040,
+              },
+              function: f32_divide,
+              left: control_depth,
+              isa: call,
+            },
+            bind: center_depth,
+            isa: binding,
+          },
+          0xa2: {
+            value: {
+              right: chamfer,
+              function: f32_subtract,
+              left: size,
+              isa: call,
+            },
+            bind: edge_limit,
+            isa: binding,
+          },
+          0xba: {
+            value: {
+              params: [
+                0x80: coordinate,
+              ],
+              body: {
+                function: quote,
+                expression: {
+                  left_2: {
+                    f32: 0x00000000,
+                  },
+                  right_2: {
+                    left_2: {
+                      f32: 0x0000803f,
+                    },
+                    right_2: {
+                      operand_2: {
+                        left_2: {
+                          unquote: coordinate,
+                          isa: unquote_2,
+                        },
+                        right_2: {
+                          unquote: half_face,
+                          isa: unquote_2,
+                        },
+                        isa: divide_2,
+                      },
+                      isa: square_2,
+                    },
+                    isa: subtract_2,
+                  },
+                  isa: max_2,
+                },
+                isa: call,
+              },
+              isa: lambda,
+            },
+            bind: shoulder,
+            isa: binding,
+          },
+          0xd1: {
+            value: {
+              params: [
+                0x40: normal,
+                0x80: u,
+                0xc0: v,
+              ],
+              body: {
+                function: quote,
+                expression: {
+                  left_2: {
+                    left_2: {
+                      operand_2: {
+                        unquote: normal,
+                        isa: unquote_2,
+                      },
+                      isa: abs_2,
+                    },
+                    right_2: {
+                      unquote: half_size,
+                      isa: unquote_2,
+                    },
+                    isa: subtract_2,
+                  },
+                  right_2: {
+                    left_2: {
+                      unquote: center_depth,
+                      isa: unquote_2,
+                    },
+                    right_2: {
+                      left_2: {
+                        unquote: {
+                          coordinate: u,
+                          function: shoulder,
+                          isa: call,
+                        },
+                        isa: unquote_2,
+                      },
+                      right_2: {
+                        unquote: {
+                          coordinate: v,
+                          function: shoulder,
+                          isa: call,
+                        },
+                        isa: unquote_2,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: sum_2,
+                },
+                isa: call,
+              },
+              isa: lambda,
+            },
+            bind: face_pair,
+            isa: binding,
+          },
+          0xe8: {
+            value: {
+              params: [
+                0x55: u,
+                0xaa: v,
+              ],
+              body: {
+                function: quote,
+                expression: {
+                  left_2: {
+                    left_2: {
+                      operand_2: {
+                        unquote: u,
+                        isa: unquote_2,
+                      },
+                      isa: abs_2,
+                    },
+                    right_2: {
+                      operand_2: {
+                        unquote: v,
+                        isa: unquote_2,
+                      },
+                      isa: abs_2,
+                    },
+                    isa: sum_2,
+                  },
+                  right_2: {
+                    unquote: edge_limit,
+                    isa: unquote_2,
+                  },
+                  isa: subtract_2,
+                },
+                isa: call,
+              },
+              isa: lambda,
+            },
+            bind: chamfer_pair,
+            isa: binding,
+          },
+        ],
+      },
+      isa: lambda,
+    },
+    figure: {
+      name: "figure",
+    },
+    figure_layout: {
+      name: "figure layout",
+      params: [
+        0x55: picture,
+        0xaa: part,
+      ],
+      body: {
+        expressions: [
+          0x55: picture,
+          0xaa: {
+            child: {
+              baseline: {
+                f64: 0x000000000000f03f,
+              },
+              function: row,
+              gap: {
+                f64: 0x0000000000003040,
+              },
+              isa: call,
+              children: {
+                expressions: [
+                  0x55: {
+                    steps: [
+                      0x80: {
+                        key: result,
+                      },
+                    ],
+                    function: at,
+                    at_value: picture,
+                    isa: call,
+                  },
+                  0xaa: {
+                    step: part,
+                    function: descend,
+                    isa: call,
+                  },
+                ],
+                function: do,
+                isa: call,
+              },
+            },
+            function: selectable,
+            isa: call,
+          },
+        ],
+        function: do,
+        isa: call,
+      },
+      isa: lambda,
+    },
+    figure_view: {
+      name: "figure view",
+      params: [
+        0x80: projection_value,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: figure_layout,
+          part: {
+            key: figure,
+          },
+          picture: {
+            function: rendered,
+            projection_value: {
+              function: shape,
+              isa: call,
+            },
+            isa: call,
+          },
+          isa: call,
+        },
+        isa: call,
+        bindings: [
+          0x80: {
+            value: projection_value,
+            pattern: {
+              figure: {
+                bind: shape,
+                isa: binder,
+              },
+            },
+            isa: binding,
+          },
+        ],
+      },
+      isa: lambda,
+    },
+    figures: {
+      name: "figures",
+    },
+    functions: {
+      name: "functions",
+    },
+    gyroid: {
+      name: "gyroid sphere",
+      params: [],
+      body: {
+        left_2: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                left_2: {
+                  left_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: x,
+                      },
+                      right_2: {
+                        f32: 0xcdcccc3e,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: sin,
+                  },
+                  right_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: y,
+                      },
+                      right_2: {
+                        f32: 0xcdcccc3e,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: cos,
+                  },
+                  isa: multiply_2,
+                },
+                right_2: {
+                  left_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: y,
+                      },
+                      right_2: {
+                        f32: 0xcdcccc3e,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: sin,
+                  },
+                  right_2: {
+                    operand_2: {
+                      left_2: {
+                        isa: axis_2,
+                        axis: z,
+                      },
+                      right_2: {
+                        f32: 0xcdcccc3e,
+                      },
+                      isa: multiply_2,
+                    },
+                    isa: cos,
+                  },
+                  isa: multiply_2,
+                },
+                isa: sum_2,
+              },
+              right_2: {
+                left_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: z,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: sin,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: cos,
+                },
+                isa: multiply_2,
+              },
+              isa: sum_2,
+            },
+            isa: abs_2,
+          },
+          right_2: {
+            f32: 0xcdcc4c3e,
+          },
+          isa: subtract_2,
+        },
+        right_2: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                left_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: square_2,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    right_2: {
+                      f32: 0xcdcccc3e,
+                    },
+                    isa: multiply_2,
+                  },
+                  isa: square_2,
+                },
+                isa: sum_2,
+              },
+              right_2: {
+                operand_2: {
+                  left_2: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  right_2: {
+                    f32: 0xcdcccc3e,
+                  },
+                  isa: multiply_2,
+                },
+                isa: square_2,
+              },
+              isa: sum_2,
+            },
+            isa: sqrt,
+          },
+          right_2: {
+            f32: 0x0000c841,
+          },
+          isa: subtract_2,
+        },
+        isa: max_2,
+      },
+      isa: lambda,
+    },
+    half_face: {
+      name: "half face",
+    },
+    half_size: {
+      name: "half size",
+    },
+    mesh: {
+      name: "mesh",
+    },
+    mesh_view: {
+      name: "mesh view",
+      params: [
+        0x80: projection_value,
+      ],
+      body: {
+        function: where,
+        expression: {
+          function: figure_layout,
+          part: {
+            key: mesh,
+          },
+          picture: {
+            function: meshed,
+            projection_value: {
+              function: shape,
+              isa: call,
+            },
+            isa: call,
+          },
+          isa: call,
+        },
+        isa: call,
+        bindings: [
+          0x80: {
+            value: projection_value,
+            pattern: {
+              mesh: {
+                bind: shape,
+                isa: binder,
+              },
+            },
+            isa: binding,
+          },
+        ],
+      },
+      isa: lambda,
+    },
+    meshed: {
+      name: "meshed",
+      params: [
+        0x80: projection_value,
+      ],
+      body: {
+        min_z: {
+          f32: 0x9a9919bf,
+        },
+        mesh_depth: {
+          u64: 0x0500000000000000,
+        },
+        function: preview_mesh,
+        projection_value: {
+          function: quote,
+          expression: {
+            objects: [
+              0x80: {
+                field: {
+                  unquote: projection_value,
+                  isa: unquote_2,
+                },
+                color: {
+                  rgb: 0x60b6d0,
+                },
+              },
+            ],
+            isa: scene,
+          },
+          isa: call,
+        },
+        max_x: {
+          f32: 0x9a99193f,
+        },
+        max_y: {
+          f32: 0x9a99193f,
+        },
+        max_z: {
+          f32: 0x9a99193f,
+        },
+        isa: call,
+        min_y: {
+          f32: 0x9a9919bf,
+        },
+        min_x: {
+          f32: 0x9a9919bf,
+        },
+      },
+      isa: lambda,
+    },
+    normal: {
+      name: "normal",
+    },
+    part: {
+      name: "part",
+    },
+    picture: {
+      name: "picture",
+    },
+    radius: {
+      name: "radius",
+    },
+    rendered: {
+      name: "rendered",
+      params: [
+        0x80: projection_value,
+      ],
+      body: {
+        function: preview_3d,
+        projection_value: projection_value,
+        isa: call,
+      },
+      isa: lambda,
+    },
+    shape: {
+      name: "shape",
+    },
+    shoulder: {
+      name: "shoulder",
+    },
+    size: {
+      name: "size",
+    },
+    sphere: {
+      name: "sphere",
+      params: [
+        0x80: radius,
+      ],
+      body: {
+        function: quote,
+        expression: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                left_2: {
+                  operand_2: {
+                    isa: axis_2,
+                    axis: x,
+                  },
+                  isa: square_2,
+                },
+                right_2: {
+                  operand_2: {
+                    isa: axis_2,
+                    axis: y,
+                  },
+                  isa: square_2,
+                },
+                isa: sum_2,
+              },
+              right_2: {
+                operand_2: {
+                  isa: axis_2,
+                  axis: z,
+                },
+                isa: square_2,
+              },
+              isa: sum_2,
+            },
+            isa: sqrt,
+          },
+          right_2: {
+            unquote: radius,
+            isa: unquote_2,
+          },
+          isa: subtract_2,
+        },
+        isa: call,
+      },
+      isa: lambda,
+    },
+    tanglecube: {
+      name: "tanglecube",
+      params: [],
+      body: {
+        left_2: {
+          left_2: {
+            left_2: {
+              left_2: {
+                operand_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: square_2,
+              },
+              right_2: {
+                left_2: {
+                  f32: 0x0000a040,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: multiply_2,
+              },
+              isa: subtract_2,
+            },
+            right_2: {
+              left_2: {
+                operand_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: square_2,
+              },
+              right_2: {
+                left_2: {
+                  f32: 0x0000a040,
+                },
+                right_2: {
+                  operand_2: {
+                    left_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    right_2: {
+                      f32: 0x0000c841,
+                    },
+                    isa: divide_2,
+                  },
+                  isa: square_2,
+                },
+                isa: multiply_2,
+              },
+              isa: subtract_2,
+            },
+            isa: sum_2,
+          },
+          right_2: {
+            left_2: {
+              operand_2: {
+                operand_2: {
+                  left_2: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  right_2: {
+                    f32: 0x0000c841,
+                  },
+                  isa: divide_2,
+                },
+                isa: square_2,
+              },
+              isa: square_2,
+            },
+            right_2: {
+              left_2: {
+                f32: 0x0000a040,
+              },
+              right_2: {
+                operand_2: {
+                  left_2: {
+                    isa: axis_2,
+                    axis: z,
+                  },
+                  right_2: {
+                    f32: 0x0000c841,
+                  },
+                  isa: divide_2,
+                },
+                isa: square_2,
+              },
+              isa: multiply_2,
+            },
+            isa: subtract_2,
+          },
+          isa: sum_2,
+        },
+        right_2: {
+          f32: 0xcdcc3c41,
+        },
+        isa: sum_2,
+      },
+      isa: lambda,
+    },
+    torus: {
+      name: "torus",
+      params: [],
+      body: {
+        left_2: {
+          left_2: {
+            operand_2: {
+              left_2: {
+                operand_2: {
+                  left_2: {
+                    operand_2: {
+                      isa: axis_2,
+                      axis: x,
+                    },
+                    isa: square_2,
+                  },
+                  right_2: {
+                    operand_2: {
+                      isa: axis_2,
+                      axis: y,
+                    },
+                    isa: square_2,
+                  },
+                  isa: sum_2,
+                },
+                isa: sqrt,
+              },
+              right_2: {
+                f32: 0x00003442,
+              },
+              isa: subtract_2,
+            },
+            isa: square_2,
+          },
+          right_2: {
+            operand_2: {
+              isa: axis_2,
+              axis: z,
+            },
+            isa: square_2,
+          },
+          isa: sum_2,
+        },
+        right_2: {
+          operand_2: {
+            f32: 0x00007041,
+          },
+          isa: square_2,
+        },
+        isa: subtract_2,
+      },
+      isa: lambda,
+    },
+    u: {
+      name: "u",
+    },
+    v: {
+      name: "v",
+    },
+  },
+  "root": {
+    figures: [
+      0x2a: {
+        figure: ring,
+      },
+      0x55: {
+        figure: torus,
+      },
+      0x80: {
+        figure: tanglecube,
+      },
+      0xaa: {
+        figure: gyroid,
+      },
+      0xd5: {
+        mesh: cube,
+      },
+    ],
+    libraries: [
+      0x55: {
+        name: "figure",
+        projection: figure_view,
+        keys: [
+          0x80: figure,
+        ],
+        functions: [
+          0x55: figure_layout,
+          0xaa: rendered,
+        ],
+      },
+      0xaa: {
+        name: "mesh figure",
+        projection: mesh_view,
+        keys: [
+          0x80: mesh,
+        ],
+        functions: [
+          0x80: meshed,
+        ],
+      },
+    ],
+  },
+}

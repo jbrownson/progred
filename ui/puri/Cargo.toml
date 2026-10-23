@@ -1,0 +1,21 @@
+[package]
+name = "puri"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[features]
+# One-event dispatch shorthands, for tests here and in dependent crates.
+test-support = []
+
+[dependencies]
+kurbo.workspace = true
+parley.workspace = true
+peniko.workspace = true
+ui-events.workspace = true
+uig.workspace = true
+web-time = "1.1"
+nalgebra = "0.35"
+
+[dev-dependencies]
+skrifa.workspace = true

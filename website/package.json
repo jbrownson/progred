@@ -1,0 +1,11 @@
+{
+  "name": "progred-website",
+  "private": true,
+  "scripts": {
+    "build": "sh build-ci.sh",
+    "stage": "wrangler versions upload --preview-alias staged"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

@@ -1,0 +1,360 @@
+diff --git a/fidget-raster/src/lib.rs b/fidget-raster/src/lib.rs
+index 814a222..2a79fb1 100644
+--- a/fidget-raster/src/lib.rs
++++ b/fidget-raster/src/lib.rs
+@@ -109,6 +109,11 @@ where
+ {
+     use rayon::prelude::*;
+ 
++    let is_cancelled = || eval_config.is_cancelled();
++    if is_cancelled() {
++        return None;
++    }
++
+     let mut tiles = vec![];
+     let t = tile_sizes[0];
+     let width = render_config.width() as usize;
+@@ -125,6 +130,9 @@ where
+     let mut rh = RenderHandle::new(shape);
+ 
+     let _ = rh.i_tape(&mut vec![]); // populate i_tape before cloning
++    if is_cancelled() {
++        return None;
++    }
+     let ts = tile_sizes;
+     let init = || {
+         let rh = rh.clone();
+@@ -141,7 +149,9 @@ where
+                     if eval_config.is_cancelled() {
+                         Err(())
+                     } else {
+-                        let pixels = worker.render_tile(&mut rh, tile);
++                        let pixels = worker
++                            .render_tile(&mut rh, tile, &is_cancelled)
++                            .ok_or(())?;
+                         Ok((tile, pixels))
+                     }
+                 })
+@@ -156,7 +166,8 @@ where
+                     if eval_config.is_cancelled() {
+                         Err(())
+                     } else {
+-                        let pixels = w.render_tile(rh, tile);
++                        let pixels =
++                            w.render_tile(rh, tile, &is_cancelled).ok_or(())?;
+                         Ok((tile, pixels))
+                     }
+                 })
+@@ -194,12 +205,13 @@ pub(crate) trait RenderWorker<'a, F: Function> {
+         vars: &'a ShapeVars<f32>,
+     ) -> Self;
+ 
+-    /// Render a single tile, returning a worker-dependent output
++    /// Render a single tile, or None if cancellation interrupts its work.
+     fn render_tile(
+         &mut self,
+         shape: &mut RenderHandle<F>,
+         tile: Tile<2>,
+-    ) -> Self::Output;
++        is_cancelled: &impl Fn() -> bool,
++    ) -> Option<Self::Output>;
+ }
+ 
+ /// Generic image type
+diff --git a/fidget-raster/src/pixel.rs b/fidget-raster/src/pixel.rs
+index 7c1dedf..4762eea 100644
+--- a/fidget-raster/src/pixel.rs
++++ b/fidget-raster/src/pixel.rs
+@@ -321,10 +321,11 @@ impl<'a, F: Function> RenderWorker<'a, F> for Worker<'a, F> {
+         &mut self,
+         shape: &mut RenderHandle<F>,
+         tile: Tile<2>,
+-    ) -> Self::Output {
++        is_cancelled: &impl Fn() -> bool,
++    ) -> Option<Self::Output> {
+         self.image = Image::new((self.tile_sizes[0] as u32).into());
+-        self.render_tile_recurse(shape, 0, tile);
+-        std::mem::take(&mut self.image)
++        self.render_tile_recurse(shape, 0, tile, is_cancelled)?;
++        Some(std::mem::take(&mut self.image))
+     }
+ }
+ 
+@@ -334,7 +335,11 @@ impl<F: Function> Worker<'_, F> {
+         shape: &mut RenderHandle<F>,
+         depth: usize,
+         tile: Tile<2>,
+-    ) {
++        is_cancelled: &impl Fn() -> bool,
++    ) -> Option<()> {
++        if is_cancelled() {
++            return None;
++        }
+         let tile_size = self.tile_sizes[depth];
+ 
+         // Find the interval bounds of the region, in screen coordinates
+@@ -358,6 +363,10 @@ impl<F: Function> Worker<'_, F> {
+                 Err(ShapeTracingEvalError::MissingVar(..)) => unreachable!(),
+             };
+ 
++        if is_cancelled() {
++            return None;
++        }
++
+         if !self.pixel_perfect {
+             let pixel = if i.upper() < 0.0 {
+                 Some(DistancePixel::Fill {
+@@ -380,7 +389,7 @@ impl<F: Function> Worker<'_, F> {
+                         .pixel_offset(tile.add(Vector2::new(0, y)));
+                     self.image[start..][..tile_size].fill(fill);
+                 }
+-                return;
++                return Some(());
+             }
+         }
+ 
+@@ -405,12 +414,17 @@ impl<F: Function> Worker<'_, F> {
+                         Tile::new(
+                             tile.corner + Vector2::new(i, j) * next_tile_size,
+                         ),
+-                    );
++                        is_cancelled,
++                    )?;
+                 }
+             }
+         } else {
++            if is_cancelled() {
++                return None;
++            }
+             self.render_tile_pixels(sub_tape, tile_size, tile);
+         }
++        (!is_cancelled()).then_some(())
+     }
+ 
+     fn render_tile_pixels(
+@@ -510,6 +524,46 @@ pub fn render<F: Function + RenderHints>(
+ #[cfg(test)]
+ mod test {
+     use super::*;
++    #[test]
++    fn cancellation_discards_a_partly_rendered_last_tile() {
++        use fidget_core::{context::Tree, vm::VmFunction};
++        use std::cell::Cell;
++
++        let config = RenderConfig::from_size(64.into());
++        let sizes = TileSizes::new(&[64, 16, 8]).unwrap();
++        let vars = ShapeVars::new();
++        let run = |stop_at| {
++            let mut shape =
++                RenderHandle::new(VmShape::from(Tree::x() + Tree::y()));
++            let mut worker = Worker::<VmFunction>::new(
++                &config,
++                TileSizesRef::new(&sizes, 64),
++                &vars,
++            );
++            let polls = Cell::new(0);
++            let output = worker.render_tile(
++                &mut shape,
++                Tile::new(nalgebra::Point2::new(0, 0)),
++                &|| {
++                    polls.set(polls.get() + 1);
++                    polls.get() >= stop_at
++                },
++            );
++            (polls.get(), output)
++        };
++        let (total, complete) = run(usize::MAX);
++        assert!(complete.is_some());
++        assert!(total > 8);
++        for stop_at in [1, total / 2, total] {
++            let (polls, output) = run(stop_at);
++            assert!(output.is_none(), "cancelled tile must not be published");
++            assert_eq!(
++                polls, stop_at,
++                "cancellation must unwind, not keep visiting subtiles"
++            );
++        }
++    }
++
+     use fidget_core::{
+         Context,
+         shape::Shape,
+diff --git a/fidget-raster/src/voxel.rs b/fidget-raster/src/voxel.rs
+index 57b941e..42645a8 100644
+--- a/fidget-raster/src/voxel.rs
++++ b/fidget-raster/src/voxel.rs
+@@ -245,7 +245,8 @@ impl<'a, F: Function> RenderWorker<'a, F> for Worker<'a, F> {
+         &mut self,
+         shape: &mut RenderHandle<F>,
+         tile: Tile<2>,
+-    ) -> Self::Output {
++        is_cancelled: &impl Fn() -> bool,
++    ) -> Option<Self::Output> {
+         // Prepare local tile data to fill out
+         let root_tile_size = self.tile_sizes[0];
+         self.out = Image::new(RenderSize::from(root_tile_size as u32));
+@@ -255,11 +256,11 @@ impl<'a, F: Function> RenderWorker<'a, F> for Worker<'a, F> {
+                 tile.corner.y,
+                 k as usize * root_tile_size,
+             ));
+-            if !self.render_tile_recurse(shape, 0, tile) {
++            if !self.render_tile_recurse(shape, 0, tile, is_cancelled)? {
+                 break;
+             }
+         }
+-        std::mem::take(&mut self.out)
++        Some(std::mem::take(&mut self.out))
+     }
+ }
+ 
+@@ -271,13 +272,18 @@ impl<F: Function> Worker<'_, F> {
+ 
+     /// Render a single tile
+     ///
+-    /// Returns `true` if we should keep rendering, `false` otherwise
++    /// Returns `Some(true)` to keep rendering, `Some(false)` when filled,
++    /// and `None` on cancellation (which must propagate out of the whole tile).
+     fn render_tile_recurse(
+         &mut self,
+         shape: &mut RenderHandle<F>,
+         depth: usize,
+         tile: Tile<3>,
+-    ) -> bool {
++        is_cancelled: &impl Fn() -> bool,
++    ) -> Option<bool> {
++        if is_cancelled() {
++            return None;
++        }
+         // Early exit if every single pixel is filled
+         let tile_size = self.tile_sizes[depth];
+         let fill_z = (tile.corner[2] + tile_size + 1).try_into().unwrap();
+@@ -285,7 +291,7 @@ impl<F: Function> Worker<'_, F> {
+             let i = self.tile_row_offset(tile, y);
+             (0..tile_size).all(|x| self.out[i + x].depth >= fill_z)
+         }) {
+-            return false;
++            return Some(false);
+         }
+ 
+         let base = Point3::from(tile.corner).cast::<f32>();
+@@ -305,6 +311,10 @@ impl<F: Function> Worker<'_, F> {
+             )
+             .unwrap();
+ 
++        if is_cancelled() {
++            return None;
++        }
++
+         // Return early if this tile is completely empty or full, returning
+         // `data_interval` to scratch memory for reuse.
+         if i.upper() < 0.0 {
+@@ -314,9 +324,9 @@ impl<F: Function> Worker<'_, F> {
+                     self.out[i + x].depth = self.out[i + x].depth.max(fill_z);
+                 }
+             }
+-            return false; // completely full, stop rendering
++            return Some(false); // completely full, stop rendering
+         } else if i.lower() > 0.0 {
+-            return true; // complete empty, keep going
++            return Some(true); // complete empty, keep going
+         }
+ 
+         // Calculate a simplified tape based on the trace
+@@ -345,15 +355,16 @@ impl<F: Function> Worker<'_, F> {
+                                 tile.corner
+                                     + Vector3::new(i, j, k) * next_tile_size,
+                             ),
+-                        );
++                            is_cancelled,
++                        )?;
+                     }
+                 }
+             }
+         } else {
+-            self.render_tile_pixels(sub_tape, tile_size, tile);
++            self.render_tile_pixels(sub_tape, tile_size, tile, is_cancelled)?;
+         };
+         // TODO recycle something here?
+-        true // keep going
++        Some(true) // keep going
+     }
+ 
+     fn render_tile_pixels(
+@@ -361,7 +372,11 @@ impl<F: Function> Worker<'_, F> {
+         shape: &mut RenderHandle<F>,
+         tile_size: usize,
+         tile: Tile<3>,
+-    ) {
++        is_cancelled: &impl Fn() -> bool,
++    ) -> Option<()> {
++        if is_cancelled() {
++            return None;
++        }
+         // Prepare for pixel-by-pixel evaluation
+         let mut index = 0;
+         assert!(self.scratch.x.len() >= tile_size.pow(3));
+@@ -463,6 +478,9 @@ impl<F: Function> Worker<'_, F> {
+         }
+ 
+         if grad > 0 {
++            if is_cancelled() {
++                return None;
++            }
+             let out = self
+                 .eval_grad_slice
+                 .eval_with_transform_and_vars(
+@@ -480,6 +498,7 @@ impl<F: Function> Worker<'_, F> {
+                 self.out[*o].normal = [g.dx, g.dy, g.dz];
+             }
+         }
++        (!is_cancelled()).then_some(())
+     }
+ }
+ 
+@@ -555,6 +574,46 @@ pub fn render<F: Function + RenderHints>(
+ #[cfg(test)]
+ mod test {
+     use super::*;
++    #[test]
++    fn cancellation_discards_a_partly_rendered_last_tile() {
++        use fidget_core::{context::Tree, vm::VmFunction};
++        use std::cell::Cell;
++
++        let config = RenderConfig::from_size(64.into());
++        let sizes = TileSizes::new(&[64, 16, 8]).unwrap();
++        let vars = ShapeVars::new();
++        let run = |stop_at| {
++            let mut shape =
++                RenderHandle::new(VmShape::from(Tree::x() + Tree::y()));
++            let mut worker = Worker::<VmFunction>::new(
++                &config,
++                TileSizesRef::new(&sizes, 64),
++                &vars,
++            );
++            let polls = Cell::new(0);
++            let output = worker.render_tile(
++                &mut shape,
++                Tile::new(nalgebra::Point2::new(0, 0)),
++                &|| {
++                    polls.set(polls.get() + 1);
++                    polls.get() >= stop_at
++                },
++            );
++            (polls.get(), output)
++        };
++        let (total, complete) = run(usize::MAX);
++        assert!(complete.is_some());
++        assert!(total > 8);
++        for stop_at in [1, total / 2, total] {
++            let (polls, output) = run(stop_at);
++            assert!(output.is_none(), "cancelled tile must not be published");
++            assert_eq!(
++                polls, stop_at,
++                "cancellation must unwind, not keep visiting subtiles"
++            );
++        }
++    }
++
+     use fidget_core::{Context, var::Var, vm::VmShape};
+ 
+     /// Make sure we don't crash if there's only a single tile

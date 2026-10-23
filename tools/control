@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Send one action to a running `make control` session and print its reply.
+
+The actions are those of Anthropic's computer-use tool. Coordinates are
+pixels in the session's 1280 x 800 window, from its top left; modifiers are
+`+`-joined names such as ctrl or ctrl+shift.
+
+    tools/control screenshot [FILE]
+    tools/control mouse_move X Y
+    tools/control left_click X Y [MODIFIERS]
+    tools/control double_click X Y [MODIFIERS]
+    tools/control triple_click X Y [MODIFIERS]
+    tools/control left_click_drag X1 Y1 X2 Y2 [MODIFIERS]
+    tools/control scroll X Y up|down|left|right AMOUNT [MODIFIERS]
+    tools/control key KEYS        (for example Return, ctrl+z, shift+Tab)
+    tools/control type TEXT
+
+A screenshot is saved as a PNG, under target/control/screenshots unless FILE
+is given, and its path printed. Other actions print `done`, or why they
+couldn't happen. Each request is a GID document whose root calls the action,
+spelled with the binders the session writes beside its socket.
+"""
+
+import os
+import re
+import socket
+import struct
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CONTROL = ROOT / "target" / "control"
+SOCKET = CONTROL / "progred.sock"
+SCREENSHOTS = CONTROL / "screenshots"
+
+
+def number(value):
+    return "{f64: 0x" + struct.pack("<d", float(value)).hex() + "}"
+
+
+def coordinate(x, y):
+    return f"[{number(x)}, {number(y)}]"
+
+
+def quoted(text):
+    escaped = (
+        text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
+
+
+def modifiers(rest):
+    return {"text": quoted(rest[0])} if rest else {}
+
+
+def request(action, arguments):
+    """The call's fields, or a usage error."""
+    match action, arguments:
+        case "screenshot", [] | [_]:
+            return {}
+        case "mouse_move", [x, y]:
+            return {"coordinate": coordinate(x, y)}
+        case ("left_click" | "double_click" | "triple_click"), [x, y, *rest] if len(rest) <= 1:
+            return {"coordinate": coordinate(x, y), **modifiers(rest)}
+        case "left_click_drag", [x1, y1, x2, y2, *rest] if len(rest) <= 1:
+            return {
+                "start_coordinate": coordinate(x1, y1),
+                "coordinate": coordinate(x2, y2),
+                **modifiers(rest),
+            }
+        case "scroll", [x, y, direction, amount, *rest] if len(rest) <= 1:
+            return {
+                "coordinate": coordinate(x, y),
+                "scroll_direction": quoted(direction),
+                "scroll_amount": number(amount),
+                **modifiers(rest),
+            }
+        case ("key" | "type"), [text]:
+            return {"text": quoted(text)}
+    raise SystemExit(__doc__)
+
+
+def binders():
+    """The vocabulary the session wrote beside its socket, as binder lines."""
+    try:
+        text = (SOCKET.parent / "vocabulary.gid").read_text()
+    except FileNotFoundError:
+        raise SystemExit(f"no session vocabulary in {SOCKET.parent}; start one with make control")
+    return re.findall(r'^\s*("\w+": \w+),$', text.split('"root"')[0], re.MULTILINE)
+
+
+def document_end(data):
+    """Where the first whole document ends, or None: braces in quoted text don't count."""
+    depth, opened, quoted_text, escaped = 0, False, False, False
+    for index, byte in enumerate(data):
+        if quoted_text:
+            if escaped:
+                escaped = False
+            elif byte == ord("\\"):
+                escaped = True
+            elif byte == ord('"'):
+                quoted_text = False
+        elif byte == ord('"'):
+            quoted_text = True
+        elif byte == ord("{"):
+            depth, opened = depth + 1, True
+        elif byte == ord("}"):
+            depth = max(depth - 1, 0)
+        if opened and depth == 0:
+            return index + 1
+    return None
+
+
+def exchange(document):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        # A socket's path is limited to about a hundred bytes, which a deep
+        # checkout's absolute path can pass; connect from beside it instead.
+        here = os.getcwd()
+        try:
+            os.chdir(CONTROL)
+            connection.connect(SOCKET.name)
+        except (FileNotFoundError, ConnectionRefusedError):
+            raise SystemExit(f"no session is listening on {SOCKET}; start one with make control")
+        finally:
+            os.chdir(here)
+        connection.sendall(document.encode())
+        reply = b""
+        while (end := document_end(reply)) is None:
+            chunk = connection.recv(1 << 16)
+            if not chunk:
+                raise SystemExit("the session ended without replying; its output says why")
+            reply += chunk
+        return reply[:end].decode()
+
+
+def screenshot_path(arguments):
+    if arguments:
+        return Path(arguments[0])
+    SCREENSHOTS.mkdir(parents=True, exist_ok=True)
+    taken = len(list(SCREENSHOTS.glob("screenshot-*.png")))
+    return SCREENSHOTS / f"screenshot-{taken + 1:03}.png"
+
+
+def main():
+    if len(sys.argv) < 2:
+        raise SystemExit(__doc__)
+    action, arguments = sys.argv[1], sys.argv[2:]
+    fields = request(action, arguments)
+    call = ", ".join([f"function: {action}"] + [f"{label}: {value}" for label, value in fields.items()])
+    lines = ",\n    ".join(binders())
+    reply = exchange(f'{{\n  "binders": {{\n    {lines},\n  }},\n  "root": {{{call}}},\n}}\n')
+    root = reply.split('"root": ', 1)[1].rsplit("}", 1)[0].strip().rstrip(",")
+    png = re.fullmatch(r"\{\s*png: 0x([0-9a-f]+),?\s*\}", root)
+    if png:
+        path = screenshot_path(arguments)
+        path.write_bytes(bytes.fromhex(png.group(1)))
+        print(path.resolve())
+    else:
+        print(re.sub(r",? *\}", " }", re.sub(r"\s+", " ", root)))
+
+
+if __name__ == "__main__":
+    main()

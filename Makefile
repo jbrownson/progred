@@ -1,0 +1,162 @@
+UNAME_S := $(shell uname -s)
+
+# Builds run sandboxed, under Seatbelt on macOS and in namespaces on Linux.
+NATIVE_TARGET_DIR := target/sandbox/build
+ifeq ($(UNAME_S),Darwin)
+NATIVE_RUN_TARGET := run-macos
+NATIVE_CARGO := ./tools/sandbox-cargo
+else ifeq ($(UNAME_S),Linux)
+NATIVE_RUN_TARGET := run-linux
+NATIVE_CARGO := ./tools/linux-cargo
+else
+NATIVE_RUN_TARGET := unsupported-native-platform
+NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
+endif
+
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website fetch check build test test-vendor test-gpu test-web-gpu perf sweep audit outdated sandbox-app
+
+help:
+	@echo "Development:"
+	@echo "  make run          Run the native app once"
+	@echo "  make dev          Rebuild after app exit or Ctrl+C"
+	@echo "  make control      Serve a headless editor for tools/control (ARGS='--document PATH')"
+	@echo "  make run-web      Serve the website and its editor on port 8081"
+	@echo "  make build-web    Build the browser editor; the servers build it first"
+	@echo "  make build-website  Package the publishable website into target/website"
+	@echo "  make install-linux  Install the app for the current user (Linux)"
+	@echo "  make fetch        Download the locked dependencies"
+	@echo "  make check        Type-check the workspace, profiling code included"
+	@echo "  make build        Build the workspace"
+	@echo "  make test         Test the workspace, except the vendored Fidget packages"
+	@echo "                    (ARGS='NAME' runs only the tests whose names contain NAME)"
+	@echo "  make test-vendor  Test the vendored Fidget packages"
+	@echo "  make test-gpu     Run the tests that need a GPU"
+	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome (macOS)"
+	@echo "  make perf         Run the performance canaries and compare with the log"
+	@echo "  make sweep        Delete development build outputs no check or test uses"
+	@echo "  make audit        Check the Cargo and npm lockfiles for security advisories"
+	@echo "  make outdated     List newer Cargo and npm releases"
+	@echo
+	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
+
+run: $(NATIVE_RUN_TARGET)
+
+run-macos: sandbox-app
+	@/usr/bin/open -W -n target/sandbox/app/Progred.app
+
+run-linux:
+	@./tools/run-linux $(ARGS)
+
+install-linux:
+	@./tools/install-linux-app
+
+unsupported-native-platform:
+	@echo "native Progred is not supported on $(UNAME_S)" >&2
+	@exit 1
+
+dev:
+	@./tools/dev-native $(ARGS)
+
+control:
+	@$(NATIVE_CARGO) build -p progred --features control --bin progred-control
+	@$(NATIVE_TARGET_DIR)/debug/progred-control $(ARGS)
+
+build-website: build-web
+	python3 -B website/package.py
+
+# The launcher builds editor changes before serving.
+run-web:
+	@python3 website/preview.py $(ARGS)
+
+fetch:
+	$(NATIVE_CARGO) fetch
+
+# All targets and the profiling features, which nothing else compiles.
+CHECK := check --workspace --all-targets --features progred/cam-profile,progred/control,progred/layout-profile
+
+check:
+	$(NATIVE_CARGO) $(CHECK)
+
+build:
+	$(NATIVE_CARGO) build --workspace
+
+VENDORED := fidget-core fidget-raster fidget-wgpu
+
+# Unit and integration tests. Cargo's default selection would also build the
+# examples, which `make check` compiles, and run doc tests, of which there are
+# none, both needing progred compiled a second time as a plain library. ARGS
+# filters by test name, reusing this build: selecting one package instead, as
+# `-p progred` does, resolves dependencies' features differently and builds
+# much of the graph again beside it.
+TEST := test --workspace --tests $(VENDORED:%=--exclude %)
+
+test:
+	$(NATIVE_CARGO) $(TEST) $(if $(ARGS),-- $(ARGS))
+
+# Upstream's tests of the vendored packages, optimized. Run them after
+# changing a patch or upgrading Fidget. The binaries run outside the build
+# sandbox because fidget-wgpu's need a GPU.
+test-vendor:
+	$(NATIVE_CARGO) test --release --doc $(VENDORED:%=-p %)
+	@python3 -B tools/test_binaries.py --release $(VENDORED:%=-p %)
+
+# Ignored tests that need a GPU, run outside the build sandbox.
+test-gpu:
+	@python3 -B tools/test_binaries.py --release -p puri-vello --features capture --test compositor --test mesh -- --ignored --test-threads=1
+	@python3 -B tools/test_binaries.py --release -p progred --lib -- --ignored --test-threads=1 compositor gpu
+
+perf:
+	@python3 -B tools/perf.py $(ARGS)
+
+# Cargo keeps every earlier build's outputs. This keeps what `make check` and
+# `make test` use, building what they lack, and deletes the rest of the
+# development profile; see tools/sweep.py.
+sweep:
+	@python3 -B tools/sweep.py $(NATIVE_CARGO) -- $(CHECK) -- $(TEST) --no-run
+
+# Every lockfile against its advisory database, reporting all before failing.
+audit:
+	@status=0; \
+	$(NATIVE_CARGO) audit || status=1; \
+	for package in website tools; do \
+		echo "npm audit: $$package"; npm audit --prefix $$package || status=1; \
+	done; \
+	exit $$status
+
+# Cargo's compatible updates that pass the publish-age cutoff, with newer
+# incompatible releases noted as available; then npm's, which may list
+# releases still under the cutoff.
+outdated:
+	@$(NATIVE_CARGO) update --dry-run --verbose
+	@for package in website tools; do \
+		echo "npm outdated: $$package"; npm outdated --prefix $$package || true; \
+	done
+
+# The browser presentation's pixel test, run in the installed Chrome through
+# the playwright-core that tools/package.json pins.
+test-web-gpu:
+	@set -e; . ./tools/web-build-settings.sh; \
+	./tools/sandbox-cargo web-threaded build --release -p progred --example web_gpu_probe; \
+	./tools/wasm-bindgen --target web --no-typescript --out-dir web/gpu-probe-pkg --out-name probe \
+		target/sandbox/build-web/$$web_target/release/examples/web_gpu_probe.wasm; \
+	[ tools/node_modules/.package-lock.json -nt tools/package-lock.json ] || npm ci --prefix tools; \
+	node tools/test-web-gpu.cjs
+
+sandbox-app:
+	@./tools/build-macos-app
+
+# Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary,
+# using the release matching Cargo.lock. Both builds go to the page, which
+# loads the fallback where it can't share memory with workers.
+build-web:
+	@set -e; . ./tools/web-build-settings.sh; \
+	$(NATIVE_CARGO) web-threaded build $$web_cargo_args; \
+	$(NATIVE_CARGO) web-fallback build $$web_cargo_args; \
+	bind() { \
+		wasm=target/sandbox/$$1/$$web_target/release/progred.wasm; out=$$2; shift 2; \
+		if [ ! -f $$out/progred_bg.wasm ] || [ ! -f $$out/progred.js ] || [ "$$wasm" -nt $$out/progred_bg.wasm ]; then \
+			./tools/wasm-bindgen "$$@" "$$wasm"; \
+		fi; \
+	}; \
+	bind build-web web/pkg $$web_bindgen_args; \
+	bind build-web-fallback web/pkg-fallback $$web_fallback_bindgen_args

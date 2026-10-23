@@ -1,0 +1,401 @@
+//! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
+use super::{Library, absent, layout, name, presentation};
+use crate::computations::memo;
+use crate::display::Host;
+use ::grap::{
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    SourceOrigin,
+};
+use gid::{CellId, Value};
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+
+#[cfg(test)]
+mod tests;
+
+pub const ID: CellId = CellId::from_u128(0x0680eec8cc78f0aebe7ab8a68562a65f);
+pub mod vocabulary {
+    use gid::CellId;
+    pub const GROUP: CellId = CellId::from_u128(0xc2a9d12a23c6bbb553682d85869481b0);
+    pub const LEAF: CellId = CellId::from_u128(0xa2ee2a23ede9372c4bc71c21b6b83838);
+    pub const MAP: CellId = CellId::from_u128(0x7dc1fd86e63e18ce835a5b1768f17abc);
+    pub const COLLECT: CellId = CellId::from_u128(0xf070b08cda17ca0f5ec97de2ab5b2fab);
+    pub const PROGRAM: CellId = CellId::from_u128(0xe4ee09094ff44e8dd415a05645f99e97);
+    pub const INVALID_OUTPUT: CellId = CellId::from_u128(0x2769ad609e44a12b73cd26889ac88760);
+    pub const OUTPUT_REQUIRED: CellId = CellId::from_u128(0xe350d7fb10fc3a710e7028b18d0b886b);
+    pub const MAPPING: CellId = CellId::from_u128(0x4ad3bf56ebbd64849bf8d218f46d7591);
+}
+use layout::vocabulary::CHILDREN;
+use presentation::vocabulary::VALUE;
+use vocabulary::*;
+
+/// An evaluation-local interpretation. Groups balance even on an absent/halt;
+/// ordinary absent recovery retains earlier emissions, as with other effects.
+pub trait Sink {
+    fn begin_group(&mut self, source: Option<SourceOrigin>);
+    fn end_group(&mut self);
+    fn leaf(&mut self, value: RuntimeValue, source: Option<SourceOrigin>);
+}
+
+struct Output<S> {
+    sink: Rc<RefCell<S>>,
+    maps: RefCell<Vec<::grap::PreparedCallable>>,
+}
+
+fn group<S: Sink>(
+    context: &mut Context,
+    expression: Expression,
+    source: Option<SourceOrigin>,
+    environment: &Environment,
+    output: &Output<S>,
+) -> Result<RuntimeValue, Halt> {
+    context.effect(|| output.sink.borrow_mut().begin_group(source));
+    let result = children(context, expression, environment, output);
+    context.effect(|| output.sink.borrow_mut().end_group());
+    result
+}
+
+fn children<S: Sink>(
+    context: &mut Context,
+    expression: Expression,
+    environment: &Environment,
+    output: &Output<S>,
+) -> Result<RuntimeValue, Halt> {
+    if let Some(elements) = context.elements(&expression).map(<[_]>::to_vec) {
+        for child in elements {
+            context.burn()?;
+            let result = if context.elements(&child).is_some() {
+                group(
+                    context,
+                    child.clone(),
+                    context.source_origin(&child),
+                    environment,
+                    output,
+                )?
+            } else {
+                context.eval(child, environment)?
+            };
+            if result.absent_reason().is_some() {
+                return Ok(result);
+            }
+        }
+        Ok(RuntimeValue::record([]))
+    } else {
+        context.eval(expression, environment)
+    }
+}
+
+fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
+    let output = Rc::new(Output {
+        sink,
+        maps: RefCell::default(),
+    });
+    let (group_output, map_output) = (output.clone(), output.clone());
+    ForeignFunctions::default()
+        .register(
+            GROUP,
+            ForeignFunction::new(move |context, call, environment| {
+                let Some(expression) = context.field(call, CHILDREN) else {
+                    return Ok(context.missing_runtime_argument(call, CHILDREN));
+                };
+                group(
+                    context,
+                    expression,
+                    context.source_origin(call),
+                    environment,
+                    &group_output,
+                )
+            })
+            .tracked(),
+        )
+        .register(
+            MAP,
+            ForeignFunction::new(move |context, call, environment| {
+                let Some(expression) = context.field(call, CHILDREN) else {
+                    return Ok(context.missing_runtime_argument(call, CHILDREN));
+                };
+                let Some(map) = context.field(call, MAPPING) else {
+                    return Ok(context.missing_runtime_argument(call, MAPPING));
+                };
+                let map = context.prepare_callable(map, environment)?;
+                map_output.maps.borrow_mut().push(map);
+                let result = children(context, expression, environment, &map_output);
+                map_output.maps.borrow_mut().pop();
+                result
+            })
+            .tracked(),
+        )
+        .register(
+            LEAF,
+            ForeignFunction::new(move |context, call, environment| {
+                let Some(expression) = context.field(call, VALUE) else {
+                    return Ok(context.missing_runtime_argument(call, VALUE));
+                };
+                let source = context.source_origin(call);
+                let maps = output
+                    .maps
+                    .borrow()
+                    .iter()
+                    .rev()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let value = maps.iter().try_fold(
+                    context.eval(expression, environment)?,
+                    |value, map| {
+                        if value.absent_reason().is_some() {
+                            Ok(value)
+                        } else {
+                            context.call_prepared(map, [(VALUE, value)])
+                        }
+                    },
+                )?;
+                Ok(if value.absent_reason().is_some() {
+                    value
+                } else {
+                    context.effect(|| {
+                        output.sink.borrow_mut().leaf(value, source);
+                        RuntimeValue::record([])
+                    })
+                })
+            })
+            .tracked(),
+        )
+}
+
+/// Install a caller-owned interpretation only for the supplied computation.
+pub fn interpret<S: Sink + 'static, T>(
+    context: &mut Context,
+    sink: Rc<RefCell<S>>,
+    run: impl FnOnce(&mut Context) -> T,
+) -> T {
+    context.with_foreign_functions(functions(sink), run)
+}
+
+#[derive(Clone)]
+pub(crate) struct Built {
+    pub items: RuntimeValue,
+    pub root: Rc<Node>,
+}
+
+#[derive(Clone, PartialEq)]
+pub(crate) struct Node {
+    pub source: Option<SourceOrigin>,
+    // None is a leaf, even if its payload is a list; Some(empty) is an empty group.
+    pub children: Option<BTreeMap<gid::Position, Node>>,
+}
+
+impl Node {
+    pub fn at(&self, path: &[gid::Position]) -> Option<&Self> {
+        path.iter()
+            .try_fold(self, |node, position| node.children.as_ref()?.get(position))
+    }
+}
+
+#[derive(Default)]
+struct Collector {
+    items: Vec<Built>,
+    parents: Vec<(Option<SourceOrigin>, Vec<Built>)>,
+}
+
+impl Sink for Collector {
+    fn begin_group(&mut self, source: Option<SourceOrigin>) {
+        self.parents.push((source, std::mem::take(&mut self.items)));
+    }
+    fn end_group(&mut self) {
+        let (source, parent) = self.parents.pop().expect("balanced group interpretation");
+        let children = std::mem::replace(&mut self.items, parent);
+        let items = RuntimeValue::list(children.iter().map(|child| child.items.clone()));
+        let children = gid::position::spread(children.len())
+            .into_iter()
+            .zip(
+                children
+                    .into_iter()
+                    .map(|child| Rc::unwrap_or_clone(child.root)),
+            )
+            .collect();
+        self.items.push(Built {
+            items,
+            root: Rc::new(Node {
+                source,
+                children: Some(children),
+            }),
+        });
+    }
+    fn leaf(&mut self, value: RuntimeValue, source: Option<SourceOrigin>) {
+        self.items.push(Built {
+            items: value,
+            root: Rc::new(Node {
+                source,
+                children: None,
+            }),
+        });
+    }
+}
+
+fn collect(
+    context: &mut Context,
+    program: &::grap::PreparedCallable,
+) -> Result<Result<Built, RuntimeValue>, Halt> {
+    let sink = Rc::new(RefCell::new(Collector::default()));
+    let result = interpret(context, sink.clone(), |context| {
+        context.call_prepared(program, [])
+    })?;
+    if result.absent_reason().is_some() {
+        Ok(Err(result))
+    } else {
+        let items = std::mem::take(&mut sink.borrow_mut().items);
+        Ok(match <[Built; 1]>::try_from(items) {
+            Ok([built]) => Ok(built),
+            Err(_) => Err(::grap::absent::value(INVALID_OUTPUT).into()),
+        })
+    }
+}
+
+fn evaluate(
+    program: &RuntimeValue,
+    host: &dyn ::grap::Host,
+    fuel: usize,
+) -> (::grap::Evaluation, Option<Result<Built, RuntimeValue>>) {
+    let built = RefCell::new(None);
+    let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
+        let Some(expression) = context.field(call, PROGRAM) else {
+            return Ok(context.missing_runtime_argument(call, PROGRAM));
+        };
+        let callable = context.prepare_callable(expression, environment)?;
+        let result = collect(context, &callable)?;
+        let value = result
+            .as_ref()
+            .map(|built| built.items.clone())
+            .unwrap_or_else(Clone::clone);
+        built.replace(Some(result));
+        Ok(value)
+    };
+    let expression = RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            Value::from(::grap::vocabulary::kind::CALL).into(),
+        ),
+        (::grap::vocabulary::FUNCTION, Value::from(COLLECT).into()),
+        (PROGRAM, program.clone()),
+    ]);
+    let evaluation = ::grap::evaluate_runtime_scoped(
+        &expression,
+        host,
+        &::grap::ForeignOverlay::new(&[COLLECT], &emit).tracked(),
+        fuel,
+    );
+    (evaluation, built.into_inner())
+}
+
+/// What `program` builds when evaluated directly, without memoizing.
+#[cfg(any(test, feature = "cam-profile"))]
+pub(crate) fn build(
+    program: &RuntimeValue,
+    host: &dyn ::grap::Host,
+    fuel: usize,
+) -> Result<Built, RuntimeValue> {
+    let (evaluation, built) = evaluate(program, host, fuel);
+    outcome(evaluation, built)
+}
+
+/// What an evaluation built: the tree once it completes, or why there's none.
+fn outcome(
+    evaluation: ::grap::Evaluation,
+    built: Option<Result<Built, RuntimeValue>>,
+) -> Result<Built, RuntimeValue> {
+    if evaluation.completed {
+        built.unwrap_or(Err(evaluation.result))
+    } else {
+        Err(evaluation.result)
+    }
+}
+
+pub(crate) fn prepared(
+    computations: &crate::computations::Computations,
+    site: &crate::editing::Site,
+    program: RuntimeValue,
+    fuel: usize,
+) -> Rc<Result<Built, RuntimeValue>> {
+    struct Prepared {
+        input: incremental::Input<(RuntimeValue, usize)>,
+        result: incremental::Memo<Result<Built, RuntimeValue>>,
+    }
+    let prepared = site.memo(computations, || {
+        let input = computations.runtime.input((program.clone(), fuel));
+        let result = computations.runtime.memo_by(
+            {
+                let input = input.clone();
+                let definitions = computations.definitions.clone();
+                move |read| {
+                    let input = input.read(read);
+                    let mut built = None;
+                    // The returned Built contains every emission; replaying those
+                    // effects would only rebuild the same immutable output.
+                    let evaluation = memo::with_recorded_effects(&definitions, read, |host| {
+                        let (evaluation, output) = evaluate(&input.0, host, input.1);
+                        built = output;
+                        evaluation
+                    });
+                    Ok(outcome(evaluation, built))
+                }
+            },
+            same_output,
+        );
+        Prepared { input, result }
+    });
+    prepared
+        .input
+        .set_by((program, fuel), |a, b| a.1 == b.1 && a.0.same_result(&b.0));
+    computations
+        .runtime
+        .read(&prepared.result)
+        .unwrap_or_else(|error| Rc::new(Err(memo::failure(error).into())))
+}
+
+fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>) -> bool {
+    match (a, b) {
+        (Ok(a), Ok(b)) => a.root == b.root && a.items.same_result(&b.items),
+        (Err(a), Err(b)) => a.same_result(b),
+        _ => false,
+    }
+}
+
+pub fn library<W: Host>() -> Library<W> {
+    // Outside a collection, a tree constructor has nowhere to emit.
+    let functions = ForeignFunctions::default()
+        .register(GROUP, absent::outside_scope(OUTPUT_REQUIRED, [CHILDREN]))
+        .register(LEAF, absent::outside_scope(OUTPUT_REQUIRED, [VALUE]))
+        .register(
+            MAP,
+            absent::outside_scope(OUTPUT_REQUIRED, [CHILDREN, MAPPING]),
+        )
+        .register(
+            COLLECT,
+            ForeignFunction::new(|context, call, environment| {
+                let Some(program) = context.field(call, PROGRAM) else {
+                    return Ok(context.missing_runtime_argument(call, PROGRAM));
+                };
+                let program = context.prepare_callable(program, environment)?;
+                Ok(match collect(context, &program)? {
+                    Ok(built) => built.items,
+                    Err(error) => error,
+                })
+            })
+            .parameters([PROGRAM])
+            .tracked(),
+        );
+    name::named_library(
+        ID,
+        "trees",
+        [
+            (GROUP, "tree group"),
+            (LEAF, "tree leaf"),
+            (MAP, "map tree leaves"),
+            (COLLECT, "collect tree"),
+            (PROGRAM, "tree program"),
+            (MAPPING, "mapping"),
+            (INVALID_OUTPUT, "tree requires one root"),
+            (OUTPUT_REQUIRED, "tree output required"),
+        ],
+        functions,
+    )
+}

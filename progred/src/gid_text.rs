@@ -1,0 +1,582 @@
+//! Text import/export for GID documents. This binder notation bridges to
+//! text-based tools; it is not GID's native representation.
+
+use crate::libraries::name;
+use ::grap::text;
+use gid::{CellId, Cells, Document, Value, new_cell_id};
+use std::collections::BTreeMap;
+use std::collections::HashSet;
+use std::fmt::Write as _;
+
+/// The file-local binder table: pure serialization sugar, kept by
+/// the store layer between load and save, never part of the model.
+pub type Binders = BTreeMap<String, CellId>;
+
+pub fn parse(text: &str) -> Result<(Document, Binders), String> {
+    let mut parser = Parser {
+        rest: text,
+        binders: BTreeMap::new(),
+    };
+    parser.skip_space();
+    let file = parser.file()?;
+    parser.skip_space();
+    if !parser.rest.is_empty() {
+        return Err(parser.err("trailing content after the file record"));
+    }
+    Ok((file, parser.binders))
+}
+
+struct Parser<'a> {
+    rest: &'a str,
+    binders: Binders,
+}
+
+/// A bare token under the two-namespace rule.
+enum Token {
+    CellId(CellId),
+    Binder(String),
+}
+
+fn as_cell_id(token: &str) -> Option<CellId> {
+    token.parse().ok()
+}
+
+fn valid_binder(token: &str) -> bool {
+    let mut bytes = token.bytes();
+    matches!(bytes.next(), Some(b) if b.is_ascii_alphabetic() || b == b'_')
+        && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+impl Parser<'_> {
+    fn err(&self, message: impl std::fmt::Display) -> String {
+        let at = self.rest.chars().take(24).collect::<String>();
+        format!("{message} (at `{at}…`)")
+    }
+
+    fn skip_space(&mut self) {
+        self.rest = self.rest.trim_start();
+    }
+
+    fn eat(&mut self, expected: char) -> Result<(), String> {
+        self.skip_space();
+        match self.rest.strip_prefix(expected) {
+            Some(rest) => {
+                self.rest = rest;
+                Ok(())
+            }
+            None => Err(self.err(format!("expected `{expected}`"))),
+        }
+    }
+
+    fn peek(&mut self) -> Option<char> {
+        self.skip_space();
+        self.rest.chars().next()
+    }
+
+    /// The comma-separated interior of `{…}`/`[…]`, trailing comma
+    /// optional — one of the defined leniencies.
+    fn separated<T>(
+        &mut self,
+        close: char,
+        mut item: impl FnMut(&mut Self) -> Result<T, String>,
+    ) -> Result<Vec<T>, String> {
+        let mut items = Vec::new();
+        loop {
+            if self.peek() == Some(close) {
+                self.rest = &self.rest[1..];
+                return Ok(items);
+            }
+            items.push(item(self)?);
+            match self.peek() {
+                Some(',') => {
+                    self.rest = &self.rest[1..];
+                }
+                Some(c) if c == close => {}
+                _ => return Err(self.err(format!("expected `,` or `{close}`"))),
+            }
+        }
+    }
+
+    fn string(&mut self) -> Result<String, String> {
+        self.eat('"')?;
+        let mut out = String::new();
+        let mut chars = self.rest.char_indices();
+        loop {
+            let Some((at, c)) = chars.next() else {
+                return Err("unterminated string".to_string());
+            };
+            match c {
+                '"' => {
+                    self.rest = &self.rest[at + 1..];
+                    return Ok(out);
+                }
+                '\n' => return Err("raw newline in string; spell it \\n".to_string()),
+                '\\' => match chars.next() {
+                    Some((_, '"')) => out.push('"'),
+                    Some((_, '\\')) => out.push('\\'),
+                    Some((_, 'n')) => out.push('\n'),
+                    Some((_, 't')) => out.push('\t'),
+                    Some((_, other)) => {
+                        return Err(format!("unknown escape `\\{other}`"));
+                    }
+                    None => return Err("unterminated string".to_string()),
+                },
+                c => out.push(c),
+            }
+        }
+    }
+
+    fn bare(&mut self) -> Result<&str, String> {
+        self.skip_space();
+        let end = self
+            .rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(self.rest.len());
+        if end == 0 {
+            return Err(self.err("expected a value"));
+        }
+        let token = &self.rest[..end];
+        self.rest = &self.rest[end..];
+        Ok(token)
+    }
+
+    /// A bare token as an identity: cell-id literal, or binder minting on first
+    /// use — create-on-reference at the file layer.
+    fn token(&mut self) -> Result<Token, String> {
+        let token = self.bare()?;
+        if let Some(cell) = as_cell_id(token) {
+            return Ok(Token::CellId(cell));
+        }
+        if !valid_binder(token) {
+            return Err(format!("`{token}` is neither a cell id nor a binder"));
+        }
+        Ok(Token::Binder(token.to_string()))
+    }
+
+    fn resolve(&mut self, token: Token) -> CellId {
+        match token {
+            Token::CellId(cell) => cell,
+            Token::Binder(binder) => *self.binders.entry(binder).or_insert_with(new_cell_id),
+        }
+    }
+
+    fn blob(&mut self) -> Result<Vec<u8>, String> {
+        self.rest = &self.rest[2..];
+        let end = self
+            .rest
+            .find(|c: char| !c.is_ascii_hexdigit())
+            .unwrap_or(self.rest.len());
+        let hex = &self.rest[..end];
+        if !hex.len().is_multiple_of(2) {
+            return Err("a blob needs whole bytes (even hex digits)".to_string());
+        }
+        let bytes = hex
+            .as_bytes()
+            .chunks(2)
+            .map(|pair| {
+                std::str::from_utf8(pair)
+                    .ok()
+                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| "a blob holds hex digits".to_string())?;
+        self.rest = &self.rest[end..];
+        Ok(bytes)
+    }
+
+    fn value(&mut self) -> Result<Value, String> {
+        match self.peek() {
+            Some('"') => Ok(text::value(self.string()?)),
+            Some('{') => {
+                self.rest = &self.rest[1..];
+                let fields = self.separated('}', |p| {
+                    let label = p.label()?;
+                    p.eat(':')?;
+                    Ok((label, p.value()?))
+                })?;
+                let mut seen = HashSet::new();
+                for (label, _) in &fields {
+                    if !seen.insert(*label) {
+                        return Err("duplicate label in a record".to_string());
+                    }
+                }
+                Ok(Value::record(fields))
+            }
+            Some('[') => {
+                self.rest = &self.rest[1..];
+                let elements = self.separated(']', |p| Ok((p.position()?, p.value()?)))?;
+                list(elements)
+            }
+            Some('0') if self.rest.as_bytes().get(1) == Some(&b'x') => {
+                Ok(Value::from(self.blob()?))
+            }
+            _ => {
+                let token = self.token()?;
+                Ok(Value::from(self.resolve(token)))
+            }
+        }
+    }
+
+    /// An element's `0x…:` position, when it gives one: a blob literal
+    /// followed by a colon, which a blob element never is.
+    fn position(&mut self) -> Result<Option<gid::Position>, String> {
+        self.skip_space();
+        let Some(digits) = self.rest.strip_prefix("0x") else {
+            return Ok(None);
+        };
+        let end = digits
+            .find(|c: char| !c.is_ascii_hexdigit())
+            .unwrap_or(digits.len());
+        if !digits[end..].trim_start().starts_with(':') {
+            return Ok(None);
+        }
+        let bytes = self.blob()?;
+        self.eat(':')?;
+        gid::Position::from_bytes(bytes)
+            .map(Some)
+            .ok_or_else(|| "a list position is nonempty and ends in a nonzero byte".to_string())
+    }
+
+    fn label(&mut self) -> Result<CellId, String> {
+        let token = self.token()?;
+        Ok(self.resolve(token))
+    }
+
+    /// Fields apply as they parse: `binders` must precede any use of
+    /// its binders, since resolution mints as it goes.
+    fn file(&mut self) -> Result<Document, String> {
+        self.eat('{')?;
+        let mut binders_seen = false;
+        let mut cells_seen = false;
+        let mut stated = HashSet::new();
+        let mut cells = Cells::new();
+        let mut root = None;
+        self.separated('}', |p| {
+            let key = p.string()?;
+            p.eat(':')?;
+            match key.as_str() {
+                "binders" => {
+                    if binders_seen {
+                        return Err("two `binders` tables".to_string());
+                    }
+                    binders_seen = true;
+                    p.eat('{')?;
+                    p.separated('}', |p| {
+                        let binder = p.string()?;
+                        if !valid_binder(&binder) {
+                            return Err(format!("`{binder}` is not a usable binder"));
+                        }
+                        if as_cell_id(&binder).is_some() {
+                            return Err(format!("`{binder}` spells a cell id, not a binder"));
+                        }
+                        p.eat(':')?;
+                        let token = p.bare()?;
+                        let cell = as_cell_id(token).ok_or_else(|| {
+                            format!("`binders` maps binders to cell-id literals, got `{token}`")
+                        })?;
+                        if p.binders.insert(binder.clone(), cell).is_some() {
+                            return Err(format!(
+                                "binder `{binder}` bound twice (`binders` also must \
+                                 precede any use of them)"
+                            ));
+                        }
+                        Ok(())
+                    })?;
+                    Ok(())
+                }
+                "cells" => {
+                    if cells_seen {
+                        return Err("two `cells` tables".to_string());
+                    }
+                    cells_seen = true;
+                    p.eat('{')?;
+                    p.separated('}', |p| {
+                        let token = p.token()?;
+                        let cell = p.resolve(token);
+                        // Stating a cell twice — by any spelling —
+                        // fails rather than clobbering.
+                        if !stated.insert(cell) {
+                            return Err("a cell stated twice".to_string());
+                        }
+                        p.eat(':')?;
+                        cells.set_value(cell, p.value()?);
+                        Ok(())
+                    })?;
+                    Ok(())
+                }
+                "root" => {
+                    if root.replace(p.value()?).is_some() {
+                        return Err("two `root` fields".to_string());
+                    }
+                    Ok(())
+                }
+                other => Err(format!("unknown file field `{other}`")),
+            }
+        })?;
+        Ok(Document { root, cells })
+    }
+}
+
+/// A list from its elements, each with the position the file gave it or
+/// none. Positions, when given, are its order; a list without them, as written
+/// by hand, gets fresh ones.
+fn list(elements: Vec<(Option<gid::Position>, Value)>) -> Result<Value, String> {
+    if elements.iter().all(|(position, _)| position.is_none()) {
+        return Ok(Value::list(elements.into_iter().map(|(_, value)| value)));
+    }
+    let elements = elements
+        .into_iter()
+        .map(|(position, value)| Some((position?, value)))
+        .collect::<Option<Vec<_>>>()
+        .ok_or("a list gives positions for some elements but not all")?;
+    if !elements.windows(2).all(|pair| pair[0].0 < pair[1].0) {
+        return Err("a list's positions must increase, without repeats".to_string());
+    }
+    Ok(Value::List(elements.into_iter().fold(
+        gid::List::new(),
+        |mut list, (position, value)| {
+            list.insert(position, value);
+            list
+        },
+    )))
+}
+
+/// The canonical printer — deterministic from (document, binders).
+pub fn print(doc: &Document, binders: &Binders) -> String {
+    let spell = spellings(doc, binders);
+    let mut out = String::new();
+    out.push_str("{\n");
+    if !spell.is_empty() {
+        out.push_str("  \"binders\": {\n");
+        let mut table: Vec<(&String, &CellId)> =
+            spell.iter().map(|(cell, binder)| (binder, cell)).collect();
+        table.sort();
+        for (binder, cell) in table {
+            let _ = writeln!(out, "    {}: {},", quoted(binder), cell);
+        }
+        out.push_str("  },\n");
+    }
+    let mut entries: Vec<(CellId, &Value)> = doc
+        .cells
+        .iter()
+        .map(|(cell, value)| (*cell, value))
+        .collect();
+    entries.sort_by(|a, b| match (name::read(a.1), name::read(b.1)) {
+        (Some(x), Some(y)) => x.cmp(y).then(a.0.cmp(&b.0)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.0.cmp(&b.0),
+    });
+    if !entries.is_empty() {
+        out.push_str("  \"cells\": {\n");
+        for (cell, value) in entries {
+            out.push_str("    ");
+            out.push_str(&identity(&spell, cell));
+            out.push_str(": ");
+            print_value(&mut out, value, &spell, 2);
+            out.push_str(",\n");
+        }
+        out.push_str("  },\n");
+    }
+    if let Some(root) = &doc.root {
+        out.push_str("  \"root\": ");
+        print_value(&mut out, root, &spell, 1);
+        out.push_str(",\n");
+    }
+    out.push_str("}\n");
+    out
+}
+
+/// Each cell the document mentions, spelled: loaded binders survive for
+/// cell identities the document still mentions. Every other identity
+/// receives a deterministic binder: its simple name when available,
+/// otherwise its short id suffix.
+fn spellings(doc: &Document, binders: &Binders) -> BTreeMap<CellId, String> {
+    let mentioned = mentioned_cell_ids(doc);
+    let mut spell = binders
+        .iter()
+        .filter(|(_, cell)| mentioned.contains(cell))
+        .fold(BTreeMap::new(), |mut spell, (binder, cell)| {
+            spell.entry(*cell).or_insert_with(|| binder.clone());
+            spell
+        });
+    let mut taken: HashSet<String> = spell.values().cloned().collect();
+    let mut named: Vec<(&str, CellId)> = doc
+        .cells
+        .iter()
+        .filter(|(cell, _)| !spell.contains_key(*cell))
+        .filter_map(|(cell, value)| name::read(value).map(|name| (name, *cell)))
+        .collect();
+    named.sort();
+    spell.extend(
+        named
+            .into_iter()
+            .map(|(name, cell)| (cell, unique_binder(derive_binder(name), &mut taken))),
+    );
+    let mut remaining: Vec<CellId> = mentioned
+        .iter()
+        .copied()
+        .filter(|cell| !spell.contains_key(cell))
+        .collect();
+    remaining.sort();
+    spell.extend(remaining.into_iter().map(|cell| {
+        let hex = cell.to_string();
+        (
+            cell,
+            unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken),
+        )
+    }));
+    spell
+}
+
+fn identity(spell: &BTreeMap<CellId, String>, cell: CellId) -> String {
+    match spell.get(&cell) {
+        Some(binder) => binder.clone(),
+        None => cell.to_string(),
+    }
+}
+
+/// Every cell identity the document mentions: cell entries, links in values,
+/// cells used as labels.
+fn mentioned_cell_ids(doc: &Document) -> HashSet<CellId> {
+    let mut ids: HashSet<CellId> = doc.cells.cells().copied().collect();
+    fn walk(value: &Value, ids: &mut HashSet<CellId>) {
+        if plain_text(value).is_none() {
+            match value {
+                Value::Cell(cell) => {
+                    ids.insert(*cell);
+                }
+                Value::Blob(_) => {}
+                Value::List(elements) => {
+                    for element in elements.values() {
+                        walk(element, ids);
+                    }
+                }
+                Value::Record(fields) => {
+                    for (label, field) in fields {
+                        ids.insert(*label);
+                        walk(field, ids);
+                    }
+                }
+            }
+        }
+    }
+    for value in doc.cells.iter().map(|(_, value)| value).chain(&doc.root) {
+        walk(value, &mut ids);
+    }
+    ids
+}
+
+/// The notation's own string spelling — exactly the four escapes the
+/// parser knows, everything else raw.
+fn quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A name sanitized to the binder token grammar.
+fn derive_binder(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            out.push(c);
+        } else {
+            out.push('_');
+        }
+    }
+    if !out
+        .bytes()
+        .next()
+        .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+    {
+        out.insert(0, '_');
+    }
+    if as_cell_id(&out).is_some() {
+        out.insert(0, '_');
+    }
+    out
+}
+
+fn unique_binder(base: String, taken: &mut HashSet<String>) -> String {
+    if taken.insert(base.clone()) {
+        base
+    } else {
+        (2..)
+            .map(|suffix| format!("{base}_{suffix}"))
+            .find(|candidate| taken.insert(candidate.clone()))
+            .expect("the integer suffix space is unbounded")
+    }
+}
+
+fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>, level: usize) {
+    let indent = "  ".repeat(level + 1);
+    let closing = "  ".repeat(level);
+    match plain_text(value) {
+        Some(text) => {
+            let _ = write!(out, "{}", quoted(text));
+        }
+        None => match value {
+            Value::Blob(bytes) => print_bytes(out, bytes),
+            Value::Cell(cell) => out.push_str(&identity(spell, *cell)),
+            Value::List(elements) if elements.is_empty() => out.push_str("[]"),
+            Value::List(elements) => {
+                out.push_str("[\n");
+                for (position, element) in elements.iter() {
+                    out.push_str(&indent);
+                    print_bytes(out, position.as_bytes());
+                    out.push_str(": ");
+                    print_value(out, element, spell, level + 1);
+                    out.push_str(",\n");
+                }
+                out.push_str(&closing);
+                out.push(']');
+            }
+            Value::Record(fields) if fields.is_empty() => out.push_str("{}"),
+            Value::Record(fields) => {
+                out.push_str("{\n");
+                for (label, field) in fields {
+                    out.push_str(&indent);
+                    out.push_str(&identity(spell, *label));
+                    out.push_str(": ");
+                    print_value(out, field, spell, level + 1);
+                    out.push_str(",\n");
+                }
+                out.push_str(&closing);
+                out.push('}');
+            }
+        },
+    }
+}
+
+fn print_bytes(out: &mut String, bytes: &[u8]) {
+    out.push_str("0x");
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+}
+
+fn plain_text(value: &Value) -> Option<&str> {
+    let text = text::read(value)?;
+    value
+        .as_record()?
+        .keys()
+        .all(|label| *label == text::UTF8)
+        .then_some(text)
+}
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod checked_in_files;

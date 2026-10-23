@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+
+# Locked Cargo for Linux under bubblewrap, the counterpart of
+# tools/sandbox-cargo's Seatbelt sandbox: build scripts, procedural macros and
+# tests see a read-only system without the home directory, other processes or
+# (except while fetching) the network, and write only beneath target/sandbox.
+# tools/cargo-common.sh holds the commands the two wrappers share. This is the
+# single deliberate Linux exception to the .cargo/config.toml tripwire.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [[ $(uname -s) != Linux ]]; then
+    echo "linux-cargo requires Linux; use tools/sandbox-cargo on macOS" >&2
+    exit 1
+fi
+
+. "$tool_dir/cargo-common.sh"
+
+bwrap_path=$(command -v bwrap 2>/dev/null || true)
+if [[ -z $bwrap_path ]]; then
+    echo "linux-cargo: the build sandbox needs bubblewrap; install your distribution's bubblewrap package" >&2
+    exit 1
+fi
+if ! failure=$("$bwrap_path" --unshare-all --ro-bind / / true 2>&1); then
+    cat >&2 <<EOF
+linux-cargo: bubblewrap couldn't create the build sandbox: $failure
+It needs unprivileged user namespaces, which some distributions restrict; on
+Ubuntu, AppArmor does (kernel.apparmor_restrict_unprivileged_userns).
+EOF
+    exit 1
+fi
+
+# The host read-only, with /proc, a /dev of the basic devices, and scratch
+# /tmp, /var/tmp and /dev/shm of its own; home and /run empty and read-only;
+# the toolchain and source tree read-only, without .git, local agent
+# configuration or a root .env; and only target/sandbox writable, and
+# Cargo.lock when an update asks. Each mount lands on those before it. Steps
+# with network access also get a proxy's settings, its certificate bundle, and
+# the resolver configuration, which often lives under /run.
+run_sandboxed() {
+    local allow_network=$1 allow_lock_write=$2
+    shift 2
+    local environment=(
+        CARGO_HOME="$cargo_home"
+        CARGO_TARGET_DIR="$target_dir"
+        HOME="$sandbox_home"
+        LOGNAME="$user_name"
+        PATH="$toolchain_root/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        PROGRED_COMMIT="$(stamp "$@")"
+        RUSTC="$rustc_path"
+        RUSTC_WRAPPER=
+        RUSTDOC="$rustdoc_path"
+        CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="${web_rustflags-}"
+        TMPDIR="$sandbox_tmp"
+        USER="$user_name"
+    )
+    local sandbox=(
+        --unshare-all --die-with-parent --new-session --cap-drop ALL
+        --ro-bind / / --proc /proc --dev /dev
+        --tmpfs /dev/shm --tmpfs /tmp --tmpfs /run
+    )
+    if [[ -d /var/tmp ]]; then
+        sandbox+=(--tmpfs /var/tmp)
+    fi
+    if [[ -d $HOME ]]; then
+        sandbox+=(--tmpfs "$HOME")
+    fi
+    sandbox+=(
+        --ro-bind "$toolchain_root" "$toolchain_root"
+        --ro-bind "$project_root" "$project_root"
+    )
+    local name
+    for name in .git .claude .codex .env; do
+        if [[ -d $project_root/$name ]]; then
+            sandbox+=(--tmpfs "$project_root/$name" --remount-ro "$project_root/$name")
+        elif [[ -e $project_root/$name ]]; then
+            sandbox+=(--ro-bind /dev/null "$project_root/$name")
+        fi
+    done
+    sandbox+=(--bind "$build_root" "$build_root")
+    if [[ $allow_lock_write = 1 ]]; then
+        sandbox+=(--bind "$project_root/Cargo.lock" "$project_root/Cargo.lock")
+    fi
+    if [[ $allow_network = 1 ]]; then
+        environment+=(CARGO_NET_OFFLINE=false)
+        sandbox+=(--share-net)
+        local variable file
+        for variable in HTTPS_PROXY https_proxy ALL_PROXY all_proxy NO_PROXY no_proxy \
+            CARGO_HTTP_CAINFO SSL_CERT_FILE; do
+            if [[ -n ${!variable-} ]]; then
+                environment+=("$variable=${!variable}")
+            fi
+        done
+        for file in "${CARGO_HTTP_CAINFO-}" "${SSL_CERT_FILE-}" \
+            "$(readlink -f /etc/resolv.conf 2>/dev/null || true)"; do
+            if [[ -f $file ]]; then
+                sandbox+=(--ro-bind "$file" "$file")
+            fi
+        done
+    else
+        environment+=(CARGO_NET_OFFLINE=true)
+    fi
+    if [[ -d $HOME ]]; then
+        sandbox+=(--remount-ro "$HOME")
+    fi
+    sandbox+=(--remount-ro /run --chdir "$PWD")
+    env -i "${environment[@]}" "$bwrap_path" "${sandbox[@]}" -- "$@"
+}
+
+cargo_command "$@"

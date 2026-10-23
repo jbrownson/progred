@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Headless browser compositor diagnostic</title>
+<canvas id="probe" width="220" height="100"></canvas>
+<pre id="result">Starting (does not start the editor)</pre>
+<script type="module">
+const fail = error => { window.probeError = String(error.stack ?? error); };
+try {
+  const wasm = await import("./gpu-probe-pkg/probe.js");
+  await wasm.default();
+  const canvas = document.querySelector("#probe");
+  window.backend = await wasm.start_gpu_probe(canvas);
+  window.drawProbe = async (stage, width = 220, height = 100) => {
+    canvas.width = width; canvas.height = height;
+    wasm.draw_gpu_probe(width, height, stage);
+    // Browser copying a canvas waits for submitted drawing; no application
+    // readback path is introduced just for this pixel diagnostic.
+    const copy = document.createElement("canvas");
+    copy.width = width; copy.height = height;
+    const context = copy.getContext("2d");
+    context.drawImage(canvas, 0, 0);
+    return Array.from(context.getImageData(0, 0, width, height).data);
+  };
+} catch (error) { fail(error); }
+</script>

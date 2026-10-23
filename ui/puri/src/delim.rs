@@ -1,0 +1,322 @@
+//! Stretched delimiters as filled outlines, the way math fonts draw
+//! them, after Knuth's Computer Modern: the paren one arc over the FULL
+//! span, its ends leaving at a slant and cut flat; the brace hooked at
+//! its tips and pointed at its middle with straight arms between; the
+//! bracket square. The curved strokes are MODULATED as Latin Modern's
+//! are, thick at the paren's belly and the brace's arms and thinning to
+//! `TIP` of that at the paren's ends, the brace's hook tips and its
+//! point. A tall delimiter keeps its width and gains weight (TeX's \big
+//! through \Bigg grow in both dimensions); the one-line form is drawn
+//! the same way at glyph height and the base weight. Ink spans exactly
+//! x in [0, bow] and y in [top, bottom].
+
+mod widget;
+pub use widget::{Side, advance, draw_stretched, minimum_span};
+
+use kurbo::{Affine, Arc, BezPath, Point, Rect, Shape, Vec2};
+use std::f64::consts::{FRAC_PI_2, PI, SQRT_2};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delim {
+    Paren,
+    Bracket,
+    Brace,
+}
+
+/// Contrast (belly weight over the base stem) ramps with the square
+/// root of the height in lines, capped here. The cap is deliberately
+/// modest: the surrounding text is a near-monoline UI face, and the
+/// mathy quality comes from the modulation being PRESENT, not from
+/// absolute weight.
+pub const MAX_CONTRAST: f64 = 1.6;
+
+/// How thin a curved stroke's ends are, as a fraction of its belly:
+/// Latin Modern's parens and brace hooks keep about this contrast at
+/// every size.
+const TIP: f64 = 0.4;
+
+/// The steepest a paren's outer edge leaves its ends, below the
+/// horizontal. Latin Modern's leave at 38° to 49° at every size, because
+/// its tall parens widen; ours keep their width, so Knuth's rule alone
+/// would leave a tall paren's ends nearly vertical and the paren nearly
+/// straight.
+const END: f64 = 45.0 * PI / 180.0;
+
+/// Parens and brackets share a 0.30 em base width, wide enough to keep
+/// their curvature and arms legible and deliberately more regular
+/// than the system font's differently proportioned glyphs. Braces take
+/// half as much again, LaTeX's proportion to its parens, so their hooks
+/// read at text size. All span -0.704..+0.171 em around the baseline
+/// with 0.05 em side bearings; `line` is the one-line reference height
+/// the contrast ramp measures against.
+#[derive(Debug, Clone, Copy)]
+pub struct DelimStyle {
+    pub stem: f64,
+    pub bow: f64,
+    pub brace_bow: f64,
+    pub line: f64,
+}
+
+impl DelimStyle {
+    pub fn for_text_size(size: f64) -> Self {
+        Self {
+            stem: size * 0.075,
+            bow: size * 0.30,
+            brace_bow: size * 0.45,
+            line: size * 1.18,
+        }
+    }
+
+    pub fn bow(&self, delim: Delim) -> f64 {
+        match delim {
+            Delim::Paren | Delim::Bracket => self.bow,
+            Delim::Brace => self.brace_bow,
+        }
+    }
+
+    /// The modulated weights at `height`: the belly thickens with the
+    /// contrast ramp, and the ends thin to [`TIP`] of it.
+    fn weights(&self, height: f64) -> (f64, f64) {
+        let belly = self.stem * (height / self.line).sqrt().clamp(1.0, MAX_CONTRAST);
+        (belly, belly * TIP)
+    }
+}
+
+/// The opening delimiter from `top` to `bottom`, at its style's bow.
+pub fn open(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
+    let bow = style.bow(delim);
+    let bottom = bottom.max(top + style.stem);
+    let (belly, tip) = style.weights(bottom - top);
+    match delim {
+        Delim::Paren => paren(bow, top, bottom, belly, tip),
+        Delim::Bracket => bracket(bow, top, bottom, belly, tip),
+        Delim::Brace => brace(bow, top, bottom, belly, tip),
+    }
+}
+
+/// Mirrored [`open`].
+pub fn close(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
+    let mut path = open(delim, style, top, bottom);
+    path.apply_affine(Affine::new([-1.0, 0.0, 0.0, 1.0, style.bow(delim), 0.0]));
+    path
+}
+
+/// One crescent as Knuth draws it: each edge a Metafont curve from one
+/// end through the waist to the other, and the ends cut flat. Knuth
+/// leaves each end along its edge's chord to the waist with the run
+/// tripled; a tall paren stretches the run further, so that its outer
+/// edge leaves no steeper than [`END`]. The inner edge, with its shorter
+/// run, leaves steeper, so the band is `belly` wide at the waist and
+/// thins to `tip` wide at the ends.
+fn paren(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
+    let mid = (top + bottom) / 2.0;
+    let half = (bottom - top) / 2.0;
+    let stretch = (half / ((bow - tip).max(f64::EPSILON) * END.tan())).max(3.0);
+    let flip = |point: Point| Point::new(point.x, 2.0 * mid - point.y);
+    let down = Vec2::new(0.0, 1.0);
+    let (outer, outer_waist) = (Point::new(bow - tip, top), Point::new(0.0, mid));
+    let (inner, inner_waist) = (Point::new(bow, top), Point::new(belly, mid));
+    let (o1, o2) = hobby(
+        outer,
+        Vec2::new(-stretch * (bow - tip), half),
+        outer_waist,
+        down,
+    );
+    let (i1, i2) = hobby(
+        inner,
+        Vec2::new(stretch * (belly - bow), half),
+        inner_waist,
+        down,
+    );
+    let mut path = BezPath::new();
+    path.move_to(outer);
+    path.curve_to(o1, o2, outer_waist);
+    path.curve_to(flip(o2), flip(o1), flip(outer));
+    path.line_to(flip(inner));
+    path.curve_to(flip(i1), flip(i2), inner_waist);
+    path.curve_to(i2, i1, inner);
+    path.close_path();
+    path
+}
+
+/// The control points Metafont gives `from{leave}...{arrive}to`: John
+/// Hobby's curve at tension one, kept within the triangle its tangents
+/// make so that it never inflects.
+fn hobby(from: Point, leave: Vec2, to: Point, arrive: Vec2) -> (Point, Point) {
+    let chord = to - from;
+    let turn = |angle: f64| (angle + PI).rem_euclid(2.0 * PI) - PI;
+    let theta = turn(leave.atan2() - chord.atan2());
+    let phi = turn(chord.atan2() - arrive.atan2());
+    let (st, ct, sf, cf) = (theta.sin(), theta.cos(), phi.sin(), phi.cos());
+    let root5 = 5f64.sqrt();
+    let velocity = |st: f64, ct: f64, sf: f64, cf: f64| {
+        let num = 2.0 + SQRT_2 * (st - sf / 16.0) * (sf - st / 16.0) * (ct - cf);
+        let den = 3.0 * (1.0 + 0.5 * (root5 - 1.0) * ct + 0.5 * (3.0 - root5) * cf);
+        (num / den).min(4.0)
+    };
+    let mut leaving = velocity(st, ct, sf, cf);
+    let mut arriving = velocity(sf, cf, st, ct);
+    let sine = st.abs() * cf + sf.abs() * ct;
+    if st * sf >= 0.0 && sine > 0.0 {
+        leaving = leaving.min(sf.abs() / sine);
+        arriving = arriving.min(st.abs() / sine);
+    }
+    let rotate = |v: Vec2, angle: f64| {
+        let (sin, cos) = angle.sin_cos();
+        Vec2::new(v.x * cos - v.y * sin, v.x * sin + v.y * cos)
+    };
+    (
+        from + rotate(chord, theta) * leaving,
+        to - rotate(chord, -phi) * arriving,
+    )
+}
+
+/// A square bracket is monoline: its horizontal arms track the
+/// height-sensitive weight of its vertical stem. Its square corners
+/// read heavier than curves at equal weight, so lighten both together.
+fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, _tip: f64) -> BezPath {
+    let weight = belly * 0.8;
+    let mut path = Rect::new(0.0, top, weight.min(bow), bottom).to_path(0.05);
+    path.extend(Rect::new(0.0, top, bow, top + weight).path_elements(0.05));
+    path.extend(Rect::new(0.0, bottom - weight, bow, bottom).path_elements(0.05));
+    path
+}
+
+/// The brace as math fonts draw it: each half a band that runs straight
+/// down its arm, curls in a tight hook at its tip, thinning as it goes, and
+/// ends there in a small round cap; toward the middle it thins again as it
+/// curves into the point, where the halves meet at a short face. The band
+/// is `belly` thick along the arm and `tip` thick at the hook's end and the
+/// point. The hooks and the point keep to the brace's width, so they grow
+/// with it. The lower half is the upper one mirrored and reversed, so both
+/// wind the same way and fill as one where they overlap.
+fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
+    let weight = belly.min(bow / 2.0);
+    let half_weight = weight / 2.0;
+    let mid = (top + bottom) / 2.0;
+    // Where the hook ends, inset so its round cap stays in the box.
+    let end = bow - tip / 2.0;
+    let arm = bow / 2.0;
+    let reach = (mid - top - half_weight).max(0.0);
+    // A quarter of the way from tip to point each, as in Knuth's big
+    // braces, up to the brace's width.
+    let hook = (reach / 4.0)
+        .clamp(HOOK * bow, bow)
+        .min(reach * 0.45)
+        .max(half_weight);
+    let point = (reach / 4.0)
+        .clamp(POINT * bow, bow)
+        .min(reach * 0.55)
+        .max(tip);
+    let hook_y = top + half_weight + hook;
+    let hook_radii = Vec2::new(end - arm + half_weight, hook + half_weight);
+    let mut path = BezPath::new();
+    for sign in [1.0, -1.0] {
+        let y = |y: f64| mid + sign * (y - mid);
+        let hook_center = (end, y(hook_y));
+        let point_center = (0.0, y(mid - point));
+        let mut half = BezPath::new();
+        half.move_to((end, y(top)));
+        arc(
+            &mut half,
+            hook_center,
+            hook_radii,
+            -sign * FRAC_PI_2,
+            -sign * FRAC_PI_2,
+        );
+        half.line_to((arm - half_weight, y(mid - point)));
+        arc(
+            &mut half,
+            point_center,
+            Vec2::new(arm - half_weight, point - tip / 2.0),
+            0.0,
+            sign * FRAC_PI_2,
+        );
+        half.line_to((0.0, y(mid + tip / 2.0)));
+        arc(
+            &mut half,
+            point_center,
+            Vec2::new(arm + half_weight, point + tip / 2.0),
+            sign * FRAC_PI_2,
+            -sign * FRAC_PI_2,
+        );
+        half.line_to((arm + half_weight, y(hook_y)));
+        tapered(
+            &mut half,
+            hook_center,
+            hook_radii,
+            (weight, tip),
+            sign * PI,
+            sign * FRAC_PI_2,
+        );
+        arc(
+            &mut half,
+            (end, y(top + tip / 2.0)),
+            Vec2::new(tip / 2.0, tip / 2.0),
+            sign * FRAC_PI_2,
+            -sign * PI,
+        );
+        half.close_path();
+        path.extend(if sign < 0.0 {
+            half.reverse_subpaths()
+        } else {
+            half
+        });
+    }
+    path
+}
+
+/// The least height of the brace's hook and point curves, as fractions
+/// of its width; a short brace keeps these.
+const HOOK: f64 = 0.32;
+const POINT: f64 = 0.38;
+
+fn arc(path: &mut BezPath, center: (f64, f64), radii: Vec2, start: f64, sweep: f64) {
+    path.extend(
+        Arc::new(Point::new(center.0, center.1), radii, start, sweep, 0.0).append_iter(0.05),
+    );
+}
+
+/// The inner edge of a band whose outer edge is the ellipse at `center`
+/// with `radii`, from angle `start` through `sweep`. It is drawn in by
+/// `thick` where the ellipse runs vertically and by `thin` where it runs
+/// horizontally, the horizontal inset falling off with the square of the
+/// angle's cosine, so the band thins toward its ends the way a math font's
+/// strokes do. Cubic Hermite segments, four to a quarter turn, follow it to
+/// well within a thousandth of an em.
+fn tapered(
+    path: &mut BezPath,
+    center: (f64, f64),
+    radii: Vec2,
+    (thick, thin): (f64, f64),
+    start: f64,
+    sweep: f64,
+) {
+    let reach = Vec2::new((radii.x - thin).max(0.0), (radii.y - thin).max(0.0));
+    let taper = thick - thin;
+    let at = |angle: f64| {
+        let (sin, cos) = angle.sin_cos();
+        (
+            Point::new(
+                center.0 + reach.x * cos - taper * cos.powi(3),
+                center.1 + reach.y * sin,
+            ),
+            Vec2::new(-sin * (reach.x - 3.0 * taper * cos * cos), reach.y * cos),
+        )
+    };
+    let segments = (sweep.abs() / FRAC_PI_2 * 4.0).ceil().max(1.0);
+    let step = sweep / segments;
+    let (mut from, mut from_slope) = at(start);
+    for index in 1..=segments as usize {
+        let (to, to_slope) = at(start + step * index as f64);
+        path.curve_to(
+            from + from_slope * (step / 3.0),
+            to - to_slope * (step / 3.0),
+            to,
+        );
+        (from, from_slope) = (to, to_slope);
+    }
+}
+
+#[cfg(test)]
+mod tests;

@@ -1,0 +1,26 @@
+{
+  "binders": {
+    "colors": c785948e50c854a7c89bf6c4a4bdf4fc,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "moons": 6122302fdbe3db3624731717321b94a1,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "planet": 6655e4ba9e8ae76706056e0b8edf94f0,
+    "world": 05bcece72b133b42300b7629fd3f402d,
+    "first": 9940ece27410c72a5308a544890ccc71,
+    "second": f717b766d250a7b86c5eb842885c4417,
+  },
+  "cells": {
+    colors: {name: "colors"},
+    moons: {name: "moons"},
+    planet: {name: "planet"},
+    world: {
+      planet: "Mars",
+      moons: {f64: 0x0000000000000040},
+      colors: ["red", "orange"],
+    },
+  },
+  "root": {
+    first: world,
+    second: world,
+  },
+}

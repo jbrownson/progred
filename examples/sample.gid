@@ -1,0 +1,375 @@
+{
+  "binders": {
+    "_321ee": f297bd70673e008742579e344f2321ee,
+    "_8c710": fe958866c1d3ceac555a1b1ad488c710,
+    "absent": 6509cd9921ab4cf28657ac75a9976d71,
+    "amount": 4a99abd61aa7dfe64f93de9561124845,
+    "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
+    "at": 4c2cb3268f1911bd26a0eb74622ba097,
+    "at_display": 31554fd72b1717254695c5d14a6944f9,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "button": 0ec32df180178e9fbc958d3d061481d7,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "case": 7ebb4ced7047479caafcd90b14499697,
+    "cases": a9aadcb44755963498c743fa114f0f00,
+    "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
+    "children": e10b73d5482f96ca7d3852c0f16b49ea,
+    "col": 64bad273f94f32f9957b99a6e4d14d39,
+    "color": 897fc1c794c08a0506590276aa72a3d7,
+    "commands": b3604c47bef05aa4c7ef0b2d5794da14,
+    "content": 3e6b91d4a25f70c8815d29f6c4a30e7b,
+    "corner": 12606ebd874c8c81cb938f4a119baed5,
+    "declined": 1cab38a2c8cffe5c077adc29f74c2ddf,
+    "descent": 2ed0b9294782093c08695dd5137df21a,
+    "dim_face": f14b6a08d29c53e7bd0561f8a3c2497e,
+    "double": 1588cd2c81f1c6563cfe843f32e760df,
+    "double_pitch": e69c085ed00f5270f24a895cca9cd7d6,
+    "draw_shape": fcaaadef14980397cce95363fc5a54f9,
+    "draw_stroke": c2025f7714e1f74c8ad75f28ea00f616,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
+    "edge": 2f74c8a1936e05bd4c17e2b98d60a5f4,
+    "evaluation": 549dd85073474d6296d773c8df9c0526,
+    "event": bd232b5fb4450b52e088470776ed2a01,
+    "event_kind": 9cacae824e9661b167f3ed2b8e187ee0,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "favorite": a83b16a0d85afeb98d46c3459f2e7e16,
+    "favorite_value": 7acfbb51cd4b3c60645d0c2955775c1a,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
+    "handler": 3e5d38e4658b1895e38307ad12862061,
+    "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "layout_radius": 6423c35e07d7a4ff536127d1f1d8eb53,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "line_width": a8e4d1cb2cd9f070eb428e013fecc5ef,
+    "match": b3f6a62e4926889bcfcd338025f4a6f9,
+    "material": c7c1197574183c44d7e038cb52d78760,
+    "modifiers": 36dc2e12ccce7f3cd48713123170714a,
+    "multiply": d6f384c439d9d69996d545df422efd79,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "name_face": 520e9b3c7ad6f18409cf25a7d8631be0,
+    "of": 4544b0db160b6330f20a69dd3ce34e2d,
+    "on_event": b8eafe383f924449a980d74faea1996b,
+    "origin": 065c608bbd1f53075b5c831cc4c5abd6,
+    "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "pitch": 563079b77defe2a26abcdccfa47655ed,
+    "pitch_value": 76c66b416993d623709779e49815d0b6,
+    "pointer_down": 67a9a626caff2f3568224eafcb338428,
+    "points": e92356b75104edae387062fcf8a859e0,
+    "primary": 09f73c1a02464b762ae34adc9ec17baa,
+    "profile": 3624cc3724556440847e7da953d398fc,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "reason": c2a01958bce64151beb2b3992017de4c,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "roof": 06068f483e95e24492a0835caa2751cb,
+    "rounded_rect": b07684708c0d04b7dfd66b9ec7ecf35b,
+    "row": a791e4873aa95e21bc925dacbbbf6ea5,
+    "row_2": 4843d61b088a4e569fafe00f7a617c6a,
+    "selection_path": a1005961125b04b7285b8d5aa54a0566,
+    "selection_set": a12f30681dc2a8465da7673a7e2da9a8,
+    "selection_value": 544d3b52ea73cd263c435ecddfe5e8bf,
+    "shape": b5db29c46198e28df0c26ac4aa5a411a,
+    "site_path": 803e2b0d0c621eb9688569d0879c3b23,
+    "stage": 6a1fd3082b9c47e5f60d21a8c45e9b37,
+    "stroke": 083e083f1549e362245fe6fb27135193,
+    "style": 2b9652d2cb8cb5c9d633b34d827048b1,
+    "subject": 00dafdc01c7e014edd857e174c6c8b6f,
+    "swatch": f2aadbb9e548ea30aceb7fed5773ea8a,
+    "tags": 41f5587d6560bfbebc9fb72fb0728e27,
+    "text": fd00dc28f7f24065bc76a528fc941c66,
+    "unquote": da48703c290e3b35d7353c38110bc953,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "value": 85e3b0d729c4165ffa1e0c5d49b3872e,
+    "width": f33c672fef9d0d4561102410fd64129f,
+    "x": 415def0fa0a9ac40dfba5fca4d0f8876,
+    "y": 4e2dcde5b1ab1480a2f126176dd148c7,
+  },
+  "cells": {
+    amount: {
+      name: "amount",
+    },
+    at: {
+      name: "at",
+    },
+    at_display: {
+      name: "at display",
+      params: [
+        0x80: value,
+      ],
+      body: {
+        subject: value,
+        function: match,
+        cases: [
+          0x80: {
+            pattern: {
+              col: {
+                bind: col,
+                isa: binder,
+              },
+              row: {
+                bind: row,
+                isa: binder,
+              },
+            },
+            expression: {
+              function: quote,
+              expression: {
+                handler: {
+                  params: [
+                    0x80: event,
+                  ],
+                  body: {
+                    subject: event,
+                    function: match,
+                    cases: [
+                      0x55: {
+                        pattern: {
+                          button: primary,
+                          modifiers: [],
+                          event_kind: pointer_down,
+                        },
+                        expression: {
+                          selection_value: {
+                            stage: edge,
+                          },
+                          function: selection_set,
+                          selection_path: {
+                            function: site_path,
+                            isa: call,
+                          },
+                          isa: call,
+                        },
+                        isa: case,
+                      },
+                      0xaa: {
+                        pattern: {
+                          bind: event,
+                          isa: binder,
+                        },
+                        expression: {
+                          reason: declined,
+                          isa: absent,
+                        },
+                        isa: case,
+                      },
+                    ],
+                    isa: call,
+                  },
+                  isa: lambda,
+                },
+                child: {
+                  gap: {
+                    f64: 0x0000000000001040,
+                  },
+                  isa: row_2,
+                  children: [
+                    0x33: {
+                      descent: {
+                        f64: 0x0000000000000040,
+                      },
+                      ascent: {
+                        f64: 0x0000000000002040,
+                      },
+                      commands: [
+                        0x80: {
+                          draw_stroke: {
+                            line_width: {
+                              f64: 0x000000000000f03f,
+                            },
+                            paint: dim_face,
+                            draw_shape: {
+                              rounded_rect: {
+                                x: {
+                                  f64: 0x000000000000e03f,
+                                },
+                                y: {
+                                  f64: 0x000000000000e03f,
+                                },
+                                layout_radius: {
+                                  f64: 0x0000000000000040,
+                                },
+                                height: {
+                                  f64: 0x0000000000002240,
+                                },
+                                width: {
+                                  f64: 0x0000000000002240,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                      isa: drawing,
+                      width: {
+                        f64: 0x0000000000002440,
+                      },
+                    },
+                    0x66: {
+                      content: {
+                        unquote: row,
+                        isa: unquote_2,
+                      },
+                      paint: name_face,
+                      isa: text,
+                    },
+                    0x99: {
+                      content: "×",
+                      paint: dim_face,
+                      isa: text,
+                    },
+                    0xcc: {
+                      content: {
+                        unquote: col,
+                        isa: unquote_2,
+                      },
+                      paint: name_face,
+                      isa: text,
+                    },
+                  ],
+                },
+                isa: on_event,
+              },
+              isa: call,
+            },
+            isa: case,
+          },
+        ],
+        isa: call,
+      },
+      isa: lambda,
+    },
+    col: {
+      name: "col",
+    },
+    color: {
+      name: "color",
+    },
+    corner: {
+      name: "corner",
+      of: roof,
+      at: {
+        col: "right",
+        row: "bottom",
+      },
+    },
+    double: {
+      name: "double",
+      params: [
+        0x80: amount,
+      ],
+      body: {
+        right: {
+          f64: 0x0000000000000040,
+        },
+        function: multiply,
+        left: amount,
+        isa: call,
+      },
+      isa: lambda,
+    },
+    double_pitch: {
+      name: "double pitch",
+    },
+    favorite: {
+      name: "favorite",
+    },
+    material: {
+      name: "material",
+    },
+    of: {
+      name: "of",
+    },
+    origin: {
+      name: "origin",
+      at: {
+        col: "left",
+        row: "top",
+      },
+    },
+    pitch: {
+      name: "pitch",
+    },
+    points: {
+      name: "points",
+    },
+    profile: {
+      name: "profile",
+    },
+    roof: {
+      name: "roof",
+      stroke: "hairline",
+      style: _321ee,
+      profile: {
+        expression: {
+          right: {
+            f64: 0x0000000000002040,
+          },
+          function: multiply,
+          left: {
+            amount: pitch_value,
+            function: double,
+            isa: call,
+          },
+          isa: call,
+        },
+        isa: evaluation,
+      },
+      tags: [
+        0x55: "draft",
+        0xaa: "gabled",
+      ],
+      pitch: pitch_value,
+      material: _8c710,
+      double_pitch: {
+        expression: {
+          amount: pitch_value,
+          function: double,
+          isa: call,
+        },
+        isa: evaluation,
+      },
+      points: [
+        0x55: origin,
+        0xaa: corner,
+      ],
+    },
+    row: {
+      name: "row",
+    },
+    shape: {
+      name: "shape",
+    },
+    stroke: {
+      name: "stroke",
+    },
+    style: {
+      name: "style",
+    },
+    swatch: {
+      name: "swatch",
+    },
+    tags: {
+      name: "tags",
+    },
+    pitch_value: {
+      f64: 0x0000000000000440,
+    },
+    favorite_value: corner,
+    _321ee: {
+      color: "rebeccapurple",
+      swatch: 0x663399,
+    },
+  },
+  "root": {
+    style: _321ee,
+    at_display: at_display,
+    favorite: favorite_value,
+    shape: roof,
+  },
+}

@@ -1,0 +1,60 @@
+#!/bin/sh
+
+# Locked Cargo for macOS under the repository's Seatbelt sandbox,
+# tools/cargo-sandbox.sb. tools/cargo-common.sh holds the commands it shares
+# with tools/linux-cargo.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [ "$(uname -s)" != Darwin ]; then
+    echo "sandbox-cargo requires macOS sandbox-exec; use tools/linux-cargo on Linux" >&2
+    exit 1
+fi
+
+. "$tool_dir/cargo-common.sh"
+
+# In a linked worktree Cargo's ancestor-directory config search also reads
+# the main checkout's .cargo/config.toml; allow that single file.
+main_git_dir=$(cd "$project_root" && /usr/bin/git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$project_root/.git")
+ancestor_cargo_config=$(dirname "$main_git_dir")/.cargo/config.toml
+
+run_sandboxed() {
+    allow_network=$1
+    allow_lock_write=$2
+    shift 2
+    offline=$([ "$allow_network" = 1 ] && echo false || echo true)
+    env -i \
+        CARGO_HOME="$cargo_home" \
+        CARGO_NET_OFFLINE="$offline" \
+        CARGO_TARGET_DIR="$target_dir" \
+        HOME="$sandbox_home" \
+        LOGNAME="$user_name" \
+        PATH="$toolchain_root/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+        PROGRED_COMMIT="$(stamp "$@")" \
+        RUSTC="$rustc_path" \
+        RUSTC_WRAPPER= \
+        RUSTDOC="$rustdoc_path" \
+        CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="${web_rustflags-}" \
+        TMPDIR="$sandbox_tmp" \
+        USER="$user_name" \
+        /usr/bin/sandbox-exec \
+            -D "ALLOW_NETWORK=$allow_network" \
+            -D "ALLOW_LOCK_WRITE=$allow_lock_write" \
+            -D "PROJECT_ROOT=$project_root" \
+            -D "GIT_DIR=$project_root/.git" \
+            -D "CLAUDE_DIR=$project_root/.claude" \
+            -D "CODEX_DIR=$project_root/.codex" \
+            -D "DOTENV=$project_root/.env" \
+            -D "LOCKFILE=$project_root/Cargo.lock" \
+            -D "BUILD_ROOT=$build_root" \
+            -D "SANDBOX_HOME=$sandbox_home" \
+            -D "SANDBOX_TMP=$sandbox_tmp" \
+            -D "TOOLCHAIN_ROOT=$toolchain_root" \
+            -D "ANCESTOR_CARGO_CONFIG=$ancestor_cargo_config" \
+            -f "$tool_dir/cargo-sandbox.sb" \
+            "$@"
+}
+
+cargo_command "$@"

@@ -1,0 +1,14 @@
+# Cargo build scripts and procedural macros are native executables. Keep an
+# ordinary `cargo build/check/test/run` from compiling them outside the
+# repository's build sandbox. The sandbox wrappers, tools/sandbox-cargo and
+# tools/linux-cargo, explicitly clear this setting and use a separate target
+# directory.
+[build]
+rustc-wrapper = "tools/refuse-unsandboxed-rustc"
+target-dir = "target/unsandboxed-disabled"
+
+# An ordinary Cargo invocation should not silently refresh registries or fetch
+# newly selected package versions. The wrappers' fetch and update commands opt
+# in to network access inside the filesystem sandbox.
+[net]
+offline = true

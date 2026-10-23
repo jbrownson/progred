@@ -1,0 +1,533 @@
+use super::super::playback;
+use super::*;
+use crate::libraries::{f32, f64, grap::control, layout};
+use crate::library::Definitions;
+use gid::{Document, Value, new_cell_id};
+use incremental::background::{Executor, Job};
+use std::{
+    cell::Cell,
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
+
+fn settings(yaw: f32, progress: f64) -> implicit::computation::Settings {
+    settings_at(yaw, progress, 32.0, 24.0, 1.0)
+}
+
+fn settings_at(
+    yaw: f32,
+    progress: f64,
+    width: f64,
+    height: f64,
+    scale: f64,
+) -> implicit::computation::Settings {
+    use fidget::vocabulary as f;
+    let model = fidget::volume_preview(&::grap::isa::record(
+        f::kind::VOLUME_PREVIEW,
+        [
+            (f::FIELD, f32::value(1.0)),
+            (layout::vocabulary::WIDTH, f64::value(width)),
+            (layout::vocabulary::HEIGHT, f64::value(height)),
+            (f::MIN_X, f32::value(-0.6)),
+            (f::MAX_X, f32::value(0.6)),
+            (f::MIN_Y, f32::value(-0.6)),
+            (f::MAX_Y, f32::value(0.6)),
+            (f::MIN_Z, f32::value(-0.6)),
+            (f::MAX_Z, f32::value(0.6)),
+        ],
+    ))
+    .unwrap();
+    let playback = playback::Settings::read(&Value::record([
+        (PROGRESS, f64::value(progress)),
+        (PROFILE_TOLERANCE, f64::value(0.001)),
+        (
+            STOCK_MIN,
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(-0.5)))),
+        ),
+        (
+            STOCK_MAX,
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(0.5)))),
+        ),
+        (
+            STOCK,
+            Value::record([(
+                fidget::vocabulary::COLOR,
+                crate::libraries::color::tests::value(peniko::Color::from_rgb8(100, 180, 230)),
+            )]),
+        ),
+    ]))
+    .unwrap();
+    let camera = Value::record([(
+        fidget::vocabulary::CAMERA,
+        Value::record([(fidget::vocabulary::YAW, f32::value(yaw))]),
+    )]);
+    implicit::computation::Settings {
+        request: fidget::raster::Request::new(model, Some(&camera), scale).unwrap(),
+        style: mesh::computation::PathStyle {
+            radius: 0.01,
+            color: [200, 150, 20],
+            playback: Some(playback),
+        },
+    }
+}
+
+struct Fixture {
+    computations: Computations,
+    interaction: Rc<fidget::interaction::Interaction>,
+    graph: Computation,
+    queue: Arc<Mutex<VecDeque<Job>>>,
+    runs: Rc<Cell<usize>>,
+}
+
+impl Fixture {
+    fn new() -> Self {
+        let queue = Arc::new(Mutex::new(VecDeque::new()));
+        let computations = Computations::new(
+            Executor::new({
+                let queue = queue.clone();
+                move |job| queue.lock().unwrap().push_back(job)
+            }),
+            || {},
+        );
+        let mut libraries = crate::stack::load().libraries;
+        let counter = new_cell_id();
+        let runs = Rc::new(Cell::new(0));
+        let mut definitions = Definitions::default();
+        definitions.insert(
+            counter,
+            ::grap::Definition::foreign(
+                counter,
+                Value::record([]),
+                ::grap::ForeignFunction::from_value({
+                    let runs = runs.clone();
+                    move |_, _, _| {
+                        runs.set(runs.get() + 1);
+                        Ok(Value::record([]))
+                    }
+                })
+                .tracked(),
+            ),
+        );
+        libraries.insert(new_cell_id(), definitions);
+        computations.begin(Rc::new(Document::default()), libraries);
+        let program = ::grap::lambda(
+            [],
+            ::grap::call(
+                control::vocabulary::DO.into(),
+                [(
+                    control::vocabulary::EXPRESSIONS,
+                    Value::list([
+                        ::grap::call(counter.into(), []),
+                        ::grap::call(
+                            START_AT.into(),
+                            [X, Y, Z]
+                                .into_iter()
+                                .zip([-0.25, 0.0, 0.45].map(f64::value)),
+                        ),
+                        ::grap::call(
+                            LINE_TO.into(),
+                            [X, Y, Z].into_iter().zip([0.25, 0.0, 0.45].map(f64::value)),
+                        ),
+                    ]),
+                )],
+            ),
+        );
+        let program = crate::libraries::toolpath::tests::tool_program(program);
+        let interaction = Rc::new(fidget::interaction::Interaction::new(&computations));
+        let graph = Computation::new(
+            &computations,
+            computations.tasks.as_ref().unwrap(),
+            program.into(),
+            10000,
+            settings(0.0, 0.25),
+            3,
+            interaction.permitted.clone(),
+        );
+        Self {
+            computations,
+            interaction,
+            graph,
+            queue,
+            runs,
+        }
+    }
+
+    fn read(&self) -> Rc<View> {
+        self.computations.runtime.read(&self.graph.view).unwrap()
+    }
+
+    fn finish(&self, index: usize) {
+        let job = self
+            .queue
+            .lock()
+            .unwrap()
+            .remove(index)
+            .expect("requested work");
+        std::thread::spawn(job).join().unwrap();
+        assert!(self.computations.poll());
+    }
+
+    fn mesh(&self) -> Rc<Outcome<mesh::computation::ViewGeometry>> {
+        let view = self.read();
+        let View::Mesh(mesh, _) = &*view else {
+            panic!("expected immediate mesh fallback")
+        };
+        mesh.clone()
+    }
+
+    fn finish_preparation(&self) {
+        self.finish(0);
+        self.mesh(); // Compilation alone cannot produce an implicit image.
+        assert_eq!(
+            self.queue.lock().unwrap().len(),
+            1,
+            "pixels are now ready to render"
+        );
+    }
+}
+
+#[test]
+fn mouse_release_starts_only_the_latest_view_without_repreparing_the_scene() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    let mesh = f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    let ready = f.read();
+    assert!(matches!(&*ready, View::Implicit(_, _)));
+
+    f.computations.pointer_pressed.set(true);
+    assert!(
+        Rc::ptr_eq(&ready, &f.read()),
+        "an unrelated press preserves the current image"
+    );
+    for yaw in [30.0, 60.0, 90.0] {
+        f.graph.settings.set(settings(yaw, 0.25));
+        assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+        assert!(f.queue.lock().unwrap().is_empty());
+    }
+    f.computations.pointer_pressed.set(false);
+    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only pixels, not preparation"
+    );
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    assert!(f.queue.lock().unwrap().is_empty());
+    assert_eq!(f.runs.get(), 1);
+}
+
+#[test]
+fn wheel_zoom_waits_for_quiet_and_reuses_the_mesh_and_prepared_scene() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    let mesh = f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    let ready = f.read();
+    assert!(matches!(&*ready, View::Implicit(_, _)));
+
+    let now = web_time::Instant::now();
+    let mut timers = crate::timers::Timers::default();
+    f.interaction.zoomed(&mut timers, now);
+    assert!(
+        Rc::ptr_eq(&ready, &f.read()),
+        "closing admission alone preserves the current image"
+    );
+    for zoom in [1.1, 1.4, 2.0] {
+        let mut next = settings(0.0, 0.25);
+        let camera = Value::record([(
+            fidget::vocabulary::CAMERA,
+            Value::record([(fidget::vocabulary::ZOOM, f32::value(zoom))]),
+        )]);
+        next.request =
+            fidget::raster::Request::new(next.request.preview.clone(), Some(&camera), 1.0).unwrap();
+        f.graph.settings.set(next);
+        assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+        assert!(f.queue.lock().unwrap().is_empty());
+    }
+    // Button release must not admit pixels while wheel input is still active.
+    f.computations.pointer_pressed.set(true);
+    f.mesh();
+    f.computations.pointer_pressed.set(false);
+    f.mesh();
+    assert!(f.queue.lock().unwrap().is_empty());
+
+    f.interaction
+        .refresh(now + web_time::Duration::from_millis(150));
+    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only the latest pixels, not mesh generation or scene preparation"
+    );
+    f.finish(0);
+    let ready = f.read();
+    assert!(matches!(&*ready, View::Implicit(_, _)));
+    assert!(timers.fire_due(now + web_time::Duration::from_secs(1)));
+    f.interaction
+        .refresh(now + web_time::Duration::from_secs(1));
+    assert!(
+        Rc::ptr_eq(&ready, &f.read()),
+        "late delivery does not restart completed work"
+    );
+    assert!(f.queue.lock().unwrap().is_empty());
+    assert_eq!(f.runs.get(), 1);
+}
+
+#[test]
+fn held_playback_conflates_stock_updates_but_defers_implicit_until_release() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    f.read();
+
+    f.computations.pointer_pressed.set(true);
+    for progress in [0.4, 0.5, 0.75] {
+        f.graph.settings.set(settings(0.0, progress));
+        let mesh = f.mesh();
+        let mesh = mesh.as_ref().as_ref().unwrap();
+        assert!(mesh.surface_pending);
+        assert!(!mesh.awaiting_first_surface);
+        assert_eq!(
+            f.queue.lock().unwrap().len(),
+            1,
+            "one admitted stock job, no implicit jobs during drag"
+        );
+    }
+    f.finish(0); // Finish the first dragged position, then skip to the latest.
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    assert_eq!(f.queue.lock().unwrap().len(), 1);
+    f.finish(0); // The latest stock mesh is still the prerequisite for implicit.
+    assert!(!f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    f.finish(0); // Preparation may finish while the pointer remains held.
+    f.mesh();
+    assert!(
+        f.queue.lock().unwrap().is_empty(),
+        "implicit still waits for release"
+    );
+    f.computations.pointer_pressed.set(false);
+    f.mesh();
+    assert_eq!(f.queue.lock().unwrap().len(), 1);
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    assert_eq!(f.runs.get(), 1, "dragging reuses the recorded program");
+}
+
+#[test]
+fn orbit_reuses_mesh_and_conflates_only_implicit_requests() {
+    let f = Fixture::new();
+    assert!(f.mesh().as_ref().as_ref().unwrap().awaiting_first_surface);
+    assert_eq!(f.runs.get(), 1, "both interpretations share one evaluation");
+    assert_eq!(f.queue.lock().unwrap().len(), 1, "only mesh work is ready");
+    f.finish(0);
+    let mesh = f.mesh();
+    assert!(!mesh.as_ref().as_ref().unwrap().awaiting_first_surface);
+    f.finish_preparation();
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+
+    f.graph.settings.set(settings(30.0, 0.25));
+    assert!(
+        Rc::ptr_eq(&mesh, &f.mesh()),
+        "camera changes reuse the same geometry immediately"
+    );
+    f.graph.settings.set(settings(60.0, 0.25));
+    assert!(Rc::ptr_eq(&mesh, &f.mesh()));
+    f.graph
+        .settings
+        .set(settings_at(60.0, 0.25, 24.0, 32.0, 2.0));
+    assert!(
+        Rc::ptr_eq(&mesh, &f.mesh()),
+        "size and display scale also retain geometry"
+    );
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "no remesh and no queued camera history"
+    );
+    assert_eq!(f.runs.get(), 1);
+    f.finish(0);
+    let view = f.read();
+    let View::Implicit(image, _) = &*view else {
+        panic!("replacement image")
+    };
+    let image = image.as_ref().unwrap();
+    assert!(!image.pending);
+    let image = &image.frame.image;
+    assert_eq!((image.width, image.height), (48, 64));
+    assert!(f.queue.lock().unwrap().is_empty());
+}
+
+#[test]
+fn playback_moves_tool_immediately_but_implicit_waits_for_the_current_mesh() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    let old = f.mesh();
+    f.finish_preparation();
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    f.graph.settings.set(settings(0.0, 0.75));
+    let new = f.mesh();
+    assert!(!new.as_ref().as_ref().unwrap().awaiting_first_surface);
+    assert!(new.as_ref().as_ref().unwrap().surface_pending);
+    let tool_center = |view: &Outcome<mesh::computation::ViewGeometry>| {
+        let vertices = &view.as_ref().unwrap().geometry.vertices;
+        let xs: Vec<_> = vertices
+            .iter()
+            .filter(|v| v.color == [225, 94, 58].map(|v| v as f32 / 255.0))
+            .map(|v| v.position.x)
+            .collect();
+        (xs.iter().copied().fold(f32::INFINITY, f32::min)
+            + xs.iter().copied().fold(f32::NEG_INFINITY, f32::max))
+            / 2.0
+    };
+    assert!(tool_center(&new) > tool_center(&old));
+    assert_eq!(f.runs.get(), 1);
+    assert_eq!(f.queue.lock().unwrap().len(), 1, "no implicit job yet");
+    f.graph.settings.set(settings(15.0, 0.75));
+    assert!(
+        Rc::ptr_eq(&new, &f.mesh()),
+        "orbit retains the pending mesh"
+    );
+    f.graph.settings.set(settings(15.0, 0.9));
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only one mesh is admitted"
+    );
+    f.finish(0);
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "latest mesh, not implicit work"
+    );
+    f.finish(0);
+    let current = f.mesh();
+    assert!(!current.as_ref().as_ref().unwrap().surface_pending);
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "now implicit work is ready"
+    );
+    f.finish_preparation();
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    f.graph.settings.set(settings(30.0, 0.9));
+    assert!(
+        Rc::ptr_eq(&current, &f.mesh()),
+        "orbit after implicit cannot regress the stock"
+    );
+    assert_eq!(f.queue.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    f.mesh(); // Current mesh starts implicit work, but don't execute it yet.
+    f.graph.settings.set(settings(0.0, 0.75));
+    assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    let cancelled = f.queue.lock().unwrap().pop_front().unwrap();
+    std::thread::spawn(cancelled).join().unwrap();
+    assert!(!f.computations.poll(), "the old implicit slot was cleared");
+    assert_eq!(
+        f.queue.lock().unwrap().len(),
+        1,
+        "only replacement mesh remains"
+    );
+    f.finish(0);
+    assert!(!f.mesh().as_ref().as_ref().unwrap().surface_pending);
+    f.finish_preparation();
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+}
+
+#[test]
+fn current_failure_is_not_hidden_by_a_previous_successful_render() {
+    let f = Fixture::new();
+    f.read();
+    f.finish(0);
+    f.read();
+    f.finish_preparation();
+    f.finish(0);
+    assert!(matches!(&*f.read(), View::Implicit(_, _)));
+    f.graph.program.fuel.set(0);
+    let view = f.read();
+    let View::Mesh(result, _) = &*view else {
+        panic!("current error must be exposed")
+    };
+    assert!(result.as_ref().is_err());
+}
+
+#[test]
+fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
+    let f = Fixture::new();
+    let model_settings = |progress| {
+        let mut settings = settings(0.0, progress);
+        settings.style.playback = Some(
+            playback::Settings::read(&Value::record([
+                (PROGRESS, f64::value(progress)),
+                (PROFILE_TOLERANCE, f64::value(0.001)),
+                (
+                    STOCK_MIN,
+                    ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(-0.5)))),
+                ),
+                (
+                    STOCK_MAX,
+                    ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(0.5)))),
+                ),
+            ]))
+            .unwrap(),
+        );
+        settings
+    };
+    f.graph.settings.set(model_settings(0.25));
+    f.read();
+    f.finish(0);
+    f.read();
+    f.finish_preparation();
+    f.finish(0);
+    let initial = f.read();
+    let View::Implicit(image, geometry) = &*initial else {
+        panic!("finished model")
+    };
+    f.graph.settings.set(model_settings(0.75));
+    let moved = f.read();
+    let View::Implicit(next_image, next_geometry) = &*moved else {
+        panic!("model should stay ready")
+    };
+    assert!(same_frame(image, next_image));
+    assert!(!Rc::ptr_eq(geometry, next_geometry));
+    assert!(
+        f.queue.lock().unwrap().is_empty(),
+        "tool motion schedules neither meshing nor implicit rendering"
+    );
+    let mut restyled = model_settings(0.75);
+    restyled.style.color = [100, 50, 200];
+    restyled.style.radius *= 2.0;
+    f.graph.settings.set(restyled);
+    let styled = f.read();
+    let View::Implicit(styled_image, _) = &*styled else {
+        panic!("model should stay ready")
+    };
+    assert!(same_frame(image, styled_image));
+    assert!(f.queue.lock().unwrap().is_empty());
+    assert_eq!(f.runs.get(), 1);
+}
+
+/// Reusing the rendered frame, not re-rendering an equal one.
+fn same_frame(a: &Outcome<Refinement>, b: &Outcome<Refinement>) -> bool {
+    matches!((a, b), (Ok(a), Ok(b)) if std::sync::Arc::ptr_eq(&a.frame.depth, &b.frame.depth))
+}

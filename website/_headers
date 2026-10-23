@@ -1,0 +1,5 @@
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=0, must-revalidate

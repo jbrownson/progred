@@ -1,0 +1,796 @@
+//! The Progred-drawn menu system: an in-window bar and popups, one
+//! per editor. It emits [`command::Command`]s; the native macOS menu
+//! is its own separate system in `native_menu`.
+
+use crate::command::{self, AppCommand, Command, DocCommand, Example};
+use ui_events::keyboard::{Key, KeyboardEvent};
+
+/// The drawn bar's structure: which commands, in which menus, in
+/// which order. Labels, keys, and toggle-ness come from the shared
+/// [`command::spec`] catalog.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Entry {
+    Command(Command),
+    Separator,
+}
+
+pub struct Menu {
+    pub label: &'static str,
+    pub entries: Vec<Entry>,
+}
+
+pub fn commands(menus: &[Menu]) -> impl Iterator<Item = Command> + '_ {
+    menus.iter().flat_map(|menu| {
+        menu.entries.iter().filter_map(|entry| match entry {
+            Entry::Command(command) => Some(*command),
+            Entry::Separator => None,
+        })
+    })
+}
+
+/// The host supplies the same modifier for labels and dispatch.
+fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModifier) -> String {
+    format!(
+        "{}+{}{}",
+        match command {
+            puri::keyboard::CommandModifier::Meta => "Cmd",
+            puri::keyboard::CommandModifier::Control => "Ctrl",
+        },
+        if shortcut.shift { "Shift+" } else { "" },
+        shortcut.key.label()
+    )
+}
+
+/// The fixed menus, then `Projections`: the presets, and an entry for each
+/// library an area can switch off; then `Libraries`, an entry for each
+/// loaded library, when there are any.
+pub fn definition(
+    projections: impl IntoIterator<Item = gid::CellId>,
+    libraries: impl IntoIterator<Item = gid::CellId>,
+) -> Vec<Menu> {
+    use crate::stack::Preset;
+    use crate::workspace::{Move, Side};
+    use {AppCommand as A, Command as C, DocCommand as D, Example as E};
+    #[cfg(target_arch = "wasm32")]
+    let file_entries = vec![
+        Entry::Command(C::App(A::New)),
+        Entry::Command(C::App(A::Open)),
+        Entry::Separator,
+        Entry::Command(C::Doc(D::Save)),
+        Entry::Command(C::Doc(D::SaveAs)),
+    ];
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let file_entries = vec![
+        Entry::Command(C::App(A::New)),
+        Entry::Command(C::App(A::NewWindow)),
+        Entry::Command(C::App(A::Open)),
+        Entry::Separator,
+        Entry::Command(C::App(A::Close)),
+        Entry::Command(C::Doc(D::Save)),
+        Entry::Command(C::Doc(D::SaveAs)),
+        Entry::Separator,
+        Entry::Command(C::App(A::Quit)),
+    ];
+    // The browser's own page zoom serves the web.
+    #[cfg(target_arch = "wasm32")]
+    let zoom_entries = Vec::new();
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let zoom_entries = vec![
+        Entry::Separator,
+        Entry::Command(C::Doc(D::ActualSize)),
+        Entry::Command(C::Doc(D::ZoomIn)),
+        Entry::Command(C::Doc(D::ZoomOut)),
+    ];
+    let libraries: Vec<_> = libraries
+        .into_iter()
+        .map(|library| Entry::Command(C::Doc(D::OpenLibrary(library))))
+        .collect();
+    let libraries = (!libraries.is_empty()).then_some(Menu {
+        label: "Libraries",
+        entries: libraries,
+    });
+    [
+        Menu {
+            label: "File",
+            entries: file_entries,
+        },
+        Menu {
+            label: "Examples",
+            entries: E::ALL
+                .into_iter()
+                .map(|example| Entry::Command(C::App(A::Example(example))))
+                .collect(),
+        },
+        Menu {
+            label: "Edit",
+            entries: vec![
+                Entry::Command(C::Doc(D::Undo)),
+                Entry::Command(C::Doc(D::Redo)),
+            ],
+        },
+        Menu {
+            label: "View",
+            entries: [
+                Entry::Command(C::Doc(D::OpenPane(Side::Left))),
+                Entry::Command(C::Doc(D::OpenPane(Side::Right))),
+                Entry::Command(C::Doc(D::ClosePane)),
+                Entry::Separator,
+                Entry::Command(C::Doc(D::MovePane(Move::Up))),
+                Entry::Command(C::Doc(D::MovePane(Move::Down))),
+                Entry::Command(C::Doc(D::MovePane(Move::Left))),
+                Entry::Command(C::Doc(D::MovePane(Move::Right))),
+            ]
+            .into_iter()
+            .chain(zoom_entries)
+            .collect(),
+        },
+        Menu {
+            label: "Projections",
+            entries: Preset::ALL
+                .into_iter()
+                .map(|preset| Entry::Command(C::Doc(D::Preset(preset))))
+                .chain([Entry::Separator])
+                .chain(
+                    projections
+                        .into_iter()
+                        .map(|library| Entry::Command(C::Doc(D::Projection(library)))),
+                )
+                .collect(),
+        },
+    ]
+    .into_iter()
+    .chain(libraries)
+    .chain([Menu {
+        label: "Help",
+        entries: vec![Entry::Command(C::Doc(D::CopyVersion))],
+    }])
+    .collect()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hover {
+    Heading(usize),
+    Item(Command),
+    /// The version at the bar's far end, which a click copies.
+    Stage,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct State {
+    open: Option<usize>,
+    /// Highlighted command, shared by pointer and keyboard navigation.
+    /// Separators do not count toward this position.
+    cursor: Option<usize>,
+    /// Alt is down on its own, with nothing pressed or clicked since, so
+    /// releasing it is a tap.
+    alt_alone: bool,
+}
+
+impl State {
+    pub fn open(&self) -> Option<usize> {
+        self.open
+    }
+
+    pub fn cursor(&self) -> Option<usize> {
+        self.cursor
+    }
+
+    pub fn toggle(&mut self, menu: usize) {
+        self.open = (self.open != Some(menu)).then_some(menu);
+        self.cursor = None;
+    }
+
+    pub fn close(&mut self) -> bool {
+        self.cursor = None;
+        self.open.take().is_some()
+    }
+
+    pub fn captures_key(&self, event: &KeyboardEvent) -> bool {
+        self.open.is_some() && event.state.is_down()
+    }
+
+    /// Whether `event` releases Alt pressed on its own, with no other key
+    /// between. Its repeats while held are still the one press.
+    fn alt_tapped(&mut self, event: &KeyboardEvent) -> bool {
+        use ui_events::keyboard::NamedKey;
+        let alt = event.key == Key::Named(NamedKey::Alt);
+        if event.state.is_down() {
+            let alone =
+                !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.shift());
+            self.alt_alone = alt && if event.repeat { self.alt_alone } else { alone };
+            false
+        } else {
+            alt && std::mem::take(&mut self.alt_alone)
+        }
+    }
+
+    /// Something other than a key, such as a click, came between Alt's press
+    /// and release, so releasing it isn't a tap.
+    pub fn interrupt(&mut self) {
+        self.alt_alone = false;
+    }
+}
+
+pub enum Navigation {
+    Pass,
+    Handled,
+    Activate(Command),
+}
+
+/// Keyboard navigation inside an open drawn menu: vertical arrows walk
+/// the enabled items, horizontal arrows switch menus, Enter or Space
+/// activates the cursored item. F10, or a tap of Alt on its own, enters or
+/// leaves the bar; Escape and Tab dismiss it without sending the key to the
+/// document underneath.
+pub fn navigate(
+    state: &mut State,
+    menus: &[Menu],
+    availability: command::Availability,
+    event: &KeyboardEvent,
+) -> Navigation {
+    use ui_events::keyboard::NamedKey;
+    let first_enabled = |menu: usize| {
+        menus.get(menu).and_then(|menu| {
+            commands(std::slice::from_ref(menu)).position(|command| availability.enabled(command))
+        })
+    };
+    let tapped = state.alt_tapped(event);
+    let down = event.state.is_down();
+    let plain = crate::modifiers::plain(&event.modifiers);
+    match (state.open, &event.key) {
+        _ if tapped || down && plain && event.key == Key::Named(NamedKey::F10) => {
+            if !state.close() {
+                state.open = Some(0);
+                state.cursor = first_enabled(0);
+            }
+            Navigation::Handled
+        }
+        (Some(_), Key::Named(NamedKey::Escape | NamedKey::Tab))
+            if down && crate::modifiers::at_most_shift(&event.modifiers) =>
+        {
+            state.close();
+            Navigation::Handled
+        }
+        (Some(open), key) if down && plain => {
+            let items: Vec<Command> = menus.get(open).map_or_else(Vec::new, |menu| {
+                commands(std::slice::from_ref(menu)).collect()
+            });
+            let enabled: Vec<bool> = items
+                .iter()
+                .map(|command| availability.enabled(*command))
+                .collect();
+            match key {
+                Key::Named(NamedKey::ArrowDown) => {
+                    state.cursor = step(&enabled, state.cursor, 1);
+                    Navigation::Handled
+                }
+                Key::Named(NamedKey::ArrowUp) => {
+                    state.cursor = step(&enabled, state.cursor, -1);
+                    Navigation::Handled
+                }
+                Key::Named(NamedKey::Home) => {
+                    state.cursor = step(&enabled, None, 1);
+                    Navigation::Handled
+                }
+                Key::Named(NamedKey::End) => {
+                    state.cursor = step(&enabled, None, -1);
+                    Navigation::Handled
+                }
+                Key::Named(arrow @ (NamedKey::ArrowLeft | NamedKey::ArrowRight)) => {
+                    let delta = match arrow {
+                        NamedKey::ArrowRight => 1,
+                        _ => menus.len() - 1,
+                    };
+                    let next = (open + delta) % menus.len();
+                    state.open = Some(next);
+                    state.cursor = first_enabled(next);
+                    Navigation::Handled
+                }
+                _ if *key == Key::Named(NamedKey::Enter)
+                    || matches!(key, Key::Character(c) if c.as_str() == " ") =>
+                {
+                    match state.cursor.and_then(|at| items.get(at)) {
+                        Some(command) if availability.enabled(*command) => {
+                            Navigation::Activate(*command)
+                        }
+                        _ => Navigation::Handled,
+                    }
+                }
+                _ => Navigation::Pass,
+            }
+        }
+        _ => Navigation::Pass,
+    }
+}
+
+/// The enabled item `delta` away from `from`, wrapping around, or the
+/// first enabled one counting from that end with nothing cursored.
+fn step(enabled: &[bool], from: Option<usize>, delta: isize) -> Option<usize> {
+    let len = enabled.len() as isize;
+    let start = from.map_or(if delta > 0 { 0 } else { len - 1 }, |at| {
+        at as isize + delta
+    });
+    (0..len)
+        .map(|offset| (start + offset * delta).rem_euclid(len) as usize)
+        .find(|at| enabled.get(*at).copied().unwrap_or(false))
+}
+
+pub fn shortcut(
+    event: &KeyboardEvent,
+    command: puri::keyboard::CommandModifier,
+) -> Option<Command> {
+    command::shortcut(event, command, commands(&definition([], [])))
+}
+
+mod view {
+    use super::{Entry, Hover, State, definition, drawn_label};
+    use crate::Editor;
+    use crate::command::{Availability, Command, Toggles, spec};
+    use crate::display::widget::placed;
+    use crate::frame::{DispatchContext, HoverPass, Hovered};
+    use kurbo::{Affine, BezPath, Insets, Rect, Stroke};
+    use measured::{self, Extent, Measured};
+    use peniko::Brush;
+    use puri::draw::Canvas;
+    use puri::handler::{Event, EventOutcome, HasHandler};
+    use puri::text::{TextCtx, TextStyle};
+    use ui_events::pointer::PointerType;
+
+    const BAR_HEIGHT: f64 = 30.0;
+    const MENU_WIDTH: f64 = 230.0;
+
+    pub struct Description {
+        pub palette: crate::display::widget::style::Palette,
+        pub command_modifier: puri::keyboard::CommandModifier,
+        pub state: State,
+        pub availability: Availability,
+        pub toggles: Toggles,
+        /// Each library that brings a projection, with the name its
+        /// Projections entry shows.
+        pub projections: Vec<(gid::CellId, String)>,
+        /// Each loaded library, with the name its Libraries entry shows.
+        pub libraries: Vec<(gid::CellId, String)>,
+        pub scale: f64,
+        pub width: f64,
+    }
+
+    pub struct View<P> {
+        pub bar: Measured<P>,
+        pub keyboard: puri::handler::Handler<Editor, DispatchContext<Editor>>,
+        pub heading_width: f64,
+        pub popup: Option<(f64, Measured<P>)>,
+    }
+
+    struct Styles {
+        text: TextStyle,
+        dim: TextStyle,
+        disabled: TextStyle,
+    }
+
+    fn styles(palette: crate::display::widget::style::Palette) -> Styles {
+        let text = |color| TextStyle {
+            size: 14.0,
+            brush: Brush::from(color),
+            weight: None,
+            family: parley::style::GenericFamily::SystemUi,
+        };
+        Styles {
+            text: text(palette.ink),
+            dim: text(palette.muted),
+            disabled: text(palette.disabled),
+        }
+    }
+
+    pub fn bar_height(scale: f64) -> f64 {
+        BAR_HEIGHT * scale
+    }
+
+    fn interactive(
+        hover: Hover,
+        content: Measured<HoverPass<Editor>>,
+        point: impl Fn(&mut State) + 'static,
+        press: impl Fn(&mut Editor, &DispatchContext<Editor>) -> bool + 'static,
+    ) -> Measured<HoverPass<Editor>> {
+        placed::before(content, move |p, placement| {
+            let target = Hovered::Menu(hover);
+            p.claim_exact(placement, target.clone());
+            p.handler().on(move |app: &mut Editor, event, input| {
+                let handled = !placement.clipped_out()
+                    && input.hovered() == Some(&target)
+                    && match &event {
+                        Event::PointerDown(event) => {
+                            puri::interact::is_primary_contact(event) && press(app, input)
+                        }
+                        Event::PointerMove(event)
+                            if event.pointer.pointer_type == PointerType::Mouse
+                                && event.current.buttons.is_empty()
+                                && app.menu.open().is_some() =>
+                        {
+                            point(&mut app.menu);
+                            true
+                        }
+                        _ => false,
+                    };
+                EventOutcome::from_handled(event, handled)
+            });
+        })
+    }
+
+    fn heading(
+        palette: crate::display::widget::style::Palette,
+        tcx: &mut TextCtx,
+        style: &TextStyle,
+        index: usize,
+        label: &'static str,
+        active: bool,
+        scale: f64,
+    ) -> Measured<HoverPass<Editor>> {
+        let text = placed::text(tcx, label, style);
+        let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
+        let content = measured::pad(
+            Insets::new(10.0 * scale, vertical, 10.0 * scale, vertical),
+            text,
+        );
+        let content = placed::decorate(content, move |p, rect| {
+            p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
+                let hovered =
+                    matches!(hover.hovered.as_ref(), Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
+                if active || hovered {
+                    cv.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
+                }
+            });
+        });
+        interactive(
+            Hover::Heading(index),
+            content,
+            move |state| {
+                state.open = Some(index);
+                state.cursor = None;
+            },
+            move |app, _| {
+                app.menu.toggle(index);
+                true
+            },
+        )
+    }
+
+    fn separator(
+        palette: crate::display::widget::style::Palette,
+        scale: f64,
+        width: f64,
+    ) -> Measured<HoverPass<Editor>> {
+        placed::leaf(
+            Extent {
+                width,
+                ascent: 4.0 * scale,
+                descent: 3.0 * scale,
+            },
+            move |p, placement| {
+                let y = placement.rect.center().y;
+                p.fill(
+                    Rect::new(
+                        placement.rect.x0 + 9.0 * scale,
+                        y,
+                        placement.rect.x1 - 9.0 * scale,
+                        y + scale.max(1.0),
+                    ),
+                    palette.border,
+                    Affine::IDENTITY,
+                );
+            },
+        )
+    }
+
+    struct Item {
+        command: Command,
+        label: Measured<HoverPass<Editor>>,
+        shortcut: Measured<HoverPass<Editor>>,
+        checked: bool,
+        enabled: bool,
+        cursored: bool,
+        index: usize,
+    }
+
+    fn measure_item(
+        tcx: &mut TextCtx,
+        styles: &Styles,
+        description: &Description,
+        command: Command,
+        index: usize,
+    ) -> Item {
+        let spec = spec(command);
+        let enabled = description.availability.enabled(command);
+        let style = if enabled {
+            &styles.text
+        } else {
+            &styles.disabled
+        };
+        let shortcut_style = if enabled {
+            &styles.dim
+        } else {
+            &styles.disabled
+        };
+        let (libraries, library) = match command {
+            Command::Doc(crate::command::DocCommand::Projection(library)) => {
+                (description.projections.as_slice(), Some(library))
+            }
+            Command::Doc(crate::command::DocCommand::OpenLibrary(library)) => {
+                (description.libraries.as_slice(), Some(library))
+            }
+            _ => (&[][..], None),
+        };
+        let name = libraries
+            .iter()
+            .find(|(id, _)| Some(*id) == library)
+            .map(|(_, name)| name.as_str());
+        let label = placed::text(tcx, name.unwrap_or(spec.label), style);
+        let shortcut = placed::text(
+            tcx,
+            &spec
+                .shortcut
+                .map(|shortcut| drawn_label(shortcut, description.command_modifier))
+                .unwrap_or_default(),
+            shortcut_style,
+        );
+        Item {
+            command,
+            label,
+            shortcut,
+            checked: spec.toggle && description.toggles.checked(command),
+            enabled,
+            cursored: description.state.cursor() == Some(index),
+            index,
+        }
+    }
+
+    fn item(
+        item: Item,
+        palette: crate::display::widget::style::Palette,
+        scale: f64,
+        width: f64,
+    ) -> Measured<HoverPass<Editor>> {
+        let Item {
+            command,
+            label,
+            shortcut,
+            checked,
+            enabled,
+            cursored,
+            index,
+        } = item;
+        // Every row shares the same label origin and right-aligned shortcut
+        // column. The checkmark has its own gutter, independent of text shaping.
+        let gap = width - 40.0 * scale - label.extent.width - shortcut.extent.width;
+        let content = measured::pad(
+            Insets::new(28.0 * scale, 5.0 * scale, 12.0 * scale, 5.0 * scale),
+            measured::row(gap, vec![label, shortcut]),
+        );
+        let content = placed::decorate(content, move |p, rect| {
+            if enabled && cursored {
+                p.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
+            }
+            if checked {
+                let x = rect.x0;
+                let y = rect.center().y;
+                let mut check = BezPath::new();
+                check.move_to((x + 10.0 * scale, y));
+                check.line_to((x + 13.0 * scale, y + 3.0 * scale));
+                check.line_to((x + 20.0 * scale, y - 4.0 * scale));
+                p.stroke(
+                    check,
+                    Stroke::new(1.5 * scale),
+                    palette.ink,
+                    Affine::IDENTITY,
+                );
+            }
+        });
+        interactive(
+            Hover::Item(command),
+            content,
+            move |state| state.cursor = enabled.then_some(index),
+            move |app, input| {
+                if enabled {
+                    app.choose_menu(command, input.geometry(scale));
+                }
+                // Disabled rows still consume the press.
+                true
+            },
+        )
+    }
+
+    fn popup(
+        tcx: &mut TextCtx,
+        styles: &Styles,
+        description: &Description,
+        menu_entries: &[Entry],
+    ) -> Measured<HoverPass<Editor>> {
+        let scale = description.scale;
+        let palette = description.palette;
+        // Separators don't count toward a command's index.
+        let items = menu_entries
+            .iter()
+            .scan(0, |index, entry| {
+                Some(match entry {
+                    Entry::Separator => None,
+                    Entry::Command(command) => {
+                        *index += 1;
+                        Some(measure_item(tcx, styles, description, *command, *index - 1))
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let label_width = items
+            .iter()
+            .flatten()
+            .map(|item| item.label.extent.width)
+            .fold(0.0, f64::max);
+        let shortcut_width = items
+            .iter()
+            .flatten()
+            .map(|item| item.shortcut.extent.width)
+            .fold(0.0, f64::max);
+        let width = (MENU_WIDTH * scale).max(label_width + shortcut_width + 64.0 * scale);
+        let entries = items
+            .into_iter()
+            .map(|entry| match entry {
+                Some(prepared) => item(prepared, palette, scale, width),
+                None => separator(palette, scale, width),
+            })
+            .collect();
+        let content = measured::pad(
+            Insets::new(0.0, 4.0 * scale, 0.0, 4.0 * scale),
+            measured::col(0, 0.0, entries),
+        );
+        placed::before(
+            placed::decorate(content, move |p, rect| {
+                p.fill(rect, palette.panel, Affine::IDENTITY);
+                p.stroke(
+                    rect.inflate(-scale.max(1.0) / 2.0, -scale.max(1.0) / 2.0),
+                    Stroke::new(scale.max(1.0)),
+                    palette.border,
+                    Affine::IDENTITY,
+                );
+            }),
+            |p, placement| {
+                p.occlude(placement);
+                p.handler().on_pointer_move(move |app: &mut Editor, event| {
+                    if event.pointer.pointer_type == PointerType::Mouse
+                        && event.current.buttons.is_empty()
+                        && placement.contains(kurbo::Point::new(
+                            event.current.position.x,
+                            event.current.position.y,
+                        ))
+                    {
+                        app.menu.cursor = None;
+                        true
+                    } else {
+                        false
+                    }
+                });
+                p.handler()
+                    .on_pointer_cancel(|app: &mut Editor, _| app.menu.close());
+            },
+        )
+    }
+
+    pub fn view(tcx: &mut TextCtx, description: Description) -> View<HoverPass<Editor>> {
+        let palette = description.palette;
+        let styles = styles(palette);
+        let definition = definition(
+            description.projections.iter().map(|(library, _)| *library),
+            description.libraries.iter().map(|(library, _)| *library),
+        );
+        let headings = definition
+            .iter()
+            .enumerate()
+            .map(|(index, menu)| {
+                heading(
+                    palette,
+                    tcx,
+                    &styles.text,
+                    index,
+                    menu.label,
+                    description.state.open() == Some(index),
+                    description.scale,
+                )
+            })
+            .collect::<Vec<_>>();
+        let heading_width = headings.iter().map(|node| node.extent.width).sum::<f64>();
+        // The open menu's popup hangs below its heading.
+        let popup_x = description.state.open().map_or(0.0, |open| {
+            headings
+                .iter()
+                .take(open)
+                .map(|node| node.extent.width)
+                .sum()
+        });
+        // How finished Progred is, at the bar's far end: a note, not a menu,
+        // which a click copies.
+        let stage = {
+            let scale = description.scale;
+            let text = placed::text(tcx, &crate::editor::stage(), &styles.dim);
+            let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
+            let horizontal = 10.0 * scale;
+            let content = placed::decorate(
+                measured::pad(
+                    Insets::new(horizontal, vertical, horizontal, vertical),
+                    text,
+                ),
+                move |p, rect| {
+                    p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
+                        if hover.hovered.as_ref() == Some(&Hovered::Menu(Hover::Stage)) {
+                            cv.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
+                        }
+                    });
+                },
+            );
+            interactive(
+                Hover::Stage,
+                content,
+                |_| {},
+                move |app, input| {
+                    app.choose_menu(
+                        Command::Doc(crate::command::DocCommand::CopyVersion),
+                        input.geometry(scale),
+                    );
+                    true
+                },
+            )
+        };
+        let spacer = placed::leaf(
+            Extent {
+                width: (description.width - heading_width - stage.extent.width).max(0.0),
+                ascent: 0.0,
+                descent: 0.0,
+            },
+            |_, _| {},
+        );
+        let popup = description.state.open().and_then(|index| {
+            definition
+                .get(index)
+                .map(|menu| popup(tcx, &styles, &description, &menu.entries))
+        });
+        let bar = placed::decorate(
+            measured::min_width(
+                description.width,
+                measured::centered_row(0.0, headings.into_iter().chain([spacer, stage]).collect()),
+            ),
+            move |p, rect| {
+                p.fill(rect, palette.chrome, Affine::IDENTITY);
+                p.fill(
+                    Rect::new(rect.x0, rect.y1 - 1.0, rect.x1, rect.y1),
+                    palette.border,
+                    Affine::IDENTITY,
+                );
+            },
+        );
+        let scale = description.scale;
+        let keyboard = puri::handler::Handler::from_function(
+            move |editor: &mut Editor, event, input: &mut DispatchContext<Editor>| {
+                let handled = match &event {
+                    Event::Key(key) => editor.menu_key(key, input.geometry(scale)),
+                    Event::PointerDown(_) | Event::Scroll(_) | Event::Gesture(_) => {
+                        editor.menu.interrupt();
+                        false
+                    }
+                    _ => false,
+                };
+                EventOutcome::from_handled(event, handled)
+            },
+        );
+        View {
+            bar,
+            keyboard,
+            heading_width,
+            popup: popup.map(|popup| (popup_x, popup)),
+        }
+    }
+}
+
+pub use view::{Description, bar_height, view};
+
+#[cfg(test)]
+mod interaction_tests;
+
+#[cfg(test)]
+mod tests;

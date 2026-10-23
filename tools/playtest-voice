@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Kokoro, an open text-to-speech model, for tools/playtest-video's notes.
+
+    tools/playtest-voice setup
+        Download the model and voices from the kokoro-onnx release (about
+        120 MB) and install kokoro-onnx in a virtual environment, all in
+        target/playtest-voice. tools/playtest-video uses it from then on.
+
+    tools/playtest-voice speak VOICE SPEED
+        Read one {"text": ..., "file": ...} object per line on stdin and write
+        each text as a WAV file, loading the model once. Run it with the
+        virtual environment's Python.
+"""
+
+import json
+import pathlib
+import subprocess
+import sys
+import urllib.request
+import wave
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+HOME = ROOT / "target" / "playtest-voice"
+RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
+MODEL = HOME / "kokoro-v1.0.int8.onnx"
+VOICES = HOME / "voices-v1.0.bin"
+PYTHON = HOME / "venv" / "bin" / "python"
+
+
+def setup():
+    HOME.mkdir(parents=True, exist_ok=True)
+    for path in [MODEL, VOICES]:
+        if not path.exists():
+            print(f"playtest-voice: downloading {path.name}", file=sys.stderr)
+            partial = path.with_suffix(".part")
+            urllib.request.urlretrieve(f"{RELEASE}/{path.name}", partial)
+            partial.rename(path)
+    if not PYTHON.exists():
+        subprocess.run([sys.executable, "-m", "venv", str(HOME / "venv")], check=True)
+    subprocess.run([str(PYTHON), "-m", "pip", "install", "-q", "kokoro-onnx"], check=True)
+    print(f"playtest-voice: ready in {HOME}", file=sys.stderr)
+
+
+def speak(voice, speed):
+    from kokoro_onnx import Kokoro
+
+    kokoro = Kokoro(str(MODEL), str(VOICES))
+    for line in sys.stdin:
+        job = json.loads(line)
+        samples, rate = kokoro.create(job["text"], voice=voice, speed=speed, lang="en-us")
+        pcm = (samples.clip(-1.0, 1.0) * 32767).astype("<i2").tobytes()
+        with wave.open(job["file"], "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(rate)
+            out.writeframes(pcm)
+
+
+def main(args):
+    if args == ["setup"]:
+        setup()
+    elif len(args) == 3 and args[0] == "speak":
+        speak(args[1], float(args[2]))
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

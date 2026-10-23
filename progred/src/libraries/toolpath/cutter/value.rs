@@ -1,0 +1,281 @@
+use super::super::vocabulary::{TOOL_DIAMETER, TOOL_LENGTH};
+use super::super::{Error, invalid, number, result};
+use super::*;
+use crate::libraries::f64;
+use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions};
+use gid::{CellId, Value};
+
+pub mod vocabulary {
+    use gid::CellId;
+    /// The tool `with tool` cuts with.
+    pub const TOOL: CellId = CellId::from_u128(0xfbe28409798777a59a474570ec600c9a);
+    /// A tool's sections, in order, each `{cutting: profile}` or
+    /// `{non-cutting: profile}`.
+    pub const SECTIONS: CellId = CellId::from_u128(0x597f106baef34b199411828f4c870edc);
+    pub const CUTTING: CellId = CellId::from_u128(0xd22a92c1020be6f690b5cb738b728fd3);
+    pub const NON_CUTTING: CellId = CellId::from_u128(0x32ec688b8b412514e5a4ee4789b0e5d8);
+    pub const RADIUS: CellId = CellId::from_u128(0x0c43e0deeecda93da913261dc2786878);
+    pub const AXIAL: CellId = CellId::from_u128(0x1e87f4d476a2d51539d4c221b068b9f4);
+    pub const CONVEX_ARC: CellId = CellId::from_u128(0xf37b32e135dc0170157a33f832a5773d);
+    pub const CONCAVE_ARC: CellId = CellId::from_u128(0xae836a45a572d83608097e2e14726a07);
+    pub const BALL_MILL: CellId = CellId::from_u128(0x79c14e901b08feb6c3ae78f1edb50ab9);
+    pub const SQUARE_MILL: CellId = CellId::from_u128(0xfe82f5a06ac17b08b4c42cc1a0a9f374);
+    pub const BULL_MILL: CellId = CellId::from_u128(0xc614260c7754cd2d311d437fd6e22a19);
+    pub const CORNER_RADIUS: CellId = CellId::from_u128(0x16528b8b5e24da34f153e36997b206d8);
+
+    pub mod kind {
+        use gid::CellId;
+
+        /// A cutter: `{isa: tool, sections}`.
+        pub const TOOL: CellId = CellId::from_u128(0x6a88f5f3f2b84c0e90c238309cce5e93);
+    }
+}
+use vocabulary::*;
+
+pub(crate) fn names() -> impl Iterator<Item = (CellId, &'static str)> {
+    [
+        (TOOL, "tool"),
+        (kind::TOOL, "tool"),
+        (SECTIONS, "sections"),
+        (CUTTING, "cutting"),
+        (NON_CUTTING, "non-cutting"),
+        (RADIUS, "radius"),
+        (AXIAL, "axial"),
+        (CONVEX_ARC, "convex arc"),
+        (CONCAVE_ARC, "concave arc"),
+        (BALL_MILL, "ball mill"),
+        (SQUARE_MILL, "square mill"),
+        (BULL_MILL, "bull mill"),
+        (CORNER_RADIUS, "corner radius"),
+    ]
+    .into_iter()
+}
+
+/// Retain explicit numeric inputs: absent coordinates inherit, malformed ones
+/// fail. Unrelated metadata is not part of the geometric convention.
+fn coordinate(fields: &gid::Record, id: CellId, previous: f64) -> Option<f64> {
+    match fields.get(&id) {
+        Some(value) => f64::read(value).filter(|v| v.is_finite() && *v >= 0.0),
+        None => Some(previous),
+    }
+}
+
+/// Lower moves to the connected bands consumed by the sweep. The caller owns
+/// the current point across cutting/non-cutting boundaries.
+/// Travel on the axis has no volume; radial edges at the ends are implicit caps.
+fn sections(value: &Value, kind: SectionKind, current: &mut Point) -> Option<Vec<Section>> {
+    fn finish(section: &mut Section, result: &mut Vec<Section>, next: Point) {
+        if matches!(section.profile.last(), Some(Segment::Shoulder(_))) {
+            section.profile.pop();
+        }
+        let previous = std::mem::replace(
+            section,
+            Section {
+                kind: section.kind,
+                start: next,
+                profile: Vec::new(),
+            },
+        );
+        if !previous.profile.is_empty() {
+            result.push(previous);
+        }
+    }
+    let mut section = Section {
+        kind,
+        start: *current,
+        profile: Vec::new(),
+    };
+    let mut result = Vec::new();
+    for value in value.as_list()?.values() {
+        let fields = value.as_record()?;
+        if !fields.contains_key(&RADIUS) && !fields.contains_key(&AXIAL) {
+            return None;
+        }
+        let end = Point::new(
+            coordinate(fields, RADIUS, current.radius)?,
+            coordinate(fields, AXIAL, current.axial)?,
+        );
+        if !end.valid() || end.axial < current.axial {
+            return None;
+        }
+        let arc = match (fields.get(&CONVEX_ARC), fields.get(&CONCAVE_ARC)) {
+            (None, None) => None,
+            (Some(r), None) => Some((f64::read(r)?, Bend::Convex)),
+            (None, Some(r)) => Some((f64::read(r)?, Bend::Concave)),
+            _ => return None,
+        };
+        if let Some((radius, bend)) = arc {
+            section.profile.push(Segment::Arc { end, radius, bend });
+        } else if end.axial == current.axial {
+            if section.profile.is_empty() {
+                section.start = end;
+            } else if let Some(Segment::Shoulder(radius)) = section.profile.last_mut() {
+                *radius = end.radius;
+            } else if end.radius != current.radius {
+                section.profile.push(Segment::Shoulder(end.radius));
+            }
+        } else if current.radius == 0.0 && end.radius == 0.0 {
+            finish(&mut section, &mut result, end);
+        } else {
+            section.profile.push(Segment::Line(end));
+        }
+        *current = end;
+    }
+    finish(&mut section, &mut result, *current);
+    (!result.is_empty()).then_some(result)
+}
+
+fn profile_value(section: &Section, current: &mut Point) -> Value {
+    let mut moves = Vec::new();
+    // Connected sections continue directly. A gap needs explicit travel along
+    // the axis, rather than an unintended cylinder or taper between the bands.
+    if section.start.axial != current.axial {
+        if current.radius != 0.0 {
+            moves.push(Value::record([(RADIUS, f64::value(0.0))]));
+            current.radius = 0.0;
+        }
+        moves.push(Value::record([(AXIAL, f64::value(section.start.axial))]));
+    }
+    if section.start.radius != current.radius {
+        moves.push(Value::record([(RADIUS, f64::value(section.start.radius))]));
+    }
+    *current = section.start;
+    for segment in &section.profile {
+        let (end, arc) = match *segment {
+            Segment::Line(end) => (end, None),
+            Segment::Shoulder(radius) => (Point::new(radius, current.axial), None),
+            Segment::Arc { end, radius, bend } => (
+                end,
+                Some((
+                    match bend {
+                        Bend::Convex => CONVEX_ARC,
+                        Bend::Concave => CONCAVE_ARC,
+                    },
+                    f64::value(radius),
+                )),
+            ),
+        };
+        let mut fields = Vec::new();
+        if end.radius != current.radius || end == *current {
+            fields.push((RADIUS, f64::value(end.radius)));
+        }
+        if end.axial != current.axial {
+            fields.push((AXIAL, f64::value(end.axial)));
+        }
+        fields.extend(arc);
+        moves.push(Value::record(fields));
+        *current = end;
+    }
+    Value::list(moves)
+}
+
+/// A cutter as a document value: its sections, in order, each a cutting or
+/// non-cutting profile.
+pub trait ToolValue: Sized {
+    fn value(&self) -> Value;
+    fn read(value: &Value) -> Option<Self>;
+}
+
+impl ToolValue for Tool {
+    fn value(&self) -> Value {
+        let mut current = Point::new(0.0, 0.0);
+        ::grap::isa::record(
+            kind::TOOL,
+            [(
+                SECTIONS,
+                Value::list(self.sections().iter().map(|s| {
+                    let kind = match s.kind {
+                        SectionKind::Cutting => CUTTING,
+                        SectionKind::NonCutting => NON_CUTTING,
+                    };
+                    Value::record([(kind, profile_value(s, &mut current))])
+                })),
+            )],
+        )
+    }
+
+    fn read(value: &Value) -> Option<Self> {
+        let fields = value
+            .as_record()
+            .filter(|fields| ::grap::isa::of(fields) == Some(kind::TOOL))?;
+        let mut current = Point::new(0.0, 0.0);
+        let sections = fields
+            .get(&SECTIONS)?
+            .as_list()?
+            .values()
+            .map(|s| {
+                let s = s.as_record()?;
+                let (kind, shape) = match (s.get(&CUTTING), s.get(&NON_CUTTING)) {
+                    (Some(shape), None) => (SectionKind::Cutting, shape),
+                    (None, Some(shape)) => (SectionKind::NonCutting, shape),
+                    _ => return None,
+                };
+                sections(shape, kind, &mut current)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Self::new(sections.into_iter().flatten().collect())
+    }
+}
+
+pub(crate) fn functions(functions: ForeignFunctions) -> ForeignFunctions {
+    functions
+        .register(
+            BALL_MILL,
+            mill(
+                [TOOL_DIAMETER, TOOL_LENGTH],
+                |context, call, environment| {
+                    dimensions(context, call, environment)
+                        .map(|(diameter, length)| Tool::ball(diameter, length))
+                },
+            ),
+        )
+        .register(
+            SQUARE_MILL,
+            mill(
+                [TOOL_DIAMETER, TOOL_LENGTH],
+                |context, call, environment| {
+                    dimensions(context, call, environment)
+                        .map(|(diameter, length)| Tool::square(diameter, length))
+                },
+            ),
+        )
+        .register(
+            BULL_MILL,
+            mill(
+                [TOOL_DIAMETER, CORNER_RADIUS, TOOL_LENGTH],
+                |context, call, environment| {
+                    let (diameter, length) = dimensions(context, call, environment)?;
+                    let corner = number(context, call, environment, CORNER_RADIUS)?;
+                    Ok(Tool::bull(diameter, corner, length))
+                },
+            ),
+        )
+}
+
+/// A mill's function, from the reader of its arguments into the tool they
+/// make, if they make one.
+fn mill(
+    parameters: impl IntoIterator<Item = CellId>,
+    tool: fn(&mut Context, &Expression, &Environment) -> Result<Option<Tool>, Error>,
+) -> ForeignFunction {
+    ForeignFunction::from_value(move |context, call, environment| {
+        result(
+            tool(context, call, environment)
+                .and_then(|tool| tool.map(|tool| tool.value()).ok_or_else(invalid)),
+        )
+    })
+    .parameters(parameters)
+    .tracked()
+}
+
+/// A mill's diameter and length, read in that order.
+fn dimensions(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<(f64, f64), Error> {
+    Ok((
+        number(context, call, environment, TOOL_DIAMETER)?,
+        number(context, call, environment, TOOL_LENGTH)?,
+    ))
+}

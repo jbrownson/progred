@@ -1,0 +1,113 @@
+//! Browser keys need an answer during their DOM callback. The web event loop
+//! and this callback borrow the same app; neither retains a second editor.
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
+
+use ui_events::keyboard::{KeyState, KeyboardEvent, Location, Modifiers};
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::platform::web::EventLoopExtWebSys;
+use winit::window::WindowId;
+
+use crate::UserEvent;
+use crate::app::App;
+
+thread_local! {
+    static APP: RefCell<Weak<RefCell<App>>> = const { RefCell::new(Weak::new()) };
+}
+
+pub(crate) fn spawn(app: App, event_loop: EventLoop<UserEvent>) {
+    let app = Rc::new(RefCell::new(app));
+    APP.with(|slot| *slot.borrow_mut() = Rc::downgrade(&app));
+    event_loop.spawn_app(SharedApp(app));
+}
+
+struct SharedApp(Rc<RefCell<App>>);
+
+impl ApplicationHandler<UserEvent> for SharedApp {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.0.borrow_mut().resumed(event_loop);
+    }
+
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        self.0.borrow_mut().suspended(event_loop);
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        self.0.borrow_mut().window_event(event_loop, id, event);
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        self.0.borrow_mut().user_event(event_loop, event);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.0.borrow_mut().about_to_wait(event_loop);
+    }
+
+    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+        APP.with(|slot| *slot.borrow_mut() = Weak::new());
+        self.0.borrow_mut().exiting(event_loop);
+    }
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
+    let mut modifiers = Modifiers::empty();
+    // Lock keys are toggles, not held modifiers, and pointer input never
+    // reports them; including them would make every key look like a
+    // modifier change.
+    for (name, flag) in [
+        ("Shift", Modifiers::SHIFT),
+        ("Control", Modifiers::CONTROL),
+        ("Alt", Modifiers::ALT),
+        ("Meta", Modifiers::META),
+        ("AltGraph", Modifiers::ALT_GRAPH),
+    ] {
+        modifiers.set(flag, event.get_modifier_state(name));
+    }
+    // Windows browsers report AltGr as Ctrl+Alt as well; its characters are
+    // text, not Ctrl chords.
+    if modifiers.contains(Modifiers::ALT_GRAPH) {
+        modifiers.remove(Modifiers::CONTROL);
+    }
+    let key = KeyboardEvent {
+        state: if event.type_() == "keyup" {
+            KeyState::Up
+        } else {
+            KeyState::Down
+        },
+        key: event.key().parse().unwrap_or_default(),
+        code: event.code().parse().unwrap_or_default(),
+        location: match event.location() {
+            1 => Location::Left,
+            2 => Location::Right,
+            3 => Location::Numpad,
+            _ => Location::Standard,
+        },
+        modifiers,
+        repeat: event.repeat(),
+        is_composing: event.is_composing(),
+    };
+    if let Some(app) = APP.with(|slot| slot.borrow().upgrade())
+        // A synthetic reentrant event cannot borrow the editor. Leave it to
+        // the browser instead of queuing an edit after its default action.
+        && let Ok(mut app) = app.try_borrow_mut()
+        && let Some(runner) = app.editors.first_mut()
+        && let Some(window) = runner.editor.window()
+    {
+        let scale = runner.editor.scale(&window);
+        let viewport = crate::editor::viewport(&window);
+        let focus_changed =
+            runner.focus_changed(crate::web::browser_editor_focused(&window), scale, viewport);
+        let (handled, changed) = runner.forwarded_key(&key, scale, viewport);
+        if handled || changed || focus_changed {
+            runner.sync_window(&window);
+            window.request_redraw();
+        }
+        handled
+    } else {
+        false
+    }
+}

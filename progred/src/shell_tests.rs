@@ -1,0 +1,182 @@
+use crate::display::test_support::mouse;
+use crate::input::{PendingPointer, PendingScroll, continuous_input};
+use kurbo::{Point, Size};
+use ui_events::ScrollDelta;
+use ui_events::keyboard::Modifiers;
+use ui_events::pointer::{PointerId, PointerScrollEvent, PointerState, PointerUpdate};
+use winit::dpi::PhysicalPosition;
+use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
+
+fn pending(delta: ScrollDelta, x: f64) -> PendingScroll {
+    let mut state = PointerState::default();
+    state.position.x = x;
+    PendingScroll {
+        events: vec![PointerScrollEvent {
+            pointer: mouse(),
+            delta,
+            state,
+        }],
+        scale: 2.0,
+        viewport: Size::new(1800.0, 1280.0),
+    }
+}
+
+#[test]
+fn pending_scrolls_preserve_packets_in_order_including_mixed_units() {
+    let mut accumulated = pending(
+        ScrollDelta::PixelDelta(PhysicalPosition::new(2.0, 3.0)),
+        10.0,
+    );
+    assert!(
+        accumulated
+            .merge(pending(
+                ScrollDelta::PixelDelta(PhysicalPosition::new(5.0, 7.0)),
+                20.0,
+            ))
+            .is_ok()
+    );
+    assert_eq!(
+        accumulated
+            .events
+            .iter()
+            .map(|event| (event.delta, event.state.position.x))
+            .collect::<Vec<_>>(),
+        [
+            (
+                ScrollDelta::PixelDelta(PhysicalPosition::new(2.0, 3.0)),
+                10.0
+            ),
+            (
+                ScrollDelta::PixelDelta(PhysicalPosition::new(5.0, 7.0)),
+                20.0
+            ),
+        ]
+    );
+    assert!(
+        accumulated
+            .merge(pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0))
+            .is_ok()
+    );
+    assert_eq!(
+        accumulated.events.last().unwrap().delta,
+        ScrollDelta::LineDelta(0.0, 1.0)
+    );
+    let mut resized = pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0);
+    resized.viewport.width += 1.0;
+    assert!(accumulated.merge(resized).is_err());
+    let mut rescaled = pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0);
+    rescaled.scale += 1.0;
+    assert!(accumulated.merge(rescaled).is_err());
+}
+
+fn pointer(x: f64) -> PendingPointer {
+    let scroll = pending(ScrollDelta::LineDelta(0.0, 0.0), x);
+    let event = scroll.events.into_iter().next().unwrap();
+    PendingPointer {
+        event: PointerUpdate {
+            pointer: event.pointer,
+            current: event.state,
+            coalesced: vec![],
+            predicted: vec![],
+        },
+        start: Point::ZERO,
+        scale: scroll.scale,
+        viewport: scroll.viewport,
+    }
+}
+
+#[test]
+fn pointer_batches_preserve_observed_samples_and_replace_predictions() {
+    let mut batch = pointer(2.0);
+    batch.event.coalesced.push(pointer(1.0).event.current);
+    batch.event.predicted.push(pointer(100.0).event.current);
+    let mut next = pointer(4.0);
+    next.event.coalesced.push(pointer(3.0).event.current);
+    next.event.predicted.push(pointer(5.0).event.current);
+    next.start = Point::new(2.0, 0.0);
+    assert!(batch.merge(next).is_ok());
+    assert_eq!(batch.start, Point::ZERO);
+    assert_eq!(batch.event.current.position.x, 4.0);
+    assert_eq!(
+        puri::interact::pointer_samples(&batch.event)
+            .map(|sample| sample.position.x)
+            .collect::<Vec<_>>(),
+        [1.0, 2.0, 3.0, 4.0],
+    );
+    assert_eq!(batch.event.predicted, vec![pointer(5.0).event.current]);
+}
+
+#[test]
+fn pointer_batches_do_not_mix_contacts_buttons_or_coordinate_systems() {
+    let mut other_contact = pointer(1.0);
+    other_contact.event.pointer.pointer_id = PointerId::new(2);
+    let mut pressed = pointer(1.0);
+    pressed
+        .event
+        .current
+        .buttons
+        .insert(ui_events::pointer::PointerButton::Primary);
+    let mut modified = pointer(1.0);
+    modified.event.current.modifiers = Modifiers::SHIFT;
+    let mut resized = pointer(1.0);
+    resized.viewport.width += 1.0;
+    let mut rescaled = pointer(1.0);
+    rescaled.scale = 1.0;
+    for next in [other_contact, pressed, modified, resized, rescaled] {
+        let mut batch = pointer(0.0);
+        let before = batch.event.clone();
+        assert!(batch.merge(next).is_err());
+        assert_eq!(batch.event, before);
+    }
+    let mut pressed = pointer(1.0);
+    pressed
+        .event
+        .current
+        .buttons
+        .insert(ui_events::pointer::PointerButton::Primary);
+    let mut next = pointer(2.0);
+    next.event.current.buttons = pressed.event.current.buttons;
+    assert!(pressed.merge(next).is_ok(), "pressed motion batches too");
+}
+
+#[test]
+fn redraw_release_and_cancellation_flush_motion_before_dispatch() {
+    let device_id = DeviceId::dummy();
+    assert!(continuous_input(&WindowEvent::CursorMoved {
+        device_id,
+        position: PhysicalPosition::new(-20.0, 30.0),
+    }));
+    for event in [
+        WindowEvent::RedrawRequested,
+        WindowEvent::MouseInput {
+            device_id,
+            state: ElementState::Released,
+            button: MouseButton::Left,
+        },
+        WindowEvent::Focused(false),
+        WindowEvent::CursorLeft { device_id },
+    ] {
+        assert!(!continuous_input(&event));
+    }
+    for (phase, continuous) in [
+        (winit::event::TouchPhase::Started, false),
+        (winit::event::TouchPhase::Moved, true),
+        (winit::event::TouchPhase::Ended, false),
+        (winit::event::TouchPhase::Cancelled, false),
+    ] {
+        assert_eq!(
+            continuous_input(&WindowEvent::Touch(winit::event::Touch {
+                device_id,
+                phase,
+                location: PhysicalPosition::new(10.0, 20.0),
+                force: None,
+                id: 1,
+            })),
+            continuous
+        );
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod compositor;
+mod focus;

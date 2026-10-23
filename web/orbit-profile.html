@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Full-frame orbit diagnostic (no app event loop)</title>
+<canvas id="canvas" width="2400" height="1800" style="width:1200px;height:900px"></canvas>
+<script type="module">
+import { startWorker } from "./worker-host.js";
+const params = new URLSearchParams(location.search);
+const moduleUrl = new URL(`./${params.get("package") ?? "orbit-pkg"}/orbit.js`, location.href).href;
+const wasm = await import(moduleUrl);
+const fail = error => { window.profileError = String(error.stack ?? error); };
+try {
+  await wasm.default();
+  await startWorker(wasm, moduleUrl, () => {}, fail, Number(params.get("threads") ?? 8));
+  const canvas = document.querySelector("canvas");
+  window.backend = await wasm.start_orbit_profile(canvas, 2, Number(params.get("position") ?? 0.5), params.has("refined"), params.has("collapsed"));
+  while (!wasm.orbit_ready()) await new Promise(resolve => setTimeout(resolve, 20));
+  window.profileMemory = () => wasm.worker_memory().buffer.byteLength;
+  window.runOrbit = async (frames = 80) => {
+    const results = [];
+    let previous = performance.now();
+    for (let i = 0; i < frames; ++i) {
+      await new Promise(requestAnimationFrame);
+      const now = performance.now();
+      const result = JSON.parse(wasm.orbit_frame(canvas.width, canvas.height));
+      result.interval_ms = now - previous;
+      previous = now;
+      results.push(result);
+    }
+    return results;
+  };
+} catch (error) { fail(error); }
+</script>

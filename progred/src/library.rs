@@ -1,0 +1,245 @@
+//! What a library contributes to the editor, and the ordered set of loaded
+//! libraries a document reads through. The built-in libraries in
+//! [`crate::libraries`] are contributions like any other.
+
+use crate::display::{Completion, CompletionProvider, CompletionRequest, Partial};
+use ::grap::{Definition, ForeignFunctions};
+use gid::Cells;
+use std::rc::Rc;
+
+/// What a loaded library's own cell holds, so a pane can show it: the
+/// editor library names these.
+pub mod vocabulary {
+    use gid::CellId;
+
+    /// The cells a library defines.
+    pub const CELLS: CellId = CellId::from_u128(0xfccbc79141f24111bd0ba86b1fc775e6);
+
+    pub mod kind {
+        use gid::CellId;
+
+        /// A loaded library: `{isa: loaded library, name, cells}`.
+        pub const LIBRARY: CellId = CellId::from_u128(0x6d1ad922d3c24267ab64c33627349a19);
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct Definitions {
+    entries: Rc<Vec<(gid::CellId, Definition)>>,
+}
+
+impl Definitions {
+    pub fn from_parts(cells: Cells, foreign: ForeignFunctions) -> Self {
+        let mut entries: Vec<_> = cells
+            .iter()
+            .map(|(cell, value)| (*cell, Definition::Value(value.clone())))
+            .collect();
+        entries.sort_unstable_by_key(|(cell, _)| *cell);
+        let mut definitions = Self {
+            entries: Rc::new(entries),
+        };
+        for (cell, function) in foreign.iter() {
+            definitions.insert(
+                cell,
+                Definition::foreign(
+                    cell,
+                    definitions
+                        .value(cell)
+                        .cloned()
+                        .unwrap_or_else(|| gid::Value::record([])),
+                    function.clone(),
+                ),
+            );
+        }
+        definitions
+    }
+
+    pub fn get(&self, cell: gid::CellId) -> Option<&Definition> {
+        self.entries
+            .binary_search_by_key(&cell, |(cell, _)| *cell)
+            .ok()
+            .map(|index| &self.entries[index].1)
+    }
+
+    pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
+        self.get(cell).map(Definition::value)
+    }
+
+    pub fn insert(&mut self, cell: gid::CellId, definition: Definition) {
+        let entries = Rc::make_mut(&mut self.entries);
+        match entries.binary_search_by_key(&cell, |(cell, _)| *cell) {
+            Ok(index) => entries[index].1 = definition,
+            Err(index) => entries.insert(index, (cell, definition)),
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definition)> {
+        self.entries
+            .iter()
+            .map(|(cell, definition)| (*cell, definition))
+    }
+}
+
+pub struct Library<World, Hover> {
+    pub definitions: Definitions,
+    pub projection: Option<Partial<World, Hover>>,
+    /// The projections this library's cells provide for the records they
+    /// identify: a kind's for records of it, a function's for calls of it.
+    pub provided: Vec<(gid::CellId, Partial<World, Hover>)>,
+    pub completions: Option<CompletionProvider>,
+}
+
+impl<World, Hover> Clone for Library<World, Hover> {
+    fn clone(&self) -> Self {
+        Self {
+            definitions: self.definitions.clone(),
+            projection: self.projection.clone(),
+            provided: self.provided.clone(),
+            completions: self.completions.clone(),
+        }
+    }
+}
+
+impl<World, Hover> Default for Library<World, Hover> {
+    fn default() -> Self {
+        Self::new(Definitions::default())
+    }
+}
+
+impl<World, Hover> Library<World, Hover> {
+    pub fn new(definitions: Definitions) -> Self {
+        Self {
+            definitions,
+            projection: None,
+            provided: Vec::new(),
+            completions: None,
+        }
+    }
+
+    /// Also defines each `(cell, value)` in `values`.
+    pub fn with_values(
+        mut self,
+        values: impl IntoIterator<Item = (gid::CellId, gid::Value)>,
+    ) -> Self {
+        for (cell, value) in values {
+            self.definitions.insert(cell, Definition::Value(value));
+        }
+        self
+    }
+
+    pub fn with_projection(mut self, projection: Partial<World, Hover>) -> Self {
+        self.projection = Some(projection);
+        self
+    }
+
+    /// Also draws the records each cell identifies with its projection.
+    pub fn with_projections_for(
+        mut self,
+        provided: impl IntoIterator<Item = (gid::CellId, Partial<World, Hover>)>,
+    ) -> Self {
+        self.provided.extend(provided);
+        self
+    }
+
+    pub fn with_completions(
+        mut self,
+        completions: impl Fn(&CompletionRequest<'_>) -> Option<Vec<Completion>> + 'static,
+    ) -> Self {
+        self.completions = Some(Rc::new(completions));
+        self
+    }
+}
+
+/// The ordered loaded-library set. A library identity is unique:
+/// insertion replaces that identity in place.
+#[derive(Clone, Default)]
+pub struct Libraries {
+    entries: Rc<Vec<(gid::CellId, Definitions)>>,
+}
+
+impl Libraries {
+    pub(crate) fn same_storage(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.entries, &other.entries)
+    }
+    pub fn from_contributions<World, Hover>(
+        entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
+    ) -> (
+        Self,
+        Vec<(gid::CellId, Partial<World, Hover>)>,
+        Vec<(gid::CellId, gid::CellId, Partial<World, Hover>)>,
+        Vec<(gid::CellId, CompletionProvider)>,
+    ) {
+        let mut unique: Vec<(gid::CellId, Library<World, Hover>)> = Vec::new();
+        for (id, library) in entries {
+            if let Some((_, previous)) = unique.iter_mut().find(|(key, _)| *key == id) {
+                *previous = library;
+            } else {
+                unique.push((id, library));
+            }
+        }
+        unique.into_iter().fold(
+            (Self::default(), Vec::new(), Vec::new(), Vec::new()),
+            |(mut libraries, mut projections, mut provided, mut completions), (id, library)| {
+                libraries.insert(id, library.definitions);
+                projections.extend(library.projection.map(|projection| (id, projection)));
+                provided.extend(
+                    library
+                        .provided
+                        .into_iter()
+                        .map(|(cell, projection)| (id, cell, projection)),
+                );
+                completions.extend(library.completions.map(|provider| (id, provider)));
+                (libraries, projections, provided, completions)
+            },
+        )
+    }
+
+    pub fn insert(&mut self, id: gid::CellId, definitions: Definitions) {
+        let entries = Rc::make_mut(&mut self.entries);
+        match entries.iter_mut().find(|(candidate, _)| *candidate == id) {
+            Some((_, existing)) => *existing = definitions,
+            None => entries.push((id, definitions)),
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definitions)> {
+        self.entries
+            .iter()
+            .map(|(id, definitions)| (*id, definitions))
+    }
+
+    /// Each loaded library's definition of `cell`, in load order.
+    pub fn definitions(
+        &self,
+        cell: gid::CellId,
+    ) -> impl Iterator<Item = (gid::CellId, &Definition)> + '_ {
+        self.entries
+            .iter()
+            .filter_map(move |(library, definitions)| {
+                definitions
+                    .get(cell)
+                    .map(|definition| (*library, definition))
+            })
+    }
+
+    pub fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
+        self.definitions(cell)
+            .next()
+            .map(|(library, definition)| (gid::Resolution::Library(library), definition.clone()))
+    }
+
+    pub fn cell_ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
+        self.entries
+            .iter()
+            .flat_map(|(_, definitions)| definitions.iter().map(|(cell, _)| cell))
+    }
+}
+
+impl ::grap::Host for Libraries {
+    fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
+        self.resolve(cell)
+    }
+}
+
+#[cfg(test)]
+mod tests;

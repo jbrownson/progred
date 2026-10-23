@@ -1,0 +1,207 @@
+//! Async implicit surfaces combined with mesh paths and cutters.
+
+use super::mesh::computation::PathStyle;
+use super::playback;
+use super::{Error, argument, invalid, number, present, runtime_result, vocabulary::*};
+use crate::computations::memo;
+use crate::display::host::{Host, Layout, ProjectionInput};
+use crate::libraries::{color, f64, fidget, layout, presentation};
+use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
+use cam::field::read_radius;
+use cam::paths::*;
+use gid::Value;
+use std::rc::Rc;
+use std::sync::Arc;
+
+pub(super) mod computation;
+
+/// Overlay only: progress never changes the viewport's size or input handling.
+pub(super) fn progress_bar<W: Host>(
+    drawing: Layout<W>,
+    progress: Option<incremental::background::Progress>,
+) -> Layout<W> {
+    crate::display::widget::after(
+        drawing,
+        Rc::new(move |context| {
+            let height = 3.0 * context.viewing().scale();
+            let bar = puri_widgets::progress::ProgressBar {
+                fraction: progress.map_or(0.0, |p| p.fraction()),
+                track: peniko::Color::from_rgba8(196, 204, 214, 220),
+                fill: peniko::Color::from_rgb8(48, 126, 210),
+            };
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    let rect = kurbo::Rect::new(
+                        placement.rect.x0,
+                        placement.rect.y0,
+                        placement.rect.x1,
+                        (placement.rect.y0 + height).min(placement.rect.y1),
+                    );
+                    output.render(move |canvas, _| bar.draw(canvas, rect));
+                }
+            })
+        }),
+    )
+}
+
+pub(super) fn preview(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Halt> {
+    runtime_result(preview_with(
+        context,
+        call,
+        environment,
+        kind::PATHS_VOLUME_PREVIEW,
+        fidget::preview_3d_function,
+    ))
+}
+
+pub(super) fn preview_with(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    kind: gid::CellId,
+    model: impl FnOnce(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
+) -> Result<RuntimeValue, Error> {
+    let playback = match context.field(call, PLAYBACK) {
+        Some(expression) => {
+            let value = present(context.eval_to_value(expression, environment)?.into())?;
+            playback::Settings::read(value.as_value()).ok_or_else(invalid)?;
+            Some((PLAYBACK, value))
+        }
+        None => None,
+    };
+    let program = argument(context, call, PROGRAM)?;
+    let program = present(context.eval(program, environment)?)?;
+    let radius = number(context, call, environment, LINE_RADIUS)?;
+    read_radius(radius).ok_or_else(invalid)?;
+    let color = argument(context, call, fidget::vocabulary::COLOR)?;
+    let color = context.eval_to_value(color, environment)?;
+    color::read_opaque(&color).ok_or_else(|| {
+        Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())
+    })?;
+    let fuel = super::fuel(context, call, environment)?;
+    let model = present(model(context, call, environment)?.into())?;
+    Ok(::grap::isa::runtime(
+        kind,
+        [
+            (presentation::vocabulary::VALUE, model),
+            (PROGRAM, program),
+            (LINE_RADIUS, RuntimeValue::f64(radius)),
+            (fidget::vocabulary::COLOR, color.into()),
+            (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
+        ]
+        .into_iter()
+        .chain(playback),
+    ))
+}
+
+/// What a 3D path preview's value holds besides its model, as `preview_with`
+/// writes it.
+pub(super) struct PathPreview {
+    pub program: RuntimeValue,
+    pub fuel: usize,
+    pub style: PathStyle,
+}
+
+impl PathPreview {
+    pub fn read(fields: &RuntimeValue) -> Option<Self> {
+        let radius = fields.field(LINE_RADIUS)?.as_f64()?;
+        read_radius(radius)?;
+        Some(Self {
+            program: fields.field(PROGRAM)?,
+            fuel: ::grap::f64::to_usize(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?,
+            style: PathStyle {
+                radius,
+                color: color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?,
+                playback: match fields.field(PLAYBACK) {
+                    Some(value) => Some(playback::Settings::read(value.as_value())?),
+                    None => None,
+                },
+            },
+        })
+    }
+}
+
+pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+    let fields = input.value?;
+    let model = fidget::volume_preview(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
+    let PathPreview {
+        program,
+        fuel,
+        style,
+    } = PathPreview::read(&fields)?;
+    let settings = computation::Settings {
+        request: fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?,
+        style,
+    };
+    let state = input.state.cloned();
+    let scale = input.scale_factor;
+    let drawing = Layout::program(Rc::new(move |context, build| {
+        let computations = context.viewing().computations();
+        match &computations.tasks {
+            None => super::background_unavailable(&model),
+            Some(tasks) => {
+                let site = context.site();
+                let interaction = fidget::interaction::Interaction::at(computations, &site);
+                let computation = site.memo(computations, || {
+                    computation::Computation::new(
+                        computations,
+                        tasks,
+                        program.clone(),
+                        fuel,
+                        settings.clone(),
+                        interaction.permitted.clone(),
+                    )
+                });
+                computation.program.update(program.clone(), fuel);
+                computation.settings.set(settings.clone());
+                let image = computations.runtime.read(&computation.image);
+                let paths = computations.runtime.read(&computation.paths);
+                let result = image
+                    .as_ref()
+                    .map_err(|error| memo::failure(*error))
+                    .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone))
+                    .and_then(|image| {
+                        let paths = paths
+                            .as_ref()
+                            .map_err(|e| memo::failure(*e))?
+                            .as_ref()
+                            .as_ref()
+                            .map_err(Clone::clone)?;
+                        let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
+                            puri::mesh::Surface {
+                                frame: frame.clone(),
+                                mesh_start: paths.indices.len(),
+                            }
+                        });
+                        let drawing = fidget::mesh::drawing_surface(
+                            paths,
+                            surface,
+                            &model,
+                            state.as_ref(),
+                            scale,
+                        )
+                        .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
+                        Ok((image, drawing))
+                    });
+                result
+                    .map(|(image, drawing)| {
+                        if image.pending {
+                            progress_bar(drawing, image.progress)
+                        } else {
+                            drawing
+                        }
+                    })
+                    .unwrap_or_else(presentation::result_layout)
+            }
+        }
+        .measure(context, build)
+    }));
+    Some(fidget::interactive_volume(drawing, input))
+}
+
+#[cfg(test)]
+pub(super) mod tests;

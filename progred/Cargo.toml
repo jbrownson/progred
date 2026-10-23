@@ -1,0 +1,118 @@
+[package]
+name = "progred"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[features]
+cam-profile = []
+# The headless editor an agent drives over a local socket: `make control`.
+control = []
+layout-profile = []
+
+# Only the library has tests. A binary's empty test harness would need the
+# library compiled a second time, as a plain dependency; see `make test`.
+[[bin]]
+name = "progred"
+path = "src/main.rs"
+test = false
+
+[[bin]]
+name = "progred-control"
+path = "src/bin/progred-control.rs"
+required-features = ["control"]
+test = false
+
+[[example]]
+name = "cam_profile"
+required-features = ["cam-profile"]
+
+[[example]]
+name = "orbit_profile"
+required-features = ["cam-profile"]
+
+[dependencies]
+grap = { path = "../grap" }
+gid.workspace = true
+incremental.workspace = true
+measured = { path = "../ui/measured" }
+puri.workspace = true
+puri-widgets.workspace = true
+fidget-engine = { workspace = true, features = ["raster", "mesh"] }
+nalgebra = "0.35"
+uig.workspace = true
+volume.workspace = true
+cam.workspace = true
+kurbo.workspace = true
+peniko.workspace = true
+parley.workspace = true
+winit = "0.30.13"
+ui-events.workspace = true
+ui-events-winit = "0.3"
+serde_json.workspace = true
+png = "0.18.1"
+web-time = "1.1"
+puri-vello = { path = "../ui/puri-vello" }
+vello.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fidget-engine = { workspace = true, features = ["wgpu"] }
+pollster.workspace = true
+
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+clipboard-rs = "0.3.3"
+# Offscreen rendering and readback, for the pictures copies carry and the
+# control session's screenshots.
+puri-vello = { path = "../ui/puri-vello", features = ["capture"] }
+rfd = "0.17"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+getrandom = { workspace = true, features = ["wasm_js"] }
+puri-web = { path = "../ui/puri-web" }
+wasm-bindgen.workspace = true
+wasm-bindgen-futures = "0.4"
+web-sys = { workspace = true, features = [
+    "console",
+    "Blob",
+    "BlobPropertyBag",
+    "CanvasRenderingContext2d",
+    "Document",
+    "File",
+    "FileList",
+    "HtmlAnchorElement",
+    "HtmlCanvasElement",
+    "HtmlInputElement",
+    "KeyboardEvent",
+    "Url",
+    "Window",
+] }
+
+# Only the shared-memory browser build runs jobs on workers.
+[target.'cfg(all(target_arch = "wasm32", target_feature = "atomics"))'.dependencies]
+rayon = "1.12"
+wasm-bindgen-rayon = { version = "1.3", features = ["no-bundler"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "NSApplication",
+    "NSCell",
+    "NSEvent",
+    "NSMenu",
+    "NSResponder",
+    "NSView",
+    "NSWindow",
+] }
+objc2-foundation = { version = "0.3.2", features = ["NSData", "NSError", "NSString", "NSURL"] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["CAMetalLayer"] }
+raw-window-metal = "1.1.0"
+
+[dev-dependencies]
+base64 = "0.22.1"
+puri = { workspace = true, features = ["test-support"] }
+puri-vello = { path = "../ui/puri-vello", features = ["capture"] }
+skrifa.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+futures-intrusive = "0.5"
