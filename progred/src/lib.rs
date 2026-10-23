@@ -101,7 +101,7 @@ pub(crate) use editor::{Editor, EditorRunner};
 use fonts::font_context;
 use std::path::PathBuf;
 #[cfg(test)]
-pub(crate) use test_support::{editor_of, test_editor, test_editor_with_stack, test_root};
+pub(crate) use test_support::{editor_of, test_editor, test_editor_with_stack};
 #[cfg(target_arch = "wasm32")]
 use web::WEB_PROXY;
 

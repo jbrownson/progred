@@ -5,10 +5,9 @@
 use super::{Landmark, landmark_at};
 use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
-use crate::display::widget::view::Root;
+use crate::display::widget::view::Area;
 use crate::model::Model;
 use crate::occurrence::Step;
-use crate::selection::Selection;
 use kurbo::{Rect, Vec2};
 use puri::handler::NavigationDirection;
 
@@ -32,24 +31,24 @@ const REVEAL_PAD: f64 = 12.0;
 
 impl<W> Geometry<'_, W> {
     /// Missing paths do nothing; new geometry does not retry the request.
-    pub fn reveal_path(self, model: &mut Model, root: &Root, path: &[Step]) {
-        if let Some(target) = landmark_at(self.landmarks, Some(root), path) {
-            self.reveal_rect(model, root, target.rect);
+    pub fn reveal_path(self, model: &mut Model, area: &Area, path: &[Step]) {
+        if let Some(target) = landmark_at(self.landmarks, Some(area), path) {
+            self.reveal_rect(model, area, target.rect);
         }
     }
 
     pub fn reveal_selection(self, model: &mut Model) {
         if let Some(selection) = &model.selection {
-            let root = selection.root().clone();
+            let area = model.workspace.area_of(selection.view(), selection.path());
             let path = selection.path().to_vec();
-            self.reveal_path(model, &root, &path);
+            self.reveal_path(model, &area, &path);
         }
     }
 
-    pub fn reveal_rect(self, model: &mut Model, root: &Root, rect: Rect) {
+    pub fn reveal_rect(self, model: &mut Model, area: &Area, rect: Rect) {
         if let (Some(region), Some(view)) = (
-            self.view_regions.iter().find(|region| &region.root == root),
-            model.workspace.view_mut(root),
+            self.view_regions.iter().find(|region| &region.area == area),
+            model.workspace.view_mut(area),
         ) {
             view.scroll = Vec2::new(
                 reveal_axis(
@@ -118,15 +117,20 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
     let target = {
         let session = world.session();
         let selection = session.model.selection.as_ref();
-        let root = selection
-            .map(Selection::root)
-            .unwrap_or_else(|| session.model.workspace.document_root())
-            .clone();
+        let area = selection.map_or_else(
+            || session.model.workspace.document_area(),
+            |selection| {
+                session
+                    .model
+                    .workspace
+                    .area_of(selection.view(), selection.path())
+            },
+        );
         let anchor = selection.and_then(|selection| {
-            landmark_at(geometry.landmarks, Some(&root), selection.path())
+            landmark_at(geometry.landmarks, Some(&area), selection.path())
                 .map(|landmark| landmark.rect)
         });
-        let stops = tab_stops(geometry.landmarks, &root);
+        let stops = tab_stops(geometry.landmarks, &area);
         match (anchor, back) {
             (None, false) => stops.first(),
             (None, true) => stops.last(),
@@ -141,10 +145,10 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
 /// The view's tab stops, the places to fill in that its widgets marked, in
 /// reading order: line by line, where a line is what overlaps vertically,
 /// then left to right.
-fn tab_stops<'a, W>(landmarks: &'a [Landmark<W>], root: &Root) -> Vec<&'a Landmark<W>> {
+fn tab_stops<'a, W>(landmarks: &'a [Landmark<W>], area: &Area) -> Vec<&'a Landmark<W>> {
     let mut stops: Vec<_> = landmarks
         .iter()
-        .filter(|landmark| landmark.tab_stop && landmark.root.as_ref() == Some(root))
+        .filter(|landmark| landmark.tab_stop && landmark.area.as_ref() == Some(area))
         .collect();
     stops.sort_by(|a, b| a.rect.y0.total_cmp(&b.rect.y0));
     let mut lines: Vec<(f64, Vec<&Landmark<W>>)> = Vec::new();

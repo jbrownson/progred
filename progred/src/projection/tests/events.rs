@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::widget::view::ViewId;
 use puri::handler::test_support::DispatchShorthands;
 
 #[test]
@@ -20,8 +21,11 @@ fn native_annotation_handler_retains_the_projected_site() {
                 crate::display::widget::scroll::scroll(
                     context.toolkit.styles().scale,
                     move |world: &mut crate::Editor, delta| {
-                        crate::editing::Edit::new(world.session())
-                            .annotate(&path, f64::value(delta.y));
+                        crate::editing::Edit::new(world.session()).annotate(
+                            ViewId::Document,
+                            &path,
+                            f64::value(delta.y),
+                        );
                         puri::handler::ScrollOutcome::handled_leaving(Default::default())
                     },
                 )

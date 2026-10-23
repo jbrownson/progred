@@ -29,13 +29,16 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
         scale: 1.0,
         cache: &mut world.text_cache,
     };
-    let view = world.model.workspace.selected_or_document(
+    let selected = world.model.selection.as_ref().map(|selection| {
         world
             .model
-            .selection
-            .as_ref()
-            .map(crate::selection::Selection::root),
-    );
+            .workspace
+            .area_of(selection.view(), selection.path())
+    });
+    let view = world
+        .model
+        .workspace
+        .selected_or_document(selected.as_ref());
     let sources = Sources {
         doc: &world.model.doc,
         libraries: &world.stack.libraries,
@@ -56,6 +59,7 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
             computations: &world.computations,
             completions: Some(&completions),
             sources,
+            view: view.area.view,
             root: shown.root.as_deref(),
             root_path: &shown.root_path,
             selection,
@@ -152,14 +156,13 @@ impl ProfileView {
             self.scale,
         );
         let view = crate::workspace::View {
-            root: self
-                .root
-                .as_deref()
-                .and_then(crate::occurrence::document)
-                .map_or_else(
-                    crate::display::widget::view::Root::document,
-                    crate::display::widget::view::Root::pane,
-                ),
+            area: crate::display::widget::view::Area::part(
+                crate::display::widget::view::ViewId::Document,
+                self.root
+                    .as_deref()
+                    .and_then(crate::occurrence::document)
+                    .unwrap_or_default(),
+            ),
             shown: crate::workspace::Shown::ALL,
             annotations: Annotations::default(),
             scroll: kurbo::Vec2::ZERO,

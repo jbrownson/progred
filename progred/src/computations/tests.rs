@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::widget::view::ViewId;
 
 #[test]
 fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects() {
@@ -199,12 +200,10 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
 #[test]
 fn occurrences_in_different_views_have_independent_root_lifetimes() {
     let computations = Computations::default();
-    // The document view's root, and a pane's, whose path starts with its
-    // declaration and a pane step.
-    let document = Trail::root();
-    let pane = Trail::from(crate::test_examples::pane_root(
-        &crate::workspace::panes(Some(&crate::workspace::row([Value::record([])])))[0],
-    ));
+    // The document view's root and an opened pane's: the same path, in
+    // different views.
+    let document = Trail::root(ViewId::Document);
+    let pane = Trail::root(ViewId::Opened(gid::new_cell_id()));
     let first = computations.at(&document, || computations.runtime.input(1));
     let second = computations.at(&pane, || computations.runtime.input(2));
     first.set(3);

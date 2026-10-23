@@ -9,7 +9,7 @@ fn view_annotations(world: &crate::Editor) -> Annotations {
     world
         .model
         .workspace
-        .view(world.model.workspace.document_root())
+        .view(&world.model.workspace.document_area())
         .unwrap()
         .annotations
         .clone()

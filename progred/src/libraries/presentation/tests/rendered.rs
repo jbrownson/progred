@@ -34,7 +34,7 @@ fn a_render_outside_a_pane_is_the_record_it_is() {
 /// Where the program's pane draws `rest` within its definition.
 fn in_program(rest: &[Step]) -> occurrence::Path {
     occurrence::below(
-        &crate::test_examples::pane_root(&crate::test_examples::main_part()),
+        &crate::occurrence::of(&crate::test_examples::main_part()),
         &[
             &[
                 Step::Key(crate::libraries::grap::vocabulary::GRAP),
@@ -50,7 +50,7 @@ fn in_program(rest: &[Step]) -> occurrence::Path {
 fn pane_result(driver: &Driver, rest: &[occurrence::Step]) -> occurrence::Path {
     let pane = driver.element(&[Step::Key(workspace::vocabulary::PARTS)], 0, &[]);
     [
-        crate::test_examples::pane_root(&pane).as_slice(),
+        crate::occurrence::of(&pane).as_slice(),
         &[
             occurrence::Step::Key(presentation::vocabulary::RESULT),
             occurrence::Step::Computed,

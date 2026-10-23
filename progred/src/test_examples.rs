@@ -49,14 +49,6 @@ pub fn main_part() -> gid::Path {
     part(1, 2)
 }
 
-/// Where the document's pane at `path` starts drawing its part: under the
-/// part, after a pane step.
-pub fn pane_root(path: &[Step]) -> crate::occurrence::Path {
-    let mut root = crate::occurrence::of(path);
-    root.push(crate::occurrence::Step::Pane);
-    root
-}
-
 /// Where a presentation at `path` in the document view draws its result:
 /// computed, beneath the presentation's result step.
 pub fn result_path(path: &[Step]) -> crate::occurrence::Path {

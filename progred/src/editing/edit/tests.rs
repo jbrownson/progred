@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::widget::view::ViewId;
 use crate::libraries::{editor::selection as selection_data, editor::site, grap::control, text};
 use gid::{Cells, Document, Resolution, new_cell_id};
 use std::rc::Rc;
@@ -14,7 +15,7 @@ impl Edit<'_> {
     fn grap(&mut self, path: Path, function: Value, event: Value) -> bool {
         let function =
             grap::evaluate(&function, &self.session.sources(), grap::DEFAULT_FUEL).result;
-        self.grap_runtime(path, function, event)
+        self.grap_runtime(ViewId::Document, path, function, event)
     }
 }
 
@@ -52,8 +53,8 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
     let (mut editor, source, first) = fixture(text::value("before"));
     let second = jump(&source);
     let annotation = text::value("local state");
-    Edit::new(editor.session()).annotate(&first, annotation.clone());
-    Edit::new(editor.session()).select(&second);
+    Edit::new(editor.session()).annotate(ViewId::Document, &first, annotation.clone());
+    Edit::new(editor.session()).select(ViewId::Document, &second);
     assert!(
         Edit::new(editor.session()).edit_line(&second, &line("before"), &|edit| {
             edit.state.set_text("after");
@@ -63,7 +64,12 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
     assert_eq!(read(&editor, &first), Some(&text::value("after")));
     assert_eq!(read(&editor, &second), Some(&text::value("after")));
     assert_eq!(editor.model.selection.as_ref().unwrap().path(), second);
-    let annotations = &editor.model.workspace.view_at(&first).unwrap().annotations;
+    let annotations = &editor
+        .model
+        .workspace
+        .view_at(ViewId::Document, &first)
+        .unwrap()
+        .annotations;
     assert_eq!(annotations.at(&first), Some(&annotation));
     assert_eq!(annotations.at(&second), None);
     assert_eq!(annotations.at(&crate::occurrence::of(&source)), None);
@@ -87,7 +93,7 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
 #[test]
 fn structural_paste_delete_and_undo_keep_the_occurrence() {
     let (mut editor, source, occurrence) = fixture(text::value("old"));
-    Edit::new(editor.session()).select(&occurrence);
+    Edit::new(editor.session()).select(ViewId::Document, &occurrence);
     assert!(editor.paste_value(text::value("pasted")));
     assert_eq!(
         editor.sources().resolve_path(&source),
@@ -116,7 +122,7 @@ fn a_missing_child_under_a_jump_uses_the_ordinary_completion_and_continuation() 
     let (mut editor, source, mut occurrence) = fixture(Value::record([]));
     let field = new_cell_id();
     occurrence.push(Step::Key(field));
-    Edit::new(editor.session()).select(&occurrence);
+    Edit::new(editor.session()).select(ViewId::Document, &occurrence);
     assert_eq!(
         editor
             .model
@@ -184,7 +190,7 @@ fn a_grap_handler_acts_at_its_occurrence_without_an_opaque_value() {
         editor
             .model
             .workspace
-            .view_at(&occurrence)
+            .view_at(ViewId::Document, &occurrence)
             .unwrap()
             .annotations
             .at(&occurrence),
@@ -206,13 +212,26 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
     let (mut editor, source, first) = fixture(Value::list([text::value("item")]));
     let second = jump(&source);
     let document = editor.model.doc.clone();
-    assert!(editor.session().set_folded(&first, false, Some(true)));
-    let annotations = &editor.model.workspace.view_at(&first).unwrap().annotations;
+    assert!(
+        editor
+            .session()
+            .set_folded(ViewId::Document, &first, false, Some(true))
+    );
+    let annotations = &editor
+        .model
+        .workspace
+        .view_at(ViewId::Document, &first)
+        .unwrap()
+        .annotations;
     assert!(crate::annotations::folded(annotations.at(&first), false));
     assert!(!crate::annotations::folded(annotations.at(&second), false));
     assert!(Rc::ptr_eq(&document, &editor.model.doc));
     assert!(editor.model.step_history(true));
-    assert!(editor.session().set_folded(&second, false, Some(true)));
+    assert!(
+        editor
+            .session()
+            .set_folded(ViewId::Document, &second, false, Some(true))
+    );
 }
 
 #[test]
@@ -266,7 +285,7 @@ fn inserting_a_list_sibling_under_a_jump_preserves_the_occurrence() {
         .clone();
     let position = gid::position::between(Some(&position), None).unwrap();
     let item = [occurrence.clone(), vec![Step::Element(position.clone())]].concat();
-    Edit::new(editor.session()).select(&item);
+    Edit::new(editor.session()).select(ViewId::Document, &item);
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(&selected.path()[..occurrence.len()], occurrence);
     assert_eq!(

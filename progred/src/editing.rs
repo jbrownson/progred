@@ -146,10 +146,19 @@ pub(crate) fn enter_pending(
     match &session.model.selection {
         Some(current) => {
             let read = Read { sources };
+            // Where the selection's area starts, as at the root.
+            let starts = crate::occurrence::of(
+                session
+                    .model
+                    .workspace
+                    .area_of(current.view(), current.path())
+                    .path(),
+            );
+            let view = current.view();
             if within {
-                selection::pending_insert(&read, current.path(), shift)
+                selection::pending_insert(&read, view, current.path(), shift)
             } else {
-                selection::pending_enter(&read, current.path(), shift)
+                selection::pending_enter(&read, view, current.path(), &starts, shift)
             }
             .map(|pending| pending.with_origin(current.path().to_vec()))
         }

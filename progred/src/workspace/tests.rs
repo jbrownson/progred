@@ -1,8 +1,9 @@
 use super::*;
 use crate::command::DocCommand;
+use crate::display::widget::view::{Area, ViewId};
 use crate::driver::Driver;
 use crate::sample::{PLANET_VIEW, planets};
-use crate::test_examples::{pane_root, part};
+use crate::test_examples::part;
 use gid::Cells;
 use std::rc::Rc;
 
@@ -24,20 +25,17 @@ fn driver_of(root: Option<Value>, cells: Cells) -> Driver {
     )
 }
 
-/// The opened pane's id, where `root` is one.
-fn id(root: &Root) -> CellId {
-    match root.target() {
-        Target::Opened { id } => *id,
-        target => panic!("not an opened pane: {target:?}"),
+/// The opened pane's id, where `area` is one's.
+fn id(area: &Area) -> CellId {
+    match area.view {
+        ViewId::Opened(id) => id,
+        view => panic!("not an opened pane: {view:?}"),
     }
 }
 
-/// Where the opened pane `root` draws `place`.
-fn opened_at(root: &Root, place: crate::location::Location<'_>) -> occurrence::Path {
-    vec![
-        occurrence::Step::Opened(id(root)),
-        occurrence::Step::jump(place),
-    ]
+/// Where an opened pane draws `place`: from a jump there.
+fn opened_at(place: crate::location::Location<'_>) -> occurrence::Path {
+    vec![occurrence::Step::jump(place)]
 }
 
 #[test]
@@ -56,29 +54,36 @@ fn a_library_toggles_whichever_way_the_area_lists_its_libraries() {
 }
 
 #[test]
-fn a_path_names_the_view_it_is_drawn_in() {
-    let part = part(0, 1);
-    let pane = pane_root(&part);
-    // A document pane's paths start with its part and a pane step.
-    assert_eq!(view_of(&pane), Root::pane(part.clone()));
+fn a_path_is_drawn_in_the_area_of_the_part_it_leads_into() {
+    let mut workspace = Workspace::default();
+    let part = part(0, 2);
+    let document = Area::whole(ViewId::Document);
+    // While the document is whole, every path is in its whole area.
     assert_eq!(
-        view_of(&occurrence::below(&pane, &[Step::Key(gid::new_cell_id())])),
-        Root::pane(part.clone())
+        workspace.area_of(ViewId::Document, &occurrence::of(&part)),
+        document
     );
-    // A jump at a part, as a document projection might draw one, is still
-    // the document view's: only a pane step starts a pane.
-    let mut jumped = occurrence::of(&part);
+    // Once its root splits, a path is in the area of the part it leads into,
+    // a jump below the part included.
+    workspace.sync(Some(&row([Value::list([]), Value::list([])])));
+    let pane = Area::part(ViewId::Document, part.clone());
+    assert_eq!(
+        workspace.area_of(ViewId::Document, &occurrence::of(&part)),
+        pane
+    );
+    let mut jumped = occurrence::below(&occurrence::of(&part), &[Step::Key(gid::new_cell_id())]);
     jumped.push(occurrence::Step::jump(crate::location::Location::root(
-        part.clone(),
+        Vec::new(),
     )));
-    assert_eq!(view_of(&jumped), Root::document());
-    // The part drawn as data is the document view's, as is the root.
-    assert_eq!(view_of(&occurrence::of(&part)), Root::document());
-    assert_eq!(view_of(&[]), Root::document());
-    // An opened pane's paths start with the step naming it.
-    let opened = Root::opened(gid::new_cell_id());
-    let place = crate::location::Location::root(part);
-    assert_eq!(view_of(&opened_at(&opened, place)), opened);
+    assert_eq!(workspace.area_of(ViewId::Document, &jumped), pane);
+    // The root itself, which no part leads, is the document's whole area.
+    assert_eq!(workspace.area_of(ViewId::Document, &[]), document);
+    // An opened pane is one area, whatever its path.
+    let opened = workspace.open(Side::Left, Value::record([]));
+    assert_eq!(
+        workspace.area_of(opened.view, &occurrence::of(&part)),
+        opened
+    );
 }
 
 #[test]
@@ -93,12 +98,12 @@ fn duplicate_views_keep_independent_projection_state() {
         false,
         true,
     );
-    let folded = |root: &Root| {
-        crate::annotations::folded(workspace.view(root).unwrap().annotations.at(&[]), false)
+    let folded = |area: &Area| {
+        crate::annotations::folded(workspace.view(area).unwrap().annotations.at(&[]), false)
     };
     assert!(folded(&one));
     assert!(!folded(&other));
-    assert!(!folded(workspace.document_root()));
+    assert!(!folded(&workspace.document_area()));
 }
 
 #[test]
@@ -154,7 +159,7 @@ fn document_panes_reconcile_without_losing_view_state() {
     let mut workspace = Workspace::default();
     let root = row([entry(), entry()]);
     workspace.sync(Some(&root));
-    let [first, second] = [0, 1].map(|index| Root::pane(part(index, 2)));
+    let [first, second] = [0, 1].map(|index| Area::part(ViewId::Document, part(index, 2)));
     let view = workspace.view_mut(&first).unwrap();
     view.scroll = Vec2::new(4.0, 9.0);
     view.shown = Shown::RAW;
@@ -171,7 +176,7 @@ fn document_panes_reconcile_without_losing_view_state() {
     assert!(workspace.view(&first).is_none());
     let geometry = workspace.geometry(Some(&root), Size::new(900.0, 600.0), 1.0);
     assert_eq!(geometry.views.len(), 1);
-    assert_eq!(geometry.views[0].view.root, *workspace.document_root());
+    assert_eq!(geometry.views[0].view.area, workspace.document_area());
 }
 
 #[test]
@@ -186,12 +191,12 @@ fn divider_drags_move_share_between_neighbours() {
     let mut workspace = Workspace::default();
     let opened = workspace.open(Side::Left, Value::record([]));
     let size = Size::new(1_001.0, 600.0);
-    let width = |workspace: &Workspace, root: &Root| {
+    let width = |workspace: &Workspace, area: &Area| {
         workspace
             .geometry(None, size, 1.0)
             .views
             .iter()
-            .find(|placed| placed.view.root == *root)
+            .find(|placed| placed.view.area == *area)
             .unwrap()
             .rect
             .width()
@@ -235,21 +240,29 @@ fn opened_panes_sit_beside_the_documents_split_part() {
     workspace.sync(Some(&root));
     let opened = workspace.open(Side::Left, Value::record([]));
     let geometry = workspace.geometry(Some(&root), Size::new(900.0, 600.0), 1.0);
-    let rect = |root: &Root| {
+    let rect = |area: &Area| {
         geometry
             .views
             .iter()
-            .find(|placed| placed.view.root == *root)
+            .find(|placed| placed.view.area == *area)
             .map(|placed| placed.rect)
     };
     // The document's part splits as its root does, so its own view isn't
     // drawn.
     assert_eq!(geometry.views.len(), 4);
-    assert!(rect(workspace.document_root()).is_none());
+    assert!(rect(&workspace.document_area()).is_none());
     let opened = rect(&opened).unwrap();
-    let upper = rect(&Root::pane([part(0, 2), part(0, 2)].concat())).unwrap();
-    let lower = rect(&Root::pane([part(0, 2), part(1, 2)].concat())).unwrap();
-    let beside = rect(&Root::pane(part(1, 2))).unwrap();
+    let upper = rect(&Area::part(
+        ViewId::Document,
+        [part(0, 2), part(0, 2)].concat(),
+    ))
+    .unwrap();
+    let lower = rect(&Area::part(
+        ViewId::Document,
+        [part(0, 2), part(1, 2)].concat(),
+    ))
+    .unwrap();
+    let beside = rect(&Area::part(ViewId::Document, part(1, 2))).unwrap();
     assert_eq!((opened.x0, opened.y0, opened.y1), (0.0, 0.0, 600.0));
     assert_eq!(upper.x0 - opened.x1, 1.0);
     assert_eq!((upper.x0, upper.x1), (lower.x0, lower.x1));
@@ -302,7 +315,7 @@ fn opening_a_pane_shows_the_selected_place_and_leaves_the_document_alone() {
     let opened = driver.editor().model.workspace.opened().next().unwrap();
     let place = crate::location::Location::root(vec![Step::Key(outer)]);
     assert_eq!(opened.entry, crate::location::value(&place));
-    let shown = opened_at(&opened.view.root, place);
+    let shown = opened_at(place);
     assert!(driver.drawn(&shown));
     assert_eq!(driver.selection(), shown);
     // The document view draws the root as it did, folded as it was.
@@ -343,7 +356,7 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
     assert_eq!(place.path.as_ref(), &first[2..]);
     // The pane draws the place through a jump, and an edit there lands in
     // the cell, which the document view reads.
-    let shown = opened_at(&opened.view.root, place);
+    let shown = opened_at(place);
     assert!(driver.drawn(&shown));
     let editor = &mut driver.runner.editor;
     assert!(crate::location::set_value(
@@ -380,7 +393,7 @@ fn closing_a_document_pane_removes_its_part() {
     let [a, b] = [1, 2].map(|n| Value::from(vec![n]));
     let root = row([a, b.clone()]);
     let mut driver = driver_of(Some(root.clone()), Cells::new());
-    driver.select(&pane_root(&part(0, 2)));
+    driver.select(&occurrence::of(&part(0, 2)));
     assert!(driver.editor().menu_availability().close_pane);
     run(&mut driver, DocCommand::ClosePane);
     let closed = driver.editor().model.doc.root.clone().unwrap();
@@ -408,18 +421,7 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
     driver.select(&element);
     run(&mut driver, DocCommand::OpenPane(Side::Left));
     let place = crate::location::Location::root(element.clone());
-    let mut shown = opened_at(
-        &driver
-            .editor()
-            .model
-            .workspace
-            .opened()
-            .next()
-            .unwrap()
-            .view
-            .root,
-        place.clone(),
-    );
+    let mut shown = opened_at(place.clone());
     let remove = |driver: &mut Driver, path: &[Step]| {
         let editor = &mut driver.runner.editor;
         let root = crate::spine::without(editor.model.doc.root.as_ref().unwrap(), path).unwrap();
@@ -463,10 +465,7 @@ fn a_computed_value_opens_as_a_copy() {
     let copy = Value::from(b"computed".to_vec());
     let root = world.model.workspace.open(Side::Right, copy.clone());
     // Nothing stores it, so the pane draws it as computed.
-    let shown = vec![
-        occurrence::Step::Opened(id(&root)),
-        occurrence::Step::Computed,
-    ];
+    let shown = vec![occurrence::Step::Computed];
     assert_eq!(
         world
             .model
@@ -474,7 +473,7 @@ fn a_computed_value_opens_as_a_copy() {
             .root_path(&world.sources(), &root, true),
         shown
     );
-    world.model.selection = Some(crate::selection::Selection::edge(shown.clone()));
+    world.model.selection = Some(crate::selection::Selection::edge(root.view, shown.clone()));
     let driver = Driver::new(world, Driver::VIEWPORT);
     assert!(driver.drawn(&shown));
     assert!(
@@ -495,12 +494,7 @@ fn moving_a_document_pane_keeps_its_selection_on_what_it_was_on() {
         Value::record([]),
     ]);
     let mut driver = driver_of(Some(root), Cells::new());
-    let element = |driver: &Driver, part: &[Step]| {
-        occurrence::below(
-            &pane_root(part),
-            &[driver.element(part, 0, &[])[part.len()].clone()],
-        )
-    };
+    let element = |driver: &Driver, part: &[Step]| driver.element(part, 0, &[]);
     let first = part(0, 2);
     driver.select(&element(&driver, &first));
     assert!(driver.editor().menu_availability().move_right);
@@ -524,7 +518,7 @@ fn an_opened_pane_moves_along_the_editors_row() {
             .geometry(None, size, 1.0)
             .views
             .iter()
-            .find(|placed| placed.view.root == opened)
+            .find(|placed| placed.view.area == opened)
             .unwrap()
             .rect
             .x0
@@ -536,7 +530,7 @@ fn an_opened_pane_moves_along_the_editors_row() {
     assert!(workspace.move_opened(&opened, Move::Right));
     assert!(x(&workspace) > 0.0);
     assert!(!workspace.can_move(&opened, Move::Right, None));
-    assert!(!workspace.can_move(workspace.document_root(), Move::Left, None));
+    assert!(!workspace.can_move(&workspace.document_area(), Move::Left, None));
 }
 
 #[test]
@@ -554,7 +548,7 @@ fn open_library_shows_a_loaded_library_read_only_once() {
     let opened = driver.editor().model.workspace.opened().next().unwrap();
     assert_eq!(opened.entry, crate::location::value(&place));
     // The pane draws the library, its cells among it, and selects it.
-    let shown = opened_at(&opened.view.root, place);
+    let shown = opened_at(place);
     assert_eq!(driver.selection(), shown);
     let cells = [
         shown.clone(),
@@ -586,23 +580,11 @@ fn an_empty_document_opens_a_library_and_stays_empty() {
     let command = DocCommand::OpenLibrary(presentation::ID);
     assert!(driver.editor().menu_availability().doc_enabled(command));
     run(&mut driver, command);
-    let opened = &driver
-        .editor()
-        .model
-        .workspace
-        .opened()
-        .next()
-        .unwrap()
-        .view
-        .root;
-    let shown = opened_at(
-        opened,
-        crate::location::Location::in_cell(
-            presentation::ID,
-            gid::Resolution::Library(presentation::ID),
-            Vec::new(),
-        ),
-    );
+    let shown = opened_at(crate::location::Location::in_cell(
+        presentation::ID,
+        gid::Resolution::Library(presentation::ID),
+        Vec::new(),
+    ));
     assert_eq!(driver.selection(), shown);
     // The document is still empty, so its root still offers starting points.
     assert!(driver.editor().model.doc.root.is_none());

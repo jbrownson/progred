@@ -1,7 +1,7 @@
 //! Interpret site and selection effects while applying a Grap callable.
 //! Reads observe staged writes; a declined handler commits neither.
 
-use crate::display::widget::view::Root;
+use crate::display::widget::view::ViewId;
 use crate::occurrence::{Path, Step};
 use crate::selection::Selection;
 use crate::sources::Sources;
@@ -115,22 +115,22 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 /// committing any pending annotation or selection change.
 pub(crate) fn apply_scoped_event(
     session: &mut crate::editing::Session<'_>,
+    view: ViewId,
     path: Path,
     function: grap::RuntimeValue,
     event: Value,
 ) -> bool {
-    let root = crate::workspace::view_of(&path);
     let current = session
         .model
         .selection
         .as_ref()
-        .filter(|selection| selection.root() == &root)
+        .filter(|selection| selection.view() == view)
         .map(|selection| (selection.path().to_vec(), selection.payload()));
     let annotation = session
         .model
         .workspace
-        .view(&root)
-        .and_then(|view| view.annotations.at(&path))
+        .view_at(view, &path)
+        .and_then(|state| state.annotations.at(&path))
         .cloned();
     let mut staged = PendingChanges {
         annotation,
@@ -146,16 +146,16 @@ pub(crate) fn apply_scoped_event(
         &mut staged,
     );
     let model = &mut *session.model;
-    if handled && let Some(view) = model.workspace.view_mut(&root) {
+    if handled && let Some(state) = model.workspace.view_at_mut(view, &path) {
         install_scoped(
             staged,
             &Sources {
                 doc: &model.doc,
                 libraries: session.libraries,
             },
-            &root,
+            view,
             &path,
-            &mut view.annotations,
+            &mut state.annotations,
             &mut model.selection,
         );
         true
@@ -167,7 +167,7 @@ pub(crate) fn apply_scoped_event(
 pub(crate) fn install_scoped(
     staged: PendingChanges,
     sources: &Sources,
-    root: &Root,
+    view: ViewId,
     path: &[Step],
     annotations: &mut crate::annotations::Annotations,
     selection: &mut Option<Selection>,
@@ -179,15 +179,15 @@ pub(crate) fn install_scoped(
         match staged.selection {
             Some((path, payload)) => {
                 let recorded = selection.as_ref().is_some_and(|selection| {
-                    selection.root() == root && selection.path() == path && selection.recorded()
+                    selection.view() == view && selection.path() == path && selection.recorded()
                 });
-                let mut next = Selection::from_payload(sources, path, payload);
+                let mut next = Selection::from_payload(sources, view, path, payload);
                 next.set_recorded(recorded);
                 *selection = Some(next);
             }
             None if selection
                 .as_ref()
-                .is_some_and(|selection| selection.root() == root) =>
+                .is_some_and(|selection| selection.view() == view) =>
             {
                 *selection = None;
             }

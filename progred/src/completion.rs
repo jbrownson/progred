@@ -19,20 +19,22 @@ pub(crate) fn commit(
     let model = &mut *session.model;
     let libraries = session.libraries;
     if let Some(selection) = &model.selection
-        && let Some(view) = model.workspace.view_mut(selection.root())
+        && let Some(state) = model
+            .workspace
+            .view_at_mut(selection.view(), selection.path())
         && let Some(prepared) = prepare(
             &Sources {
                 doc: &model.doc,
                 libraries,
             },
             selection,
-            &view.annotations,
+            &state.annotations,
             value,
             definition,
             on_commit.as_ref(),
         )
     {
-        let root = selection.root().clone();
+        let view = selection.view();
         if prepared.document_changed {
             model.doc = prepared.document;
             model.history.record(before);
@@ -43,9 +45,9 @@ pub(crate) fn commit(
                 doc: &model.doc,
                 libraries,
             },
-            &root,
+            view,
             &prepared.path,
-            &mut view.annotations,
+            &mut state.annotations,
             &mut model.selection,
         );
         true

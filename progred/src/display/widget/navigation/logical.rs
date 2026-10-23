@@ -1,6 +1,6 @@
 //! Fold the chosen layout traversal into line boundaries and local neighbors.
 use super::super::frame::DispatchContext;
-use super::super::view::Root;
+use super::super::view::Area;
 use super::landmark_at;
 use measured::{Composition, RowAlignment};
 use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
@@ -380,7 +380,7 @@ impl Collector {
     /// this view, which owns its selection and any direction-aware arrival.
     pub fn finish<C: 'static, H: 'static>(
         self,
-        view: Option<Root>,
+        view: Option<Area>,
     ) -> Option<Handler<C, DispatchContext<C, H>>> {
         debug_assert!(self.parents.is_empty() && self.landmarks.is_empty());
         self.current.lines.destinations().map(|destinations| {

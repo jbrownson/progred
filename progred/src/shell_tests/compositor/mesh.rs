@@ -1,5 +1,6 @@
 //! Compare the direct mesh composite with one through an intermediate image.
 use super::*;
+use crate::display::widget::view::{Area, ViewId};
 
 #[test]
 #[ignore = "paired full-editor CAM orbit draw/composition timing; no app launch"]
@@ -19,7 +20,7 @@ fn cam_mesh_roundtrip_profile() {
         editor
             .model
             .workspace
-            .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+            .view_mut(&Area::part(ViewId::Document, path.clone()))
             .unwrap()
             .annotations
             .set_field(&controls, STATE, Some(cam_position(progress)));
@@ -52,7 +53,7 @@ fn cam_mesh_roundtrip_profile() {
                 .editor
                 .model
                 .workspace
-                .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+                .view_mut(&Area::part(ViewId::Document, path.clone()))
                 .unwrap()
                 .annotations
                 .set_field(

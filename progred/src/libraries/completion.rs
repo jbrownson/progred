@@ -49,10 +49,6 @@ pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Complet
         Some(Rc::new(move |_, site, staged| {
             let mut path =
                 crate::occurrence::below(site, &[Step::Key(PARTS), Step::Element(second.clone())]);
-            // At the document's root the row splits, its parts panes.
-            if site.is_empty() {
-                path.push(crate::occurrence::Step::Pane);
-            }
             path.extend(crate::occurrence::of(&[
                 Step::Key(key),
                 Step::Follow(Resolution::Document),

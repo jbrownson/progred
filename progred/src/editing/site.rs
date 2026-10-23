@@ -1,6 +1,6 @@
-//! One projected occurrence as a place to act: its path, which says the view
-//! it's drawn in and where its data is. Widgets act on their place through
-//! it, without carrying the path themselves.
+//! One projected occurrence as a place to act: its trail, which says the view
+//! it's drawn in and its path there, which says where its data is. Widgets act
+//! on their place through it, without carrying the path themselves.
 
 use super::{Edit, Session};
 use crate::hover::Hover;
@@ -31,7 +31,7 @@ impl Site {
 
     /// Whether `selection` is at this occurrence.
     pub(crate) fn holds(&self, selection: &crate::selection::Selection) -> bool {
-        self.path == selection.path()
+        self.path.view() == selection.view() && self.path == selection.path()
     }
 
     /// Where this occurrence is stored, if anywhere: what a jump to it
@@ -117,17 +117,20 @@ impl SiteEdit<'_> {
     /// Whether the selection is here or below, resting on a value rather
     /// than picking one or typing one.
     pub(crate) fn rests_within(&self) -> bool {
-        self.edit.rests_within(&self.site.path.to_vec())
+        self.edit
+            .rests_within(self.site.path.view(), &self.site.path.to_vec())
     }
 
     /// This occurrence's state, which its view keeps.
     pub(crate) fn state(&self) -> Option<&Value> {
-        self.edit.annotation(&self.site.path.to_vec())
+        self.edit
+            .annotation(self.site.path.view(), &self.site.path.to_vec())
     }
 
     /// Replaces this occurrence's state; false when it was already `state`.
     pub(crate) fn set_state(&mut self, state: Value) -> bool {
-        self.edit.annotate(&self.site.path.to_vec(), state)
+        self.edit
+            .annotate(self.site.path.view(), &self.site.path.to_vec(), state)
     }
 
     /// Writes `value` where this occurrence is stored.
@@ -136,24 +139,32 @@ impl SiteEdit<'_> {
     }
 
     pub(crate) fn select(&mut self) {
-        self.edit.select(&self.site.path.to_vec());
+        self.edit
+            .select(self.site.path.view(), &self.site.path.to_vec());
     }
 
     /// Opens or closes this occurrence's fold, whose state is `default`
     /// until set, toggling it without `closed`.
     pub(crate) fn fold(&mut self, default: bool, closed: Option<bool>) -> bool {
-        self.edit.fold(&self.site.path.to_vec(), default, closed)
+        self.edit.fold(
+            self.site.path.view(),
+            &self.site.path.to_vec(),
+            default,
+            closed,
+        )
     }
 
     /// Leaves the value `steps` below this occurrence pending, for the
     /// picker to fill.
     pub(crate) fn pend(&mut self, steps: &[gid::Step]) {
-        self.edit.pend(self.site.path.below(steps).to_vec());
+        self.edit
+            .pend(self.site.path.view(), self.site.path.below(steps).to_vec());
     }
 
     /// Selects this occurrence with a projection's own selection payload.
     pub(crate) fn select_with(&mut self, payload: Value) {
-        self.edit.select_payload(self.site.path.to_vec(), payload);
+        self.edit
+            .select_payload(self.site.path.view(), self.site.path.to_vec(), payload);
     }
 
     pub(crate) fn edit_line(
@@ -167,7 +178,11 @@ impl SiteEdit<'_> {
 
     /// Runs a Grap event handler here, with `event` as its argument.
     pub(crate) fn run_handler(&mut self, function: grap::RuntimeValue, event: Value) -> bool {
-        self.edit
-            .grap_runtime(self.site.path.to_vec(), function, event)
+        self.edit.grap_runtime(
+            self.site.path.view(),
+            self.site.path.to_vec(),
+            function,
+            event,
+        )
     }
 }

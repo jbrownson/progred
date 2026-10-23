@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::widget::view::ViewId;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
 use gid::Step;
@@ -330,7 +331,10 @@ fn partials_receive_selection_and_annotations_positionally() {
     };
     let cold = glyphs(None, Annotations::default());
     let selected = glyphs(
-        Some(crate::selection::Selection::edge(Vec::new())),
+        Some(crate::selection::Selection::edge(
+            ViewId::Document,
+            Vec::new(),
+        )),
         Annotations::default(),
     );
     let mut marked = Annotations::default();

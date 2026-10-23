@@ -3,9 +3,8 @@
 //! installed frame's [`Geometry`].
 
 use crate::display::widget::navigation::{Geometry, Landmark, advance};
-use crate::display::widget::view::Root;
+use crate::display::widget::view::Area;
 use crate::occurrence::{Path, Step, Trail};
-use crate::selection::Selection;
 use puri::handler::NavigationDirection;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -26,24 +25,24 @@ pub fn direction(event: &KeyboardEvent) -> Option<NavigationDirection> {
 /// backward, on the sibling before it, else its parent.
 pub fn selection_after_removing<World>(
     landmarks: &[Landmark<World>],
-    root: &Root,
+    area: &Area,
     path: &[Step],
     forward: bool,
 ) -> Path {
     forward
-        .then(|| following(landmarks, root, path))
+        .then(|| following(landmarks, area, path))
         .flatten()
-        .or_else(|| preceding(landmarks, root, path))
-        .unwrap_or_else(|| container(landmarks, root, path))
+        .or_else(|| preceding(landmarks, area, path))
+        .unwrap_or_else(|| container(landmarks, area, path))
 }
 
 /// The nearest drawn occurrence around `path`, past any drawn as part of
 /// another, else `path`'s parent.
-fn container<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -> Path {
+fn container<World>(landmarks: &[Landmark<World>], area: &Area, path: &[Step]) -> Path {
     let drawn = |path: &[Step]| {
         landmarks
             .iter()
-            .any(|landmark| landmark.root.as_ref() == Some(root) && landmark.path == path)
+            .any(|landmark| landmark.area.as_ref() == Some(area) && landmark.path == path)
     };
     let parent = path.split_last().map_or(&[][..], |(_, parent)| parent);
     (0..=parent.len())
@@ -55,19 +54,22 @@ fn container<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -
 }
 
 /// Select All, once focused controls decline the raw key, selects the root
-/// of the selection's view, else the document's.
+/// of the selection's area, else of the document's.
 pub(crate) fn select_all_key(
     editor: &mut crate::Editor,
     geometry: Geometry<'_, crate::Editor>,
     event: &KeyboardEvent,
 ) -> bool {
-    let root = editor
-        .model
-        .selection
-        .as_ref()
-        .map(Selection::root)
-        .unwrap_or_else(|| editor.model.workspace.document_root());
-    select_all(editor.command_modifier, geometry.landmarks, root, event)
+    let area = editor.model.selection.as_ref().map_or_else(
+        || editor.model.workspace.document_area(),
+        |selection| {
+            editor
+                .model
+                .workspace
+                .area_of(selection.view(), selection.path())
+        },
+    );
+    select_all(editor.command_modifier, geometry.landmarks, &area, event)
         .is_some_and(|target| geometry.arrive(editor, target, None))
 }
 
@@ -88,15 +90,15 @@ pub(crate) fn tab(
             || !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some())
 }
 
-/// An arrow with no selection selects the root of `root`'s view. So does one
-/// with the selection still `undrawn`, on nothing this frame draws.
+/// An arrow with no selection selects the root of `area`. So does one with
+/// the selection still `undrawn`, on nothing this frame draws.
 pub(crate) fn initial_navigation(
-    root: &Root,
+    area: &Area,
     landmarks: &[Landmark<crate::Editor>],
     undrawn: Option<Path>,
 ) -> Option<puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>> {
-    let target = root_target(landmarks, root)?;
-    let path = target.path.clone();
+    let target = root_target(landmarks, area)?;
+    let (view, path) = (target.path.view(), target.path.to_vec());
     Some(puri::handler::Handler::from_function(
         move |editor: &mut crate::Editor, event, _| {
             if matches!(event, puri::handler::Event::Navigate(_))
@@ -107,7 +109,7 @@ pub(crate) fn initial_navigation(
                     .map(|selection| selection.path())
                     == undrawn.as_deref()
             {
-                crate::editing::Edit::new(editor.session()).select(&path.to_vec());
+                crate::editing::Edit::new(editor.session()).select(view, &path);
                 puri::handler::EventOutcome::accept()
             } else {
                 puri::handler::EventOutcome::decline(event)
@@ -116,44 +118,44 @@ pub(crate) fn initial_navigation(
     ))
 }
 
-/// The root of `root`'s view, when `event` is Select All.
+/// The root of `area`, when `event` is Select All.
 pub fn select_all<'a, World>(
     command: puri::keyboard::CommandModifier,
     landmarks: &'a [Landmark<World>],
-    root: &Root,
+    area: &Area,
     event: &KeyboardEvent,
 ) -> Option<&'a Landmark<World>> {
     (crate::modifiers::chord(command, event, "a")
         && !(event.modifiers.shift() || event.modifiers.alt()))
-    .then(|| root_target(landmarks, root))
+    .then(|| root_target(landmarks, area))
     .flatten()
 }
 
-/// What's drawn at the root of `root`'s view: its outermost value, such as a
+/// What's drawn at the root of `area`: its outermost value, such as a
 /// document pane's part, or the place a pane shows.
 fn root_target<'a, World>(
     landmarks: &'a [Landmark<World>],
-    root: &Root,
+    area: &Area,
 ) -> Option<&'a Landmark<World>> {
     landmarks
         .iter()
-        .filter(|landmark| landmark.root.as_ref() == Some(root))
+        .filter(|landmark| landmark.area.as_ref() == Some(area))
         .min_by_key(|landmark| landmark.path.len())
 }
 
 /// The stop after the drawn `path`: its next sibling, else the one after its
 /// nearest ancestor that has one.
-fn following<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -> Option<Path> {
-    let (parent, siblings, index) = siblings(landmarks, root, path)?;
+fn following<World>(landmarks: &[Landmark<World>], area: &Area, path: &[Step]) -> Option<Path> {
+    let (parent, siblings, index) = siblings(landmarks, area, path)?;
     siblings
         .get(index + 1)
         .map(|next| next.to_vec())
-        .or_else(|| following(landmarks, root, parent))
+        .or_else(|| following(landmarks, area, parent))
 }
 
 /// The sibling before the drawn `path`.
-fn preceding<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -> Option<Path> {
-    let (_, siblings, index) = siblings(landmarks, root, path)?;
+fn preceding<World>(landmarks: &[Landmark<World>], area: &Area, path: &[Step]) -> Option<Path> {
+    let (_, siblings, index) = siblings(landmarks, area, path)?;
     index
         .checked_sub(1)
         .and_then(|index| siblings.get(index))
@@ -164,13 +166,13 @@ fn preceding<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -
 /// among them at `index`.
 fn siblings<'a, World>(
     landmarks: &'a [Landmark<World>],
-    root: &Root,
+    area: &Area,
     path: &'a [Step],
 ) -> Option<(&'a [Step], Vec<&'a Trail>, usize)> {
     let (_, parent) = path.split_last()?;
     let siblings: Vec<&Trail> = landmarks
         .iter()
-        .filter(|landmark| landmark.root.as_ref() == Some(root))
+        .filter(|landmark| landmark.area.as_ref() == Some(area))
         .map(|landmark| &landmark.path)
         .filter(|p| p.parent().is_some_and(|prefix| *prefix == parent))
         .collect();

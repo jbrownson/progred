@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::test_support::{mouse, primary_press};
+use crate::display::widget::view::{Area, ViewId};
 use crate::svg::write_cmds;
 use puri::handler::test_support::DispatchShorthands;
 
@@ -268,7 +269,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert_eq!(trace.sources().next(), Some(source.clone()));
         let mut pointer = crate::frame::DispatchContext::new(None, Some(target));
         pointer.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
-            root: Some(crate::test_root()),
+            area: Some(Area::whole(ViewId::Document)),
             path: crate::occurrence::of(&program).into(),
             rect: bounds,
             select: Rc::new(move |_, _| {
@@ -377,9 +378,8 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     use puri::handler::Event;
 
     let mut editor = crate::test_editor(Document::default());
-    let source_view = editor.model.workspace.document_root().clone();
-    let drawing_view =
-        crate::display::widget::view::Root::pane(vec![gid::Step::Key(new_cell_id())]);
+    let source_view = editor.model.workspace.document_area();
+    let drawing_view = Area::part(ViewId::Document, vec![gid::Step::Key(new_cell_id())]);
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     let output = crate::display::widget::frame::place(
         crate::display::widget::view::in_view(
@@ -399,13 +399,14 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         )))),
     );
     input.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
-        root: Some(source_view.clone()),
+        area: Some(source_view.clone()),
         path: crate::occurrence::of(&path).into(),
         rect: Rect::new(0.0, 500.0, 20.0, 530.0),
         select: Rc::new({
             let path = path.clone();
             move |editor: &mut crate::Editor, _| {
-                crate::editing::Edit::new(editor.session()).select(&crate::occurrence::of(&path));
+                crate::editing::Edit::new(editor.session())
+                    .select(ViewId::Document, &crate::occurrence::of(&path));
                 true
             }
         }),
@@ -414,7 +415,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         tab_stop: false,
     }]);
     input.view_regions = Rc::from([crate::display::widget::frame::ViewRegion {
-        root: source_view.clone(),
+        area: source_view.clone(),
         rect: Rect::new(0.0, 0.0, 200.0, 100.0),
         maximum: kurbo::Vec2::new(0.0, 1_000.0),
         content: None,
@@ -452,7 +453,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         .view_mut(&source_view)
         .unwrap()
         .scroll = kurbo::Vec2::ZERO;
-    input.root = Some(source_view.clone());
+    input.area = Some(source_view.clone());
     assert!(
         !handler
             .dispatch(&mut editor, Event::HoverChanged, &mut input)
@@ -463,12 +464,18 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         0.0
     );
 
-    input.root = Some(drawing_view);
+    input.area = Some(drawing_view);
     let event = primary_press(Point::new(5.0, 5.0), modifiers);
     editor.pressed = true;
     assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
     let selected = editor.model.selection.as_ref().unwrap();
-    assert_eq!(selected.root(), &source_view);
+    assert_eq!(
+        editor
+            .model
+            .workspace
+            .area_of(selected.view(), selected.path()),
+        source_view
+    );
     assert_eq!(selected.path(), path.as_ref());
     assert_eq!(
         editor.model.workspace.view(&source_view).unwrap().scroll.y,

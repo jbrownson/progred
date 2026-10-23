@@ -4,7 +4,7 @@ use crate::UserEvent;
 use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
 use crate::display::widget::frame::Cursor;
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::view::{Area, ViewId};
 use crate::frame::FrameState;
 use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_input};
 #[cfg(target_os = "macos")]
@@ -246,7 +246,7 @@ impl EditorRunner {
                 let dispatch = &self.frame.dispatch;
                 dispatch
                     .hover_geometry
-                    .cursor(dispatch.pointer_root.as_ref(), hovered)
+                    .cursor(dispatch.pointer_area.as_ref(), hovered)
             });
         match cursor {
             None => CursorIcon::Default,
@@ -471,12 +471,10 @@ impl Editor {
     }
 
     pub(crate) fn menu_toggles(&self) -> command::Toggles {
-        let area = self.model.workspace.selected_or_document(
-            self.model
-                .selection
-                .as_ref()
-                .map(selection::Selection::root),
-        );
+        let area = self
+            .model
+            .workspace
+            .selected_or_document(self.selected_view().as_ref());
         command::Toggles {
             shown: area.shown.clone(),
             preset: self.stack.preset(&area.shown),
@@ -484,11 +482,8 @@ impl Editor {
     }
 
     pub(crate) fn menu_availability(&self) -> command::Availability {
-        let selected_root = self
-            .model
-            .selection
-            .as_ref()
-            .map(selection::Selection::root);
+        let selected = self.selected_view();
+        let selected_root = selected.as_ref();
         command::Availability {
             #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             save: self.model.dirty() || self.doc_path.is_none(),
@@ -501,7 +496,7 @@ impl Editor {
                 .and_then(|selection| selection.value(&self.sources()))
                 .is_some(),
             close_pane: selected_root
-                .is_some_and(|root| !matches!(root.target(), Target::Document)),
+                .is_some_and(|area| *area != self.model.workspace.document_area()),
             move_up: selected_root.is_some_and(|root| self.can_move(root, workspace::Move::Up)),
             move_down: selected_root.is_some_and(|root| self.can_move(root, workspace::Move::Down)),
             move_left: selected_root.is_some_and(|root| self.can_move(root, workspace::Move::Left)),
@@ -516,7 +511,7 @@ impl Editor {
         }
     }
 
-    fn can_move(&self, root: &Root, direction: workspace::Move) -> bool {
+    fn can_move(&self, root: &Area, direction: workspace::Move) -> bool {
         self.model
             .workspace
             .can_move(root, direction, self.model.doc.root.as_ref())
@@ -554,24 +549,24 @@ impl Editor {
             .workspace
             .opened()
             .find(|opened| opened.entry == entry)
-            .map(|opened| opened.view.root.clone());
+            .map(|opened| opened.view.area.clone());
         match existing {
             Some(root) => self.select_view_root(&root),
             None => self.open_pane(workspace::Side::Right, entry),
         }
     }
 
-    /// Selects what the view `root` draws at its root.
-    fn select_view_root(&mut self, root: &Root) {
-        let Some(view) = self.model.workspace.view(root) else {
+    /// Selects what the area `area` draws at its root.
+    fn select_view_root(&mut self, area: &Area) {
+        let Some(view) = self.model.workspace.view(area) else {
             return;
         };
         let path = self.model.workspace.root_path(
             &self.sources(),
-            root,
+            area,
             view.shown.shows(crate::libraries::editor::ID),
         );
-        self.model.selection = Some(selection::Selection::edge(path));
+        self.model.selection = Some(selection::Selection::edge(area.view, path));
     }
 
     /// Opens `entry` in a pane at `side`'s end of the editor's row and
@@ -585,22 +580,23 @@ impl Editor {
     /// a document pane's part leaves its row or column. A pane showing a
     /// location leaves that place as it is.
     fn close_selected_pane(&mut self) {
-        let Some(root) = self.selected_view() else {
+        let Some(area) = self.selected_view() else {
             return;
         };
-        match root.target() {
-            Target::Opened { .. } => {
-                if self.model.workspace.close(&root) {
+        match area.view {
+            ViewId::Opened(_) => {
+                if self.model.workspace.close(&area) {
                     self.model.selection = None;
                 }
             }
-            Target::Pane { path } => {
+            ViewId::Document if area.path().is_empty() => {}
+            ViewId::Document => {
                 if let Some(value) = self
                     .model
                     .doc
                     .root
                     .as_ref()
-                    .and_then(|document| crate::spine::without(document, path))
+                    .and_then(|document| crate::spine::without(document, area.path()))
                 {
                     let before = self.model.snapshot();
                     Rc::make_mut(&mut self.model.doc).root = Some(value);
@@ -610,46 +606,45 @@ impl Editor {
                     self.refresh_title();
                 }
             }
-            Target::Document => {}
         }
     }
 
     /// Moves the selected pane one place along its row or column, keeping
     /// its selection on what it was on.
     fn move_selected_pane(&mut self, direction: workspace::Move) {
-        let Some(root) = self.selected_view() else {
+        let Some(area) = self.selected_view() else {
             return;
         };
-        let Target::Pane { path } = root.target() else {
-            self.model.workspace.move_opened(&root, direction);
+        if area.view != ViewId::Document {
+            self.model.workspace.move_opened(&area, direction);
             return;
-        };
+        }
         let next = self.model.selection.as_ref().and_then(|selection| {
             let interpreted = self
                 .model
                 .workspace
-                .view(&root)?
+                .view(&area)?
                 .shown
                 .shows(crate::libraries::editor::ID);
             let shown = self
                 .model
                 .workspace
-                .root_path(&self.sources(), &root, interpreted);
+                .root_path(&self.sources(), &area, interpreted);
             let below = selection.path().strip_prefix(shown.as_slice())?.to_vec();
             let (value, path) =
-                workspace::move_part(self.model.doc.root.as_ref()?, path, direction)?;
+                workspace::move_part(self.model.doc.root.as_ref()?, area.path(), direction)?;
             Some((value, path, below, interpreted))
         });
         if let Some((value, path, below, interpreted)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
-            let next_root = Root::pane(path);
-            self.model.workspace.retarget(&root, next_root.clone());
+            let next_area = Area::part(ViewId::Document, path);
+            self.model.workspace.retarget(&area, next_area.clone());
             let mut shown =
                 self.model
                     .workspace
-                    .root_path(&self.sources(), &next_root, interpreted);
+                    .root_path(&self.sources(), &next_area, interpreted);
             shown.extend(below);
             if let Some(selection) = self.model.selection.as_mut() {
                 selection.relocate(shown);
@@ -659,13 +654,13 @@ impl Editor {
         }
     }
 
-    /// The view the selection is in, which view commands act on.
-    fn selected_view(&self) -> Option<Root> {
-        self.model
-            .selection
-            .as_ref()
-            .map(selection::Selection::root)
-            .cloned()
+    /// The area the selection is in, which view commands act on.
+    fn selected_view(&self) -> Option<Area> {
+        self.model.selection.as_ref().map(|selection| {
+            self.model
+                .workspace
+                .area_of(selection.view(), selection.path())
+        })
     }
 
     pub(crate) fn choose_menu(&mut self, command: Command, geometry: Geometry<'_, Editor>) {

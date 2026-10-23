@@ -76,12 +76,16 @@ root and the document's own definitions are writable, including a cell with no
 definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
 
-A selection's path also names the workspace view it's in: a document pane's
-paths start with its part and a pane step, an opened pane's with a step naming
-it ([panes](#panes)), and every other path is the document view's. So two panes
-showing the same stored data keep separate focus, scroll, and folds, and a view
-is what it targets, the document, one of its parts, or a pane the editor
-opened, which a workspace `Root` names; it is not a GID cell.
+Where something is drawn has two tiers. The first is the view it's in, a
+[`ViewId`](../progred/src/display/widget/view.rs): the document's, or a pane the
+editor opened beside it ([panes](#panes)). The second is the occurrence path
+within that view, unchanged from what the view alone would draw. A selection,
+a landmark, hover and computations carry the view beside the path, so two
+views drawing the same stored data at the same path keep separate focus,
+scroll, folds and results. A view is the editor's, not a GID cell. Where the
+document's root splits into a row or column, each part is drawn in its own
+area of the document's view, an `Area` naming the view and the part's path;
+which area a path is in follows from the path, the part whose path leads it.
 
 [`SourceTrace`](../progred/src/display/widget/source.rs) serves source-linked
 widgets, drawing, and highlighting. It is a location in the form it is stored
@@ -546,17 +550,15 @@ session state, as are each view's libraries shown, folds and scroll; a share
 too small for the minimum width or height draws at the minimum without being
 rewritten.
 
-A document pane draws its part under the part's path, after a **pane** step that
-says a pane starts there and changes nothing about where the data is. So its
-occurrences stay apart from any other drawing of the same data, their paths
-name the pane they're in, and a pane showing its part reads and writes it. A
-part can name a [location](#data-and-resolution) as data: `{isa: location,
+A document pane is an area of the document's view and draws its part at the
+part's own path, so a pane showing its part reads and writes it, and its state,
+folds and scroll included, is kept by that path. A part can name a [location](#data-and-resolution) as data: `{isa: location,
 steps: [...]}` from the document's root, or `{isa: location, in: cell, follow:
 source, steps: [...]}` inside a cell's definition, with the steps and source in
 the path convention's encoding. A pane tells what its part is by its kind, so
 any other value, a record that happens to have a `steps` field included, shows
 as it is. While its pane shows the editor library, the pane jumps to that place
-after its pane step and draws and edits it there, so it stays in sync with the
+at the part's path and draws and edits it there, so it stays in sync with the
 document; Plain and Raw show the location itself.
 
 Opened panes are the editor's and the document doesn't keep them, so opening,
@@ -564,8 +566,8 @@ closing and moving one never edits the document, marks it changed, or enters
 its history. Open Value on Left and Right open the selection's place, starting
 at its nearest cell, so a cell is a location with no steps, at that end of the
 editor's row; a computed value has no place and opens as a copy, read-only. An
-opened pane draws after an **opened** step naming it, then a jump to its place,
-or a computed step for a copy or while the editor library is off. A place
+opened pane is a view of its own, so its paths start afresh: a jump to its
+place, or a computed step for a copy or while the editor library is off. A place
 that's only empty, as after its value was deleted, draws as any empty place
 does, ready to write; one that can't be reached, as after its container was
 deleted, draws a read-only `place not found` absent carrying the location. The

@@ -3,6 +3,7 @@
 
 use crate::Editor;
 use crate::display::widget::navigation::{Geometry, landmark_at};
+use crate::display::widget::view::ViewId;
 use crate::modifiers;
 use crate::navigate;
 use crate::occurrence::{Path, Step};
@@ -12,14 +13,19 @@ use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
-    /// Select what this frame draws at `path`, else the edge there.
-    fn select_landmark_or_edge(&mut self, geometry: Geometry<'_, Editor>, path: Path) {
-        let view = crate::workspace::view_of(&path);
-        match landmark_at(geometry.landmarks, Some(&view), &path) {
+    /// Select what this frame draws at `path` in `view`, else the edge there.
+    fn select_landmark_or_edge(
+        &mut self,
+        geometry: Geometry<'_, Editor>,
+        view: ViewId,
+        path: Path,
+    ) {
+        let area = self.model.workspace.area_of(view, &path);
+        match landmark_at(geometry.landmarks, Some(&area), &path) {
             Some(target) => {
                 (target.select)(self, None);
             }
-            None => self.model.selection = Some(Selection::edge(path)),
+            None => self.model.selection = Some(Selection::edge(view, path)),
         }
     }
 
@@ -49,7 +55,7 @@ impl Editor {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
             Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
-                let path = current.path().to_vec();
+                let (view, path) = (current.view(), current.path().to_vec());
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
@@ -66,7 +72,7 @@ impl Editor {
                             self.model.history.record(before);
                             self.refresh_title();
                         }
-                        self.model.selection = Some(selection::pending_value(path));
+                        self.model.selection = Some(selection::pending_value(view, path));
                         geometry.reveal_selection(&mut self.model);
                         true
                     }
@@ -89,7 +95,11 @@ impl Editor {
     /// structure. A structural copy of what's `drawn` at a path also asks
     /// for a picture of it, which the shell puts beside the copy once the key
     /// is handled.
-    pub(crate) fn copy_value(&mut self, value: &Value, drawn: Option<&[Step]>) -> bool {
+    pub(crate) fn copy_value(
+        &mut self,
+        value: &Value,
+        drawn: Option<&crate::occurrence::Trail>,
+    ) -> bool {
         let (text, structural) = crate::clipboard::spelling(value);
         let copied = self
             .text_clipboard
@@ -152,9 +162,9 @@ impl Editor {
                     // Pasting what's there already stays off the undo stack, as
                     // every write that changes nothing does.
                     current.value(&self.sources()) == Some(&value) || {
-                        let path = current.path().to_vec();
+                        let (view, path) = (current.view(), current.path().to_vec());
                         crate::editing::Edit::new(self.session()).replace(&path, value) && {
-                            self.model.selection = Some(Selection::edge(path));
+                            self.model.selection = Some(Selection::edge(view, path));
                             true
                         }
                     }
@@ -246,9 +256,9 @@ impl Editor {
         origin: Path,
     ) {
         if origin == current.path() {
-            crate::editing::Edit::new(self.session()).select(&origin);
+            crate::editing::Edit::new(self.session()).select(current.view(), &origin);
         } else {
-            self.select_landmark_or_edge(geometry, origin);
+            self.select_landmark_or_edge(geometry, current.view(), origin);
         }
         geometry.reveal_selection(&mut self.model);
     }
@@ -276,7 +286,7 @@ impl Editor {
                             selection::Stage::Label => current.path().to_vec(),
                             _ => navigate::selection_after_removing(
                                 geometry.landmarks,
-                                current.root(),
+                                &self.model.workspace.area_of(current.view(), current.path()),
                                 current.path(),
                                 forward,
                             ),
@@ -284,7 +294,7 @@ impl Editor {
                         // Cancelling the empty document's root pending
                         // deselects: reselecting it would pend again.
                         if !back.is_empty() || self.model.doc.root.is_some() {
-                            self.select_landmark_or_edge(geometry, back);
+                            self.select_landmark_or_edge(geometry, current.view(), back);
                         }
                         geometry.reveal_selection(&mut self.model);
                     }
@@ -314,7 +324,7 @@ impl Editor {
                     && current.writable(&sources) =>
             {
                 Some(
-                    selection::pending_with_query(current.path().to_vec(), typed)
+                    selection::pending_with_query(current.view(), current.path().to_vec(), typed)
                         .with_origin(current.path().to_vec()),
                 )
             }

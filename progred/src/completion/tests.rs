@@ -1,5 +1,6 @@
 use super::*;
 use crate::annotations::Annotations;
+use crate::display::widget::view::ViewId;
 use crate::libraries::{fidget, grap::control, presentation, text};
 use crate::selection::{Stage, pending_edge};
 use crate::test_support::{
@@ -12,7 +13,7 @@ use std::rc::Rc;
 fn completion_insertion_never_invents_or_overwrites_selection_policy() {
     let libraries = core_libraries();
     let doc = Document::default();
-    let pending = crate::selection::pending_with_query(vec![], "original query");
+    let pending = crate::selection::pending_with_query(ViewId::Document, vec![], "original query");
     let old_payload = pending.payload();
     for continuation in [
         None,
@@ -72,6 +73,7 @@ fn label_offer_explicitly_opens_its_missing_value() {
         &crate::editing::Read {
             sources: src(&doc, &libraries),
         },
+        ViewId::Document,
         vec![],
     )
     .unwrap();
@@ -142,7 +144,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         assert_eq!(
             selected.path(),
             [
-                crate::test_examples::pane_root(&main),
+                crate::occurrence::of(&main),
                 crate::occurrence::of(&[Step::Key(field), Step::Follow(Resolution::Document)]),
             ]
             .concat()
@@ -181,15 +183,19 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let pending = crate::selection::pending_value(crate::occurrence::of(&[Step::Key(field)]));
+    let pending = crate::selection::pending_value(
+        ViewId::Document,
+        crate::occurrence::of(&[Step::Key(field)]),
+    );
     let offer = root_completions(&stack)
         .into_iter()
         .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
         .unwrap();
     let mut world = crate::test_editor(doc.clone());
-    world.model.selection = Some(crate::selection::pending_value(crate::occurrence::of(&[
-        Step::Key(field),
-    ])));
+    world.model.selection = Some(crate::selection::pending_value(
+        ViewId::Document,
+        crate::occurrence::of(&[Step::Key(field)]),
+    ));
     (offer.activate)(&mut world.session());
     let inserted = world
         .model

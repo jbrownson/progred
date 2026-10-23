@@ -1,11 +1,12 @@
 use super::*;
+use crate::display::widget::view::ViewId;
 use crate::location::Location;
 use gid::{Resolution, new_cell_id};
 
 #[test]
 fn a_trail_holds_the_path_it_was_built_along() {
     let [field, other] = [new_cell_id(), new_cell_id()];
-    let parent = Trail::root().push(Step::Key(field));
+    let parent = Trail::root(ViewId::Document).push(Step::Key(field));
     let child = parent.below(&[gid::Step::Follow(Resolution::Document)]);
     let path = vec![Step::Key(field), Step::Follow(Resolution::Document)];
     assert_eq!(child.to_vec(), path);
@@ -19,18 +20,21 @@ fn a_trail_holds_the_path_it_was_built_along() {
     // A sibling differs in its last step, and a cousin further up.
     assert_ne!(parent.push(Step::Key(other)), child);
     assert_ne!(
-        Trail::root()
+        Trail::root(ViewId::Document)
             .push(Step::Key(other))
             .push(Step::Follow(Resolution::Document)),
         child
     );
-    assert!(Trail::root().is_empty() && Trail::root() == Vec::<Step>::new());
+    assert!(
+        Trail::root(ViewId::Document).is_empty()
+            && Trail::root(ViewId::Document) == Vec::<Step>::new()
+    );
 }
 
 #[test]
 fn a_trail_knows_where_its_jumps_and_computed_values_are() {
     let [field, cell] = [new_cell_id(), new_cell_id()];
-    let data = Trail::root().push(Step::Key(field));
+    let data = Trail::root(ViewId::Document).push(Step::Key(field));
     assert!(data.data_from(0) && !data.computed());
     let followed = data.push(Step::Follow(Resolution::Document));
     let inside = followed.push(Step::Key(field));
@@ -55,7 +59,7 @@ fn a_trail_knows_where_its_jumps_and_computed_values_are() {
 fn steps_after_a_start_compare_across_trails() {
     let [a, b, field] = [new_cell_id(), new_cell_id(), new_cell_id()];
     let below = |cell| {
-        Trail::root()
+        Trail::root(ViewId::Document)
             .push(Step::Key(cell))
             .push(Step::Follow(Resolution::Document))
             .push(Step::Key(field))

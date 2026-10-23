@@ -53,8 +53,6 @@ pub fn library<W: Host>() -> Library<W> {
             (crate::location::vocabulary::NOT_FOUND, "place not found"),
             (crate::occurrence::vocabulary::JUMP, "jump"),
             (crate::occurrence::vocabulary::COMPUTED, "computed"),
-            (crate::occurrence::vocabulary::PANE, "pane"),
-            (crate::occurrence::vocabulary::OPENED, "opened"),
             (workspace::vocabulary::kind::ROW, "row"),
             (workspace::vocabulary::kind::COLUMN, "column"),
             (workspace::vocabulary::PARTS, "parts"),

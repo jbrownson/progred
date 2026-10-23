@@ -3,6 +3,7 @@
 //! the text tools a line editor needs. Nothing reachable from it leads to the
 //! window or the menus; the shell shows what changed once dispatch returns.
 
+use crate::display::widget::view::ViewId;
 use crate::gesture::Active;
 use crate::library::Libraries;
 use crate::model::Model;
@@ -87,11 +88,12 @@ impl Session<'_> {
     /// needed to change it. A change ends any drag.
     pub(crate) fn set_folded(
         &mut self,
+        view: ViewId,
         path: &[Step],
         default: bool,
         closed: Option<bool>,
     ) -> bool {
-        let changed = self.model.set_folded(path, default, closed);
+        let changed = self.model.set_folded(view, path, default, closed);
         if changed {
             self.finish_gesture();
         }

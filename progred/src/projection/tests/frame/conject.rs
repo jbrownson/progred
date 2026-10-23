@@ -162,7 +162,7 @@ fn nested_result_evaluations_use_their_own_allowance() {
     );
     let mut driver = Driver::of(workspace::row([render]));
     let pane = driver.element(&[gid::Step::Key(workspace::vocabulary::PARTS)], 0, &[]);
-    let mut result = crate::test_examples::pane_root(&pane);
+    let mut result = crate::occurrence::of(&pane);
     result.extend([
         Step::Key(RESULT),
         Step::Computed,
@@ -292,7 +292,7 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
         }),
     );
     let path = [Step::Key(first), Step::Computed];
-    let root = world.model.workspace.document_root().clone();
+    let root = world.model.workspace.document_area();
     let before = world.model.doc.clone();
     world.model.mark_saved();
     let mut driver = Driver::new(world, Driver::VIEWPORT);

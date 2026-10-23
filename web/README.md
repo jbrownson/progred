@@ -100,7 +100,7 @@ and after document or selection changes. Hover, caret movement within the same
 value, and ordinary repainting do not serialize the document. With no callback,
 there is no observer or snapshot cost. Observations contain `document` using
 GID's existing Serde representation, and `selection` (or null): `view` is
-`"document"` or `{pane: path}`, `path` is the occurrence, `source` is where the
+`"document"` or `{opened: id}` for a pane the editor opened, `path` is the occurrence, `source` is where the
 selected data is stored, if anywhere, and `stage` is `"value"`, `"pending"`, or
 `"label"`. A `source` is `{path}` from the document's root, or
 `{cell, library, path}` within a cell's definition, `library` naming the library

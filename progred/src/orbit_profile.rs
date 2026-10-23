@@ -101,6 +101,7 @@ impl OrbitProfile {
                 .collect();
             for (position, key) in sections {
                 editor.session().set_folded(
+                    crate::display::widget::view::ViewId::Document,
                     &crate::occurrence::of(&[
                         Step::Key(outline),
                         Step::Element(position),
@@ -114,7 +115,10 @@ impl OrbitProfile {
         editor
             .model
             .workspace
-            .view_mut(&crate::display::widget::view::Root::pane(panes[0].clone()))
+            .view_mut(&crate::display::widget::view::Area::part(
+                crate::display::widget::view::ViewId::Document,
+                panes[0].clone(),
+            ))
             .unwrap()
             .annotations
             .set_field(

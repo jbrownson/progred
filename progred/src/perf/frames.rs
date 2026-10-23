@@ -154,6 +154,7 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
             doc: &doc,
             libraries: &context.stack.libraries,
         },
+        crate::display::widget::view::ViewId::Document,
         Vec::new(),
         payload,
     );

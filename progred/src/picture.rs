@@ -3,9 +3,8 @@
 //! control session's screenshots.
 
 use crate::Editor;
-use crate::display::widget::navigation::landmark_at;
 use crate::frame::Dispatch;
-use crate::occurrence::{Path, Step};
+use crate::occurrence::Trail;
 use gid::Value;
 use kurbo::{Rect, Size};
 use puri::draw::DrawList;
@@ -14,17 +13,17 @@ use puri_vello::compositor::{Compositor, Resources, SplitCanvas};
 use vello::wgpu;
 
 /// A structural copy waiting for its picture: the value copied, and the
-/// path it was drawn at.
+/// occurrence it was drawn as.
 pub(crate) struct Copied {
     value: Value,
-    path: Path,
+    drawn: Trail,
 }
 
 impl Copied {
-    pub(crate) fn new(value: &Value, path: &[Step]) -> Self {
+    pub(crate) fn new(value: &Value, drawn: &Trail) -> Self {
         Self {
             value: value.clone(),
-            path: path.to_vec(),
+            drawn: drawn.clone(),
         }
     }
 }
@@ -48,7 +47,7 @@ impl Editor {
         render: impl FnOnce(&Picture) -> Result<Vec<u8>, String>,
     ) {
         if let Some(copied) = self.unpictured.take()
-            && let Some(picture) = picture(self, &copied.path, scale, viewport)
+            && let Some(picture) = picture(self, &copied.drawn, scale, viewport)
         {
             match render(&picture) {
                 Ok(png) => {
@@ -62,11 +61,12 @@ impl Editor {
     }
 }
 
-/// What `editor`'s window draws at `path`, at `scale` in `viewport`, with nothing selected and no pointer over it, so no highlight
-/// marks it: as much of it as is in view, or none when none is.
-fn picture(editor: &mut Editor, path: &[Step], scale: f64, viewport: Size) -> Option<Picture> {
+/// What `editor`'s window draws as `drawn`, at `scale` in `viewport`, with
+/// nothing selected and no pointer over it, so no highlight marks it: as
+/// much of it as is in view, or none when none is.
+fn picture(editor: &mut Editor, drawn: &Trail, scale: f64, viewport: Size) -> Option<Picture> {
     let frame = editor.unmarked_frame(scale, viewport);
-    shown(&frame.dispatch, path, viewport).map(|region| {
+    shown(&frame.dispatch, drawn, viewport).map(|region| {
         let mut drawing = DrawList::new();
         puri::frame::render(frame.renders, &mut drawing);
         Picture {
@@ -78,15 +78,17 @@ fn picture(editor: &mut Editor, path: &[Step], scale: f64, viewport: Size) -> Op
 }
 
 /// The whole pixels of `viewport` that hold what `dispatch`'s frame draws
-/// at `path`, within its view.
-fn shown(dispatch: &Dispatch, path: &[Step], viewport: Size) -> Option<Rect> {
-    let root = &crate::workspace::view_of(path);
-    landmark_at(&dispatch.landmarks, Some(root), path)
+/// as `drawn`, within its area.
+fn shown(dispatch: &Dispatch, drawn: &Trail, viewport: Size) -> Option<Rect> {
+    dispatch
+        .landmarks
+        .iter()
+        .find(|landmark| landmark.path == *drawn)
         .map(|landmark| {
             dispatch
                 .view_regions
                 .iter()
-                .filter(|region| region.root == *root)
+                .filter(|region| Some(&region.area) == landmark.area.as_ref())
                 .fold(
                     landmark.rect.intersect(viewport.to_rect()),
                     |rect, region| rect.intersect(region.rect),

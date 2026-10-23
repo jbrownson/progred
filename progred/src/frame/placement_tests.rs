@@ -4,6 +4,7 @@ use crate::display::widget::container::floating;
 use crate::display::widget::container::scrolled;
 use crate::display::widget::placed::leaf;
 use crate::display::widget::view::in_view;
+use crate::display::widget::view::{Area, ViewId};
 use crate::display::widget::{HoverContext, HoverInput};
 use crate::projection::test_support::HoverOutput;
 use kurbo::{Affine, Point, Rect, Stroke};
@@ -147,7 +148,7 @@ fn delimiter_interaction_is_opt_in_without_changing_ink_or_extent() {
                 assert_eq!(
                     interactive.claim.clone().map(|(_, claim)| claim),
                     Some(Claim::Direct(Hovered::Tree(crate::hover::Hover::Value(
-                        crate::occurrence::Trail::root()
+                        crate::occurrence::Trail::root(ViewId::Document)
                     ))))
                 );
                 let outlines = [inert, interactive].map(|placed| {
@@ -180,15 +181,17 @@ fn delimiter_interaction_is_opt_in_without_changing_ink_or_extent() {
 
 #[test]
 fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
-    let owner = Root::document();
-    let other = Root::pane(vec![gid::Step::Key(gid::new_cell_id())]);
+    let owner = Area::whole(ViewId::Document);
+    let other = Area::part(ViewId::Document, vec![gid::Step::Key(gid::new_cell_id())]);
     let measured = in_view(
         native_delimiter(true, 1.0, Extent::default(), puri::delim::Side::Open),
         owner.clone(),
     );
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
-    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root(
+        ViewId::Document,
+    )));
     let point = Point::new(rect.x1 + 1.0, rect.center().y);
     let placed = crate::display::widget::frame::place(
         measured,
@@ -228,7 +231,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
         );
         let mut world = crate::test_editor(gid::Document::default());
         if picking {
-            world.model.selection = Some(crate::selection::pending_value(vec![]));
+            world.model.selection = Some(crate::selection::pending_value(ViewId::Document, vec![]));
         }
         let handled = placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
             &mut world,
@@ -276,8 +279,12 @@ fn scroll_at(x: f64, y: f64) -> PointerScrollEvent {
 
 #[test]
 fn target_actions_and_raw_handlers_share_visual_precedence() {
-    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
-    let other = Hovered::Tree(crate::hover::Hover::Toggle(crate::occurrence::Trail::root()));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root(
+        ViewId::Document,
+    )));
+    let other = Hovered::Tree(crate::hover::Hover::Toggle(crate::occurrence::Trail::root(
+        ViewId::Document,
+    )));
     let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
     let mut frame = HoverOutput::default();
     let mut navigation = Default::default();
@@ -413,7 +420,9 @@ fn popover_content_is_out_of_flow_and_raised_over_the_frame() {
 
 #[test]
 fn clipped_leaves_keep_handlers_but_contribute_no_visible_work() {
-    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root(
+        ViewId::Document,
+    )));
     let child = leaf(
         Extent {
             width: 10.0,
@@ -635,8 +644,8 @@ fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
 
 #[test]
 fn a_floater_keeps_its_view_when_it_covers_another_view() {
-    let owner = Root::document();
-    let covered = Root::document();
+    let owner = Area::whole(ViewId::Document);
+    let covered = Area::whole(ViewId::Document);
     let target = Hovered::Tree(crate::hover::Hover::Entry(0));
     let extent = Extent {
         width: 10.0,
@@ -713,8 +722,8 @@ fn a_floater_keeps_its_view_when_it_covers_another_view() {
 #[test]
 fn native_floaters_keep_their_view_and_raise_above_later_content() {
     use crate::display::widget;
-    let owner = Root::document();
-    let other = Root::pane(vec![]);
+    let owner = Area::whole(ViewId::Document);
+    let other = Area::part(ViewId::Document, vec![]);
     let target = Hovered::Tree(crate::hover::Hover::Entry(0));
     let expected = target.clone();
     let rect = Rect::new(50.0, 0.0, 70.0, 20.0);
@@ -785,7 +794,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     let [landmark] = output.landmarks.as_slice() else {
         panic!("native popup must contribute exactly one landmark");
     };
-    assert_eq!(landmark.root, Some(owner.clone()));
+    assert_eq!(landmark.area, Some(owner.clone()));
     assert_eq!(landmark.rect, rect);
     assert_eq!(
         landmark.path,
@@ -814,7 +823,9 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
 
 #[test]
 fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
-    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root(
+        ViewId::Document,
+    )));
     let claimed = target.clone();
     let child = leaf(
         Extent {
@@ -902,8 +913,8 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
         };
         let mut pointer = DispatchContext::new(None, Some(hovered));
         pointer.landmarks = std::rc::Rc::from([crate::display::widget::navigation::Landmark {
-            root: Some(editor.model.workspace.document_root().clone()),
-            path: crate::occurrence::Trail::root(),
+            area: Some(editor.model.workspace.document_area()),
+            path: crate::occurrence::Trail::root(ViewId::Document),
             rect: placement.rect,
             select: std::rc::Rc::new({
                 let count = count.clone();

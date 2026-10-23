@@ -1,6 +1,6 @@
 //! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::view::{Area, ViewId};
 use crate::location::{Location, Start};
 use crate::{Editor, selection::Stage};
 use ::grap::path;
@@ -63,7 +63,7 @@ pub(crate) fn content_height(
 ) -> Option<f64> {
     regions.iter().find_map(|region| {
         let content = region.content?;
-        (matches!(region.root.target(), Target::Document) && region.rect.area() > 0.0)
+        (region.area == Area::whole(ViewId::Document) && region.rect.area() > 0.0)
             .then(|| (region.rect.y0 / scale + content.y).ceil())
     })
 }
@@ -259,7 +259,7 @@ fn named_reference(
 
 #[derive(PartialEq, Eq)]
 struct Selection {
-    root: Root,
+    view: ViewId,
     path: crate::occurrence::Path,
     /// Where the selected data is stored.
     source: Option<Location<'static>>,
@@ -291,7 +291,7 @@ struct Changes {
 impl Changes {
     fn sample(&mut self, editor: &Editor) -> Option<String> {
         let selection = editor.model.selection.as_ref().map(|selected| Selection {
-            root: selected.root().clone(),
+            view: selected.view(),
             path: selected.path().to_vec(),
             source: selected
                 .location()
@@ -314,10 +314,9 @@ impl Changes {
             let state = serde_json::json!({
                 "document": &*editor.model.doc,
                 "selection": selection.as_ref().map(|selected| serde_json::json!({
-                    "view": match selected.root.target() {
-                        Target::Document => serde_json::json!("document"),
-                        Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
-                        Target::Opened { id } => serde_json::json!({"opened": id.to_string()}),
+                    "view": match selected.view {
+                        ViewId::Document => serde_json::json!("document"),
+                        ViewId::Opened(id) => serde_json::json!({"opened": id.to_string()}),
                     },
                     "path": crate::occurrence::value(&selected.path),
                     "source": selected.source.as_ref().map(source),

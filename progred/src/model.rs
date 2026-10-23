@@ -1,6 +1,7 @@
 //! The editor's durable document state: document, selection, view,
 //! and history.
 
+use crate::display::widget::view::ViewId;
 use crate::history;
 use crate::occurrence::Step;
 use crate::selection;
@@ -20,7 +21,8 @@ pub(crate) struct Model {
 
 pub(crate) struct Snapshot {
     doc: Rc<Document>,
-    selection: Option<crate::occurrence::Path>,
+    /// The selection's view and path.
+    selection: Option<(ViewId, crate::occurrence::Path)>,
     folds: workspace::Folds,
 }
 
@@ -60,10 +62,11 @@ impl Model {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             doc: self.doc.clone(),
-            selection: self
-                .selection
-                .as_ref()
-                .and_then(|selection| selection.history_path().map(<[Step]>::to_vec)),
+            selection: self.selection.as_ref().and_then(|selection| {
+                selection
+                    .history_path()
+                    .map(|path| (selection.view(), path.to_vec()))
+            }),
             folds: self.workspace.folds(),
         }
     }
@@ -79,7 +82,9 @@ impl Model {
             self.doc = restored.doc;
             self.workspace.sync(self.doc.root.as_ref());
             self.workspace.restore_folds(restored.folds);
-            self.selection = restored.selection.map(selection::Selection::edge);
+            self.selection = restored
+                .selection
+                .map(|(view, path)| selection::Selection::edge(view, path));
             true
         } else {
             false
@@ -88,12 +93,13 @@ impl Model {
 
     pub(crate) fn set_folded(
         &mut self,
+        view: ViewId,
         path: &[Step],
         default: bool,
         closed: Option<bool>,
     ) -> bool {
         let before = self.snapshot();
-        let changed = self.workspace.view_at_mut(path).is_some_and(|view| {
+        let changed = self.workspace.view_at_mut(view, path).is_some_and(|view| {
             let previous = crate::annotations::folded(view.annotations.at(path), default);
             let next = closed.unwrap_or(!previous);
             if previous == next {

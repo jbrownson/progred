@@ -1,11 +1,12 @@
 use super::*;
+use crate::display::widget::view::{Area, ViewId};
 use crate::selection;
 use gid::{Step, Value};
 
 #[test]
 fn content_height_waits_for_a_measured_window() {
     let region = |rect| crate::display::widget::frame::ViewRegion {
-        root: Root::document(),
+        area: Area::whole(ViewId::Document),
         rect,
         maximum: kurbo::Vec2::ZERO,
         content: Some(kurbo::Vec2::new(300.0, 120.5)),
@@ -124,9 +125,10 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     let list = editor.model.doc.root.as_ref().unwrap().as_list().unwrap();
     let positions: Vec<_> = list.keys().cloned().collect();
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
-    editor.model.selection = Some(selection::Selection::edge(crate::occurrence::of(&[
-        Step::Element(position.clone()),
-    ])));
+    editor.model.selection = Some(selection::Selection::edge(
+        ViewId::Document,
+        crate::occurrence::of(&[Step::Element(position.clone())]),
+    ));
     let pending: serde_json::Value =
         serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
     assert_eq!(pending["selection"]["stage"], "pending");
@@ -142,7 +144,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
         committed["selection"]["value"],
         serde_json::to_value(crate::libraries::text::value("peaches")).unwrap()
     );
-    editor.model.selection = Some(selection::Selection::edge(vec![]));
+    editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
     let whole: serde_json::Value = serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
     assert_eq!(whole["selection"]["path"], serde_json::json!({"list": []}));
     assert!(changes.sample(&editor).is_none());

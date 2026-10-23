@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
 use crate::display::test_support::primary_press;
-use crate::display::widget::view::Root;
+use crate::display::widget::view::{Area, ViewId};
 use crate::libraries::f64;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
 use crate::occurrence::{Path, Step};
@@ -15,11 +15,11 @@ fn model(value: Value) -> crate::Editor {
     crate::editor_of(value)
 }
 
-/// A state drag from `origin` that annotates `path` in `root`'s view.
+/// A state drag from `origin` that annotates `path` in the area `area`.
 fn annotating_drag(
     origin: Point,
     scale: f64,
-    root: Root,
+    area: Area,
     path: Path,
     handler: StateDragHandler,
 ) -> Box<dyn Gesture> {
@@ -27,7 +27,7 @@ fn annotating_drag(
         Drag::new(origin, scale, crate::gesture::DRAG_THRESHOLD),
         handler(),
         Rc::new(move |session: &mut crate::editing::Session<'_>, value| {
-            if let Some(view) = session.model.workspace.view_mut(&root) {
+            if let Some(view) = session.model.workspace.view_mut(&area) {
                 view.annotations.set(&path, Some(value));
                 true
             } else {
@@ -51,7 +51,8 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
                     Rc::new(move |session| {
                         select_log.borrow_mut().push("select");
                         if accepts {
-                            crate::editing::Edit::new(session.reborrow()).select(&[]);
+                            crate::editing::Edit::new(session.reborrow())
+                                .select(ViewId::Document, &[]);
                         }
                         accepts
                     }),
@@ -68,7 +69,10 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &primary_press(Point::new(5.0, 5.0), Modifiers::empty()),
-            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hover(vec![]))),
+            &mut crate::frame::DispatchContext::new(
+                Some(Area::whole(ViewId::Document)),
+                Some(hover(vec![])),
+            ),
         );
         assert_eq!(handled, covered || accepts);
         assert_eq!(world.gesture.is_some(), accepts && !covered);
@@ -146,7 +150,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             &mut world,
             &event,
             &mut crate::frame::DispatchContext::new(
-                owns_view.then(crate::test_root),
+                owns_view.then(|| Area::whole(ViewId::Document)),
                 Some(hover(vec![])),
             ),
         );
@@ -177,7 +181,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
                     &mut world,
                     &primary_press(Point::new(5.0, 5.0), crate::test_support::command()),
                     &mut crate::frame::DispatchContext::new(
-                        Some(crate::test_root()),
+                        Some(Area::whole(ViewId::Document)),
                         Some(hover(vec![]))
                     )
                 ))
@@ -189,7 +193,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
 #[test]
 fn state_drags_use_total_logical_distance_and_only_update_their_view() {
     let mut model = model(Value::record([]));
-    let root = model.model.workspace.document_root().clone();
+    let root = model.model.workspace.document_area();
     let path = vec![Step::Key(gid::new_cell_id())];
     let mut gesture = annotating_drag(
         Point::ZERO,
@@ -230,7 +234,7 @@ fn state_drags_use_total_logical_distance_and_only_update_their_view() {
 #[test]
 fn state_drag_gets_one_batch_including_threshold_excursions() {
     let mut model = model(Value::record([]));
-    let root = model.model.workspace.document_root().clone();
+    let root = model.model.workspace.document_area();
     let calls = Rc::new(std::cell::RefCell::new(Vec::new()));
     let log = calls.clone();
     let mut gesture = annotating_drag(
@@ -272,8 +276,8 @@ fn state_drag_gets_one_batch_including_threshold_excursions() {
 fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
     let mut model = model(f64::value(0.0));
     let original = model.model.doc.clone();
-    let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(crate::selection::Selection::edge(vec![]));
+    let root = model.model.workspace.document_area();
+    model.model.selection = Some(crate::selection::Selection::edge(ViewId::Document, vec![]));
     let mut gesture = point(
         Rect::new(10.0, 20.0, 110.0, 120.0),
         Rc::new(|event| PointUpdate {
@@ -293,7 +297,7 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
         Some(Value::list([f64::value(1.0), f64::value(0.0)]))
     );
     assert!(!gesture.advance(&mut model.session(), &[Point::new(210.0, -20.0)]));
-    assert_eq!(model.model.selection.as_ref().unwrap().root(), &root);
+    assert_eq!(model.model.selection.as_ref().unwrap().view(), root.view);
     assert!(model.model.step_history(true));
     assert_eq!(model.model.doc.root, original.root);
     assert!(!model.model.history.can_undo());

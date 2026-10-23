@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::test_support::{mouse, primary_press};
+use crate::display::widget::view::ViewId;
 use crate::display::{Layout, partial, widget};
 use crate::libraries::{f64, text};
 use crate::projection::Projection;
@@ -113,7 +114,10 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
         cells,
     }));
     runner.refresh_frame(1.0, VIEWPORT);
-    runner.editor.model.selection = Some(selection::Selection::edge(cell_path.clone()));
+    runner.editor.model.selection = Some(selection::Selection::edge(
+        ViewId::Document,
+        cell_path.clone(),
+    ));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(!runner.keyboard_event(
         &key_down(NamedKey::ArrowDown, Modifiers::empty()),
@@ -184,7 +188,10 @@ fn arrows_edit_text_before_routing_and_arrive_at_the_near_text_edge() {
         .map(|position| vec![crate::occurrence::Step::Element(position.clone())])
         .collect();
     let mut runner = EditorRunner::new(crate::editor_of(list));
-    runner.editor.model.selection = Some(selection::Selection::edge(paths[0].clone()));
+    runner.editor.model.selection = Some(selection::Selection::edge(
+        ViewId::Document,
+        paths[0].clone(),
+    ));
     runner.refresh_frame(1.0, VIEWPORT);
     // Plain selection defaults to the end; Left first moves within "ab".
     assert!(runner.keyboard_event(
@@ -241,7 +248,10 @@ fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
             .collect();
         let mut editor = crate::editor_of(list);
         editor.command_modifier = command;
-        editor.model.selection = Some(selection::Selection::edge(paths[1].clone()));
+        editor.model.selection = Some(selection::Selection::edge(
+            ViewId::Document,
+            paths[1].clone(),
+        ));
         let mut runner = EditorRunner::new(editor);
         runner.refresh_frame(1.0, VIEWPORT);
         for (key, index, offset) in [
@@ -282,7 +292,10 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
         .chain([crate::occurrence::Step::Key(name::vocabulary::NAME)])
         .collect();
     let mut runner = EditorRunner::new(crate::editor_of(list));
-    runner.editor.model.selection = Some(selection::Selection::edge(name_path.clone()));
+    runner.editor.model.selection = Some(selection::Selection::edge(
+        ViewId::Document,
+        name_path.clone(),
+    ));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.keyboard_event(
         &key_down(NamedKey::ArrowRight, Modifiers::empty()),
@@ -350,7 +363,7 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
 #[test]
 fn focus_changes_clear_selection_cancel_gestures_and_gate_keyboard_input() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
-    runner.editor.model.selection = Some(selection::Selection::edge(vec![]));
+    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.keyboard_event(&key(), 1.0, VIEWPORT));
     let document = runner.editor.model.doc.clone();
@@ -388,7 +401,7 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     runner.refresh_frame(1.0, VIEWPORT);
     assert_eq!(runner.frame.input_area, None);
-    runner.editor.model.selection = Some(selection::Selection::edge(vec![]));
+    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     let area = runner
         .frame
@@ -403,7 +416,7 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
 #[test]
 fn a_picker_query_offers_a_composition_area() {
     let mut runner = EditorRunner::new(crate::test_editor(Document::default()));
-    runner.editor.model.selection = Some(selection::Selection::edge(vec![]));
+    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.frame.input_area.is_some());
 }
@@ -411,7 +424,7 @@ fn a_picker_query_offers_a_composition_area() {
 #[test]
 fn focus_loss_ends_ime_composition_without_changing_committed_text() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
-    runner.editor.model.selection = Some(selection::Selection::edge(vec![]));
+    runner.editor.model.selection = Some(selection::Selection::edge(ViewId::Document, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.ime_event(
         &ImeEvent::Preedit("draft".into(), Some((5, 5))),
@@ -490,7 +503,7 @@ fn no_op_dispatch_declines_without_building_a_frame() {
     assert!(runner.frame.pending_paint.is_none());
     assert!(runner.frame.dispatch.landmarks.is_empty());
     assert!(runner.frame.dispatch.view_regions.is_empty());
-    assert!(runner.frame.dispatch.pointer_root.is_none());
+    assert!(runner.frame.dispatch.pointer_area.is_none());
 }
 
 #[test]
@@ -501,16 +514,16 @@ fn stationary_modifier_changes_dispatch_with_the_installed_hover_without_focus()
     runner.refresh_frame(1.0, VIEWPORT);
     log.borrow_mut().clear();
     let hover = crate::frame::Hovered::Blocked;
-    let root = runner.editor.model.workspace.document_root().clone();
+    let root = runner.editor.model.workspace.document_area();
     runner.frame.hover = Some(hover.clone());
-    runner.frame.dispatch.pointer_root = Some(root.clone());
+    runner.frame.dispatch.pointer_area = Some(root.clone());
     runner.frame.dispatch.handler_mut().on({
         let log = log.clone();
         move |editor, event, input| {
             if let Event::ModifiersChanged(modifiers) = event {
                 assert_eq!(editor.modifiers, *modifiers);
                 assert_eq!(input.hovered(), Some(&hover));
-                assert_eq!(input.root.as_ref(), Some(&root));
+                assert_eq!(input.area.as_ref(), Some(&root));
                 log.borrow_mut().push(("modifiers", 0.0));
                 Rc::make_mut(&mut editor.model.doc).root = Some(f64::value(5.0));
                 puri::handler::EventOutcome::accept()
@@ -541,7 +554,7 @@ fn every_input_receives_the_installed_dispatch_context() {
         let log = Log::default();
         let mut runner = instrumented_runner(&log);
         runner.refresh_frame(1.0, VIEWPORT);
-        let root = runner.editor.model.workspace.document_root().clone();
+        let root = runner.editor.model.workspace.document_area();
         let hover = crate::frame::Hovered::Blocked;
         let mut pass =
             crate::display::widget::HoverPass::<(), _>::new(&Default::default(), Rect::ZERO);
@@ -556,7 +569,7 @@ fn every_input_receives_the_installed_dispatch_context() {
         runner.frame.dispatch.hover_geometry =
             pass.finish().bind(Default::default()).hover_geometry;
         runner.frame.hover = Some(hover.clone());
-        runner.frame.dispatch.pointer_root = Some(root.clone());
+        runner.frame.dispatch.pointer_area = Some(root.clone());
         let landmarks = runner.frame.dispatch.landmarks.clone();
         let regions = runner.frame.dispatch.view_regions.clone();
         let calls = Rc::new(std::cell::Cell::new(0));
@@ -567,7 +580,7 @@ fn every_input_receives_the_installed_dispatch_context() {
                     return EventOutcome::decline(event);
                 }
                 assert_eq!(input.hovered(), Some(&hover), "{kind}");
-                assert_eq!(input.root.as_ref(), Some(&root), "{kind}");
+                assert_eq!(input.area.as_ref(), Some(&root), "{kind}");
                 assert!(Rc::ptr_eq(&input.landmarks, &landmarks), "{kind}");
                 assert!(Rc::ptr_eq(&input.view_regions, &regions), "{kind}");
                 calls.set(calls.get() + 1);

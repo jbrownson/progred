@@ -724,6 +724,9 @@ pub struct ProjectDescription<'a> {
     pub focused: bool,
     pub completions: Option<&'a crate::display::CompletionProvider>,
     pub sources: Sources<'a>,
+    /// The view the projection draws in, which every occurrence it draws is
+    /// in.
+    pub view: crate::display::widget::view::ViewId,
     pub root: Option<&'a Value>,
     pub root_path: &'a [Step],
     /// Selection belonging to this editable view.
@@ -755,6 +758,7 @@ fn prepare_project(
         focused,
         completions,
         sources,
+        view,
         root,
         root_path,
         selection,
@@ -806,7 +810,7 @@ fn prepare_project(
         ProjectionScope {
             cx: &cx,
             projection,
-            path: &Trail::of(root_path),
+            path: &Trail::in_view(view, root_path),
             ancestors: &ancestry,
             state: annotations.node_at(root_path),
             value: root.cloned().map(grap::RuntimeValue::from).as_ref(),
@@ -868,13 +872,15 @@ fn bind_selection(
             let cut = crate::modifiers::chord(command, event, "x");
             event.state.is_down()
                 && editor.model.selection.as_ref().is_some_and(|selection| {
-                    path == selection.path() && selection.stage(&editor.sources()) == Stage::Edge
+                    path.view() == selection.view()
+                        && path == selection.path()
+                        && selection.stage(&editor.sources()) == Stage::Edge
                 })
                 && if copy || cut {
                     // A cut's occurrence is gone before a picture of it
                     // could be drawn.
-                    let drawn = (!cut).then(|| path.to_vec());
-                    editor.copy_value(value.as_value(), drawn.as_deref()) && {
+                    let drawn = (!cut).then(|| path.clone());
+                    editor.copy_value(value.as_value(), drawn.as_ref()) && {
                         if cut {
                             editor.delete_selected_edge(input.geometry(scale));
                         }

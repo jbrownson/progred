@@ -5,7 +5,7 @@
 use crate::display::widget::frame::{Cursor, ViewRegion};
 use crate::display::widget::navigation::{Geometry, Landmark, landmark_at};
 use crate::display::widget::source::SourceTrace;
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::view::{Area, ViewId};
 use crate::display::widget::{container, placed, style, view};
 use crate::hover;
 use crate::menu;
@@ -34,7 +34,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 #[derive(Default)]
 pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
-    pub(crate) pointer_root: Option<crate::display::widget::view::Root>,
+    pub(crate) pointer_area: Option<Area>,
     pub(crate) landmarks: Rc<[Landmark<Editor>]>,
     pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
@@ -64,15 +64,15 @@ pub(crate) struct FrameState {
     pub(crate) dispatch: Dispatch,
     pub(crate) pending_paint: Option<PendingPaint>,
     pub(crate) input_area: Option<Rect>,
-    notified_hover: Option<(Option<Root>, Hovered)>,
+    notified_hover: Option<(Option<Area>, Hovered)>,
     hover_awaits_paint: bool,
 }
 
 impl FrameState {
-    fn hover_location(&self) -> Option<(Option<Root>, Hovered)> {
+    fn hover_location(&self) -> Option<(Option<Area>, Hovered)> {
         self.hover
             .clone()
-            .map(|hover| (self.dispatch.pointer_root.clone(), hover))
+            .map(|hover| (self.dispatch.pointer_area.clone(), hover))
     }
 }
 
@@ -113,7 +113,7 @@ impl Dispatch {
             pointer: editor.pointer,
             modifiers: editor.modifiers,
             pressed: editor.pressed,
-            ..DispatchContext::new(self.pointer_root.clone(), hover)
+            ..DispatchContext::new(self.pointer_area.clone(), hover)
         }
     }
 }
@@ -164,7 +164,7 @@ impl crate::display::Host for Editor {
 fn attribute(
     sources: &sources::Sources<'_>,
     landmarks: &[Landmark<Editor>],
-    root: Option<&Root>,
+    area: Option<&Area>,
     completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
@@ -180,7 +180,7 @@ fn attribute(
     };
     let visible = source_hover_visible(hovered.as_ref(), link);
     let landmark = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(path))) => landmark_at(landmarks, root, path),
+        Some(Hovered::Tree(hover::Hover::Value(path))) => landmark_at(landmarks, area, path),
         _ => None,
     };
     let hovered_secondary = match &hovered {
@@ -210,9 +210,7 @@ fn attribute(
 }
 
 /// Interpret the winning claim as an editor target and its owning view.
-fn hover_target(
-    claim: Option<(Option<crate::display::widget::view::Root>, Claim<Hovered>)>,
-) -> (Option<Hovered>, Option<crate::display::widget::view::Root>) {
+fn hover_target(claim: Option<(Option<Area>, Claim<Hovered>)>) -> (Option<Hovered>, Option<Area>) {
     match claim {
         Some((root, Claim::Direct(target) | Claim::Extended(target))) => (Some(target), root),
         Some((root, Claim::Occludes)) => (Some(Hovered::Blocked), root),
@@ -253,7 +251,7 @@ pub(crate) struct FrameResources<'a> {
 #[derive(Default)]
 struct PointerInput<'a> {
     position: Option<Point>,
-    previous: Option<(Option<&'a Root>, &'a Hovered)>,
+    previous: Option<(Option<&'a Area>, &'a Hovered)>,
     pressed: bool,
     link_sources: bool,
 }
@@ -308,9 +306,9 @@ fn compute_hover(
             reach_px: HOVER_REACH_POINTS * description.scale,
         },
     );
-    let (hover, pointer_root) = if pointer.pressed {
-        pointer.previous.map_or((None, None), |(root, hover)| {
-            (Some(hover.clone()), root.cloned())
+    let (hover, pointer_area) = if pointer.pressed {
+        pointer.previous.map_or((None, None), |(area, hover)| {
+            (Some(hover.clone()), area.cloned())
         })
     } else {
         hover_target(output.claim.take())
@@ -321,7 +319,7 @@ fn compute_hover(
             libraries: &description.stack.libraries,
         },
         &output.landmarks,
-        pointer_root.as_ref(),
+        pointer_area.as_ref(),
         output.completion.as_ref(),
         hover.clone(),
         pointer.link_sources,
@@ -346,7 +344,7 @@ fn compute_hover(
         .map(|selection| selection.path().to_vec());
     if (description.model.selection.is_none() || undrawn.is_some())
         && let Some(handler) = navigate::initial_navigation(
-            description.model.workspace.document_root(),
+            &description.model.workspace.document_start(),
             &output.landmarks,
             undrawn,
         )
@@ -367,7 +365,7 @@ fn compute_hover(
         hover,
         dispatch: Dispatch {
             handler: Rc::new(handler.unwrap_or_else(Handler::new)),
-            pointer_root,
+            pointer_area,
             landmarks: landmarks.into(),
             view_regions: view_regions.into(),
             hover_geometry,
@@ -380,14 +378,14 @@ fn compute_hover(
 impl Editor {
     pub(crate) fn scroll_view(
         &mut self,
-        root: Root,
+        area: Area,
         update: &ui_events::pointer::PointerScrollEvent,
         scale: f64,
         viewport: Size,
         maximum: Vec2,
     ) -> ScrollOutcome {
         // A retained handler can outlive its view; decline rather than panic.
-        match self.model.workspace.view_mut(&root) {
+        match self.model.workspace.view_mut(&area) {
             Some(view) => {
                 let (next, outcome) = crate::display::widget::scroll::offset(
                     view.scroll,
@@ -405,12 +403,12 @@ impl Editor {
 
     fn sync_views(&mut self) {
         self.model.workspace.sync(self.model.doc.root.as_ref());
-        if self
-            .model
-            .selection
-            .as_ref()
-            .is_some_and(|selection| self.model.workspace.view(selection.root()).is_none())
-        {
+        if self.model.selection.as_ref().is_some_and(|selection| {
+            self.model
+                .workspace
+                .view_at(selection.view(), selection.path())
+                .is_none()
+        }) {
             self.model.selection = None;
         }
     }
@@ -419,7 +417,7 @@ impl Editor {
         &mut self,
         scale: f64,
         viewport: Size,
-        previous: Option<(Option<Root>, Hovered)>,
+        previous: Option<(Option<Area>, Hovered)>,
     ) -> Frame {
         self.sync_views();
         self.computations.frame_time.set(web_time::Instant::now());
@@ -479,13 +477,13 @@ impl EditorRunner {
     pub(crate) fn probe_pointer(&mut self, scale: f64) {
         // Retain the complete hover location throughout an active press.
         if !self.editor.pressed {
-            let (hover, pointer_root) = hover_target(self.frame.dispatch.hover_geometry.probe(
+            let (hover, pointer_area) = hover_target(self.frame.dispatch.hover_geometry.probe(
                 self.editor.pointer,
                 self.frame.hover.as_ref(),
                 HOVER_REACH_POINTS * scale,
             ));
             self.frame.hover = hover;
-            self.frame.dispatch.pointer_root = pointer_root;
+            self.frame.dispatch.pointer_area = pointer_area;
         }
     }
 
@@ -655,19 +653,20 @@ fn view_content<'a>(
     size: Size,
     scale: f64,
 ) -> ViewContent<'a> {
-    let viewport = match view.root.target() {
-        Target::Pane { path } if view.shown.shows(crate::libraries::presentation::ID) => {
-            projection::viewport::entry(sources, path)
-        }
-        _ => None,
-    };
+    let area = &view.area;
+    // Every area but the document's whole one shows a pane's entry.
+    let pane = area.view != ViewId::Document || !area.path().is_empty();
+    let viewport = (area.view == ViewId::Document
+        && pane
+        && view.shown.shows(crate::libraries::presentation::ID))
+    .then(|| projection::viewport::entry(sources, area.path()))
+    .flatten();
     let interpreted = view.shown.shows(crate::libraries::editor::ID);
-    let root_path = workspace.root_path(&sources, &view.root, interpreted);
-    let pane = !matches!(view.root.target(), Target::Document);
-    match (view.root.target(), viewport) {
-        (Target::Pane { path }, Some(entry)) => ViewContent {
+    let root_path = workspace.root_path(&sources, area, interpreted);
+    match viewport {
+        Some(entry) => ViewContent {
             // The cells the entry follows to its viewport, below the jump.
-            root_path: crate::occurrence::below(&root_path, &entry.path[path.len()..]),
+            root_path: crate::occurrence::below(&root_path, &entry.path[area.path().len()..]),
             root: Some(Cow::Borrowed(entry.value)),
             projection: Cow::Owned(projection::viewport::projection(
                 &view_projection(stack, view, false),
@@ -675,8 +674,8 @@ fn view_content<'a>(
             )),
             viewport: true,
         },
-        _ => {
-            let entry = workspace.entry(&sources, &view.root);
+        None => {
+            let entry = workspace.entry(&sources, area);
             // An opened pane's entry, which nothing stores, draws as computed.
             let root = match root_path.last() {
                 Some(crate::occurrence::Step::Computed) => entry,
@@ -768,12 +767,12 @@ fn project_workspace_view(
             focused,
             completions: Some(&completions),
             sources,
+            view: view.area.view,
             root: shown.root.as_deref(),
             root_path: &shown.root_path,
-            selection: model
-                .selection
-                .as_ref()
-                .filter(|selection| selection.root() == &view.root),
+            selection: model.selection.as_ref().filter(|selection| {
+                model.workspace.area_of(selection.view(), selection.path()) == view.area
+            }),
             source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
             names: names(stack, view),
@@ -784,27 +783,27 @@ fn project_workspace_view(
         tcx,
     );
     let content = measured::pad(Insets::uniform(margin), projected);
-    let root = view.root.clone();
+    let area = view.area.clone();
     let content = if shown.viewport {
-        view::viewport(content, root.clone())
+        view::viewport(content, area.clone())
     } else {
         let maximum = crate::display::widget::scroll::maximum(content.extent, size, scale);
         let offset = Vec2::new(
             view.scroll.x.clamp(0.0, maximum.x) * scale,
             view.scroll.y.clamp(0.0, maximum.y) * scale,
         );
-        let scroll_root = root.clone();
+        let scroll_area = area.clone();
         view::scrolled_at(
             content,
             offset,
-            root.clone(),
+            area.clone(),
             scale,
             move |app: &mut Editor, update| {
-                app.scroll_view(scroll_root.clone(), update, scale, size, maximum)
+                app.scroll_view(scroll_area.clone(), update, scale, size, maximum)
             },
         )
     };
-    let content = view::in_view(content, root);
+    let content = view::in_view(content, area);
     measured::overlay_into(backdrop(size), content, move |placement, _| {
         Some(Placement::new(
             placement.rect,

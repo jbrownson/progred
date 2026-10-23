@@ -5,6 +5,7 @@
 
 use crate::display::CompletionKind;
 use crate::display::widget::offers::Entry;
+use crate::display::widget::view::ViewId;
 use crate::library::Libraries;
 use crate::selection::{Selection, pending_edge};
 use crate::sources::Sources;
@@ -42,16 +43,9 @@ pub(crate) fn test_editor_with_stack(doc: Document, stack: crate::stack::Stack) 
         Default::default(),
         None,
     );
-    editor.model.workspace.document.root = test_root();
     editor.model.workspace.sync(editor.model.doc.root.as_ref());
     editor.focused = true;
     editor
-}
-
-/// The document view's root, the same one throughout a thread.
-pub(crate) fn test_root() -> crate::display::widget::view::Root {
-    thread_local! { static ROOT: crate::display::widget::view::Root = crate::display::widget::view::Root::document(); }
-    ROOT.with(Clone::clone)
 }
 
 /// A Grap host resolving each cell through its function.
@@ -271,7 +265,7 @@ pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a
 
 /// A selection of what's drawn at the document path `path`.
 pub(crate) fn make_selection(path: Path) -> Selection {
-    Selection::edge(crate::occurrence::of(&path))
+    Selection::edge(ViewId::Document, crate::occurrence::of(&path))
 }
 
 /// The value `spine`'s Key and Element steps reach within `value`; a Follow
@@ -384,11 +378,12 @@ pub(crate) fn test_entry(
                 cells: Cells::new(),
             });
             world.model.selection = Some(match kind {
-                CompletionKind::Value => crate::selection::pending_value(vec![]),
+                CompletionKind::Value => crate::selection::pending_value(ViewId::Document, vec![]),
                 CompletionKind::Field => pending_edge(
                     &crate::editing::Read {
                         sources: world.sources(),
                     },
+                    ViewId::Document,
                     vec![],
                 )
                 .unwrap(),
@@ -427,9 +422,9 @@ pub(crate) fn activate_projected(
     entry: &Entry<crate::Editor>,
 ) -> crate::Editor {
     let mut editor = crate::test_editor(doc.clone());
-    editor.model.workspace.document.root = selection.root().clone();
     editor.model.selection = Some(Selection::from_payload(
         &editor.sources(),
+        selection.view(),
         selection.path().to_vec(),
         selection.payload(),
     ));

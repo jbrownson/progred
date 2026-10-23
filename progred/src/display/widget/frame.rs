@@ -4,7 +4,7 @@ use super::{
     navigation::{Collector, Landmark, Select},
     offers::Offers,
     source::{Secondary, SourceTrace},
-    view::Root,
+    view::Area,
 };
 use kurbo::{Affine, Point, Rect, Vec2};
 use measured::Measured;
@@ -39,7 +39,7 @@ impl<H> Clone for HoverInput<'_, H> {
 pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
     pub(super) output: &'a mut HoverOutput<C, H>,
-    root: Option<Root>,
+    area: Option<Area>,
     navigation: &'a mut Collector,
 }
 
@@ -52,7 +52,7 @@ impl<'a, C, H> HoverContext<'a, C, H> {
         Self {
             input,
             output,
-            root: None,
+            area: None,
             navigation,
         }
     }
@@ -143,7 +143,7 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
         self.output
             .hover_geometry
             .cursors
-            .push((self.root.clone(), target, cursor));
+            .push((self.area.clone(), target, cursor));
     }
 
     pub fn claim(&mut self, probe: Probe<H>) {
@@ -152,12 +152,12 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
             self.input
                 .pointer
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
-                .map(|claim| (self.root.clone(), claim)),
+                .map(|claim| (self.area.clone(), claim)),
         );
         self.output
             .hover_geometry
             .probes
-            .push((self.root.clone(), probe));
+            .push((self.area.clone(), probe));
     }
 
     /// Blocks the targets below `placement`, and the presses there.
@@ -207,7 +207,7 @@ pub struct HoverPass<C, H> {
     pointer: Option<Point>,
     prior: Option<H>,
     reach_px: f64,
-    root: Option<Root>,
+    area: Option<Area>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
     /// Where floating placements may go: the whole frame, not the view or
@@ -228,7 +228,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             pointer: input.pointer,
             prior: input.prior.cloned(),
             reach_px: input.reach_px,
-            root: None,
+            area: None,
             output: HoverOutput::default(),
             floaters: Vec::new(),
             bounds,
@@ -253,7 +253,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             &mut self.output,
             &mut self.navigation,
         );
-        context.root = self.root.clone();
+        context.area = self.area.clone();
         step(&mut context);
         if let Some(handler) = self.output.handler.take() {
             self.output.after_hover.push(move |_, output| {
@@ -273,14 +273,14 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         self.output = std::mem::take(&mut self.output).over(map(child));
     }
 
-    pub fn in_view(&mut self, root: Root, content: impl FnOnce(&mut Self)) {
-        let parent = self.root.replace(root.clone());
+    pub fn in_view(&mut self, area: Area, content: impl FnOnce(&mut Self)) {
+        let parent = self.area.replace(area.clone());
         let navigation = std::mem::take(&mut self.navigation);
         self.scope(
             |pass| {
                 content(pass);
                 if let Some(handlers) =
-                    std::mem::take(&mut pass.navigation).finish(Some(root.clone()))
+                    std::mem::take(&mut pass.navigation).finish(Some(area.clone()))
                 {
                     pass.visit(|output| {
                         output.handler().stack(handlers);
@@ -288,12 +288,12 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
                 }
             },
             |mut output| {
-                output.attribute_view(&root);
+                output.attribute_view(&area);
                 output
             },
         );
         self.navigation = navigation;
-        self.root = parent;
+        self.area = parent;
     }
 
     /// Place `content` clipped to `placement`, its starts and scrolls gated there.
@@ -303,9 +303,9 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
 
     /// Place `above` once everything else is placed, over it, in this view.
     pub(crate) fn float(&mut self, above: impl FnOnce(&mut Self) + 'static) {
-        let root = self.root.clone();
-        self.floaters.push(Box::new(move |pass| match root {
-            Some(root) => pass.in_view(root, above),
+        let area = self.area.clone();
+        self.floaters.push(Box::new(move |pass| match area {
+            Some(area) => pass.in_view(area, above),
             None => above(pass),
         }));
     }
@@ -319,7 +319,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
 
     pub fn finish(mut self) -> HoverOutput<C, H> {
         self.run_floaters();
-        if let Some(handlers) = std::mem::take(&mut self.navigation).finish(self.root.clone()) {
+        if let Some(handlers) = std::mem::take(&mut self.navigation).finish(self.area.clone()) {
             self.output.handler_mut().stack(handlers);
         }
         self.output
@@ -351,9 +351,9 @@ pub fn place<C: 'static, H: Clone + 'static>(
 }
 
 fn claim_over<H>(
-    base: Option<(Option<Root>, Claim<H>)>,
-    above: Option<(Option<Root>, Claim<H>)>,
-) -> Option<(Option<Root>, Claim<H>)> {
+    base: Option<(Option<Area>, Claim<H>)>,
+    above: Option<(Option<Area>, Claim<H>)>,
+) -> Option<(Option<Area>, Claim<H>)> {
     if above
         .as_ref()
         .is_some_and(|(_, claim)| claim.supersedes(base.as_ref().map(|(_, claim)| claim)))
@@ -367,8 +367,8 @@ fn claim_over<H>(
 /// The installed frame's hit tests, in painting order, and the cursors their
 /// targets ask for, with their owning views.
 pub struct HoverGeometry<H> {
-    probes: Vec<(Option<Root>, Probe<H>)>,
-    cursors: Vec<(Option<Root>, H, Cursor)>,
+    probes: Vec<(Option<Area>, Probe<H>)>,
+    cursors: Vec<(Option<Area>, H, Cursor)>,
 }
 
 impl<H> Default for HoverGeometry<H> {
@@ -398,24 +398,24 @@ impl<H: Clone + PartialEq> HoverGeometry<H> {
         pointer: Option<Point>,
         prior: Option<&H>,
         reach_px: f64,
-    ) -> Option<(Option<Root>, Claim<H>)> {
+    ) -> Option<(Option<Area>, Claim<H>)> {
         pointer.and_then(|point| {
-            self.probes.iter().fold(None, |below, (root, probe)| {
+            self.probes.iter().fold(None, |below, (area, probe)| {
                 claim_over(
                     below,
                     probe
                         .answer(point, prior, reach_px)
-                        .map(|claim| (root.clone(), claim)),
+                        .map(|claim| (area.clone(), claim)),
                 )
             })
         })
     }
 
-    /// The cursor `hovered`, in the view `root`, asked for.
-    pub fn cursor(&self, root: Option<&Root>, hovered: &H) -> Option<Cursor> {
+    /// The cursor `hovered`, in the area `area`, asked for.
+    pub fn cursor(&self, area: Option<&Area>, hovered: &H) -> Option<Cursor> {
         self.cursors
             .iter()
-            .find(|(owner, target, _)| owner.as_ref() == root && target == hovered)
+            .find(|(owner, target, _)| owner.as_ref() == area && target == hovered)
             .map(|(_, _, cursor)| *cursor)
     }
 }
@@ -428,7 +428,7 @@ pub struct DispatchContext<C, Hover> {
     pub handler: Rc<Handler<C, DispatchContext<C, Hover>>>,
     pub landmarks: std::rc::Rc<[Landmark<C>]>,
     pub view_regions: std::rc::Rc<[ViewRegion]>,
-    pub root: Option<Root>,
+    pub area: Option<Area>,
     pub hovered: Option<Hover>,
     pub outside_view: bool,
     /// The pointer while it's over the window, as of this dispatch.
@@ -445,7 +445,7 @@ impl<C, Hover> Default for DispatchContext<C, Hover> {
             handler: Default::default(),
             landmarks: Default::default(),
             view_regions: Default::default(),
-            root: None,
+            area: None,
             hovered: None,
             outside_view: false,
             pointer: None,
@@ -456,9 +456,9 @@ impl<C, Hover> Default for DispatchContext<C, Hover> {
 }
 
 impl<C, Hover> DispatchContext<C, Hover> {
-    pub fn new(root: Option<Root>, hovered: Option<Hover>) -> Self {
+    pub fn new(area: Option<Area>, hovered: Option<Hover>) -> Self {
         Self {
-            root,
+            area,
             hovered,
             ..Self::default()
         }
@@ -485,7 +485,7 @@ impl<C, Hover> DispatchContext<C, Hover> {
 /// An editor view's settled geometry. Fixed viewports have zero scroll
 /// maxima; scrolling views use them for pointer scroll and selection reveal.
 pub struct ViewRegion {
-    pub root: Root,
+    pub area: Area,
     pub rect: Rect,
     pub maximum: Vec2,
     /// A scrolling view's whole content in logical units, which an embedding
@@ -543,7 +543,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for Effects<C, H> {
 
 pub struct HoverOutput<C, Hover> {
     pub scroll_probes: Vec<super::scroll::Probe>,
-    pub claim: Option<(Option<Root>, Claim<Hover>)>,
+    pub claim: Option<(Option<Area>, Claim<Hover>)>,
     pub hover_geometry: HoverGeometry<Hover>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
@@ -619,22 +619,22 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         self
     }
 
-    pub fn attribute_view(&mut self, root: &Root) {
+    pub fn attribute_view(&mut self, area: &Area) {
         if let Some((owner, _)) = &mut self.claim {
-            *owner = Some(root.clone());
+            *owner = Some(area.clone());
         }
         for (owner, _) in &mut self.hover_geometry.probes {
-            *owner = Some(root.clone());
+            *owner = Some(area.clone());
         }
         for (owner, _, _) in &mut self.hover_geometry.cursors {
-            *owner = Some(root.clone());
+            *owner = Some(area.clone());
         }
         for landmark in &mut self.landmarks {
-            landmark.root = Some(root.clone());
+            landmark.area = Some(area.clone());
         }
-        let root = root.clone();
+        let area = area.clone();
         self.map_effects(
-            move |handler| view_handler(handler, root.clone()),
+            move |handler| view_handler(handler, area.clone()),
             |mut renders, frame| frame.append(&mut renders),
         );
     }
@@ -707,11 +707,11 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
 
 fn view_handler<C: 'static, H: 'static>(
     inner: Handler<C, DispatchContext<C, H>>,
-    root: Root,
+    area: Area,
 ) -> Handler<C, DispatchContext<C, H>> {
     Handler::from_function(move |ctx, event, pointer: &mut DispatchContext<C, H>| {
         let outside = pointer.outside_view;
-        pointer.outside_view = pointer.root.as_ref() != Some(&root);
+        pointer.outside_view = pointer.area.as_ref() != Some(&area);
         let outcome = inner.dispatch(ctx, event, pointer);
         pointer.outside_view = outside;
         outcome

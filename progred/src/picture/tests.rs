@@ -3,6 +3,7 @@ use crate::display::test_support::painted;
 use crate::display::widget::style::{self, Palette};
 use crate::driver::Driver;
 use crate::libraries::text;
+use crate::occurrence::Step;
 use puri::draw::DrawCmd;
 use ui_events::keyboard::Key;
 

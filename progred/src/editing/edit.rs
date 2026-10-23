@@ -3,6 +3,7 @@
 //! during dispatch.
 
 use super::*;
+use crate::display::widget::view::ViewId;
 use crate::occurrence::Path;
 
 /// Read-only access to the data occurrences show.
@@ -42,23 +43,25 @@ impl Edit<'_> {
         self.session.model.selection.as_ref()
     }
 
-    /// Whether the selection is at `path` or below it, resting on a value
-    /// rather than picking one or typing one.
-    pub(crate) fn rests_within(&self, path: &[Step]) -> bool {
+    /// Whether the selection is at `path` in `view` or below it, resting on
+    /// a value rather than picking one or typing one.
+    pub(crate) fn rests_within(&self, view: ViewId, path: &[Step]) -> bool {
         let sources = self.session.sources();
         self.selection().is_some_and(|current| {
-            current.path().starts_with(path)
+            current.view() == view
+                && current.path().starts_with(path)
                 && current.stage(&sources) == selection::Stage::Edge
                 && current.value_edit().is_none()
         })
     }
 
-    /// The state of the occurrence at `path`, which its view keeps.
-    pub(crate) fn annotation(&self, path: &[Step]) -> Option<&Value> {
+    /// The state of the occurrence at `path` in `view`, which its area
+    /// keeps.
+    pub(crate) fn annotation(&self, view: ViewId, path: &[Step]) -> Option<&Value> {
         self.session
             .model
             .workspace
-            .view_at(path)?
+            .view_at(view, path)?
             .annotations
             .at(path)
     }
@@ -72,10 +75,10 @@ impl Edit<'_> {
         })
     }
 
-    /// Selects the value at `path`. Selecting what is selected already keeps
-    /// it and moves its line's caret to the end; anything else, a label being
-    /// authored included, starts afresh.
-    pub(crate) fn select(&mut self, path: &[Step]) {
+    /// Selects the value at `path` in `view`. Selecting what is selected
+    /// already keeps it and moves its line's caret to the end; anything else,
+    /// a label being authored included, starts afresh.
+    pub(crate) fn select(&mut self, view: ViewId, path: &[Step]) {
         let sources = self.session.sources();
         let reselected = self
             .session
@@ -83,36 +86,45 @@ impl Edit<'_> {
             .selection
             .as_ref()
             .is_some_and(|current| {
-                current.path() == path && current.stage(&sources) != selection::Stage::Label
+                current.view() == view
+                    && current.path() == path
+                    && current.stage(&sources) != selection::Stage::Label
             });
         let current = self.session.model.selection.take().filter(|_| reselected);
         self.session.model.selection = Some(match current {
             Some(current) => current.reselected(),
-            None => selection::Selection::edge(path.to_vec()),
+            None => selection::Selection::edge(view, path.to_vec()),
         });
     }
 
-    pub(crate) fn select_payload(&mut self, path: Path, payload: Value) {
+    pub(crate) fn select_payload(&mut self, view: ViewId, path: Path, payload: Value) {
         let session = &mut self.session;
-        let selection = selection::Selection::from_payload(&session.sources(), path, payload);
+        let selection = selection::Selection::from_payload(&session.sources(), view, path, payload);
         session.model.selection = Some(selection);
     }
 
-    /// Opens or closes the fold at `path`, toggling it without `closed`.
-    pub(crate) fn fold(&mut self, path: &[Step], default: bool, closed: Option<bool>) -> bool {
-        self.session.set_folded(path, default, closed)
+    /// Opens or closes the fold at `path` in `view`, toggling it without
+    /// `closed`.
+    pub(crate) fn fold(
+        &mut self,
+        view: ViewId,
+        path: &[Step],
+        default: bool,
+        closed: Option<bool>,
+    ) -> bool {
+        self.session.set_folded(view, path, default, closed)
     }
 
-    /// Leaves the value at `path` pending, for the picker to fill.
-    pub(crate) fn pend(&mut self, path: Path) {
-        self.session.model.selection = Some(selection::pending_value(path));
+    /// Leaves the value at `path` in `view` pending, for the picker to fill.
+    pub(crate) fn pend(&mut self, view: ViewId, path: Path) {
+        self.session.model.selection = Some(selection::pending_value(view, path));
     }
 
-    /// Replaces the state of the occurrence at `path`; false when it was
-    /// already `value`. UI state belongs to the displayed occurrence, not the
-    /// shared source.
-    pub(crate) fn annotate(&mut self, path: &[Step], value: Value) -> bool {
-        match self.session.model.workspace.view_at_mut(path) {
+    /// Replaces the state of the occurrence at `path` in `view`; false when
+    /// it was already `value`. UI state belongs to the displayed occurrence,
+    /// not the shared source.
+    pub(crate) fn annotate(&mut self, view: ViewId, path: &[Step], value: Value) -> bool {
+        match self.session.model.workspace.view_at_mut(view, path) {
             Some(view) if view.annotations.at(path) != Some(&value) => {
                 view.annotations.set(path, Some(value));
                 true
@@ -132,11 +144,12 @@ impl Edit<'_> {
 
     pub(crate) fn grap_runtime(
         &mut self,
+        view: ViewId,
         path: Path,
         function: grap::RuntimeValue,
         event: Value,
     ) -> bool {
-        crate::site::apply_scoped_event(&mut self.session, path, function, event)
+        crate::site::apply_scoped_event(&mut self.session, view, path, function, event)
     }
 }
 

@@ -1,5 +1,6 @@
 use super::*;
 use crate::Editor;
+use crate::display::widget::view::ViewId;
 use crate::libraries::f64;
 use crate::occurrence::{Path, Step};
 use std::rc::Rc;
@@ -26,7 +27,7 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let mut world = model(f64::value(10.0));
     let original = world.model.doc.clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(other_path.clone()));
+    world.model.selection = Some(Selection::edge(ViewId::Document, other_path.clone()));
     let mut edit = Site::new(crate::occurrence::Trail::from([])).edit_run();
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
@@ -49,6 +50,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let payload = Value::record([(marker, Value::from(vec![7]))]);
     world.model.selection = Some(Selection::from_payload(
         &world.sources(),
+        ViewId::Document,
         vec![],
         payload.clone(),
     ));
@@ -83,7 +85,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let mut active = gesture();
     active.advance(&mut world.session(), &[Point::new(10.0, 0.0)]);
     let other = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(other.clone()));
+    world.model.selection = Some(Selection::edge(ViewId::Document, other.clone()));
     active.finish(&mut world.session());
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other);
 }
@@ -124,7 +126,7 @@ fn gesture_finalization_runs_before_replacement_and_history_restore() {
 fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
     let mut model = model(f64::value(10.0));
     let original = model.model.doc.clone();
-    model.model.selection = Some(Selection::edge(vec![]));
+    model.model.selection = Some(Selection::edge(ViewId::Document, vec![]));
     let mut gesture = scrub(
         Point::new(100.0, 200.0),
         2.0,

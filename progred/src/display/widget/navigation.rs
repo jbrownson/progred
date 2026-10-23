@@ -1,5 +1,5 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
-use super::{HoverPass, source::Secondary, view::Root};
+use super::{HoverPass, source::Secondary, view::Area};
 use crate::occurrence::Trail;
 use kurbo::Rect;
 use measured::Measured;
@@ -29,7 +29,7 @@ pub(crate) fn arrival<W: crate::display::Host>(site: crate::editing::Site) -> Se
 }
 
 pub struct Landmark<World> {
-    pub root: Option<Root>,
+    pub area: Option<Area>,
     pub path: Trail,
     pub rect: Rect,
     pub select: Select<World>,
@@ -45,7 +45,7 @@ pub struct Landmark<World> {
 impl<World> Clone for Landmark<World> {
     fn clone(&self) -> Self {
         Self {
-            root: self.root.clone(),
+            area: self.area.clone(),
             path: self.path.clone(),
             rect: self.rect,
             select: self.select.clone(),
@@ -56,10 +56,10 @@ impl<World> Clone for Landmark<World> {
     }
 }
 
-/// The landmark drawn at `path` in the view `root`.
+/// The landmark drawn at `path` in the area `area`.
 pub(crate) fn landmark_at<'a, World, P: ?Sized>(
     landmarks: &'a [Landmark<World>],
-    root: Option<&Root>,
+    area: Option<&Area>,
     path: &P,
 ) -> Option<&'a Landmark<World>>
 where
@@ -67,7 +67,7 @@ where
 {
     landmarks
         .iter()
-        .find(|landmark| landmark.root.as_ref() == root && landmark.path == *path)
+        .find(|landmark| landmark.area.as_ref() == area && landmark.path == *path)
 }
 
 /// What the selected occurrence shares with the projections that carry the
@@ -104,7 +104,7 @@ pub(crate) fn part_landmark<World: 'static, H: 'static>(
                 let tab_stop = output.tab_stop.take().is_some_and(|at| at == path);
                 if arrival.is_some() || tab_stop {
                     output.landmarks.push(Landmark {
-                        root: None,
+                        area: None,
                         path,
                         rect: placement.rect,
                         select: arrival.unwrap_or(select),
@@ -159,7 +159,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     None => false,
                 };
                 output.landmarks.push(Landmark {
-                    root: None,
+                    area: None,
                     path,
                     rect: placement.rect,
                     select,

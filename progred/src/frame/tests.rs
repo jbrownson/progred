@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::source::Secondary;
+use crate::display::widget::view::{Area, ViewId};
 use crate::occurrence::{Step as Occurs, Trail};
 use crate::test_support::key_down;
 use gid::{CellId, Cells, Document, Step, Value};
@@ -14,7 +15,7 @@ const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
 fn scrolling_a_view_that_no_longer_exists_declines() {
     use ui_events::pointer::PointerScrollEvent;
     let mut editor = crate::editor_of(Value::record([]));
-    let gone = crate::display::widget::view::Root::pane(vec![Step::Key(gid::new_cell_id())]);
+    let gone = Area::part(ViewId::Document, vec![Step::Key(gid::new_cell_id())]);
     let event = PointerScrollEvent {
         pointer: crate::display::test_support::mouse(),
         delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
@@ -45,7 +46,7 @@ fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
             .dispatch
             .view_regions
             .iter()
-            .find(|region| matches!(region.root.target(), Target::Document))
+            .find(|region| region.area == Area::whole(ViewId::Document))
             .expect("document view");
         let content = region
             .content
@@ -65,7 +66,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         field,
         crate::libraries::text::value("shared"),
     )]));
-    let root = editor.model.workspace.document_root().clone();
+    let root = editor.model.workspace.document_area();
     let source = vec![Step::Key(field)];
     let occurrence = Trail::from([
         Occurs::Key(key),
@@ -75,7 +76,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     let secondary = Secondary::Stored(crate::occurrence::of(&source).into());
     let mut landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
         path: occurrence.clone(),
-        root: Some(root.clone()),
+        area: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
         select: Rc::new(|_, _| true),
         secondary: Some(secondary.clone()),
@@ -121,7 +122,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         Some((Some(&root), hover.as_ref().unwrap())),
         true,
     );
-    assert_eq!(frame.dispatch.pointer_root, Some(root.clone()));
+    assert_eq!(frame.dispatch.pointer_area, Some(root.clone()));
     assert_eq!(
         *observed.borrow(),
         Some((Some(expected.clone()), Some(secondary)))
@@ -148,12 +149,12 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
 #[test]
 fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
     let editor = crate::editor_of(Value::record([]));
-    let root = editor.model.workspace.document_root().clone();
+    let root = editor.model.workspace.document_area();
     let (place, cell) = (Secondary::Cell(gid::new_cell_id()), gid::new_cell_id());
     // The pending slot, selected, shares its place.
     let landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
         path: Trail::ROOT.clone(),
-        root: Some(root.clone()),
+        area: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
         select: Rc::new(|_, _| true),
         secondary: Some(place.clone()),
@@ -216,9 +217,9 @@ fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
                     },
                     move |output, placement| {
                         let target = Hovered::Tree(if (value as u64).is_multiple_of(2) {
-                            hover::Hover::Value(Trail::root())
+                            hover::Hover::Value(Trail::root(ViewId::Document))
                         } else {
-                            hover::Hover::Toggle(Trail::root())
+                            hover::Hover::Toggle(Trail::root(ViewId::Document))
                         });
                         output.claim(Probe::exact(placement, target));
                         output.after_hover(move |_, effects| {
@@ -320,7 +321,9 @@ fn pointer_hover_reactions_that_change_geometry_wait_for_paint_before_reacting_a
     assert_eq!(log.take(), [("hover", 0.0), ("project", 1.0)]);
     assert_eq!(
         runner.frame.hover,
-        Some(Hovered::Tree(hover::Hover::Toggle(Trail::root())))
+        Some(Hovered::Tree(hover::Hover::Toggle(Trail::root(
+            ViewId::Document
+        ))))
     );
     assert!(paint_hover_frame(&mut runner));
     assert_eq!(log.take(), [("paint", 1.0)]);
@@ -438,18 +441,18 @@ fn hover_notifications_include_view_ownership_and_are_reset_with_the_document() 
         let roots = roots.clone();
         move |_, event, input| {
             if matches!(event, Event::HoverChanged) {
-                roots.borrow_mut().push(input.root.clone());
+                roots.borrow_mut().push(input.area.clone());
             }
             puri::handler::EventOutcome::decline(event)
         }
     });
     runner.frame.hover = Some(Hovered::Blocked);
-    let first = Root::document();
-    let second = Root::pane(vec![Step::Key(gid::new_cell_id())]);
-    runner.frame.dispatch.pointer_root = Some(first.clone());
+    let first = Area::whole(ViewId::Document);
+    let second = Area::part(ViewId::Document, vec![Step::Key(gid::new_cell_id())]);
+    runner.frame.dispatch.pointer_area = Some(first.clone());
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
-    runner.frame.dispatch.pointer_root = Some(second.clone());
+    runner.frame.dispatch.pointer_area = Some(second.clone());
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
     assert_eq!(roots.take(), [Some(first), Some(second)]);
     runner.frame.hover_awaits_paint = true;
@@ -559,18 +562,18 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
     let [path, previous] = paths.as_slice() else {
         panic!("expected two list items");
     };
-    let root = runner.editor.model.workspace.document_root().clone();
+    let root = runner.editor.model.workspace.document_area();
     let region = runner
         .frame
         .dispatch
         .view_regions
         .iter()
-        .find(|region| region.root == root)
+        .find(|region| region.area == root)
         .unwrap()
         .rect;
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
-    crate::editing::Edit::new(runner.editor.session()).select(previous);
+    crate::editing::Edit::new(runner.editor.session()).select(ViewId::Document, previous);
     runner.refresh_frame(1.0, viewport);
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
@@ -600,7 +603,7 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
         .unwrap()
         .path
         .to_vec();
-    runner.editor.model.selection = Some(crate::selection::Selection::edge(path));
+    runner.editor.model.selection = Some(crate::selection::Selection::edge(ViewId::Document, path));
 
     runner.refresh_frame(1.0, viewport);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -624,13 +627,13 @@ fn selection_changes_do_not_implicitly_request_reveal() {
         .path
         .to_vec();
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        crate::editing::Edit::new(editor.session()).select(&path);
+        crate::editing::Edit::new(editor.session()).select(ViewId::Document, &path);
         true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        editor.model.selection = Some(crate::selection::pending_value(path));
+        editor.model.selection = Some(crate::selection::pending_value(ViewId::Document, path));
         true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -645,7 +648,7 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> crate::occurre
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap();
     let path = target.path.to_vec();
-    crate::editing::Edit::new(runner.editor.session()).select(&path);
+    crate::editing::Edit::new(runner.editor.session()).select(ViewId::Document, &path);
     path
 }
 
@@ -659,7 +662,10 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         runner.refresh_frame(1.0, viewport);
         let path = select_offscreen(&mut runner, viewport);
         if key == NamedKey::Backspace {
-            runner.editor.model.selection = Some(crate::selection::pending_value(path.clone()));
+            runner.editor.model.selection = Some(crate::selection::pending_value(
+                ViewId::Document,
+                path.clone(),
+            ));
         }
         // Include the selected widget's installed delete handler, not only
         // the shell's structural fallback.
@@ -776,7 +782,7 @@ fn raw_switches_every_library_off() {
     let stack = crate::stack::load();
     let document = Document::default();
     let view = |shown| workspace::View {
-        root: crate::test_root(),
+        area: Area::whole(ViewId::Document),
         shown,
         annotations: Default::default(),
         scroll: Vec2::ZERO,
@@ -858,9 +864,10 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
     assert!(!runner.frame.dispatch.landmarks.landmark(&path).is_some());
     runner.update_frame(1.0, viewport, |editor, dispatch, _| {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);
-        editor.model.selection = Some(crate::selection::Selection::edge(crate::occurrence::of(
-            &path,
-        )));
+        editor.model.selection = Some(crate::selection::Selection::edge(
+            ViewId::Document,
+            crate::occurrence::of(&path),
+        ));
         dispatch.geometry(1.0).reveal_selection(&mut editor.model);
         true
     });
@@ -879,7 +886,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
 
 #[test]
 fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
-    let code = Hovered::Tree(hover::Hover::Value(Trail::root()));
+    let code = Hovered::Tree(hover::Hover::Value(Trail::root(ViewId::Document)));
     let drawing = Hovered::Tree(hover::Hover::Source(SourceTrace::Stored(Rc::from([]))));
 
     assert!(source_hover_visible(Some(&code), false));
@@ -912,7 +919,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         doc: &doc,
         libraries: &libraries,
     };
-    let root = Root::document();
+    let root = Area::whole(ViewId::Document);
     let targets = [
         (gid::Resolution::Document, Rect::new(10.0, 20.0, 30.0, 40.0)),
         (
@@ -925,7 +932,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
             |(resolution, rect)| crate::display::widget::navigation::Landmark::<
                 Option<gid::Resolution>,
             > {
-                root: Some(root.clone()),
+                area: Some(root.clone()),
                 path: Trail::from([Occurs::Follow(resolution), Occurs::Key(call)]),
                 rect,
                 select: Rc::new(move |selected, _| {
@@ -946,7 +953,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         let landmark =
             crate::display::widget::source_link::source_landmark(&sources, &landmarks, &trace)
                 .unwrap();
-        assert_eq!(landmark.root, Some(root.clone()));
+        assert_eq!(landmark.area, Some(root.clone()));
         assert_eq!(landmark.rect, rect);
         let mut selected = None;
         assert!((landmark.select)(&mut selected, None));
@@ -991,16 +998,8 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     let opened = model
         .workspace
         .open(workspace::Side::Left, crate::location::value(&everything));
-    let Target::Opened { id } = opened.target() else {
-        panic!("an opened pane")
-    };
-    let in_opened = |path: &[Step]| {
-        [
-            vec![Occurs::Opened(*id), Occurs::jump(everything.clone())],
-            crate::occurrence::of(path),
-        ]
-        .concat()
-    };
+    let in_opened =
+        |path: &[Step]| crate::occurrence::below(&[Occurs::jump(everything.clone())], path);
     let panes = workspace::panes(model.doc.root.as_ref());
     let calls = Rc::new(Cell::new(0));
     let result = Rc::new(RefCell::new(source.clone()));
@@ -1062,11 +1061,11 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     .map(|(index, steps)| {
         let path = &panes[index];
         // The opened pane draws the part where it's stored, and the part's
-        // own pane draws it under the part, after a pane step.
+        // own pane draws it at the part.
         let mut stored = path.clone();
         stored.extend(steps.iter().cloned());
-        let drawn = crate::occurrence::below(&crate::test_examples::pane_root(path), &steps);
-        (Root::pane(path.clone()), stored, drawn)
+        let drawn = crate::occurrence::below(&crate::occurrence::of(path), &steps);
+        (Area::part(ViewId::Document, path.clone()), stored, drawn)
     })
     .collect();
     let shown = place(&model);
@@ -1086,20 +1085,20 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
                 shown
                     .landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(&opened) && target.path == stored)
+                    .any(|target| target.area.as_ref() == Some(&opened) && target.path == stored)
             );
             assert!(
                 !shown
                     .landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(pane) && target.path == drawn)
+                    .any(|target| target.area.as_ref() == Some(pane) && target.path == drawn)
             );
         }
     }
     for path in &panes {
         model
             .workspace
-            .view_mut(&Root::pane(path.clone()))
+            .view_mut(&Area::part(ViewId::Document, path.clone()))
             .unwrap()
             .shown = workspace::Shown::RAW;
     }
@@ -1114,14 +1113,14 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             assert!(
                 raw.landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(pane) && target.path == drawn)
+                    .any(|target| target.area.as_ref() == Some(pane) && target.path == drawn)
             );
         }
     }
     for path in &panes {
         model
             .workspace
-            .view_mut(&Root::pane(path.clone()))
+            .view_mut(&Area::part(ViewId::Document, path.clone()))
             .unwrap()
             .shown = workspace::Shown::ALL;
     }
@@ -1135,7 +1134,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             absent
                 .landmarks
                 .iter()
-                .any(|target| target.root.as_ref() == Some(pane) && target.path == source_path)
+                .any(|target| target.area.as_ref() == Some(pane) && target.path == source_path)
         );
     }
 }
@@ -1171,7 +1170,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         cells: Cells::new(),
     });
     model.workspace.sync(model.doc.root.as_ref());
-    let pane_root = Root::pane(crate::test_examples::part(0, 1));
+    let pane_root = Area::part(ViewId::Document, crate::test_examples::part(0, 1));
     model.workspace.view_mut(&pane_root).unwrap().scroll = Vec2::new(75.0, 150.0);
     let calls = Rc::new(RefCell::new(Vec::new()));
     let mut stack = stack::load();
@@ -1203,10 +1202,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         ),
     );
     let pane = model.workspace.view(&pane_root).unwrap();
-    let Target::Pane { path } = pane.root.target() else {
-        panic!("pane")
-    };
-    let path = crate::test_examples::pane_root(path);
+    let path = crate::occurrence::of(pane.area.path());
     for (size, scale) in [
         (Size::new(300.0, 500.0), 1.0),
         (Size::new(700.0, 400.0), 2.0),
@@ -1253,7 +1249,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         );
 
         let raw = workspace::View {
-            root: pane.root.clone(),
+            area: pane.area.clone(),
             shown: workspace::Shown::RAW,
             annotations: Default::default(),
             scroll: Vec2::ZERO,
@@ -1286,9 +1282,15 @@ fn rows_and_columns_are_editor_geometry_with_independent_view_regions() {
     });
     model.workspace.sync(model.doc.root.as_ref());
     let column = crate::test_examples::part(0, 2);
-    let upper = Root::pane([column.clone(), crate::test_examples::part(0, 2)].concat());
-    let lower = Root::pane([column, crate::test_examples::part(1, 2)].concat());
-    let main = Root::pane(crate::test_examples::main_part());
+    let upper = Area::part(
+        ViewId::Document,
+        [column.clone(), crate::test_examples::part(0, 2)].concat(),
+    );
+    let lower = Area::part(
+        ViewId::Document,
+        [column, crate::test_examples::part(1, 2)].concat(),
+    );
+    let main = Area::part(ViewId::Document, crate::test_examples::main_part());
     let stack = crate::stack::load();
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::display::test_support::Fonts::new();
@@ -1315,17 +1317,17 @@ fn rows_and_columns_are_editor_geometry_with_independent_view_regions() {
     let upper_region = placed
         .view_regions
         .iter()
-        .find(|region| region.root == upper)
+        .find(|region| region.area == upper)
         .expect("upper pane");
     let lower_region = placed
         .view_regions
         .iter()
-        .find(|region| region.root == lower)
+        .find(|region| region.area == lower)
         .expect("lower pane");
     let main_region = placed
         .view_regions
         .iter()
-        .find(|region| region.root == main)
+        .find(|region| region.area == main)
         .expect("main pane");
     assert_eq!((main_region.rect.y0, main_region.rect.y1), (0.0, 600.0));
     assert_eq!(main_region.rect.x0 - upper_region.rect.x1, 1.0);
@@ -1336,14 +1338,11 @@ fn rows_and_columns_are_editor_geometry_with_independent_view_regions() {
         placed
             .landmarks
             .iter()
-            .all(|landmark| landmark.root.is_some())
+            .all(|landmark| landmark.area.is_some())
     );
-    let Target::Pane { path } = upper.target() else {
-        panic!("pane root")
-    };
-    let path = crate::test_examples::pane_root(path);
+    let path = crate::occurrence::of(upper.path());
     assert!(placed.landmarks.iter().any(|landmark| {
-        landmark.root.as_ref() == Some(&upper) && landmark.path == path.as_slice()
+        landmark.area.as_ref() == Some(&upper) && landmark.path == path.as_slice()
     }));
 }
 
@@ -1511,7 +1510,7 @@ fn hover_frame(
     editor: &Editor,
     layout: measured::Measured<HoverPass<Editor>>,
     position: Option<Point>,
-    previous: Option<(Option<&Root>, &Hovered)>,
+    previous: Option<(Option<&Area>, &Hovered)>,
     pressed: bool,
 ) -> Frame {
     compute_hover(
@@ -1544,21 +1543,21 @@ fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
     let mut runner = EditorRunner::new(crate::test_editor(gid::Document::default()));
     let prior = Hovered::Tree(hover::Hover::Entry(7));
     runner.frame.hover = Some(prior.clone());
-    let prior_root = Root::document();
-    runner.frame.dispatch.pointer_root = Some(prior_root.clone());
+    let prior_root = Area::whole(ViewId::Document);
+    runner.frame.dispatch.pointer_area = Some(prior_root.clone());
     let frame =
         runner
             .editor
             .build_frame(1.0, Size::new(300.0, 200.0), runner.frame.hover_location());
     assert_eq!(runner.frame.hover, Some(prior));
-    assert_eq!(runner.frame.dispatch.pointer_root, Some(prior_root));
+    assert_eq!(runner.frame.dispatch.pointer_area, Some(prior_root));
     assert!(runner.frame.dispatch.landmarks.is_empty());
     assert_eq!(frame.hover, None);
-    let pointer_root = frame.dispatch.pointer_root.clone();
+    let pointer_area = frame.dispatch.pointer_area.clone();
     let landmarks = frame.dispatch.landmarks.clone();
     let paint = runner.install_frame(frame, 1.0, Size::new(300.0, 200.0));
     assert_eq!(runner.frame.hover, None);
-    assert_eq!(runner.frame.dispatch.pointer_root, pointer_root);
+    assert_eq!(runner.frame.dispatch.pointer_area, pointer_area);
     assert!(Rc::ptr_eq(&runner.frame.dispatch.landmarks, &landmarks));
     drop(paint);
 }
@@ -1566,8 +1565,8 @@ fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
 #[test]
 fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
     let editor = crate::test_editor(gid::Document::default());
-    let root = editor.model.workspace.document_root().clone();
-    let prior_root = Root::pane(vec![Step::Key(gid::new_cell_id())]);
+    let root = editor.model.workspace.document_area();
+    let prior_root = Area::part(ViewId::Document, vec![Step::Key(gid::new_cell_id())]);
     let prior = Hovered::Tree(hover::Hover::Entry(7));
     for pressed in [true, false] {
         let calls = Rc::new(std::cell::Cell::new(0));
@@ -1604,7 +1603,7 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
             })
         );
         assert_eq!(
-            frame.dispatch.pointer_root,
+            frame.dispatch.pointer_area,
             Some(if pressed {
                 prior_root.clone()
             } else {
@@ -1627,7 +1626,7 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
             })
         );
         assert_eq!(
-            runner.frame.dispatch.pointer_root,
+            runner.frame.dispatch.pointer_area,
             Some(if pressed {
                 prior_root.clone()
             } else {
@@ -1638,7 +1637,7 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
         runner.editor.pressed = false;
         runner.probe_pointer(1.0);
         assert_eq!(runner.frame.hover, Some(Hovered::Blocked));
-        assert_eq!(runner.frame.dispatch.pointer_root, Some(root.clone()));
+        assert_eq!(runner.frame.dispatch.pointer_area, Some(root.clone()));
     }
 }
 
@@ -1669,9 +1668,11 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
         drawn(&driver, GRAP),
         drawn(&driver, absent::vocabulary::CELL),
     );
-    assert!(missing.0.starts_with(&crate::test_examples::pane_root(
-        &crate::test_examples::part(0, 2)
-    )));
+    assert!(
+        missing
+            .0
+            .starts_with(&crate::occurrence::of(&crate::test_examples::part(0, 2)))
+    );
     let marked = |driver: &crate::driver::Driver, alpha, other: Rect| {
         let brush = Brush::from(style::Theme::Light.palette().accent.with_alpha(alpha));
         let outline = style::highlight_outline(1.0, other);

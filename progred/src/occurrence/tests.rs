@@ -15,14 +15,6 @@ fn a_path_reads_from_its_last_jump_and_not_inside_a_computed_value() {
         Step::Key(other),
     ];
     assert_eq!(location(&jumped), Some(inside.clone()));
-    // A pane's start changes nothing about where its data is.
-    assert_eq!(
-        location(&[Step::Key(field), Step::Pane, Step::Key(other)]),
-        Some(Location::root(vec![
-            gid::Step::Key(field),
-            gid::Step::Key(other)
-        ]))
-    );
     let result = [Step::Key(field), Step::Computed, Step::Key(other)];
     assert_eq!(location(&result), None);
     assert!(Trail::of(&result).computed());
@@ -50,7 +42,6 @@ fn occurrence_paths_round_trip_as_data() {
         )),
         Step::Computed,
         Step::Element(gid::position::spread(1).remove(0)),
-        Step::Pane,
     ];
     assert_eq!(from_value(&value(&path)), Some(path));
     // A document path reads as the occurrence path of the same steps.

@@ -67,12 +67,7 @@ fn cam_hover_compositor_pixels() {
         .dispatch
         .view_regions
         .iter()
-        .find(|region| {
-            matches!(
-                region.root.target(),
-                crate::display::widget::view::Target::Pane { .. }
-            )
-        })
+        .find(|region| !region.area.path().is_empty())
         .unwrap()
         .rect;
     let point = (1..(160.0 * scale) as usize)

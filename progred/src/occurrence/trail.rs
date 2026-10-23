@@ -1,20 +1,25 @@
-//! An occurrence path as projection builds it: each occurrence's own step,
-//! linked to the trail of the occurrence it's drawn inside. Descending adds
-//! one link and copies nothing, and two occurrences under one parent share
-//! everything above them. What wants the whole path walks the parents.
+//! An occurrence as projection builds it: the view it's drawn in, and its
+//! path there as a chain of steps, each occurrence's own step linked to the
+//! trail of the occurrence it's drawn inside. Descending adds one link and
+//! copies nothing, and two occurrences under one parent share everything
+//! above them. What wants the whole path walks the parents.
 
 use super::{Path, Step};
+use crate::display::widget::view::ViewId;
 use std::rc::Rc;
 
-#[derive(Clone, Default)]
-pub struct Trail(Option<Rc<Link>>);
+#[derive(Clone)]
+pub struct Trail {
+    view: ViewId,
+    link: Option<Rc<Link>>,
+}
 
 struct Link {
     step: Step,
     parent: Trail,
     len: usize,
     /// How long the trail is through its last step other than a document
-    /// path's, 0 without one: a jump, a computed value, or a pane's start.
+    /// path's, 0 without one: a jump or a computed value.
     marker: usize,
     /// Whether what's here is computed: the last jump or computed step is a
     /// computed one.
@@ -22,38 +27,55 @@ struct Link {
 }
 
 impl Trail {
-    /// The trail of a view's root, which has no steps.
-    pub const ROOT: &'static Self = &Self(None);
+    /// The trail of the document view's root, which has no steps.
+    pub const ROOT: &'static Self = &Self {
+        view: ViewId::Document,
+        link: None,
+    };
 
-    pub fn root() -> Self {
-        Self(None)
+    /// The trail of `view`'s root, which has no steps.
+    pub fn root(view: ViewId) -> Self {
+        Self { view, link: None }
     }
 
-    pub fn of(path: &[Step]) -> Self {
+    /// The occurrence at `path` in `view`.
+    pub fn in_view(view: ViewId, path: &[Step]) -> Self {
         path.iter()
-            .fold(Self::root(), |trail, step| trail.push(step.clone()))
+            .fold(Self::root(view), |trail, step| trail.push(step.clone()))
+    }
+
+    /// The occurrence at `path` in the document's view.
+    pub fn of(path: &[Step]) -> Self {
+        Self::in_view(ViewId::Document, path)
+    }
+
+    /// The view this occurrence is drawn in.
+    pub fn view(&self) -> ViewId {
+        self.view
     }
 
     /// This trail with `step` after it.
     pub fn push(&self, step: Step) -> Self {
         let len = self.len() + 1;
         let (marker, computed) = self
-            .0
+            .link
             .as_ref()
             .map_or((0, false), |link| (link.marker, link.computed));
         let (marker, computed) = match step {
             Step::Jump(_) => (len, false),
             Step::Computed => (len, true),
-            Step::Pane | Step::Opened(_) => (len, computed),
             _ => (marker, computed),
         };
-        Self(Some(Rc::new(Link {
-            step,
-            parent: self.clone(),
-            len,
-            marker,
-            computed,
-        })))
+        Self {
+            view: self.view,
+            link: Some(Rc::new(Link {
+                step,
+                parent: self.clone(),
+                len,
+                marker,
+                computed,
+            })),
+        }
     }
 
     /// This trail with a document path's `steps` after it.
@@ -64,27 +86,27 @@ impl Trail {
     }
 
     pub fn len(&self) -> usize {
-        self.0.as_ref().map_or(0, |link| link.len)
+        self.link.as_ref().map_or(0, |link| link.len)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_none()
+        self.link.is_none()
     }
 
     /// The step that reached this occurrence, none at the root.
     #[cfg(test)]
     pub fn last(&self) -> Option<&Step> {
-        self.0.as_ref().map(|link| &link.step)
+        self.link.as_ref().map(|link| &link.step)
     }
 
     /// The trail of the occurrence this one is drawn inside, none at the root.
     pub fn parent(&self) -> Option<&Trail> {
-        self.0.as_ref().map(|link| &link.parent)
+        self.link.as_ref().map(|link| &link.parent)
     }
 
     /// The steps from this occurrence back to the root, the last one first.
     pub fn steps(&self) -> impl Iterator<Item = &Step> {
-        std::iter::successors(self.0.as_deref(), |link| link.parent.0.as_deref())
+        std::iter::successors(self.link.as_deref(), |link| link.parent.link.as_deref())
             .map(|link| &link.step)
     }
 
@@ -107,7 +129,6 @@ impl Trail {
                     break;
                 }
                 Step::Computed => return None,
-                Step::Pane | Step::Opened(_) => {}
                 step => data.push(step.data().expect("a data step")),
             }
         }
@@ -125,13 +146,13 @@ impl Trail {
     /// Whether what's here is computed, as [`super::computed`] says of the
     /// path.
     pub fn computed(&self) -> bool {
-        self.0.as_ref().is_some_and(|link| link.computed)
+        self.link.as_ref().is_some_and(|link| link.computed)
     }
 
     /// Whether every step after the first `start` is a document path's, with
-    /// no jump, computed value or pane start among them.
+    /// no jump or computed value among them.
     pub fn data_from(&self, start: usize) -> bool {
-        self.0.as_ref().is_none_or(|link| link.marker <= start)
+        self.link.as_ref().is_none_or(|link| link.marker <= start)
     }
 
     /// Whether this trail's steps start with `prefix`.
@@ -170,13 +191,13 @@ impl Trail {
     }
 }
 
-/// Two trails are equal when their steps are. Siblings differ in their last
-/// step, so comparing from the end usually answers at once, and trails that
-/// share an ancestor stop comparing there.
+/// Two trails are equal when their views and steps are. Siblings differ in
+/// their last step, so comparing from the end usually answers at once, and
+/// trails that share an ancestor stop comparing there.
 impl PartialEq for Trail {
     fn eq(&self, other: &Self) -> bool {
-        let (mut left, mut right) = (&self.0, &other.0);
-        if self.len() != other.len() {
+        let (mut left, mut right) = (&self.link, &other.link);
+        if self.view != other.view || self.len() != other.len() {
             return false;
         }
         loop {
@@ -184,7 +205,7 @@ impl PartialEq for Trail {
                 (None, None) => return true,
                 (Some(a), Some(b)) if Rc::ptr_eq(a, b) => return true,
                 (Some(a), Some(b)) if a.step == b.step => {
-                    (left, right) = (&a.parent.0, &b.parent.0);
+                    (left, right) = (&a.parent.link, &b.parent.link);
                 }
                 _ => return false,
             }
@@ -194,6 +215,8 @@ impl PartialEq for Trail {
 
 impl Eq for Trail {}
 
+/// A trail equals a path when its steps are the path's, whichever view it's
+/// in.
 impl<S> PartialEq<[S]> for Trail
 where
     Step: PartialEq<S>,

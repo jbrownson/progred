@@ -5,6 +5,7 @@
 use super::*;
 use crate::annotations::Annotations;
 use crate::display::widget::navigation::Landmark;
+use crate::display::widget::view::ViewId;
 use crate::driver::Driver;
 use crate::frame::test_support::{editing_frame, settle};
 use crate::libraries::text;
@@ -71,6 +72,7 @@ pub(crate) fn offered(
 ) -> Vec<crate::display::widget::offers::Entry<crate::Editor>> {
     world.model.selection = Some(Selection::from_payload(
         &world.sources(),
+        ViewId::Document,
         selection.path().to_vec(),
         selection.payload(),
     ));
@@ -276,6 +278,7 @@ impl BenchContext {
                 computations,
                 completions: Some(&stack.completions),
                 sources,
+                view: crate::display::widget::view::ViewId::Document,
                 root,
                 root_path,
                 selection,

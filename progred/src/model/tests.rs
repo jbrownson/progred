@@ -1,6 +1,6 @@
 use super::*;
 use crate::annotations;
-use crate::display::widget::view::Root;
+use crate::display::widget::view::{Area, ViewId};
 use crate::library::Libraries;
 use crate::sources::Sources;
 use gid::{Cells, Value};
@@ -42,11 +42,12 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     assert!(model.step_history(true));
     assert!(model.dirty());
     assert!(model.history.can_undo() && model.history.can_redo());
-    let pane_root = Root::pane(pane_path.clone());
+    let pane_root = Area::part(ViewId::Document, pane_path.clone());
     let opened = model
         .workspace
         .open(workspace::Side::Left, Value::record([]));
     model.selection = Some(selection::pending_with_query(
+        ViewId::Document,
         crate::occurrence::of(&pane_path),
         "old query",
     ));
@@ -89,7 +90,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
 }
 
 fn select(model: &mut Model, path: &[crate::occurrence::Step]) {
-    model.selection = Some(selection::Selection::edge(path.to_vec()));
+    model.selection = Some(selection::Selection::edge(ViewId::Document, path.to_vec()));
 }
 
 #[test]
@@ -148,11 +149,11 @@ fn branching_before_at_and_after_save_cannot_confuse_the_saved_identity() {
 fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
     let mut model = model();
     select(&mut model, &[]);
-    assert!(!model.set_folded(&[], false, Some(false)));
+    assert!(!model.set_folded(ViewId::Document, &[], false, Some(false)));
     assert!(!model.history.can_undo());
     edit(&mut model, 2);
     let edited = model.doc.clone();
-    assert!(model.set_folded(&[], false, None));
+    assert!(model.set_folded(ViewId::Document, &[], false, None));
     assert!(Rc::ptr_eq(&model.doc, &edited));
     model.mark_saved();
     assert!(model.step_history(true));
@@ -171,7 +172,7 @@ fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
         false
     ));
     assert!(!model.dirty());
-    assert!(model.set_folded(&[], false, Some(false)));
+    assert!(model.set_folded(ViewId::Document, &[], false, Some(false)));
     assert!(!model.dirty());
 }
 
@@ -187,14 +188,18 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
         crate::test_examples::part(0, 2),
         crate::test_examples::part(1, 2),
     );
-    let first_root = Root::pane(first.clone());
-    let second_root = Root::pane(second.clone());
+    let first_root = Area::part(ViewId::Document, first.clone());
+    let second_root = Area::part(ViewId::Document, second.clone());
     assert!(model.workspace.view(&first_root).is_some());
-    // Each pane draws its part under it, after a pane step.
-    let first_path = crate::test_examples::pane_root(&first);
-    let second_path = crate::test_examples::pane_root(&second);
+    let selected = |model: &Model| {
+        let selection = model.selection.as_ref().unwrap();
+        model.workspace.area_of(selection.view(), selection.path())
+    };
+    // Each pane draws its part at the part's path.
+    let first_path = crate::occurrence::of(&first);
+    let second_path = crate::occurrence::of(&second);
     select(&mut model, &first_path);
-    assert!(model.set_folded(&first_path, false, None));
+    assert!(model.set_folded(ViewId::Document, &first_path, false, None));
     assert!(!model.dirty());
     let before = model.snapshot();
     assert!(crate::location::delete_edge(
@@ -207,7 +212,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     select(&mut model, &second_path);
     assert!(model.workspace.view(&first_root).is_none());
     assert!(model.step_history(true));
-    assert_eq!(model.selection.as_ref().unwrap().root(), &first_root);
+    assert_eq!(selected(&model), first_root);
     assert!(annotations::folded(
         model
             .workspace
@@ -233,14 +238,14 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     assert!(model.step_history(false));
     assert!(model.step_history(false));
     assert!(model.workspace.view(&first_root).is_none());
-    assert_eq!(model.selection.as_ref().unwrap().root(), &second_root);
+    assert_eq!(selected(&model), second_root);
     assert!(model.dirty());
 }
 
 #[test]
 fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
     let mut model = model();
-    assert!(model.set_folded(&[], false, None));
+    assert!(model.set_folded(ViewId::Document, &[], false, None));
     let state = gid::new_cell_id();
     model
         .workspace
@@ -335,7 +340,7 @@ fn saving_and_folding_break_typing_runs() {
         root: Some(Value::record([(field, text::value("a"))])),
         cells: Cells::new(),
     });
-    let mut typing = selection::Selection::edge(crate::occurrence::of(&path));
+    let mut typing = selection::Selection::edge(ViewId::Document, crate::occurrence::of(&path));
     typing.edit_line_mut("a");
     model.selection = Some(typing);
     let type_text = |model: &mut Model, text| {
@@ -365,7 +370,7 @@ fn saving_and_folding_break_typing_runs() {
     type_text(&mut model, "abc");
     model.mark_saved();
     type_text(&mut model, "abcd");
-    assert!(model.set_folded(&[], false, None));
+    assert!(model.set_folded(ViewId::Document, &[], false, None));
     type_text(&mut model, "abcde");
     assert!(model.step_history(true));
     assert_eq!(spelling(&model), "abcd");

@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::widget::view::{Area, ViewId};
 use crate::occurrence::{Step, Trail};
 use gid::CellId;
 use puri::handler::NavigationDirection;
@@ -416,12 +417,12 @@ fn landmarks_nested_at_one_occurrence_share_its_stop() {
 
 #[test]
 fn views_with_identical_paths_arrive_through_their_own_landmarks() {
-    use super::super::super::{HoverInput, HoverPass, view::Root};
+    use super::super::super::{HoverInput, HoverPass};
     use super::super::Landmark;
     let paths: [Trail; 2] = std::array::from_fn(|_| Trail::from([Step::Key(gid::new_cell_id())]));
     let views = [
-        Root::document(),
-        Root::pane(vec![gid::Step::Key(gid::new_cell_id())]),
+        Area::whole(ViewId::Document),
+        Area::part(ViewId::Document, vec![gid::Step::Key(gid::new_cell_id())]),
     ];
     let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput::default(), kurbo::Rect::ZERO);
     for (view, root) in views.into_iter().enumerate() {
@@ -430,7 +431,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
                 pass.visit(|output| {
                     output.navigation_stop(path.clone(), view == 0 && index == 0);
                     output.output.landmarks.push(Landmark {
-                        root: None,
+                        area: None,
                         path: path.clone(),
                         rect: Default::default(),
                         select: Rc::new(move |visits: &mut Vec<usize>, _| {

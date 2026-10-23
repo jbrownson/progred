@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
+use crate::display::widget::view::ViewId;
 use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::frame::test_support::{editing_frame, settle};
@@ -141,7 +142,7 @@ fn cam_outline_draws_in_its_part_beside_the_preview() {
         .unwrap()
         .clone();
     // The part draws in its own pane, after its pane step.
-    let pane = crate::test_examples::pane_root(&main);
+    let pane = crate::occurrence::of(&main);
     let drawn = |steps: &[Step]| [pane.clone(), occurrence::of(steps)].concat();
     let outline = drawn(&[Step::Key(SECTIONS)]);
     let first_heading = drawn(&[
@@ -150,6 +151,7 @@ fn cam_outline_draws_in_its_part_beside_the_preview() {
     ]);
     for (position, value) in entries {
         world.session().set_folded(
+            ViewId::Document,
             &section(
                 &drawn(&[Step::Key(SECTIONS), Step::Element(position)]),
                 value.as_cell().unwrap(),
@@ -203,7 +205,9 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         let driver = |b_folded| {
             let mut editor = crate::test_editor(doc.clone());
             for (path, folded) in [(&a_section, false), (&b_section, b_folded)] {
-                editor.session().set_folded(path, false, Some(folded));
+                editor
+                    .session()
+                    .set_folded(ViewId::Document, path, false, Some(folded));
             }
             Driver::new(editor, kurbo::Size::new(700.0, 600.0))
         };
@@ -318,9 +322,12 @@ fn outline_library_tint_stops_at_the_heading() {
     ]));
     let heading_path = entry(&world, &[], key);
     let body_path = body(&heading_path, key);
-    world
-        .session()
-        .set_folded(&section(&heading_path, key), false, Some(false));
+    world.session().set_folded(
+        ViewId::Document,
+        &section(&heading_path, key),
+        false,
+        Some(false),
+    );
     let f = editing_frame(&mut world);
     let heading_rect = stop(&f, &heading_path).rect;
     let body_rect = stop(&f, &body_path).rect;
@@ -599,7 +606,10 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
     let (doc, a, _, extra) = document();
     let mut editor = crate::test_editor(doc);
     let e = entry(&editor, &[], a);
-    editor.model.selection = Some(pending_value(occurrence::of(&[Step::Key(extra)])));
+    editor.model.selection = Some(pending_value(
+        ViewId::Document,
+        occurrence::of(&[Step::Key(extra)]),
+    ));
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
     // The command key, on either platform, picks the heading's reference.
     driver.hold(ModifiersState::CONTROL | ModifiersState::SUPER);
@@ -662,6 +672,7 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
         &crate::editing::Read {
             sources: world.sources(),
         },
+        ViewId::Document,
         Vec::new(),
     );
     assert!(editing_frame(&mut world).completion.is_some());
