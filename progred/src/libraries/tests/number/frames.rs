@@ -22,7 +22,7 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         (f32::value(45.0), f32::value(455.0)),
         (u64::value(45), u64::value(455)),
     ] {
-        let named = before.overlaid(name::record("tilt", []));
+        let named = name::record("tilt", before.as_record().unwrap().clone());
         let mut cells = Cells::new();
         cells.set_value(cell, named);
         let mut driver = Driver::new(
@@ -40,7 +40,10 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         assert_eq!(doc.root, Some(cell.into()));
         assert_eq!(
             doc.cells.value(cell),
-            Some(&after.overlaid(name::record("tilt angle", []))),
+            Some(&name::record(
+                "tilt angle",
+                after.as_record().unwrap().clone()
+            )),
         );
     }
 }
@@ -56,7 +59,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
         ] {
             let name_contact = contact == "name";
             let scrub = pick && !name_contact;
-            let value = number.overlaid(name::record("tilt", []));
+            let value = name::record("tilt", number.as_record().unwrap().clone());
             let cell = new_cell_id();
             let number_path = vec![Step::Follow(gid::Resolution::Document)];
             let name_path = vec![number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
@@ -132,8 +135,9 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         );
         world.model.selection = None;
         for name in [text::value(""), Value::list([text::value("unusual name")])] {
-            Rc::make_mut(&mut world.model.doc).root =
-                Some(number.overlaid(Value::record([(name::vocabulary::NAME, name)])));
+            let mut named = number.as_record().unwrap().clone();
+            named.extend([(name::vocabulary::NAME, name)]);
+            Rc::make_mut(&mut world.model.doc).root = Some(named.into());
             let frame = editing_frame(&mut world);
             assert!(frame.landmarks.landmark(&path).is_some());
         }

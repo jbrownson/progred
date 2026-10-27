@@ -34,6 +34,20 @@ pub mod toolpath;
 pub mod tree;
 pub mod u64;
 
+/// `value` written over `current`: where both are records, `current`'s
+/// fields stay under `value`'s, so a typed edit keeps a name; otherwise
+/// `value`.
+pub(crate) fn keeping_fields(current: Option<&gid::Value>, value: gid::Value) -> gid::Value {
+    match (current.and_then(gid::Value::as_record), value.as_record()) {
+        (Some(current), Some(fields)) => {
+            let mut kept = current.clone();
+            kept.extend(fields.iter().cloned());
+            kept.into()
+        }
+        _ => value,
+    }
+}
+
 #[cfg(test)]
 #[path = "tests/libraries/test_widgets.rs"]
 pub(crate) mod test_widgets;

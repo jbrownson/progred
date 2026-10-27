@@ -58,3 +58,16 @@ fn entries_sort_by_key_and_a_repeated_key_keeps_its_last_value() {
         [(first, blob("y")), (second, blob("z"))]
     );
 }
+
+#[test]
+fn extended_fields_replace_those_under_their_labels() {
+    let (a, b, k) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut fields: Record = [(a, blob("a")), (b, blob("b"))].into_iter().collect();
+    fields.extend([(b, blob("patched")), (k, blob("k"))]);
+    assert_eq!(
+        fields,
+        [(a, blob("a")), (b, blob("patched")), (k, blob("k"))]
+            .into_iter()
+            .collect()
+    );
+}

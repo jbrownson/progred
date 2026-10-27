@@ -162,24 +162,3 @@ fn malformed_spellings_refuse() {
     assert!(serde_json::from_str::<Value>(r#"{"number":1.0}"#).is_err());
     assert!(serde_json::from_str::<CellId>(r#"{"number":1.0}"#).is_err());
 }
-
-#[test]
-fn overlaying_a_record_keeps_its_fields_under_the_patch() {
-    let current = Value::record([(label("a"), blob("a")), (label("b"), blob("b"))]);
-    assert_eq!(
-        current.overlaid(Value::record([
-            (label("b"), blob("patched")),
-            (label("k"), blob("k"))
-        ])),
-        Value::record([
-            (label("a"), blob("a")),
-            (label("b"), blob("patched")),
-            (label("k"), blob("k")),
-        ])
-    );
-    assert_eq!(current.overlaid(blob("atom")), blob("atom"));
-    assert_eq!(
-        blob("atom").overlaid(Value::record([(label("a"), blob("a"))])),
-        Value::record([(label("a"), blob("a"))])
-    );
-}

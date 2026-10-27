@@ -371,7 +371,10 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
 
 #[test]
 fn navigation_named_number_hands_off_from_name_at_text_boundary() {
-    let mut driver = Driver::of(f64::value(45.0).overlaid(name::record("tilt", [])));
+    let mut driver = Driver::of(name::record(
+        "tilt",
+        f64::value(45.0).as_record().unwrap().clone(),
+    ));
     driver.select(&[Step::Key(name::vocabulary::NAME)]);
     driver.press(NamedKey::ArrowRight);
     assert!(driver.selection().is_empty());

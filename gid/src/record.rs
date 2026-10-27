@@ -75,6 +75,15 @@ impl Record {
     }
 }
 
+/// Fields replace any already under their labels.
+impl Extend<(CellId, Value)> for Record {
+    fn extend<T: IntoIterator<Item = (CellId, Value)>>(&mut self, fields: T) {
+        for (label, value) in fields {
+            self.insert(label, value);
+        }
+    }
+}
+
 impl FromIterator<(CellId, Value)> for Record {
     fn from_iter<T: IntoIterator<Item = (CellId, Value)>>(iter: T) -> Self {
         Self(Arc::new(sorted_entries(iter)))

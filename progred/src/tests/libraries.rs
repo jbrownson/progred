@@ -82,3 +82,25 @@ fn a_number_operator_names_its_representation_as_a_subscript() {
         );
     }
 }
+
+#[test]
+fn a_typed_edit_keeps_the_fields_of_the_record_it_replaces() {
+    let named = name::record("tilt", f64::value(45.0).as_record().unwrap().clone());
+    assert_eq!(
+        crate::libraries::keeping_fields(Some(&named), f64::value(90.0)),
+        name::record("tilt", f64::value(90.0).as_record().unwrap().clone())
+    );
+    let cell = gid::Value::from(gid::new_cell_id());
+    assert_eq!(
+        crate::libraries::keeping_fields(Some(&cell), f64::value(90.0)),
+        f64::value(90.0)
+    );
+    assert_eq!(
+        crate::libraries::keeping_fields(Some(&named), cell.clone()),
+        cell
+    );
+    assert_eq!(
+        crate::libraries::keeping_fields(None, text::value("x")),
+        text::value("x")
+    );
+}

@@ -18,11 +18,7 @@ pub mod vocabulary {
 pub use ::grap::text::{read, value};
 
 pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
-    Some(
-        current
-            .map(|current| current.overlaid(value(spelling)))
-            .unwrap_or_else(|| value(spelling)),
-    )
+    Some(super::keeping_fields(current, value(spelling)))
 }
 
 pub fn completion(spelling: &str) -> crate::display::Completion {

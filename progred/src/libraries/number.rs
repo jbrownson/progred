@@ -83,7 +83,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
                     Box::new(move |event| {
                         let scrubbed = scrub.update(event);
                         ScrubUpdate {
-                            value: original.overlaid(encode(scrubbed.value)),
+                            value: super::keeping_fields(Some(&original), encode(scrubbed.value)),
                             spelling: scrubbed.value.spelling(scrubbed.precision),
                         }
                     })
@@ -128,11 +128,7 @@ pub(crate) fn edit<N: std::str::FromStr>(
     encode: fn(N) -> Value,
 ) -> Option<Value> {
     let value = encode(spelling.trim().parse().ok()?);
-    Some(
-        current
-            .map(|current| current.overlaid(value.clone()))
-            .unwrap_or(value),
-    )
+    Some(super::keeping_fields(current, value))
 }
 
 struct Scrubbed<N> {
