@@ -238,7 +238,7 @@ fn fuel(
         )?)
         .ok_or_else(invalid)
     } else {
-        Ok(::grap::DEFAULT_FUEL)
+        Ok(crate::sources::DEFAULT_FUEL)
     }
 }
 

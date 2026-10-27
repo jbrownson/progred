@@ -29,6 +29,9 @@ pub struct Sources<'a> {
     pub libraries: &'a Libraries,
 }
 
+/// How much work an evaluation may do when nothing else sets its fuel.
+pub const DEFAULT_FUEL: usize = 1_024;
+
 impl crate::display::Env for Sources<'_> {
     fn apply_expression_runtime(
         &self,
@@ -40,7 +43,7 @@ impl crate::display::Env for Sources<'_> {
             arguments.iter().cloned(),
             self,
             None,
-            grap::DEFAULT_FUEL,
+            crate::sources::DEFAULT_FUEL,
         )
         .result
     }
@@ -77,7 +80,7 @@ impl crate::display::Env for Sources<'_> {
             arguments.iter().cloned(),
             self,
             scope,
-            grap::DEFAULT_FUEL,
+            crate::sources::DEFAULT_FUEL,
         )
     }
     fn apply_runtime_memo(

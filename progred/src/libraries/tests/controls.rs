@@ -12,7 +12,12 @@ fn controls_output(
     width: f64,
     frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
 ) -> Result<(Vec<Widget<crate::Editor>>, Value), Value> {
-    let callable = ::grap::evaluate(controls, frame.viewing().host(), ::grap::DEFAULT_FUEL).result;
+    let callable = ::grap::evaluate(
+        controls,
+        frame.viewing().host(),
+        crate::sources::DEFAULT_FUEL,
+    )
+    .result;
     super::controls_output(&callable, state, width, frame)
         .map(|(widgets, value)| (widgets, value.into_value()))
         .map_err(RuntimeValue::into_value)
@@ -24,7 +29,8 @@ fn apply_change(
     handler: &Value,
     value: Value,
 ) {
-    let callable = ::grap::evaluate(handler, &editor.sources(), ::grap::DEFAULT_FUEL).result;
+    let callable =
+        ::grap::evaluate(handler, &editor.sources(), crate::sources::DEFAULT_FUEL).result;
     super::apply_change(&mut editor.session(), site, &callable, value)
 }
 
@@ -175,7 +181,8 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
             };
             crate::projection::test_support::at_root(&cx, text, project, None, |context| {
                 let start = std::time::Instant::now();
-                let controls = ::grap::evaluate(controls, &sources, ::grap::DEFAULT_FUEL).result;
+                let controls =
+                    ::grap::evaluate(controls, &sources, crate::sources::DEFAULT_FUEL).result;
                 let (widgets, parameters) =
                     super::controls_output(&controls, None, width, context).unwrap();
                 eprintln!("CAM controls width {width}: {:?}", start.elapsed());

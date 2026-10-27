@@ -22,7 +22,7 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation<gid::Value> 
         doc,
         libraries: &stack.libraries,
     };
-    grap::evaluate_value(expression, &sources, grap::DEFAULT_FUEL)
+    grap::evaluate_value(expression, &sources, crate::sources::DEFAULT_FUEL)
 }
 
 #[test]

@@ -227,7 +227,7 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
                             doc: &doc,
                             libraries,
                         },
-                        ::grap::DEFAULT_FUEL,
+                        crate::sources::DEFAULT_FUEL,
                     )
                     .result
                 })

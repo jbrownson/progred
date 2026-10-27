@@ -138,7 +138,7 @@ fn viewport_runtime_output(
         Some(prepare) => {
             let fuel = match fields.get(&layout::vocabulary::FUEL) {
                 Some(value) => ::grap::f64::to_usize(f64::read(value)?)?,
-                None => ::grap::DEFAULT_FUEL,
+                None => crate::sources::DEFAULT_FUEL,
             };
             let prepared =
                 env.apply_runtime_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
@@ -170,7 +170,7 @@ fn render_display<W: Host>(
     let expression = render.field(::grap::vocabulary::EXPRESSION)?;
     let fuel = match render.field(layout::vocabulary::FUEL) {
         Some(fuel) => ::grap::f64::to_usize(fuel.as_f64()?)?,
-        None => ::grap::DEFAULT_FUEL,
+        None => crate::sources::DEFAULT_FUEL,
     };
     let steps = [Step::Key(::grap::vocabulary::EXPRESSION)];
     let result = input.env.evaluate_runtime_memo(&expression, fuel, &steps);

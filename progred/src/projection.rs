@@ -272,7 +272,7 @@ impl crate::display::Env for Occurrence<'_> {
             arguments.iter().cloned(),
             &self.cx.sources,
             None,
-            grap::DEFAULT_FUEL,
+            crate::sources::DEFAULT_FUEL,
         )
         .result
     }

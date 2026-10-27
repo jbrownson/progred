@@ -94,7 +94,7 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
             _: &[(CellId, Value)],
             fuel: usize,
         ) -> RuntimeValue {
-            assert_eq!(fuel, ::grap::DEFAULT_FUEL);
+            assert_eq!(fuel, crate::sources::DEFAULT_FUEL);
             self.0.set(self.0.get() + 1);
             ::grap::absent::value(::grap::absent::MISSING_CELL).into()
         }

@@ -168,8 +168,10 @@ fn entry_of<W: Host>(
         )],
         input
             .env
-            .evaluate_runtime_memo(reference, ::grap::DEFAULT_FUEL, &[]),
-        input.env.evaluation(reference, ::grap::DEFAULT_FUEL, &[]),
+            .evaluate_runtime_memo(reference, crate::sources::DEFAULT_FUEL, &[]),
+        input
+            .env
+            .evaluation(reference, crate::sources::DEFAULT_FUEL, &[]),
     );
     let (expression, arrow, result) = (
         shared(expression),

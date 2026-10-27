@@ -690,7 +690,7 @@ fn evaluation_display<W: Host>(
         |[expression]| {
             let result = input.env.evaluate_runtime(
                 &expression?,
-                ::grap::DEFAULT_FUEL,
+                crate::sources::DEFAULT_FUEL,
                 &[Step::Key(EXPRESSION)],
             );
             let expression = shared(expression_path(input, [Step::Key(EXPRESSION)]));

@@ -155,7 +155,7 @@ fn apply_change(
         ],
         &session.sources(),
         Some(&ForeignOverlay::from_value(&[UPDATE], &update)),
-        ::grap::DEFAULT_FUEL,
+        crate::sources::DEFAULT_FUEL,
     );
     if result.completed
         && !result.result.declines()
@@ -370,7 +370,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                     ],
                     context.viewing().host(),
                     None,
-                    ::grap::DEFAULT_FUEL,
+                    crate::sources::DEFAULT_FUEL,
                 );
                 let content = presentation::result_layout(&result.result).measure(context, build);
                 if controls.is_empty() {
@@ -442,7 +442,7 @@ fn controls_output<W: Host>(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
             &emit,
         )),
-        ::grap::DEFAULT_FUEL,
+        crate::sources::DEFAULT_FUEL,
     );
     if !evaluation.completed || evaluation.result.absent_reason().is_some() {
         Err(evaluation.result)
@@ -652,7 +652,7 @@ fn tree_program_cursor<W: Host>(
         Some(expression) => context
             .eval_f64(expression, environment)?
             .and_then(::grap::f64::to_usize),
-        None => Some(::grap::DEFAULT_FUEL),
+        None => Some(crate::sources::DEFAULT_FUEL),
     };
     let Some(fuel) = fuel else {
         return Ok(invalid_input());

@@ -71,7 +71,7 @@ pub fn grap(
                 arguments.clone().into_iter().map(|(k, v)| (k, v.into())),
                 sources,
                 Some(overlay),
-                grap::DEFAULT_FUEL,
+                crate::sources::DEFAULT_FUEL,
             )
         })
     })

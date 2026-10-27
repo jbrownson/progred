@@ -46,8 +46,6 @@ pub mod u64;
 mod unboxed;
 pub mod vocabulary;
 
-pub const DEFAULT_FUEL: usize = 1_024;
-
 /// Shared code, independent of the evaluator that executes it.
 #[derive(Clone)]
 pub struct Expression(Rc<Lowered>);

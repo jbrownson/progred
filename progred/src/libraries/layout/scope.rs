@@ -407,7 +407,7 @@ fn drawing<W: Host>(
         call,
         environment,
         FUEL,
-        Some(::grap::DEFAULT_FUEL as f64),
+        Some(crate::sources::DEFAULT_FUEL as f64),
     )?)
     .ok_or(BuildError::Invalid)?;
     let program = context.field(call, PROGRAM).ok_or(BuildError::Invalid)?;

@@ -147,7 +147,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
             .get(&::grap::vocabulary::EXPRESSION)
             .unwrap(),
         &world.sources(),
-        ::grap::DEFAULT_FUEL,
+        crate::sources::DEFAULT_FUEL,
     )
     .result;
     assert_eq!(
