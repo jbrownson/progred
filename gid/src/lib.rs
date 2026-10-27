@@ -19,7 +19,7 @@ mod value;
 mod blob_profile;
 
 pub use blob::Blob;
-pub use cell_id::{CellId, ParseCellIdError, new_cell_id};
+pub use cell_id::{CellId, new_cell_id};
 pub use cells::Cells;
 pub use document::Document;
 pub use entries::{Entries, sorted_entries};

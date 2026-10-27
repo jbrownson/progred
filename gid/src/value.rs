@@ -7,7 +7,6 @@
 use crate::blob::Blob;
 use crate::cell_id::CellId;
 use crate::{List, Record};
-use std::fmt;
 
 /// A value: anything sayable — pure structure, no identity of its
 /// own. Cycles are unrepresentable here; they exist only by a cell's
@@ -87,17 +86,6 @@ impl From<List> for Value {
 impl From<Record> for Value {
     fn from(fields: Record) -> Self {
         Value::Record(fields)
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Cell(cell) => cell.fmt(f),
-            Value::Blob(bytes) => bytes.fmt(f),
-            Value::List(elements) => elements.fmt(f),
-            Value::Record(fields) => fields.fmt(f),
-        }
     }
 }
 

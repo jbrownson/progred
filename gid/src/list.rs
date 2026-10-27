@@ -1,5 +1,4 @@
 use crate::{Entries, Position, Value};
-use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -34,19 +33,6 @@ impl Hash for List {
         for element in self.values() {
             element.hash(state);
         }
-    }
-}
-
-impl fmt::Display for List {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[")?;
-        for (index, element) in self.values().enumerate() {
-            if index > 0 {
-                write!(f, ", ")?;
-            }
-            element.fmt(f)?;
-        }
-        write!(f, "]")
     }
 }
 

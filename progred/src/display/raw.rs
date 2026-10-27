@@ -195,13 +195,14 @@ fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
 }
 
 /// The blob typed as `0x` and its hex, inserted and selected.
-fn typed_blob(bytes: Vec<u8>) -> Completion {
-    let value = Value::from(bytes);
+fn typed_blob(blob: gid::Blob) -> Completion {
+    let spelling = blob.to_string();
+    let value = Value::Blob(blob);
     let committed = value.clone();
     Completion {
         face: Face::Id,
         preview: Some(value.clone()),
-        ..Completion::new(value.to_string(), move |session| {
+        ..Completion::new(spelling, move |session| {
             if let Some(picking) = session.pending() {
                 picking.commit(
                     committed.clone(),
@@ -251,7 +252,7 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
     let query = request.query;
     let trimmed = query.trim();
     let blob = (kind == CompletionKind::Value)
-        .then(|| trimmed.strip_prefix("0x").and_then(gid::read_hex))
+        .then(|| gid::Blob::read(trimmed))
         .flatten();
     let atom_leads = trimmed.starts_with('"') || blob.is_some();
     let (readings, atoms): (Vec<_>, Vec<_>) = match kind {

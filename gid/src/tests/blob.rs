@@ -26,3 +26,15 @@ fn equality_and_hashing_compare_bytes_not_storage() {
         assert_eq!(hash(&a), hash(&b));
     }
 }
+
+#[test]
+fn blobs_read_back_the_spelling_they_display() {
+    let blob = Blob::from(vec![0xde, 0xad]);
+    assert_eq!(blob.to_string(), "0xdead");
+    assert_eq!(Blob::read("0xdead"), Some(blob.clone()));
+    assert_eq!(Blob::read("0xDEAD"), Some(blob));
+    assert_eq!(Blob::read("0x"), Some(Blob::from(Vec::new())));
+    for malformed in ["dead", "0xdea", "0xdeag", "0Xdead", ""] {
+        assert_eq!(Blob::read(malformed), None);
+    }
+}

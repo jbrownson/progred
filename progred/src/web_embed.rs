@@ -16,9 +16,9 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack, String
             } else {
                 ids.split(',')
                     .map(|id| {
-                        id.trim()
-                            .parse::<gid::CellId>()
-                            .map_err(|error| format!("Invalid library ID {id:?}: {error}"))
+                        gid::CellId::read(id.trim()).ok_or_else(|| {
+                            format!("Invalid library ID {id:?}: a cell id is 32 hex digits")
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()
             }?;
@@ -148,9 +148,9 @@ pub(crate) fn tutorial_slots(
                             return Err(format!("Unknown tutorial slot level {level:?}"));
                         }
                     };
-                    id.parse::<gid::CellId>()
-                        .map(|id| (id, level))
-                        .map_err(|error| format!("Invalid tutorial slot {id:?}: {error}"))
+                    gid::CellId::read(id).map(|id| (id, level)).ok_or_else(|| {
+                        format!("Invalid tutorial slot {id:?}: a cell id is 32 hex digits")
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             if slots

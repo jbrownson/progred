@@ -102,9 +102,9 @@ impl TextClipboard for Clipboard {
 /// On the desktop a picture of what was copied joins them, as
 /// [`crate::picture`] says.
 pub(crate) fn spelling(value: &Value) -> (String, bool) {
-    match (text::read(value), value.as_blob()) {
+    match (text::read(value), value) {
         (Some(text), _) => (format!("\"{text}\""), false),
-        (_, Some(_)) => (value.to_string(), false),
+        (_, Value::Blob(blob)) => (blob.to_string(), false),
         _ => {
             let document = gid::Document {
                 root: Some(value.clone()),

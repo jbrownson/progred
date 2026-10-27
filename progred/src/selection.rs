@@ -500,10 +500,8 @@ pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
         Some(inner) => text::value(inner.strip_suffix('"').unwrap_or(inner)),
-        None => trimmed
-            .strip_prefix("0x")
-            .and_then(gid::read_hex)
-            .map(Value::from)
+        None => gid::Blob::read(trimmed)
+            .map(Value::Blob)
             .unwrap_or_else(|| text::value(text)),
     }
 }

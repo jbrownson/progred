@@ -153,10 +153,11 @@ impl<P> Driver<P> {
     /// Copy `value` from elsewhere and paste it with the command key's V;
     /// whether the editor took it.
     pub(crate) fn paste(&mut self, value: &Value) -> bool {
-        self.runner
-            .editor
-            .text_clipboard
-            .copy(value.to_string(), Some(value), None);
+        self.runner.editor.text_clipboard.copy(
+            crate::clipboard::spelling(value).0,
+            Some(value),
+            None,
+        );
         self.keystroke(Key::Character("v".into()), self.command())
     }
 

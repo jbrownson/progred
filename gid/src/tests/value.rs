@@ -84,16 +84,3 @@ fn blobs_are_their_bytes() {
     assert_ne!(Value::from(vec![0xde, 0xad]), Value::from(vec![0xad, 0xde]));
     assert_eq!(Value::from(vec![0xde]).as_blob(), Some(&[0xde_u8][..]));
 }
-
-#[test]
-fn values_display_through_their_parts() {
-    let cell = CellId::from_u128(0x00112233445566778899aabbccddeeff);
-    let value = Value::record([(
-        label("k"),
-        Value::list([Value::from(vec![0xde, 0xad]), Value::from(cell)]),
-    )]);
-    assert_eq!(
-        value.to_string(),
-        format!("{{{}: [0xdead, {cell}]}}", label("k"))
-    );
-}

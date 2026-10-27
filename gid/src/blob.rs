@@ -1,4 +1,4 @@
-use crate::hex_string;
+use crate::{hex_string, read_hex};
 use std::{fmt, ops::Deref, sync::Arc};
 
 /// Bytes with value semantics: clones share storage.
@@ -16,6 +16,14 @@ impl Deref for Blob {
 
     fn deref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl Blob {
+    /// The blob that `0x` and hex digit pairs spell, in either case, as
+    /// Display writes it.
+    pub fn read(text: &str) -> Option<Self> {
+        text.strip_prefix("0x").and_then(read_hex).map(Self::from)
     }
 }
 

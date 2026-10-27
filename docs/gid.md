@@ -32,6 +32,11 @@ readable names are ordinary `libraries::name` facts. Mint a fixed identity
 from 16 unmodified OS-CSPRNG bytes (`new_cell_id`, or `openssl rand -hex 16`
 for a source literal), never from a UUID generator.
 
+Only the atoms have text forms of their own, and each type that has one writes
+it with `Display` and reads it back with a `read` returning `Option`: a cell
+id is 32 hex digits, a blob is `0x` and hex digit pairs. Records, lists, and
+values have no text form in GID; the text notation spells them.
+
 The Rust implementation shares record, list, and blob storage across clones.
 Blobs wrap `Arc<Vec<u8>>`: construction takes ownership of the existing byte
 buffer without copying it, and clones share it.
