@@ -1,6 +1,7 @@
 //! Optional code origins as ordinary GID annotations, not execution history.
 
-use crate::{Expression, OriginId, OriginNode, OriginRoot, SourceOrigin, path};
+use crate::lower::{OriginId, OriginNode, OriginRoot};
+use crate::{Expression, SourceOrigin, path};
 use gid::Value;
 
 pub mod vocabulary {

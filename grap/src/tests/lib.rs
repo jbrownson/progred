@@ -1,6 +1,6 @@
 use super::*;
 use gid::new_cell_id;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 fn definitions_from_parts<'a>(
     resolve: impl Fn(CellId) -> Option<Value> + 'a,

@@ -1,5 +1,7 @@
 use super::*;
+use crate::unboxed::{Native, Unboxed};
 use gid::new_cell_id;
+use std::cell::RefCell;
 
 /// A call built at runtime from `fields`, its function among them.
 fn runtime_call(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> RuntimeValue {

@@ -1,5 +1,6 @@
 use crate::*;
 use gid::new_cell_id;
+use std::cell::RefCell;
 
 fn after(effect: Value, result: Value) -> Value {
     let ignored = new_cell_id();

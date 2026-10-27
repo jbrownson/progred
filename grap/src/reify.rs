@@ -1,6 +1,8 @@
 //! Materialize one GID result without expanding shared runtime subgraphs.
 //! The borrowed input stays alive for the walk; the address table dies with it.
 use super::*;
+use crate::environment::{EnvironmentFrame, frames};
+use crate::runtime::RuntimeValueKind;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
