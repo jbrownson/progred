@@ -93,11 +93,10 @@ Zed, and other editors take the same rust-analyzer settings:
   toolchain's proc-macro server inside the sandbox, so macros expand with the
   boundaries they were built with.
 
-rust-analyzer reads the standard library from the toolchain's `rust-src`, and
-finds the toolchain through the first `rustc` on the editor's `PATH`. Use the
-toolchain the wrappers build with: with rustup, run `rustup component add
-rust-src` and put `~/.cargo/bin` ahead of a distribution's Rust on the
-editor's `PATH`.
+rust-analyzer reads the standard library from the toolchain's `rust-src`. It
+finds that toolchain by running `rustc --print sysroot`, using the first
+`rustc` on `PATH`. A distribution `rustc` reports a sysroot such as `/usr`, so
+it needs that distribution's `rust-src` package.
 
 Cargo configuration cannot redirect `cargo run` itself because aliases may not
 replace Cargo's built-in commands. Doing that transparently would require a
