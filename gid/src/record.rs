@@ -64,6 +64,22 @@ impl Record {
         next
     }
 
+    /// The record spelled by `fields`. A text spelling may list the labels in
+    /// any order, but a binary one lists them in increasing order, as they're
+    /// written; neither repeats one.
+    fn read(mut fields: Vec<(CellId, Value)>, text: bool) -> Result<Self, &'static str> {
+        if !fields.is_sorted_by(|(a, _), (b, _)| a < b) {
+            if !text {
+                return Err("record labels must increase");
+            }
+            fields.sort_by_key(|(label, _)| *label);
+            if fields.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+                return Err("repeated label in a record");
+            }
+        }
+        Ok(Self(Arc::new(fields)))
+    }
+
     pub fn without(&self, key: &CellId) -> Self {
         let mut next = self.clone();
         next.remove(key);
@@ -93,9 +109,9 @@ impl Serialize for Record {
 
 impl<'de> Deserialize<'de> for Record {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Vec::<(CellId, Value)>::deserialize(deserializer)?
-            .into_iter()
-            .collect())
+        let text = deserializer.is_human_readable();
+        let fields = Vec::<(CellId, Value)>::deserialize(deserializer)?;
+        Record::read(fields, text).map_err(serde::de::Error::custom)
     }
 }
 
