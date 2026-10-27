@@ -1,6 +1,6 @@
 //! A durable GID document: one root value and its cell definitions.
 
-use crate::{Cells, Step, Value};
+use crate::{Cells, Value};
 
 /// A document's root value plus the table holding every cell's current
 /// value. An absent table entry is a bare cell. Cloning is O(1): the
@@ -10,7 +10,3 @@ pub struct Document {
     pub root: Option<Value>,
     pub cells: Cells,
 }
-
-/// A traversal route from a document root through record fields, list
-/// elements, and cell references.
-pub type Path = Vec<Step>;

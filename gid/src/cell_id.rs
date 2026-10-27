@@ -2,7 +2,7 @@
 //! spellings. All 128 bits are identity; there are no UUID version or
 //! variant bits.
 
-use crate::value::{hex_string, read_hex};
+use crate::{hex_string, read_hex};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;

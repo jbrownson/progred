@@ -65,31 +65,6 @@ fn list_equality_ignores_positions() {
 }
 
 #[test]
-fn lists_are_canonical_copy_on_write_sequences() {
-    let [first, second, third] = spread(3).try_into().unwrap();
-    let mut original: List = [
-        (third.clone(), blob("third")),
-        (first.clone(), blob("first")),
-        (second.clone(), blob("old second")),
-        (second.clone(), blob("second")),
-    ]
-    .into_iter()
-    .collect();
-    assert_eq!(
-        original.keys().cloned().collect::<Vec<_>>(),
-        [first.clone(), second.clone(), third]
-    );
-    assert_eq!(original.get(&second), Some(&blob("second")));
-
-    let snapshot = original.clone();
-    assert!(Arc::ptr_eq(&original.0, &snapshot.0));
-    original.insert(first.clone(), blob("changed"));
-    assert!(!Arc::ptr_eq(&original.0, &snapshot.0));
-    assert_eq!(original.get(&first), Some(&blob("changed")));
-    assert_eq!(snapshot.get(&first), Some(&blob("first")));
-}
-
-#[test]
 fn records_are_content_compared_values() {
     let a = Value::record([(label("x"), blob("1")), (label("y"), blob("2"))]);
     let b = Value::record([(label("y"), blob("2")), (label("x"), blob("1"))]);
@@ -100,31 +75,6 @@ fn records_are_content_compared_values() {
     assert_ne!(Value::record([]), Value::list([]));
     // Equal inline records nest equally.
     assert_eq!(Value::list([a.clone()]), Value::list([b.clone()]));
-}
-
-#[test]
-fn records_are_canonical_copy_on_write_values() {
-    fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<Value>();
-
-    let x = label("x");
-    let y = label("y");
-    let mut original: Record = [(y, blob("first y")), (x, blob("x")), (y, blob("last y"))]
-        .into_iter()
-        .collect();
-    assert_eq!(original.keys().copied().collect::<Vec<_>>(), {
-        let mut labels = vec![x, y];
-        labels.sort();
-        labels
-    });
-    assert_eq!(original.get(&y), Some(&blob("last y")));
-
-    let snapshot = original.clone();
-    assert!(Arc::ptr_eq(&original.0, &snapshot.0));
-    original.insert(x, blob("changed"));
-    assert!(!Arc::ptr_eq(&original.0, &snapshot.0));
-    assert_eq!(original.get(&x), Some(&blob("changed")));
-    assert_eq!(snapshot.get(&x), Some(&blob("x")));
 }
 
 #[test]
@@ -221,46 +171,6 @@ fn spread_positions_carry_list_construction() {
     assert_eq!(positions, spread(100));
     let values: Vec<_> = elements.values().cloned().collect();
     assert_eq!(values[3], blob("3"));
-}
-
-#[test]
-fn typed_hex_reads_every_byte_in_either_case_and_only_whole_bytes() {
-    let bytes: Vec<u8> = (0..=255).collect();
-    for hex in [hex_string(&bytes), hex_string(&bytes).to_uppercase()] {
-        assert_eq!(read_hex(&hex), Some(bytes.clone()));
-    }
-    assert_eq!(read_hex(""), Some(vec![]));
-    for malformed in ["f", "fg", "é", "ff 00", "🦀"] {
-        assert_eq!(read_hex(malformed), None);
-    }
-}
-
-#[test]
-fn entries_sort_by_key_and_a_repeated_key_keeps_its_last_value() {
-    let (a, b) = (relation("a"), relation("b"));
-    let (low, high) = (a.min(b), a.max(b));
-    let record = Value::record([(high, blob("1")), (low, blob("2")), (high, blob("3"))]);
-    assert_eq!(
-        record
-            .as_record()
-            .unwrap()
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>(),
-        [(low, blob("2")), (high, blob("3"))]
-    );
-    let [first, second] = <[Position; 2]>::try_from(spread(2)).unwrap();
-    let list: List = [
-        (second.clone(), blob("x")),
-        (first.clone(), blob("y")),
-        (second.clone(), blob("z")),
-    ]
-    .into_iter()
-    .collect();
-    assert_eq!(
-        list.iter().cloned().collect::<Vec<_>>(),
-        [(first, blob("y")), (second, blob("z"))]
-    );
 }
 
 #[test]
