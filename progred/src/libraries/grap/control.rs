@@ -210,8 +210,7 @@ fn replace_unquotes(
         })
         .map(RuntimeValue::list)
     } else {
-        let value = context.value(&expression).clone();
-        replace_unquotes_value(&value, context, environment)
+        Ok(context.value(&expression).clone().into())
     }
 }
 
@@ -226,36 +225,6 @@ fn try_map_sized<T, U>(
         mapped.push(map(item)?);
     }
     Ok(mapped)
-}
-
-fn replace_unquotes_value(
-    value: &Value,
-    context: &mut Context,
-    environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    match value {
-        Value::Record(fields) if ::grap::isa::of(fields) == Some(vocabulary::kind::UNQUOTE) => {
-            match fields.get(&vocabulary::UNQUOTE) {
-                Some(expression) => context.eval_value_runtime(expression, environment),
-                None => Ok(::grap::absent::missing_field(vocabulary::UNQUOTE).into()),
-            }
-        }
-        Value::Record(fields) => Ok(RuntimeValue::record(
-            fields
-                .iter()
-                .map(|(field, value)| {
-                    Ok((*field, replace_unquotes_value(value, context, environment)?))
-                })
-                .collect::<Result<Vec<(CellId, RuntimeValue)>, Halt>>()?,
-        )),
-        Value::List(values) => Ok(RuntimeValue::list(
-            values
-                .values()
-                .map(|value| replace_unquotes_value(value, context, environment))
-                .collect::<Result<Vec<RuntimeValue>, Halt>>()?,
-        )),
-        Value::Cell(_) | Value::Blob(_) => Ok(value.clone().into()),
-    }
 }
 
 /// A case parsed once at prepare: its position is kept so a malformed

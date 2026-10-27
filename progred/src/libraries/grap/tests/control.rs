@@ -568,6 +568,53 @@ fn quote_replaces_unquotes_in_its_calling_environment() {
 }
 
 #[test]
+fn quote_splices_inside_a_quoted_lambda_where_the_unquote_is_written() {
+    let parameter = new_cell_id();
+    let inner = new_cell_id();
+    let unquote = |expression| {
+        Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(vocabulary::kind::UNQUOTE).into(),
+            ),
+            (vocabulary::UNQUOTE, expression),
+        ])
+    };
+    let quote = |template| {
+        grap::call(
+            grap::lambda([parameter], quote_call(template)),
+            [(parameter, blob("spliced"))],
+        )
+    };
+    assert_eq!(
+        evaluate(&quote(grap::lambda([inner], unquote(parameter.into())))).result,
+        grap::lambda([inner], blob("spliced")),
+    );
+    // A quote missing its expression says where it's written.
+    let unfinished = grap::call(Value::from(vocabulary::QUOTE), []);
+    assert_eq!(
+        evaluate(&quote(grap::lambda([inner], unquote(unfinished)))).result,
+        grap::lambda(
+            [inner],
+            ::grap::absent::missing_argument(
+                ::grap::vocabulary::EXPRESSION,
+                Some(&grap::SourceOrigin::Input(
+                    [
+                        ::grap::vocabulary::FUNCTION,
+                        ::grap::vocabulary::BODY,
+                        ::grap::vocabulary::EXPRESSION,
+                        ::grap::vocabulary::BODY,
+                        vocabulary::UNQUOTE,
+                    ]
+                    .map(Step::Key)
+                    .to_vec()
+                )),
+            ),
+        ),
+    );
+}
+
+#[test]
 fn unquote_is_ordinary_data_outside_quote() {
     let missing = new_cell_id();
     let expression = Value::record([

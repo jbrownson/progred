@@ -152,39 +152,8 @@ impl<'a> Context<'a> {
                         (*key, self.lower_runtime_code_at(value, child))
                     })
                     .collect();
-                // A field a kind requires, or why it's missing.
-                let required = |field| {
-                    lowered_field(&fields, field).unwrap_or_else(|| {
-                        missing_field(field, child_origin(origin.clone(), gid::Step::Key(field)))
-                    })
-                };
-                let params = value.field(vocabulary::PARAMS);
-                let form = match value.field(isa::ISA).and_then(|kind| kind.as_cell()) {
-                    Some(kind) if kind == vocabulary::kind::CALL => Form::Call {
-                        function: required(vocabulary::FUNCTION),
-                    },
-                    Some(kind) if kind == vocabulary::kind::LAMBDA => Form::Lambda {
-                        parameters: LambdaParameters::parse(
-                            params
-                                .as_ref()
-                                .and_then(RuntimeValue::list_values)
-                                .map(|values| {
-                                    values
-                                        .map(|v| v.as_cell().ok_or_else(|| v.to_value()))
-                                        .collect()
-                                }),
-                        ),
-                        body: required(vocabulary::BODY),
-                        fields: record
-                            .iter()
-                            .map(|(key, value)| (*key, value.to_value()))
-                            .collect(),
-                    },
-                    Some(kind) if kind == vocabulary::kind::VALUE_WRAPPER => {
-                        Form::Value(required(vocabulary::VALUE))
-                    }
-                    _ => Form::Ready(value.clone()),
-                };
+                let form = construct(value, &fields, &origin)
+                    .unwrap_or_else(|| Form::Ready(value.clone()));
                 Expression(Rc::new(Lowered {
                     source: value.clone(),
                     origin,
@@ -222,74 +191,29 @@ impl<'a> Context<'a> {
     }
 
     fn lower_with(&mut self, value: &Value, origin: Option<OriginId>) -> Expression {
+        let source = RuntimeValue::from(value);
         let (form, fields, elements) = match value {
             Value::Cell(cell) => (Form::Cell(*cell), None, None),
-            Value::Record(fields) => {
-                let lower_field = |this: &mut Self, field: CellId, value: &Value| {
-                    let child = child_origin(origin.clone(), gid::Step::Key(field));
-                    this.lower_with(value, child)
-                };
-                // Lower every field, reusing an already lowered head.
-                let lower_all = |this: &mut Self, head: Option<(CellId, &Expression)>| {
-                    fields
-                        .iter()
-                        .map(|(field, value)| match head {
-                            Some((label, lowered)) if label == *field => (*field, lowered.clone()),
-                            _ => (*field, lower_field(this, *field, value)),
-                        })
-                        .collect::<Vec<_>>()
-                };
-                // A field a kind requires, or why it's missing.
-                let required = |this: &mut Self, field: CellId| match fields.get(&field) {
-                    Some(value) => lower_field(this, field, value),
-                    None => {
-                        missing_field(field, child_origin(origin.clone(), gid::Step::Key(field)))
-                    }
-                };
-                // A record is a call, a lambda or a value wrapper only when its
-                // `isa` says so.
-                match isa::of(fields) {
-                    Some(kind) if kind == vocabulary::kind::CALL => {
-                        let function = required(self, vocabulary::FUNCTION);
-                        let fields = lower_all(self, Some((vocabulary::FUNCTION, &function)));
-                        (Form::Call { function }, Some(fields), None)
-                    }
-                    Some(kind) if kind == vocabulary::kind::LAMBDA => (
-                        Form::Lambda {
-                            parameters: LambdaParameters::parse(
-                                fields
-                                    .get(&vocabulary::PARAMS)
-                                    .and_then(Value::as_list)
-                                    .map(|list| {
-                                        list.values()
-                                            .map(|v| v.as_cell().ok_or_else(|| v.clone()))
-                                            .collect()
-                                    }),
-                            ),
-                            body: required(self, vocabulary::BODY),
-                            fields: fields.clone(),
-                        },
-                        None,
-                        None,
-                    ),
-                    Some(kind) if kind == vocabulary::kind::VALUE_WRAPPER => {
-                        let value = required(self, vocabulary::VALUE);
-                        let fields = lower_all(self, Some((vocabulary::VALUE, &value)));
-                        (Form::Value(value), Some(fields), None)
-                    }
-                    _ => (
-                        // A number or text literal is its native value
-                        // from the start, rather than read on every use.
-                        match Unboxed::recognize(fields) {
+            Value::Record(record) => {
+                let fields: Vec<_> = record
+                    .iter()
+                    .map(|(field, value)| {
+                        let child = child_origin(origin.clone(), gid::Step::Key(*field));
+                        (*field, self.lower_with(value, child))
+                    })
+                    .collect();
+                // A number or text literal is its native value from the
+                // start, rather than read on every use.
+                let form =
+                    construct(&source, &fields, &origin).unwrap_or_else(
+                        || match Unboxed::recognize(record) {
                             Some(unboxed) => {
                                 Form::Ready(RuntimeValue::new(RuntimeValueKind::Unboxed(unboxed)))
                             }
                             None => Form::Data,
                         },
-                        Some(lower_all(self, None)),
-                        None,
-                    ),
-                }
+                    );
+                (form, Some(fields), None)
             }
             Value::List(elements) => (
                 Form::Data,
@@ -308,7 +232,7 @@ impl<'a> Context<'a> {
             Value::Blob(_) => (Form::Data, None, None),
         };
         Expression(Rc::new(Lowered {
-            source: value.into(),
+            source,
             origin,
             form,
             fields,
@@ -477,6 +401,43 @@ impl<'a> Context<'a> {
         self.field(call, label)
             .ok_or_else(|| self.missing_runtime_argument(call, label))
     }
+}
+
+/// What a record's `isa` makes it, read from its lowered `fields`: a call,
+/// a lambda or a value wrapper, or `None` for any other record. A field the
+/// kind requires but the record lacks lowers to why it's missing.
+fn construct(
+    source: &RuntimeValue,
+    fields: &[(CellId, Expression)],
+    origin: &Option<OriginId>,
+) -> Option<Form> {
+    let required = |field| {
+        lowered_field(fields, field).unwrap_or_else(|| {
+            missing_field(field, child_origin(origin.clone(), gid::Step::Key(field)))
+        })
+    };
+    Some(match source.field(isa::ISA)?.as_cell()? {
+        vocabulary::kind::CALL => Form::Call {
+            function: required(vocabulary::FUNCTION),
+        },
+        vocabulary::kind::LAMBDA => Form::Lambda {
+            parameters: LambdaParameters::parse(
+                source
+                    .field(vocabulary::PARAMS)
+                    .as_ref()
+                    .and_then(RuntimeValue::list_values)
+                    .map(|values| {
+                        values
+                            .map(|v| v.as_cell().ok_or_else(|| v.to_value()))
+                            .collect()
+                    }),
+            ),
+            body: required(vocabulary::BODY),
+            fields: source.as_value().as_record()?.clone(),
+        },
+        vocabulary::kind::VALUE_WRAPPER => Form::Value(required(vocabulary::VALUE)),
+        _ => return None,
+    })
 }
 
 fn child_origin(parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
