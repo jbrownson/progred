@@ -95,8 +95,14 @@ Zed, and other editors take the same rust-analyzer settings:
 
 rust-analyzer reads the standard library from the toolchain's `rust-src`. It
 finds that toolchain by running `rustc --print sysroot`, using the first
-`rustc` on `PATH`. A distribution `rustc` reports a sysroot such as `/usr`, so
-it needs that distribution's `rust-src` package.
+`rustc` on the editor's `PATH`. Make that the toolchain the wrappers build
+with, so the library it reads is the one builds use:
+
+- with rustup, the wrappers build with its stable toolchain: run `rustup
+  component add rust-src` and put `~/.cargo/bin` ahead of a distribution's
+  Rust on the editor's `PATH`;
+- without rustup, they build with the distribution's compiler, whose sysroot
+  is `/usr` or similar: install the distribution's `rust-src` package.
 
 Cargo configuration cannot redirect `cargo run` itself because aliases may not
 replace Cargo's built-in commands. Doing that transparently would require a
