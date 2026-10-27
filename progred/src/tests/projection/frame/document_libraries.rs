@@ -82,7 +82,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
             let at = [
                 key("fractions"),
                 Step::Element(position.clone()),
-                Step::Follow(gid::Resolution::Document),
+                Step::Follow,
                 key(part),
             ];
             assert!(drawn(&mut world, &at), "{part} of a fraction");
@@ -115,7 +115,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
             let path = [
                 key("fractions"),
                 Step::Element(position.clone()),
-                Step::Follow(gid::Resolution::Document),
+                Step::Follow,
                 key(name),
             ];
             frame.landmarks.landmark(&path).unwrap().rect
@@ -221,7 +221,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
                 Step::Element(library.clone()),
                 key("functions"),
                 Step::Element(function.clone()),
-                Step::Follow(gid::Resolution::Document),
+                Step::Follow,
                 Step::Key(::grap::vocabulary::BODY),
             ];
             assert!(frame.landmarks.landmark(&body).is_some(), "{body:?}");
@@ -239,7 +239,7 @@ fn the_example_views_select_what_they_draw() {
     let fraction = vec![
         key("fractions"),
         Step::Element(driver.positions(&[key("fractions")])[0].clone()),
-        Step::Follow(gid::Resolution::Document),
+        Step::Follow,
     ];
     let over = [fraction.clone(), vec![key("over")]].concat();
     let under = [fraction.clone(), vec![key("under")]].concat();

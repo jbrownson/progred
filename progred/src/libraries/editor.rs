@@ -43,8 +43,6 @@ pub fn library<W: Host>() -> Library<W> {
             (path::vocabulary::KEY, "key"),
             (path::vocabulary::ELEMENT, "element"),
             (path::vocabulary::FOLLOW, "follow"),
-            (path::vocabulary::DOCUMENT, "document"),
-            (path::vocabulary::LIBRARY, "library"),
             (path::vocabulary::INDEXABLE, "indexable"),
             (path::vocabulary::INVALID_PATH, "invalid path"),
             (crate::location::vocabulary::kind::LOCATION, "location"),

@@ -86,7 +86,7 @@ fn a_library_toggles_whichever_way_the_area_lists_its_libraries() {
 fn a_view_starts_where_its_entry_is() {
     let [field, cell] = [gid::new_cell_id(), gid::new_cell_id()];
     let from_root = crate::location::Location::root(vec![Step::Key(field)]);
-    let in_cell = crate::location::Location::in_cell(cell, gid::Resolution::Document, Vec::new());
+    let in_cell = crate::location::Location::in_cell(cell, Vec::new());
     let start = |entry| View { entry }.root_path();
     // A place from the document's root starts along its own steps, as the
     // document's view would draw it; one inside a cell, from a jump there;
@@ -406,11 +406,7 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
         ]),
     );
     let mut driver = driver_of(Some(Value::record([(label, cell.into())])), cells);
-    let first = driver.element(
-        &[Step::Key(label), Step::Follow(gid::Resolution::Document)],
-        0,
-        &[],
-    );
+    let first = driver.element(&[Step::Key(label), Step::Follow], 0, &[]);
     driver.select(&first);
     run(&mut driver, DocCommand::OpenPane(Side::Left));
     let opened = opened(&driver);
@@ -418,13 +414,7 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
     let Entry::Place(place) = opened.entry.clone() else {
         panic!("a place")
     };
-    assert_eq!(
-        place.start,
-        Start::Cell {
-            cell,
-            resolution: gid::Resolution::Document
-        }
-    );
+    assert_eq!(place.start, Start::Cell(cell));
     assert_eq!(place.path.as_ref(), &first[2..]);
     // The pane draws the place through a jump, and an edit there lands in
     // the cell, which the document view reads.
@@ -658,11 +648,7 @@ fn open_library_shows_a_loaded_library_read_only_once() {
     use crate::libraries::presentation;
     let root = Value::record([(CellId::from_u128(1), Value::list([]))]);
     let mut driver = driver_of(Some(root.clone()), Cells::new());
-    let place = crate::location::Location::in_cell(
-        presentation::ID,
-        gid::Resolution::Library(presentation::ID),
-        Vec::new(),
-    );
+    let place = crate::location::Location::in_cell(presentation::ID, Vec::new());
     run(&mut driver, DocCommand::OpenLibrary(presentation::ID));
     assert_eq!(driver.editor().model.doc.root.as_ref(), Some(&root));
     let opened = opened(&driver);
@@ -702,7 +688,6 @@ fn an_empty_document_opens_a_library_and_stays_empty() {
     run(&mut driver, command);
     let shown = opened_at(crate::location::Location::in_cell(
         presentation::ID,
-        gid::Resolution::Library(presentation::ID),
         Vec::new(),
     ));
     assert_eq!(driver.selection(), shown);

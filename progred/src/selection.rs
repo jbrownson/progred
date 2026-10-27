@@ -7,7 +7,7 @@ use crate::occurrence::{Path, Step};
 use crate::sources::Sources;
 use crate::workspace::View;
 use ::grap::text;
-use gid::{Position, Resolution, Value, position};
+use gid::{Position, Value, position};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
@@ -350,10 +350,9 @@ pub(crate) fn pending_edge(read: &Read<'_>, view: &Rc<View>, parent: Path) -> Op
     let parent = match value {
         Value::Record(_) => parent,
         Value::Cell(cell) => {
-            let value = read.sources.resolve(*cell)?;
-            value.value.as_record()?;
+            read.sources.value(*cell)?.as_record()?;
             let mut followed = parent;
-            followed.push(Step::Follow(value.resolution));
+            followed.push(Step::Follow);
             followed
         }
         Value::Blob(_) | Value::List(_) => return None,
@@ -368,7 +367,7 @@ pub(crate) fn pending_follow(read: &Read<'_>, view: &Rc<View>, path: &[Step]) ->
     let cell = read.resolve_path(path)?.as_cell()?;
     read.sources.resolve(cell).is_none().then_some(())?;
     let mut followed = path.to_vec();
-    followed.push(Step::Follow(Resolution::Document));
+    followed.push(Step::Follow);
     read.writable(&followed).then_some(())?;
     Some(pending_value(view, followed))
 }
@@ -418,10 +417,9 @@ pub(crate) fn pending_into(
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
         Value::Cell(cell) => {
-            let value = read.sources.resolve(*cell)?;
-            let elements = value.value.as_list()?;
+            let elements = read.sources.value(*cell)?.as_list()?;
             let mut followed = path.to_vec();
-            followed.push(Step::Follow(value.resolution));
+            followed.push(Step::Follow);
             (followed, elements)
         }
         Value::Blob(_) | Value::Record(_) => return None,
@@ -454,7 +452,7 @@ pub(crate) fn pending_enter(
 ) -> Option<Selection> {
     match path {
         _ if path == starts => pending_insert(read, view, path, before),
-        [reference @ .., Step::Follow(_)] => pending_enter(read, view, reference, starts, before),
+        [reference @ .., Step::Follow] => pending_enter(read, view, reference, starts, before),
         [.., Step::Jump(_) | Step::Computed] => pending_insert(read, view, path, before),
         _ => pending_beside(read, view, path, !before)
             .or_else(|| {

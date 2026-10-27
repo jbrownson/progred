@@ -3,7 +3,7 @@ use crate::libraries::{f64, name};
 use crate::selection::payload as selection_payload;
 use crate::test_support::{core_libraries, doc_of, library_of, make_selection, src};
 use crate::test_values::key;
-use gid::{CellId, Cells, Document, new_cell_id};
+use gid::{Cells, Document, new_cell_id};
 
 #[test]
 fn replacing_query_text_settles_completion_state_before_the_next_edit() {
@@ -73,17 +73,7 @@ fn a_shadowing_document_definition_stays_editable() {
         vec![],
     )
     .unwrap();
-    assert_eq!(pending.path(), &[Step::Follow(gid::Resolution::Document)]);
-    assert!(
-        pending_edge(
-            &Read {
-                sources: src(&doc, &lib)
-            },
-            &crate::test_document(),
-            vec![Step::Follow(gid::Resolution::Library(CellId::from_u128(1)))],
-        )
-        .is_none()
-    );
+    assert_eq!(pending.path(), &[Step::Follow]);
 
     Rc::make_mut(&mut doc)
         .cells
@@ -97,10 +87,7 @@ fn a_shadowing_document_definition_stays_editable() {
         true,
     )
     .unwrap();
-    assert_eq!(
-        pending.path().first(),
-        Some(&Step::Follow(gid::Resolution::Document))
-    );
+    assert_eq!(pending.path().first(), Some(&Step::Follow));
 }
 
 #[test]
@@ -137,17 +124,14 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.
     let on_cell = pending_edge(&sources, &crate::test_document(), vec![]).unwrap();
-    assert_eq!(on_cell.path(), &[Step::Follow(gid::Resolution::Document)]);
+    assert_eq!(on_cell.path(), &[Step::Follow]);
     let inline = pending_edge(
         &sources,
         &crate::test_document(),
-        vec![Step::Follow(gid::Resolution::Document), key("at").into()],
+        vec![Step::Follow, key("at").into()],
     )
     .unwrap();
-    assert_eq!(
-        inline.path(),
-        &[Step::Follow(gid::Resolution::Document), key("at").into()]
-    );
+    assert_eq!(inline.path(), &[Step::Follow, key("at").into()]);
 
     // Lists, external cells, and bare cells decline fields. Text
     // is a record convention, so adding a field enriches it and
@@ -156,7 +140,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &sources,
             &crate::test_document(),
-            vec![Step::Follow(gid::Resolution::Document), key("tags").into()]
+            vec![Step::Follow, key("tags").into()]
         )
         .is_none()
     );
@@ -164,7 +148,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &sources,
             &crate::test_document(),
-            vec![Step::Follow(gid::Resolution::Document), key("s").into()]
+            vec![Step::Follow, key("s").into()]
         )
         .is_some()
     );
@@ -172,7 +156,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &sources,
             &crate::test_document(),
-            vec![Step::Follow(gid::Resolution::Document), key("lib").into()]
+            vec![Step::Follow, key("lib").into()]
         )
         .is_none()
     );
@@ -180,10 +164,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &sources,
             &crate::test_document(),
-            vec![
-                Step::Follow(gid::Resolution::Document),
-                key("material").into()
-            ]
+            vec![Step::Follow, key("material").into()]
         )
         .is_none()
     );
@@ -193,25 +174,18 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     let filling = pending_follow(
         &sources,
         &crate::test_document(),
-        &[
-            Step::Follow(gid::Resolution::Document),
-            key("material").into(),
-        ],
+        &[Step::Follow, key("material").into()],
     )
     .unwrap();
     assert_eq!(
         filling.path(),
-        &[
-            Step::Follow(gid::Resolution::Document),
-            key("material").into(),
-            Step::Follow(gid::Resolution::Document)
-        ]
+        &[Step::Follow, key("material").into(), Step::Follow]
     );
     assert!(
         pending_follow(
             &sources,
             &crate::test_document(),
-            &[Step::Follow(gid::Resolution::Document), key("lib").into()]
+            &[Step::Follow, key("lib").into()]
         )
         .is_none()
     );
@@ -219,7 +193,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_follow(
             &sources,
             &crate::test_document(),
-            &[Step::Follow(gid::Resolution::Document), key("at").into()]
+            &[Step::Follow, key("at").into()]
         )
         .is_none()
     );
@@ -228,7 +202,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     let into = pending_into(
         &sources,
         &crate::test_document(),
-        &[Step::Follow(gid::Resolution::Document), key("tags").into()],
+        &[Step::Follow, key("tags").into()],
         true,
     )
     .unwrap();
@@ -242,7 +216,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_insert(
             &sources,
             &crate::test_document(),
-            &[Step::Follow(gid::Resolution::Document), key("tags").into()],
+            &[Step::Follow, key("tags").into()],
             false
         )
         .is_some()
@@ -251,10 +225,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_insert(
             &sources,
             &crate::test_document(),
-            &[
-                Step::Follow(gid::Resolution::Document),
-                key("material").into()
-            ],
+            &[Step::Follow, key("material").into()],
             false
         )
         .is_some()
@@ -263,7 +234,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_insert(
             &sources,
             &crate::test_document(),
-            &[Step::Follow(gid::Resolution::Document), key("s").into()],
+            &[Step::Follow, key("s").into()],
             false
         )
         .is_some()
@@ -310,7 +281,7 @@ fn selecting_an_empty_value_slot_pends() {
     // A writable valueless cell's Follow slot is already
     // authoring: selecting it (the rendered placeholder) pends.
     assert_eq!(
-        make_selection(vec![gid::Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
+        make_selection(vec![gid::Step::Follow]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Pending
     );
     // Valued, it selects normally.
@@ -318,15 +289,13 @@ fn selecting_an_empty_value_slot_pends() {
         .cells
         .set_value(bare, crate::libraries::text::value("v"));
     assert_eq!(
-        make_selection(vec![gid::Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
+        make_selection(vec![gid::Step::Follow]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Edge
     );
     // An EXTERNAL cell has an ordinary value, so its Follow slot
     // selects normally and remains unwritable.
     Rc::make_mut(&mut doc).root = Some(Value::from(lib_cell));
-    let external = make_selection(vec![gid::Step::Follow(gid::Resolution::Library(
-        CellId::from_u128(1),
-    ))]);
+    let external = make_selection(vec![gid::Step::Follow]);
     assert_eq!(
         external.stage(&src(&doc, &lib)),
         crate::selection::Stage::Edge

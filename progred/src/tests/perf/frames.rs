@@ -454,10 +454,7 @@ fn profile_viewport_uses_size_scale_and_camera_state() {
     };
     let (view, mut context) = view.prepare(&doc);
     let resolved = view.root.as_deref().unwrap();
-    assert_eq!(
-        resolved.last(),
-        Some(&Step::Follow(gid::Resolution::Document))
-    );
+    assert_eq!(resolved.last(), Some(&Step::Follow));
     let (first, extent) = context.frame(view.frame(&doc, &orbit(resolved, 0)));
     let (second, _) = context.frame(view.frame(&doc, &orbit(resolved, 40)));
     let first = first.image();

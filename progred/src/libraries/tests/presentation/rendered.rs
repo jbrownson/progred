@@ -38,7 +38,7 @@ fn in_program(rest: &[Step]) -> occurrence::Path {
         &[
             &[
                 Step::Key(crate::libraries::grap::vocabulary::GRAP),
-                Step::Follow(gid::Resolution::Document),
+                Step::Follow,
             ][..],
             rest,
         ]
@@ -68,11 +68,7 @@ fn a_missing_cell_named_in_an_error_is_defined_from_the_error() {
         &driver,
         &[
             occurrence::Step::Key(crate::libraries::absent::vocabulary::CELL),
-            occurrence::Step::jump(Location::in_cell(
-                program,
-                gid::Resolution::Document,
-                Vec::new(),
-            )),
+            occurrence::Step::jump(Location::in_cell(program, Vec::new())),
         ],
     );
     driver.click(&hole);
@@ -80,11 +76,7 @@ fn a_missing_cell_named_in_an_error_is_defined_from_the_error() {
     assert_eq!(driver.stage(), Some(Stage::Pending));
     assert_eq!(
         driver.editor().model.selection.as_ref().unwrap().location(),
-        Some(Location::in_cell(
-            program,
-            gid::Resolution::Document,
-            Vec::new()
-        ))
+        Some(Location::in_cell(program, Vec::new()))
     );
     driver.type_text("\"drawn");
     driver.press(NamedKey::Enter);
@@ -106,8 +98,7 @@ fn a_missing_argument_is_given_from_the_error() {
     let mut cells = Cells::new();
     cells.set_value(program, ::grap::call(numbers::f64::MULTIPLY.into(), []));
     let mut driver = rendered_in_a_pane(program, program.into(), cells);
-    let argument =
-        |label| Location::in_cell(program, gid::Resolution::Document, vec![Step::Key(label)]);
+    let argument = |label| Location::in_cell(program, vec![Step::Key(label)]);
     let hole = |driver: &Driver, label| {
         pane_result(
             driver,
@@ -167,11 +158,7 @@ fn an_errors_call_is_drawn_where_the_call_is() {
             &driver,
             &[
                 occurrence::Step::Key(crate::libraries::absent::vocabulary::CALL),
-                occurrence::Step::jump(Location::in_cell(
-                    program,
-                    gid::Resolution::Document,
-                    Vec::new(),
-                )),
+                occurrence::Step::jump(Location::in_cell(program, Vec::new())),
                 occurrence::Step::Key(key),
             ],
         )
@@ -217,11 +204,7 @@ fn an_errors_callers_open_to_the_calls_it_was_made_under() {
     assert!(driver.drawn(&callers));
     // The `*` in `area` failed; its one caller is the program's call of
     // `area`, drawn where it is.
-    let program_call = occurrence::Step::jump(Location::in_cell(
-        program,
-        gid::Resolution::Document,
-        Vec::new(),
-    ));
+    let program_call = occurrence::Step::jump(Location::in_cell(program, Vec::new()));
     let drawn: Vec<_> = driver
         .drawn_under(&callers)
         .into_iter()
@@ -245,7 +228,6 @@ fn a_quoted_reference_in_a_result_edits_its_cell() {
         &driver,
         &[occurrence::Step::jump(Location::in_cell(
             quoted,
-            gid::Resolution::Document,
             Vec::new(),
         ))],
     );

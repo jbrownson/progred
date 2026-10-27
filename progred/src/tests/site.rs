@@ -304,7 +304,7 @@ fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
     let site_path = vec![Step::Key(gid::new_cell_id())];
     let target = vec![
         gid::Step::Key(gid::new_cell_id()),
-        gid::Step::Follow(gid::Resolution::Library(gid::new_cell_id())),
+        gid::Step::Follow,
         gid::Step::Element(gid::position::between(None, None).unwrap()),
     ];
     let payload = crate::selection::payload::pending("");

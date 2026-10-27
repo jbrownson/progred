@@ -646,17 +646,13 @@ fn nested_outline_composes_jumps_and_cell_follows() {
     ]));
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let outer = body(&entry(driver.editor(), &[], parent), parent);
-    let followed = occurrence::below(&outer, &[Step::Follow(gid::Resolution::Document)]);
-    let inner = driver.value(&[Step::Key(parent), Step::Follow(gid::Resolution::Document)]);
+    let followed = occurrence::below(&outer, &[Step::Follow]);
+    let inner = driver.value(&[Step::Key(parent), Step::Follow]);
     let e = entry_paths(&inner, &followed, a).remove(0);
     driver.select(&body(&e, a));
     assert!(driver.paste(&Value::list([f64::value(12.0)])));
     assert_eq!(
-        driver.value(&[
-            Step::Key(parent),
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(a)
-        ]),
+        driver.value(&[Step::Key(parent), Step::Follow, Step::Key(a)]),
         Value::list([f64::value(12.0)])
     );
     assert_eq!(driver.value(&[Step::Key(b)]), f64::value(99.0));

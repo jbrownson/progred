@@ -1,7 +1,7 @@
 //! Operations the evaluator runs natively. A library registers one under its
 //! own cell as an ordinary foreign function, with its own labels and reasons;
 //! a call that resolves to it runs the operation directly rather than through
-//! the general foreign-call machinery. Resolution, shadowing, fuel and effects
+//! the general foreign-call machinery. Lookup, shadowing, fuel and effects
 //! are those of any foreign call.
 
 use crate::arguments::{Argument, Parse, Signature};

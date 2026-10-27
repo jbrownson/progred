@@ -14,8 +14,7 @@ fn traversal_uses_the_path_library_for_every_step() {
     let steps = vec![
         Step::Key(gid::new_cell_id()),
         Step::Element(gid::position::between(None, None).unwrap()),
-        Step::Follow(gid::Resolution::Document),
-        Step::Follow(gid::Resolution::Library(gid::new_cell_id())),
+        Step::Follow,
     ];
     for step in &steps {
         assert!(
@@ -103,10 +102,7 @@ fn a_layout_round_trips_from_data() {
             col(
                 0,
                 2.0,
-                [
-                    descend_follow(gid::Resolution::Document),
-                    text_leaf("…", vocabulary::DIM_FACE),
-                ],
+                [descend_follow(), text_leaf("…", vocabulary::DIM_FACE)],
             ),
         ),
     ]);
@@ -143,7 +139,7 @@ fn a_layout_round_trips_from_data() {
     };
     assert!(matches!(
         &inspect(&(&children[0])),
-        ProjectionCall::Descend { steps, .. } if *steps == [Step::Follow(gid::Resolution::Document)]
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Follow]
     ));
 }
 

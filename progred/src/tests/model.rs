@@ -342,7 +342,7 @@ fn cell_writes_preserve_the_saved_document_without_needing_a_history_record() {
     assert!(crate::location::set_value(
         &mut model.doc,
         &Libraries::default(),
-        &crate::location::Location::root(&[gid::Step::Follow(gid::Resolution::Document)]),
+        &crate::location::Location::root(&[gid::Step::Follow]),
         Value::from(vec![2])
     ));
     assert!(model.dirty());

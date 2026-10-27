@@ -1,6 +1,6 @@
 use super::*;
 use crate::library::Libraries;
-use gid::{Cells, Document, Resolution, new_cell_id};
+use gid::{Cells, Document, new_cell_id};
 
 #[test]
 fn only_root_declarations_followed_through_stable_definitions_are_viewports() {
@@ -24,7 +24,7 @@ fn only_root_declarations_followed_through_stable_definitions_are_viewports() {
     )
     .unwrap();
     assert_eq!(resolved.value, &declaration);
-    assert_eq!(resolved.path, vec![Step::Follow(Resolution::Document); 2]);
+    assert_eq!(resolved.path, vec![Step::Follow; 2]);
 
     for root in [
         Value::list([declaration]),

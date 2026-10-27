@@ -151,7 +151,7 @@ fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
     };
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let first = driver.element(&[Step::Key(items)], 0, &[]);
-    let follow = Step::Follow(gid::Resolution::Document);
+    let follow = Step::Follow;
     // A new element pends beside the reference in its list; a new field
     // pends on the record holding the reference.
     for (value, expected, pending_at) in [

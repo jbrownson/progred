@@ -45,8 +45,7 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
         root: Some(Value::from(a)),
         cells,
     });
-    let reentry =
-        crate::occurrence::of(&[gid::Step::Follow(gid::Resolution::Document), key("next")]);
+    let reentry = crate::occurrence::of(&[gid::Step::Follow, key("next")]);
     // Space expands the default-collapsed re-entry.
     let folds = space(&mut driver, &reentry);
     assert!(!crate::annotations::folded(folds.at(&reentry), true));
@@ -74,7 +73,7 @@ fn any_valued_cell_and_any_container_collapse() {
     assert!(crate::annotations::folded(folds.at(&[]), false));
     // Its record collapses too — layout never enters into it, so inline
     // literals toggle exactly like block forms.
-    let record = [Step::Follow(gid::Resolution::Document)];
+    let record = [Step::Follow];
     space(&mut driver, &[]);
     let folds = space(&mut driver, &record);
     assert!(crate::annotations::folded(folds.at(&record), false));
@@ -104,7 +103,7 @@ fn fold_keys_are_directional_and_stay_sparse() {
     // Matching the default stores nothing.
     assert!(view_annotations(driver.editor()).at(&[]).is_none());
     // A leaf has nothing to fold.
-    let leaf = crate::occurrence::of(&[gid::Step::Follow(gid::Resolution::Document), key("a")]);
+    let leaf = crate::occurrence::of(&[gid::Step::Follow, key("a")]);
     let folds = press(
         &mut driver,
         &leaf,
@@ -129,7 +128,7 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
         ])),
         cells,
     });
-    let follow = Step::Follow(gid::Resolution::Document);
+    let follow = Step::Follow;
     world.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
     let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
@@ -168,7 +167,7 @@ fn inside_a_cell_only_cells_holding_cells_start_closed() {
         root: Some(Value::record([(first, user.into())])),
         cells,
     });
-    let follow = Step::Follow(gid::Resolution::Document);
+    let follow = Step::Follow;
     world.model.workspace.document_pane_mut().shown = crate::workspace::Shown::RAW;
     let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
@@ -211,9 +210,6 @@ fn a_cell_a_projection_draws_its_own_way_doesnt_fold() {
         root: Some(Value::Cell(caller)),
         cells,
     });
-    let position = vec![
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(grap::vocabulary::FUNCTION),
-    ];
+    let position = vec![Step::Follow, Step::Key(grap::vocabulary::FUNCTION)];
     assert!(space(&mut driver, &position).at(&position).is_none());
 }

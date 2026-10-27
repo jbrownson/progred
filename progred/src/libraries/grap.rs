@@ -214,10 +214,7 @@ fn new_parameter(spelling: String) -> Completion {
     let then = if named {
         crate::selection::at(&[], crate::selection::payload::edge())
     } else {
-        crate::selection::pending_at(&[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ])
+        crate::selection::pending_at(&[Step::Follow, Step::Key(name::vocabulary::NAME)])
     };
     let display = if named {
         spelling.clone()
@@ -248,19 +245,13 @@ pub(crate) fn declaration_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<String>,
 ) -> Option<Layout<W>> {
-    let cell = input.value?.as_cell()?;
+    input.value?.as_cell()?;
     // A cell with no definition yet gets one in the document, where typing
     // its name writes it.
-    let source = input
-        .env
-        .resolve(cell)
-        .map_or(gid::Resolution::Document, |definition| {
-            definition.resolution
-        });
     Some(selectable_bracket(
         Delim::Paren,
         crate::display::part(
-            [Step::Follow(source)],
+            [Step::Follow],
             Some(crate::display::first(
                 input,
                 crate::display::runtime_partial(move |input| {
@@ -395,16 +386,10 @@ fn program_display<W: Host>(
 
 /// The program's cell keeps its parentheses; what fills it is an expression.
 fn program<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let cell = input.value?.as_cell()?;
-    let source = input
-        .env
-        .resolve(cell)
-        .map_or(gid::Resolution::Document, |definition| {
-            definition.resolution
-        });
+    input.value?.as_cell()?;
     Some(selectable_bracket(
         Delim::Paren,
-        expression_path(input, [Step::Follow(source)]),
+        expression_path(input, [Step::Follow]),
     ))
 }
 
@@ -786,7 +771,6 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::source::vocabulary::STORED, "document source"),
             (::grap::source::vocabulary::CELL, "source cell"),
             (::grap::source::vocabulary::PATH, "source path"),
-            (::grap::source::vocabulary::SOURCE, "definition source"),
             (vocabulary::GRAP, "grap"),
             (notebook::vocabulary::kind::NOTEBOOK, "notebook"),
             (notebook::vocabulary::ENTRIES, "entries"),
@@ -905,11 +889,11 @@ fn new_program() -> Completion {
 fn function_detail(
     request: &crate::display::CompletionRequest<'_>,
     what: &str,
-    resolution: gid::Resolution,
+    library: Option<CellId>,
 ) -> String {
-    match resolution {
-        gid::Resolution::Document => what.to_owned(),
-        gid::Resolution::Library(library) => format!(
+    match library {
+        None => what.to_owned(),
+        Some(library) => format!(
             "{what} · {}",
             crate::identity::name_or_short_id(
                 (request.resolve)(library).and_then(|definition| name::read(definition.value)),
@@ -948,17 +932,13 @@ fn function_offers(
                     function_completion(cell, request.resolve).with_detail(function_detail(
                         request,
                         "function",
-                        definition.resolution,
+                        definition.library,
                     ))
                 } else {
                     call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(function_detail(request, "call", definition.resolution))
+                        .with_detail(function_detail(request, "call", definition.library))
                 };
-                (
-                    matches!(definition.resolution, gid::Resolution::Library(_)),
-                    name,
-                    offer,
-                )
+                (definition.library.is_some(), name, offer)
             })
         })
         .collect();

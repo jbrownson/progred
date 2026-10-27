@@ -222,10 +222,10 @@ impl Libraries {
             })
     }
 
-    pub fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
+    pub fn resolve(&self, cell: gid::CellId) -> Option<::grap::Definition> {
         self.definitions(cell)
             .next()
-            .map(|(library, definition)| (gid::Resolution::Library(library), definition.clone()))
+            .map(|(_, definition)| definition.clone())
     }
 
     pub fn cell_ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
@@ -236,7 +236,7 @@ impl Libraries {
 }
 
 impl ::grap::Host for Libraries {
-    fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
+    fn resolve(&self, cell: gid::CellId) -> Option<::grap::Definition> {
         self.resolve(cell)
     }
 }

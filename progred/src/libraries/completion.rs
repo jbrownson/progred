@@ -1,7 +1,7 @@
 //! Small combinators for a projection's completion vocabulary.
 
 use crate::display::{Completion, CompletionProvider, CompletionText};
-use gid::{CellId, Resolution, Step, Value};
+use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
 pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
@@ -49,10 +49,7 @@ pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Complet
         Some(Rc::new(move |_, site, staged| {
             let mut path =
                 crate::occurrence::below(site, &[Step::Key(PARTS), Step::Element(second.clone())]);
-            path.extend(crate::occurrence::of(&[
-                Step::Key(key),
-                Step::Follow(Resolution::Document),
-            ]));
+            path.extend(crate::occurrence::of(&[Step::Key(key), Step::Follow]));
             staged.select(path, crate::selection::payload::empty_pending());
             true
         })),

@@ -17,7 +17,7 @@ mod lessons;
 /// The tutorial column's frame less its border, tall enough that no lesson
 /// scrolls.
 const VIEWPORT: Size = Size::new(704.0, 1400.0);
-const FOLLOW: Step = Step::Follow(gid::Resolution::Document);
+const FOLLOW: Step = Step::Follow;
 
 fn website(path: &str) -> String {
     let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

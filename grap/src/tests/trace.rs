@@ -8,15 +8,10 @@ fn failing(fail: CellId, reason: CellId) -> impl Host {
     crate::TestHost(move |cell| {
         (cell == fail)
             .then(|| {
-                (
-                    Resolution::Document,
-                    Definition::foreign(
-                        fail,
-                        Value::record([]),
-                        ForeignFunction::from_value(move |_, _, _| {
-                            Ok(crate::absent::value(reason))
-                        }),
-                    ),
+                Definition::foreign(
+                    fail,
+                    Value::record([]),
+                    ForeignFunction::from_value(move |_, _, _| Ok(crate::absent::value(reason))),
                 )
             })
             .into_iter()

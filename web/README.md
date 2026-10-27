@@ -106,8 +106,7 @@ also contain `selection` (or null): `view` is
 `"document"`, or `"opened"` for a view the editor opened, `path` is the occurrence, `source` is where the
 selected data is stored, if anywhere, and `stage` is `"value"`, `"pending"`, or
 `"label"`. A `source` is `{path}` from the document's root, or
-`{cell, library, path}` within a cell's definition, `library` naming the library
-defining it or null for the document's own. Paths use the existing path-library GID encoding; list positions
+`{cell, path}` within a cell's definition. Paths use the existing path-library GID encoding; list positions
 are saved with the document. This reports structural selection, not text caret/ranges.
 
 `observe=<channel>` connects that callback to same-origin parent messages:

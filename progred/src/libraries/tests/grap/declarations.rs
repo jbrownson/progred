@@ -63,11 +63,7 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
                 cells: cells.clone(),
             };
             let (frame, _) = place(&doc, None, 1200.0);
-            let followed = path
-                .iter()
-                .cloned()
-                .chain([Step::Follow(gid::Resolution::Document)])
-                .collect::<Path>();
+            let followed = path.iter().cloned().chain([Step::Follow]).collect::<Path>();
             assert!(frame.landmarks.landmark(&path).is_some());
             assert_eq!(
                 frame.landmarks.landmark(&followed).is_some(),
@@ -105,7 +101,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
     );
     driver.select(&[
         Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT),
-        Step::Follow(gid::Resolution::Document),
+        Step::Follow,
     ]);
     driver.type_text("4");
     let editor = driver.editor();
@@ -119,7 +115,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
 #[test]
 fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
     let cell = new_cell_id();
-    let follow = Step::Follow(gid::Resolution::Document);
+    let follow = Step::Follow;
     let name_path = [follow.clone(), Step::Key(name::vocabulary::NAME)];
     let value_path = [follow, Step::Key(grap::vocabulary::VALUE)];
     let metadata = new_cell_id();
@@ -202,11 +198,12 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
     let frame = editing_frame(&mut world);
     let name_path = [Step::Key(name::vocabulary::NAME)];
     let name_slot = frame.landmarks.landmark(&name_path).unwrap();
-    assert!(!frame.landmarks.iter().any(|d| d.path
-        == [
-            Step::Key(grap::vocabulary::VALUE),
-            Step::Follow(gid::Resolution::Document)
-        ][..]));
+    assert!(
+        !frame
+            .landmarks
+            .iter()
+            .any(|d| d.path == [Step::Key(grap::vocabulary::VALUE), Step::Follow][..])
+    );
     let before = world.model.doc.clone();
     assert!((name_slot.select)(&mut world, None));
     assert!(editing_frame(&mut world).completion.is_some());
@@ -314,10 +311,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
         let name_path = binder_path
             .iter()
             .cloned()
-            .chain([
-                Step::Follow(gid::Resolution::Document),
-                Step::Key(name::vocabulary::NAME),
-            ])
+            .chain([Step::Follow, Step::Key(name::vocabulary::NAME)])
             .collect::<Path>();
         let (bench, _) = place(&doc, None, 1200.0);
         let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
@@ -364,7 +358,7 @@ fn declaration_names_draw_metadata_after_them_and_take_new_fields() {
     let definition = binder_path
         .iter()
         .cloned()
-        .chain([Step::Follow(gid::Resolution::Document)])
+        .chain([Step::Follow])
         .collect::<Path>();
     let extra_path = definition
         .iter()
@@ -471,7 +465,7 @@ fn use_site_overrides_do_not_hide_definitions_inside_inert_arguments() {
     let (bench, _) = place(&doc, None, 1200.0);
     let has = |path: &[Step]| bench.landmarks.landmark(&path).is_some();
     let body = Step::Key(grap::vocabulary::BODY);
-    let follow = Step::Follow(gid::Resolution::Document);
+    let follow = Step::Follow;
     assert!(!has(&[body.clone(), Step::Key(direct), follow.clone()]));
     assert!(!has(&[
         body.clone(),
@@ -515,7 +509,7 @@ fn use_site_overrides_do_not_hide_definitions_inside_inert_arguments() {
         Step::Key(nested),
         Step::Key(grap::vocabulary::PARAMS),
         Step::Element(param_list),
-        Step::Follow(gid::Resolution::Document),
+        Step::Follow,
         Step::Key(name::vocabulary::NAME)
     ]));
 }
@@ -587,7 +581,7 @@ fn recursive_patterns_keep_text_and_number_facets() {
         .chain([
             Step::Element(elements[2].clone()),
             Step::Key(control::BIND),
-            Step::Follow(gid::Resolution::Document),
+            Step::Follow,
             Step::Key(name::vocabulary::NAME),
         ])
         .collect::<Path>();
@@ -629,7 +623,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
         if !direct_reference {
             followed.push(Step::Key(field));
         }
-        followed.push(Step::Follow(gid::Resolution::Document));
+        followed.push(Step::Follow);
         assert_eq!(has(&followed), !direct_reference);
 
         let marker_position = |landmarks: &[Landmark<crate::Editor>]| {

@@ -5,20 +5,20 @@
 use crate::display::ResolvedCell;
 use crate::library::Libraries;
 use crate::location::{Location, Start};
-use gid::{CellId, Document, Resolution, Step, Value};
+use gid::{CellId, Document, Step, Value};
 
 /// One source's definition of a cell.
 #[derive(Clone, Copy)]
 enum Contribution<'a> {
     Document(&'a Value),
-    Library(&'a grap::Definition),
+    Library(CellId, &'a grap::Definition),
 }
 
 impl<'a> Contribution<'a> {
     fn value(self) -> &'a Value {
         match self {
             Self::Document(value) => value,
-            Self::Library(definition) => definition.value(),
+            Self::Library(_, definition) => definition.value(),
         }
     }
 }
@@ -104,42 +104,39 @@ impl crate::display::Env for Sources<'_> {
 impl<'a> Sources<'a> {
     /// Every definition of `cell` in lookup order: the document's, then each
     /// library's in load order. Ordinary lookup takes the first.
-    fn definitions(&self, cell: CellId) -> impl Iterator<Item = (Resolution, Contribution<'a>)> {
-        let libraries = self.libraries;
+    fn definitions(&self, cell: CellId) -> impl Iterator<Item = Contribution<'a>> {
         self.doc
             .cells
             .value(cell)
-            .map(|value| (Resolution::Document, Contribution::Document(value)))
+            .map(Contribution::Document)
             .into_iter()
-            .chain(libraries.definitions(cell).map(|(library, definition)| {
-                (
-                    Resolution::Library(library),
-                    Contribution::Library(definition),
-                )
-            }))
+            .chain(
+                self.libraries
+                    .definitions(cell)
+                    .map(|(library, definition)| Contribution::Library(library, definition)),
+            )
     }
 
-    pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
-        self.values(cell)
-            .find(|value| &value.resolution == resolution)
-            .map(|value| value.value)
-    }
-
-    pub fn values(&self, cell: CellId) -> impl Iterator<Item = ResolvedCell<'a>> {
-        self.definitions(cell)
-            .map(|(resolution, contribution)| ResolvedCell {
-                resolution,
-                value: contribution.value(),
-                native: matches!(
-                    contribution,
-                    Contribution::Library(grap::Definition::Foreign(_))
-                ),
-            })
+    /// The value of the definition ordinary lookup selects.
+    pub fn value(&self, cell: CellId) -> Option<&'a Value> {
+        self.definitions(cell).next().map(Contribution::value)
     }
 
     /// The definition ordinary lookup selects.
     pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
-        self.values(cell).next()
+        self.definitions(cell)
+            .next()
+            .map(|contribution| ResolvedCell {
+                value: contribution.value(),
+                native: matches!(
+                    contribution,
+                    Contribution::Library(_, grap::Definition::Foreign(_))
+                ),
+                library: match contribution {
+                    Contribution::Document(_) => None,
+                    Contribution::Library(library, _) => Some(library),
+                },
+            })
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -165,7 +162,7 @@ impl<'a> Sources<'a> {
         path.iter().try_fold(
             match start {
                 Start::Root => self.root(),
-                Start::Cell { cell, resolution } => self.value(cell, &resolution),
+                Start::Cell(cell) => self.value(cell),
             }?,
             |value, step| self.step(value, step),
         )
@@ -174,7 +171,7 @@ impl<'a> Sources<'a> {
     /// The value `step` reaches from `value`.
     pub fn step(&self, value: &'a Value, step: &Step) -> Option<&'a Value> {
         match step {
-            Step::Follow(resolution) => self.value(value.as_cell()?, resolution),
+            Step::Follow => self.value(value.as_cell()?),
             Step::Key(label) => value.as_record()?.get(label),
             Step::Element(position) => value.as_list()?.get(position),
         }
@@ -198,22 +195,19 @@ impl<'a> Sources<'a> {
     pub fn external(&self, cell: CellId) -> bool {
         matches!(
             self.definitions(cell).next(),
-            Some((Resolution::Library(_), _))
+            Some(Contribution::Library(..))
         )
     }
 }
 
 impl grap::Host for Sources<'_> {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, grap::Definition)> {
-        self.definitions(cell).next().map(|(source, contribution)| {
-            (
-                source,
-                match contribution {
-                    Contribution::Document(value) => grap::Definition::Value(value.clone()),
-                    Contribution::Library(definition) => definition.clone(),
-                },
-            )
-        })
+    fn resolve(&self, cell: CellId) -> Option<grap::Definition> {
+        self.definitions(cell)
+            .next()
+            .map(|contribution| match contribution {
+                Contribution::Document(value) => grap::Definition::Value(value.clone()),
+                Contribution::Library(_, definition) => definition.clone(),
+            })
     }
 }
 

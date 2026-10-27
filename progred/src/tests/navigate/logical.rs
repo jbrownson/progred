@@ -116,14 +116,14 @@ fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
             .unwrap(),
     )[0]
     .clone();
-    let content: Path = std::iter::repeat_n(Step::Follow(gid::Resolution::Document), 3)
+    let content: Path = std::iter::repeat_n(Step::Follow, 3)
         .chain([Step::Key(outline), Step::Element(first)])
         .collect();
     let mut path = vec![];
     world.model.selection = Some(make_selection(path.clone()));
     // Horizontal traversal still visits each enclosing value.
     for _ in 0..3 {
-        path.push(Step::Follow(gid::Resolution::Document));
+        path.push(Step::Follow);
         assert!(step(&mut world, NavigationDirection::Right));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
@@ -143,11 +143,7 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
     let root = Value::list([cell.into(), text::value("Tools")]);
     let positions = positions(&root);
     let path = vec![Step::Element(positions[0].clone())];
-    let function: Path = path
-        .iter()
-        .cloned()
-        .chain([Step::Follow(gid::Resolution::Document)])
-        .collect();
+    let function: Path = path.iter().cloned().chain([Step::Follow]).collect();
     let function_name: Path = function
         .iter()
         .cloned()
@@ -156,10 +152,7 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
     let body: Path = path
         .iter()
         .cloned()
-        .chain([
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(::grap::vocabulary::BODY),
-        ])
+        .chain([Step::Follow, Step::Key(::grap::vocabulary::BODY)])
         .collect();
     let mut cells = Cells::new();
     cells.set_value(

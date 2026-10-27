@@ -5,7 +5,7 @@ use crate::display::widget::style;
 use crate::library::Libraries;
 use crate::location::Location;
 use crate::sources::Sources;
-use gid::{Cells, Resolution, new_cell_id};
+use gid::{Cells, new_cell_id};
 use kurbo::Point;
 
 #[test]
@@ -79,7 +79,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
 #[test]
 fn recorded_hits_keep_the_executing_library_definition() {
     let function = new_cell_id();
-    let library_ids = [new_cell_id(), new_cell_id()];
+    let library_id = new_cell_id();
     let doc = gid::Document {
         root: Some(Value::from(function)),
         cells: Cells::new(),
@@ -100,20 +100,18 @@ fn recorded_hits_keep_the_executing_library_definition() {
             ],
         ),
     );
-    for order in [library_ids, [library_ids[1], library_ids[0]]] {
-        let libraries = Libraries::from_contributions(order.map(|id| {
-            let mut cells = Cells::new();
-            cells.set_value(function, definition.clone());
-            (
-                id,
-                crate::test_support::library(
-                    id,
-                    "drawing",
-                    cells,
-                    grap::ForeignFunctions::default(),
-                ),
-            )
-        }))
+    {
+        let mut cells = Cells::new();
+        cells.set_value(function, definition.clone());
+        let libraries = Libraries::from_contributions([(
+            library_id,
+            crate::test_support::library(
+                library_id,
+                "drawing",
+                cells,
+                grap::ForeignFunctions::default(),
+            ),
+        )])
         .0;
         let sources = Sources {
             doc: &doc,
@@ -128,11 +126,9 @@ fn recorded_hits_keep_the_executing_library_definition() {
         assert_eq!(drawing.hits(), 1);
         let selected = SourceTrace::from_location(
             &sources,
-            &Location::root(vec![
-                Step::Follow(Resolution::Library(order[0])),
-                Step::Key(grap::vocabulary::BODY),
-            ]),
+            &Location::root(vec![Step::Follow, Step::Key(grap::vocabulary::BODY)]),
         );
+        assert!(drawing.highlights(&selected));
         let Some(hover) = drawing.target_at(Point::new(5.0, 5.0)) else {
             panic!("drawing should have a source");
         };
@@ -144,14 +140,6 @@ fn recorded_hits_keep_the_executing_library_definition() {
             ),
             Some(selected)
         );
-        let other = SourceTrace::from_location(
-            &sources,
-            &Location::root(vec![
-                Step::Follow(Resolution::Library(order[1])),
-                Step::Key(grap::vocabulary::BODY),
-            ]),
-        );
-        assert!(!drawing.highlights(&other));
     }
 }
 

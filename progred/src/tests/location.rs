@@ -41,16 +41,8 @@ fn a_location_reads_from_its_start() {
         Some(&text::value("at the root"))
     );
     assert_eq!(
-        sources.read(&Location::in_cell(cell, Resolution::Document, &path[..])),
+        sources.read(&Location::in_cell(cell, &path[..])),
         Some(&text::value("inside"))
-    );
-    assert_eq!(
-        sources.read(&Location::in_cell(
-            cell,
-            Resolution::Library(cell),
-            &path[..]
-        )),
-        None
     );
 }
 
@@ -65,7 +57,7 @@ fn a_route_through_a_cell_is_stored_in_its_definition() {
     };
     let libraries = Libraries::default();
     let sources = sources(&doc, &libraries);
-    let follow = || Step::Follow(Resolution::Document);
+    let follow = || Step::Follow;
     let route = Location::root(vec![
         Step::Key(field),
         follow(),
@@ -75,16 +67,12 @@ fn a_route_through_a_cell_is_stored_in_its_definition() {
     ]);
     assert_eq!(
         route.stored(&sources),
-        Some(Location::in_cell(
-            inner,
-            Resolution::Document,
-            vec![Step::Key(field)]
-        ))
+        Some(Location::in_cell(inner, vec![Step::Key(field)]))
     );
-    let from_cell = Location::in_cell(cell, Resolution::Document, vec![Step::Key(field), follow()]);
+    let from_cell = Location::in_cell(cell, vec![Step::Key(field), follow()]);
     assert_eq!(
         from_cell.stored(&sources),
-        Some(Location::in_cell(inner, Resolution::Document, Vec::new()))
+        Some(Location::in_cell(inner, Vec::new()))
     );
     let spine = Location::root(vec![Step::Key(field)]);
     assert_eq!(spine.stored(&sources), Some(spine.clone()));
@@ -102,27 +90,18 @@ fn writes_land_where_the_document_owns_the_data() {
     let stack = crate::stack::load();
     let sources = sources(&doc, &stack.libraries);
     assert!(writable(&sources, &Location::root(vec![Step::Key(field)])));
-    assert!(writable(
+    assert!(writable(&sources, &Location::in_cell(cell, Vec::new())));
+    assert!(!writable(
         &sources,
-        &Location::in_cell(cell, Resolution::Document, Vec::new())
+        &Location::in_cell(text::ID, Vec::new())
     ));
     assert!(!writable(
         &sources,
-        &Location::in_cell(text::ID, Resolution::Library(text::ID), Vec::new())
+        &Location::root(vec![Step::Key(field), Step::Follow])
     ));
     assert!(!writable(
         &sources,
-        &Location::root(vec![
-            Step::Key(field),
-            Step::Follow(Resolution::Library(text::ID))
-        ])
-    ));
-    assert!(!writable(
-        &sources,
-        &Location::root(vec![
-            Step::Key(new_cell_id()),
-            Step::Follow(Resolution::Document)
-        ])
+        &Location::root(vec![Step::Key(new_cell_id()), Step::Follow])
     ));
 }
 
@@ -136,11 +115,11 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("x")]),
+        &Location::root(&[Step::Follow, key("x")]),
         crate::libraries::text::value("2")
     ));
     assert_eq!(
-        src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document), key("x")]),
+        src(&doc, &lib).resolve_path(&[Step::Follow, key("x")]),
         Some(&crate::libraries::text::value("2"))
     );
 
@@ -149,7 +128,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("at")]),
+        &Location::root(&[Step::Follow, key("at")]),
         Value::record([(
             crate::test_values::label("row"),
             crate::libraries::text::value("top")
@@ -158,19 +137,11 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &Location::root(&[
-            Step::Follow(gid::Resolution::Document),
-            key("at"),
-            key("row")
-        ]),
+        &Location::root(&[Step::Follow, key("at"), key("row")]),
         crate::libraries::text::value("bottom")
     ));
     assert_eq!(
-        src(&doc, &lib).resolve_path(&[
-            Step::Follow(gid::Resolution::Document),
-            key("at"),
-            key("row")
-        ]),
+        src(&doc, &lib).resolve_path(&[Step::Follow, key("at"), key("row")]),
         Some(&crate::libraries::text::value("bottom"))
     );
 
@@ -179,11 +150,11 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document)]),
+        &Location::root(&[Step::Follow]),
         Value::list([crate::libraries::text::value("a")])
     ));
     assert_eq!(
-        src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document)]),
+        src(&doc, &lib).resolve_path(&[Step::Follow]),
         Some(&Value::list([crate::libraries::text::value("a")]))
     );
 
@@ -194,20 +165,20 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(!set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("x")]),
+        &Location::root(&[Step::Follow, key("x")]),
         crate::libraries::text::value("v")
     ));
     assert!(set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document)]),
+        &Location::root(&[Step::Follow]),
         Value::record([(
             crate::test_values::label("x"),
             crate::libraries::text::value("v")
         )])
     ));
     assert_eq!(
-        src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document), key("x")]),
+        src(&doc, &lib).resolve_path(&[Step::Follow, key("x")]),
         Some(&crate::libraries::text::value("v"))
     );
 
@@ -276,27 +247,24 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
     assert!(!set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("a")]),
+        &Location::root(&[Step::Follow, key("a")]),
         crate::libraries::text::value("2")
     ));
     assert!(!set_value(
         &mut doc,
         &lib,
-        &Location::root(&[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ]),
+        &Location::root(&[Step::Follow, Step::Key(name::vocabulary::NAME),]),
         crate::libraries::text::value("mine")
     ));
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("a")])
+        &Location::root(&[Step::Follow, key("a")])
     ));
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document)])
+        &Location::root(&[Step::Follow])
     ));
     // Forking — the document taking the cell over — writes.
     Rc::make_mut(&mut doc).cells.set_value(
@@ -309,7 +277,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("a")]),
+        &Location::root(&[Step::Follow, key("a")]),
         crate::libraries::text::value("2")
     ));
 }
@@ -335,7 +303,7 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("missing")])
+        &Location::root(&[Step::Follow, key("missing")])
     ));
 
     // Unlinking a field drops the link; the linked cell floats in
@@ -343,25 +311,21 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document), key("child")])
+        &Location::root(&[Step::Follow, key("child")])
     ));
     assert_eq!(
-        src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document), key("child")]),
+        src(&doc, &lib).resolve_path(&[Step::Follow, key("child")]),
         None
     );
     assert!(doc.cells.value(child).is_some());
 
     // An element step rebuilds the list without it.
-    let dash = vec![Step::Follow(gid::Resolution::Document), key("dash")];
+    let dash = vec![Step::Follow, key("dash")];
     let ps = positions(src(&doc, &lib).resolve_path(&dash).unwrap());
     assert!(delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[
-            Step::Follow(gid::Resolution::Document),
-            key("dash"),
-            Step::Element(ps[0].clone())
-        ])
+        &Location::root(&[Step::Follow, key("dash"), Step::Element(ps[0].clone())])
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&dash),
@@ -373,14 +337,14 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document)])
+        &Location::root(&[Step::Follow])
     ));
     assert!(doc.cells.value(cell).is_none());
     assert!(src(&doc, &lib).resolve_path(&[]).is_some());
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &Location::root(&[Step::Follow(gid::Resolution::Document)])
+        &Location::root(&[Step::Follow])
     ));
 
     // The empty path empties the document.

@@ -45,8 +45,8 @@ ends up defining; the editor library draws it as its name over a column of
 its cells, each by its name.
 Replacing a loaded library replaces all its contributions in place, including
 projections and completions, before those are composed.
-Explicit source-qualified paths still reach a particular definition; loaded
-library values remain read-only. See [Sources](../progred/src/sources.rs),
+Paths, locations and evaluation all go through that lookup, so a path reaches
+whichever definition it selects; loaded library values remain read-only. See [Sources](../progred/src/sources.rs),
 [Library and Libraries](../progred/src/library.rs), and
 [Grap evaluation](projections.md#evaluation).
 
@@ -59,15 +59,16 @@ library context:
 
 - `Key(cell)` enters a record field.
 - `Element(position)` enters a list element at its stable position.
-- `Follow(Document | Library(id))` crosses a cell into a particular definition.
+- `Follow` crosses a cell into its definition, the one lookup selects.
 
-The empty path is the document root; it need not be a cell. Library sources use
-stable identities, so changing load order cannot silently retarget a `Follow`.
-List positions preserve an occurrence across edits that retain that position;
+The empty path is the document root; it need not be a cell. Loading a library,
+reordering libraries, or adding a document definition can change which
+definition a `Follow` reaches, as other edits can leave a path stale; the editor
+tolerates both. List positions preserve an occurrence across edits that retain that position;
 they are not content identities or globally meaningful addresses.
 
 A [`Location`](../progred/src/location.rs) names stored data: it starts at the
-document's root or at a cell's definition from a particular source, then follows
+document's root or at a cell's definition, then follows
 a path from there. Following a cell starts a new location at its definition,
 however the cell was reached, so what can be edited depends on where the data is
 stored, not on the route to it. Writes land in that stored value: a location's

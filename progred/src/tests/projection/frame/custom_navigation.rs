@@ -285,11 +285,8 @@ fn cells_around_expression_lists_use_the_same_vertical_entrance_policy() {
             ),
         );
         let mut f = Fixture::new(outer.into(), cells);
-        let inner = f.child([Step::Follow(gid::Resolution::Document)]);
-        let call = f.child(std::iter::repeat_n(
-            Step::Follow(gid::Resolution::Document),
-            2,
-        ));
+        let inner = f.child([Step::Follow]);
+        let call = f.child(std::iter::repeat_n(Step::Follow, 2));
         let child = |step| -> Path { call.iter().cloned().chain([step]).collect() };
         let label = child(Step::Key(FUNCTION));
         let list = child(Step::Key(control::vocabulary::EXPRESSIONS));
@@ -369,7 +366,7 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
     let name = f.child([
         Step::Key(PARAMS),
         Step::Element(position),
-        Step::Follow(gid::Resolution::Document),
+        Step::Follow,
         Step::Key(name::vocabulary::NAME),
     ]);
     let body = f.child([Step::Key(BODY)]);
@@ -405,11 +402,8 @@ fn multiline_cell_and_its_function_share_a_vertical_entrance() {
         ),
     );
     let mut f = Fixture::new(cell.into(), cells);
-    let body = f.child([Step::Follow(gid::Resolution::Document)]);
-    let name = f.child([
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(name::vocabulary::NAME),
-    ]);
+    let body = f.child([Step::Follow]);
+    let name = f.child([Step::Follow, Step::Key(name::vocabulary::NAME)]);
     for (from, direction, to) in [
         (f.whole.clone(), Right, body.clone()),
         (f.whole.clone(), Down, name.clone()),
@@ -457,7 +451,7 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
         Step::Key(c::BINDINGS),
         Step::Element(position.clone()),
         Step::Key(c::BIND),
-        Step::Follow(gid::Resolution::Document),
+        Step::Follow,
         Step::Key(name::vocabulary::NAME),
     ]);
     let value = f.child([

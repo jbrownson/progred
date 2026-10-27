@@ -1,5 +1,5 @@
 use super::*;
-use gid::{Resolution, new_cell_id};
+use gid::new_cell_id;
 use grap::SourceOrigin;
 use kurbo::Circle;
 
@@ -16,12 +16,8 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
         Ok(gid::Value::record([]).into())
     });
     let host = crate::test_support::TestHost(move |cell| {
-        (cell == sink).then(|| {
-            (
-                Resolution::Document,
-                grap::Definition::foreign(sink, gid::Value::record([]), function.clone()),
-            )
-        })
+        (cell == sink)
+            .then(|| grap::Definition::foreign(sink, gid::Value::record([]), function.clone()))
     });
     grap::evaluate_runtime_at(
         &grap::call(sink.into(), []).into(),
@@ -65,11 +61,7 @@ fn drawn_in(cell: gid::CellId, path: Vec<Step>) -> Recorded {
         hits: vec![Hit::new(
             puri::draw::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
             Affine::IDENTITY,
-            calls_at(SourceOrigin::Cell {
-                cell,
-                resolution: Resolution::Document,
-                path,
-            }),
+            calls_at(SourceOrigin::Cell { cell, path }),
         )],
     }
 }
@@ -93,7 +85,6 @@ fn a_source_descendant_does_not_highlight_its_operation() {
     let argument = new_cell_id();
     let hovered = SourceTrace::InCell {
         cell,
-        resolution: Resolution::Document,
         path: Rc::from([Step::Key(call), Step::Key(argument)]),
     };
     assert_eq!(
@@ -108,7 +99,6 @@ fn a_calls_own_source_highlights_its_operation() {
     let call = new_cell_id();
     let source = SourceTrace::InCell {
         cell,
-        resolution: Resolution::Document,
         path: Rc::from([Step::Key(call)]),
     };
     assert_eq!(

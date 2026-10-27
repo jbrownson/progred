@@ -15,7 +15,7 @@ use puri::hover::Claim;
 #[test]
 fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
     let cell = new_cell_id();
-    let number_path = [Step::Follow(gid::Resolution::Document)];
+    let number_path = [Step::Follow];
     let name_path = [number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
     for (before, after) in [
         (f64::value(45.0), f64::value(455.0)),
@@ -61,7 +61,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
             let scrub = pick && !name_contact;
             let value = name::record("tilt", number.as_record().unwrap().clone());
             let cell = new_cell_id();
-            let number_path = vec![Step::Follow(gid::Resolution::Document)];
+            let number_path = vec![Step::Follow];
             let name_path = vec![number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
             let mut cells = Cells::new();
             cells.set_value(cell, value.clone());
@@ -157,7 +157,7 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
         assert!(!bench.landmarks.iter().any(|d| {
             d.path
                 .steps()
-                .any(|s| matches!(s, crate::occurrence::Step::Follow(_)))
+                .any(|s| matches!(s, crate::occurrence::Step::Follow))
         }));
         for x in [head.rect.x0 + 0.5, head.rect.x1 - 0.5] {
             let (hovered, _) = place_with(BenchFrame {

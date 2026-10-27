@@ -45,11 +45,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         // Tall enough to show the style's color without scrolling.
         kurbo::Size::new(900.0, 1200.0),
     );
-    let path = vec![
-        key("style"),
-        gid::Step::Follow(gid::Resolution::Document),
-        key("color"),
-    ];
+    let path = vec![key("style"), gid::Step::Follow, key("color")];
     driver.click(&path);
     assert_eq!(driver.selection(), path);
 

@@ -23,12 +23,7 @@ fn site() -> crate::editing::Site {
 #[test]
 fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     let grap = crate::libraries::grap::library::<crate::Editor>();
-    let host = crate::test_support::TestHost(|cell| {
-        grap.definitions
-            .get(cell)
-            .cloned()
-            .map(|definition| (gid::Resolution::Document, definition))
-    });
+    let host = crate::test_support::TestHost(|cell| grap.definitions.get(cell).cloned());
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(
@@ -105,13 +100,9 @@ fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
         super::super::library::<crate::Editor>(),
     ];
     let host = crate::test_support::TestHost(|cell| {
-        libraries.iter().find_map(|library| {
-            library
-                .definitions
-                .get(cell)
-                .cloned()
-                .map(|definition| (gid::Resolution::Document, definition))
-        })
+        libraries
+            .iter()
+            .find_map(|library| library.definitions.get(cell).cloned())
     });
     run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&::grap::RuntimeValue::from(program), &host, scope, fuel)

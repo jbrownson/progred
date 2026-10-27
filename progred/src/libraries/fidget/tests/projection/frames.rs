@@ -28,7 +28,7 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     assert!(!bench.landmarks.iter().any(|d| {
         d.path
             .steps()
-            .any(|s| matches!(s, crate::occurrence::Step::Follow(_)))
+            .any(|s| matches!(s, crate::occurrence::Step::Follow))
     }));
     for (point, path) in [
         (coordinate_rect.center(), coordinate.to_vec()),

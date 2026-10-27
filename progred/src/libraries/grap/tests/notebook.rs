@@ -6,7 +6,7 @@ use crate::libraries::grap::numbers;
 use crate::libraries::{f32, f64, presentation};
 use crate::occurrence;
 use crate::selection::Stage;
-use gid::{CellId, Cells, Document, Resolution, Step, Value, new_cell_id};
+use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
 /// `rest` within entry `index`.
@@ -16,7 +16,7 @@ fn entry(driver: &Driver, index: usize, rest: &[Step]) -> Vec<Step> {
 
 /// Where entry `index`'s expression is: its cell's definition.
 fn expression(driver: &Driver, index: usize) -> Vec<Step> {
-    entry(driver, index, &[Step::Follow(Resolution::Document)])
+    entry(driver, index, &[Step::Follow])
 }
 
 fn result_path(driver: &Driver, index: usize) -> occurrence::Path {

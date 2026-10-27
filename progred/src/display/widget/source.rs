@@ -1,7 +1,7 @@
 use crate::location::{Location, Start};
 use crate::sources::Sources;
 use crate::workspace::View;
-use gid::{CellId, Resolution, Step};
+use gid::{CellId, Step};
 use std::rc::Rc;
 
 /// A structural source location used by execution-linked display.
@@ -10,11 +10,7 @@ use std::rc::Rc;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceTrace {
     Stored(Rc<[Step]>),
-    InCell {
-        cell: CellId,
-        resolution: Resolution,
-        path: Rc<[Step]>,
-    },
+    InCell { cell: CellId, path: Rc<[Step]> },
 }
 
 impl SourceTrace {
@@ -26,11 +22,7 @@ impl SourceTrace {
         let path = Rc::from(location.path.as_ref());
         match location.start {
             Start::Root => Self::Stored(path),
-            Start::Cell { cell, resolution } => Self::InCell {
-                cell,
-                resolution,
-                path,
-            },
+            Start::Cell(cell) => Self::InCell { cell, path },
         }
     }
 
@@ -43,13 +35,8 @@ impl SourceTrace {
         };
         match self {
             Self::Stored(path) => Self::Stored(append(path)),
-            Self::InCell {
-                cell,
-                resolution,
-                path,
-            } => Self::InCell {
+            Self::InCell { cell, path } => Self::InCell {
                 cell: *cell,
-                resolution: *resolution,
                 path: append(path),
             },
         }
@@ -66,7 +53,6 @@ pub enum Secondary {
     Stored(crate::occurrence::Trail),
     InCell {
         cell: CellId,
-        resolution: Resolution,
         path: crate::occurrence::Trail,
         /// The first step relative to `cell`, immediately after its
         /// `Follow` step in `path`.
@@ -80,14 +66,13 @@ impl Secondary {
     pub fn from_context(
         path: crate::occurrence::Trail,
         cell: Option<CellId>,
-        enclosing: Option<(CellId, Resolution, usize)>,
+        enclosing: Option<(CellId, usize)>,
     ) -> Self {
         match cell {
             Some(cell) => Self::Cell(cell),
             None => match enclosing {
-                Some((cell, resolution, relative_from)) => Self::InCell {
+                Some((cell, relative_from)) => Self::InCell {
                     cell,
-                    resolution,
                     path,
                     relative_from,
                 },
@@ -103,13 +88,8 @@ impl Secondary {
         };
         match trace {
             SourceTrace::Stored(path) => Self::Stored(trail(path)),
-            SourceTrace::InCell {
-                cell,
-                resolution,
-                path,
-            } => Self::InCell {
+            SourceTrace::InCell { cell, path } => Self::InCell {
                 cell: *cell,
-                resolution: *resolution,
                 path: trail(path),
                 relative_from: 0,
             },
@@ -131,20 +111,16 @@ impl PartialEq for Secondary {
             (
                 Self::InCell {
                     cell: left_cell,
-                    resolution: left_resolution,
                     path: left_path,
                     relative_from: left_from,
                 },
                 Self::InCell {
                     cell: right_cell,
-                    resolution: right_resolution,
                     path: right_path,
                     relative_from: right_from,
                 },
             ) => {
-                left_cell == right_cell
-                    && left_resolution == right_resolution
-                    && left_path.same_after(*left_from, right_path, *right_from)
+                left_cell == right_cell && left_path.same_after(*left_from, right_path, *right_from)
             }
             _ => false,
         }

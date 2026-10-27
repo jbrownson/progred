@@ -2,7 +2,6 @@ use super::*;
 use crate::display::CompletionKind;
 use crate::libraries::grap::control;
 use crate::test_support::{activate_projected, inserted_value, projected_completion_entries};
-use gid::Resolution;
 
 #[test]
 fn a_plain_missing_name_is_typed_into_and_its_first_keystroke_writes_it() {
@@ -39,7 +38,7 @@ fn a_grap_program_offers_grap_suggestions() {
         root: Some(Value::record([(GRAP, new_cell_id().into())])),
         cells: Cells::new(),
     };
-    let program = vec![Step::Key(GRAP), Step::Follow(Resolution::Document)];
+    let program = vec![Step::Key(GRAP), Step::Follow];
     let offered = |query| {
         projected_completion_entries(
             &doc,
@@ -68,7 +67,7 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         root: Some(Value::record([(GRAP, cell.into())])),
         cells: Cells::new(),
     };
-    let path = vec![Step::Key(GRAP), Step::Follow(Resolution::Document)];
+    let path = vec![Step::Key(GRAP), Step::Follow];
     for query in ["new lambda", "lambda", "λ"] {
         let pending =
             crate::selection::pending_with_query(&crate::test_document(), path.clone(), query);

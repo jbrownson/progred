@@ -25,7 +25,7 @@ pub(crate) fn entry<'a>(sources: Sources<'a>, place: &Location) -> Option<Entry<
         }
         seen.push(cell);
         let definition = sources.resolve(cell)?;
-        path.push(Step::Follow(definition.resolution));
+        path.push(Step::Follow);
         value = definition.value;
     }
     presentation::viewport(value).map(|_| Entry { value, path })

@@ -1166,7 +1166,7 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     use ui_events::keyboard::NamedKey;
 
     let mut driver = Driver::of(Value::record([(GRAP, new_cell_id().into())]));
-    let program = vec![Step::Key(GRAP), Step::Follow(gid::Resolution::Document)];
+    let program = vec![Step::Key(GRAP), Step::Follow];
     driver.select(&program);
     driver.type_text("λ");
     driver.choose("new lambda");

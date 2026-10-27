@@ -98,10 +98,7 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
     let name_path = cell_path
         .iter()
         .cloned()
-        .chain([
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ])
+        .chain([Step::Follow, Step::Key(name::vocabulary::NAME)])
         .collect::<Vec<_>>();
     let mut cells = Cells::new();
     cells.set_value(

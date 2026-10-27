@@ -4,7 +4,7 @@ use puri::handler::test_support::DispatchShorthands;
 #[test]
 fn native_annotation_handler_retains_the_projected_site() {
     let cell = new_cell_id();
-    let path = vec![Step::Follow(gid::Resolution::Document)];
+    let path = vec![Step::Follow];
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(vec![7u8]));
     let doc = Document {

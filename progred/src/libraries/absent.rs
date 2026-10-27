@@ -224,11 +224,7 @@ fn missing_argument<W: Host>(
 fn location(origin: ::grap::SourceOrigin) -> Option<Location<'static>> {
     match origin {
         ::grap::SourceOrigin::Stored(path) => Some(Location::root(path)),
-        ::grap::SourceOrigin::Cell {
-            cell,
-            resolution,
-            path,
-        } => Some(Location::in_cell(cell, resolution, path)),
+        ::grap::SourceOrigin::Cell { cell, path } => Some(Location::in_cell(cell, path)),
         ::grap::SourceOrigin::Input(_) => None,
     }
 }

@@ -16,7 +16,6 @@ fn definitions_from_parts<'a>(
             (Some(value), None) => Some(Definition::Value(value)),
             (None, None) => None,
         }
-        .map(|definition| (Resolution::Document, definition))
         .into_iter()
         .collect()
     })
@@ -50,35 +49,23 @@ fn apply(
 #[test]
 fn direct_cell_calls_return_decline_without_trying_another_definition() {
     let function = new_cell_id();
-    let library = Resolution::Library(new_cell_id());
     let expression = call(Value::from(function), []);
     let evaluation = super::evaluate_value(
         &expression,
         &TestHost(|cell| {
             assert_eq!(cell, function);
             vec![
-                (
-                    Resolution::Document,
-                    Definition::foreign(
-                        cell,
-                        gid::Value::record([]),
-                        ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
-                    ),
+                Definition::foreign(
+                    cell,
+                    gid::Value::record([]),
+                    ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
                 ),
-                (Resolution::Document, Definition::Value(Value::record([]))),
-                (
-                    library,
-                    Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
-                ),
-                (
-                    library,
-                    Definition::foreign(
-                        cell,
-                        gid::Value::record([]),
-                        ForeignFunction::from_value(|_, _, _| {
-                            Ok(Value::from(b"too late".to_vec()))
-                        }),
-                    ),
+                Definition::Value(Value::record([])),
+                Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
+                Definition::foreign(
+                    cell,
+                    gid::Value::record([]),
+                    ForeignFunction::from_value(|_, _, _| Ok(Value::from(b"too late".to_vec()))),
                 ),
             ]
         }),
@@ -91,18 +78,14 @@ fn direct_cell_calls_return_decline_without_trying_another_definition() {
 #[test]
 fn an_ordinary_absent_stops_dispatch_with_its_details() {
     let function = new_cell_id();
-    let library = Resolution::Library(new_cell_id());
     let first_missing = new_cell_id();
     let second_missing = new_cell_id();
     let evaluation = super::evaluate_value(
         &call(Value::from(function), []),
         &TestHost(|cell| match cell {
             cell if cell == function => vec![
-                (
-                    Resolution::Document,
-                    Definition::Value(Value::from(first_missing)),
-                ),
-                (library, Definition::Value(Value::from(second_missing))),
+                Definition::Value(Value::from(first_missing)),
+                Definition::Value(Value::from(second_missing)),
             ],
             cell if cell == first_missing => Vec::new(),
             _ => unreachable!(),
@@ -124,18 +107,12 @@ fn host_apply_returns_the_selected_definitions_decline() {
         [],
         &TestHost(|_| {
             vec![
-                (
-                    Resolution::Document,
-                    Definition::foreign(
-                        function,
-                        gid::Value::record([]),
-                        ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
-                    ),
+                Definition::foreign(
+                    function,
+                    gid::Value::record([]),
+                    ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
                 ),
-                (
-                    Resolution::Document,
-                    Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
-                ),
+                Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
             ]
         }),
         None,
@@ -320,7 +297,6 @@ fn value_wrappers_preserve_the_inner_expression_source() {
         origin.into_inner(),
         Some(SourceOrigin::Cell {
             cell,
-            resolution: Resolution::Document,
             path: vec![gid::Step::Key(vocabulary::VALUE)],
         }),
     );
@@ -590,9 +566,9 @@ fn a_foreign_call_outside_a_shadowing_scope_still_uses_the_registry() {
 
 #[test]
 fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
-    struct DataHost(CellId, Vec<(Resolution, Definition)>);
+    struct DataHost(CellId, Vec<Definition>);
     impl Host for DataHost {
-        fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
+        fn resolve(&self, cell: CellId) -> Option<Definition> {
             assert_eq!(cell, self.0);
             self.1.first().cloned()
         }
@@ -603,24 +579,21 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
         panic!("reading data must not invoke a scoped capability")
     };
     let overlay = ForeignOverlay::from_value(&functions, &invoke);
-    let first = (Resolution::Document, Definition::Value(blob("document")));
-    let second = (
-        Resolution::Library(new_cell_id()),
-        Definition::foreign(
-            cell,
-            Value::record([(cell, blob("library"))]),
-            ForeignFunction::from_value(|_, _, _| {
-                panic!("reading a native definition must not invoke it")
-            }),
-        ),
+    let first = Definition::Value(blob("document"));
+    let second = Definition::foreign(
+        cell,
+        Value::record([(cell, blob("library"))]),
+        ForeignFunction::from_value(|_, _, _| {
+            panic!("reading a native definition must not invoke it")
+        }),
     );
     // A foreign function's value is its definition, or where only a scope
     // supplies it, a foreign function implemented under its cell.
     for (values, expected) in [
         (vec![], super::foreign_function(cell)),
-        (vec![first.clone()], first.1.value().clone()),
-        (vec![second.clone()], second.1.value().clone()),
-        (vec![first.clone(), second], first.1.value().clone()),
+        (vec![first.clone()], first.value().clone()),
+        (vec![second.clone()], second.value().clone()),
+        (vec![first.clone(), second], first.value().clone()),
     ] {
         let result = super::evaluate_runtime_scoped(
             &RuntimeValue::from(Value::from(cell)),
@@ -1418,47 +1391,37 @@ fn a_foreign_call_retains_its_cell_relative_source_origin() {
         *source.borrow(),
         Some(SourceOrigin::Cell {
             cell: function,
-            resolution: Resolution::Document,
             path: vec![gid::Step::Key(vocabulary::BODY)],
         }),
     );
 }
 
 #[test]
-fn a_single_value_definition_retains_its_resolution() {
+fn a_value_definitions_origin_is_its_cell() {
     let cell = new_cell_id();
     let foreign = new_cell_id();
     let functions = [foreign];
-    for resolution in [Resolution::Document, Resolution::Library(new_cell_id())] {
-        let origin = RefCell::new(None);
-        let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-            *origin.borrow_mut() = context.source_origin(call);
-            Ok(blob("drawn"))
-        };
-        let overlay = ForeignOverlay::from_value(&functions, &scoped);
-        let evaluation = super::evaluate_runtime_scoped(
-            &RuntimeValue::from(Value::from(cell)),
-            &TestHost(|queried| {
-                assert_eq!(queried, cell);
-                vec![(
-                    resolution,
-                    Definition::Value(call(Value::from(foreign), [])),
-                )]
-            }),
-            &overlay,
-            20,
-        )
-        .into_value();
-        assert_eq!(evaluation.result, blob("drawn"));
-        assert_eq!(
-            origin.into_inner(),
-            Some(SourceOrigin::Cell {
-                cell,
-                resolution,
-                path: vec![]
-            })
-        );
-    }
+    let origin = RefCell::new(None);
+    let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
+        *origin.borrow_mut() = context.source_origin(call);
+        Ok(blob("drawn"))
+    };
+    let overlay = ForeignOverlay::from_value(&functions, &scoped);
+    let evaluation = super::evaluate_runtime_scoped(
+        &RuntimeValue::from(Value::from(cell)),
+        &TestHost(|queried| {
+            assert_eq!(queried, cell);
+            vec![Definition::Value(call(Value::from(foreign), []))]
+        }),
+        &overlay,
+        20,
+    )
+    .into_value();
+    assert_eq!(evaluation.result, blob("drawn"));
+    assert_eq!(
+        origin.into_inner(),
+        Some(SourceOrigin::Cell { cell, path: vec![] })
+    );
 }
 
 #[test]

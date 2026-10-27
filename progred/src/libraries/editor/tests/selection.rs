@@ -122,12 +122,10 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
         ),
         [],
         &crate::test_support::TestHost(|cell| {
-            functions.get(cell).cloned().map(|function| {
-                (
-                    gid::Resolution::Document,
-                    ::grap::Definition::foreign(cell, gid::Value::record([]), function),
-                )
-            })
+            functions
+                .get(cell)
+                .cloned()
+                .map(|function| ::grap::Definition::foreign(cell, gid::Value::record([]), function))
         }),
         Some(&overlay),
         100,

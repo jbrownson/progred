@@ -928,70 +928,45 @@ fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
 }
 
 #[test]
-fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
+fn a_drawing_source_selects_the_occurrence_of_its_definition() {
     let cell = CellId::from_u128(1);
     let call = CellId::from_u128(2);
-    let library_id = CellId::from_u128(3);
     let mut cells = Cells::new();
     cells.set_value(cell, Value::record([(call, Value::from(vec![1]))]));
     let doc = Document {
         root: Some(Value::Cell(cell)),
         cells,
     };
-    let libraries = crate::library::Libraries::from_contributions([(
-        library_id,
-        crate::test_support::library(
-            library_id,
-            "source",
-            doc.cells.clone(),
-            grap::ForeignFunctions::default(),
-        ),
-    )])
-    .0;
+    let libraries = crate::library::Libraries::default();
     let sources = sources::Sources {
         doc: &doc,
         libraries: &libraries,
     };
     let root = Area::whole(crate::test_document());
-    let targets = [
-        (gid::Resolution::Document, Rect::new(10.0, 20.0, 30.0, 40.0)),
-        (
-            gid::Resolution::Library(library_id),
-            Rect::new(10.0, 50.0, 30.0, 70.0),
-        ),
-    ];
-    let landmarks =
-        targets.map(
-            |(resolution, rect)| crate::display::widget::navigation::Landmark::<
-                Option<gid::Resolution>,
-            > {
-                area: Some(root.clone()),
-                path: Trail::from([Occurs::Follow(resolution), Occurs::Key(call)]),
-                rect,
-                select: Rc::new(move |selected, _| {
-                    *selected = Some(resolution);
-                    true
-                }),
-                secondary: None,
-                selected: false,
-                tab_stop: false,
-            },
-        );
-    for (resolution, rect) in targets {
-        let trace = SourceTrace::InCell {
-            cell,
-            resolution,
-            path: Rc::from([Step::Key(call)]),
-        };
-        let landmark =
-            crate::display::widget::source_link::source_landmark(&sources, &landmarks, &trace)
-                .unwrap();
-        assert_eq!(landmark.area, Some(root.clone()));
-        assert_eq!(landmark.rect, rect);
-        let mut selected = None;
-        assert!((landmark.select)(&mut selected, None));
-        assert_eq!(selected, Some(resolution));
-    }
+    let rect = Rect::new(10.0, 20.0, 30.0, 40.0);
+    let landmarks = [crate::display::widget::navigation::Landmark::<bool> {
+        area: Some(root.clone()),
+        path: Trail::from([Occurs::Follow, Occurs::Key(call)]),
+        rect,
+        select: Rc::new(|selected, _| {
+            *selected = true;
+            true
+        }),
+        secondary: None,
+        selected: false,
+        tab_stop: false,
+    }];
+    let trace = SourceTrace::InCell {
+        cell,
+        path: Rc::from([Step::Key(call)]),
+    };
+    let landmark =
+        crate::display::widget::source_link::source_landmark(&sources, &landmarks, &trace).unwrap();
+    assert_eq!(landmark.area, Some(root));
+    assert_eq!(landmark.rect, rect);
+    let mut selected = false;
+    assert!((landmark.select)(&mut selected, None));
+    assert!(selected);
 }
 
 #[test]
@@ -1082,31 +1057,22 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             &Default::default(),
         )
     };
-    let sources: Vec<_> = [
-        (0, vec![]),
-        (
-            1,
-            vec![
-                Step::Follow(gid::Resolution::Document),
-                Step::Follow(gid::Resolution::Document),
-            ],
-        ),
-    ]
-    .into_iter()
-    .map(|(index, steps)| {
-        let path = &panes[index];
-        // The opened pane draws the part where it's stored, and the part's
-        // own pane draws it at the part.
-        let mut stored = path.clone();
-        stored.extend(steps.iter().cloned());
-        let drawn = crate::occurrence::below(&crate::occurrence::of(path), &steps);
-        (
-            Area::part(crate::test_document(), path.clone()),
-            stored,
-            drawn,
-        )
-    })
-    .collect();
+    let sources: Vec<_> = [(0, vec![]), (1, vec![Step::Follow, Step::Follow])]
+        .into_iter()
+        .map(|(index, steps)| {
+            let path = &panes[index];
+            // The opened pane draws the part where it's stored, and the part's
+            // own pane draws it at the part.
+            let mut stored = path.clone();
+            stored.extend(steps.iter().cloned());
+            let drawn = crate::occurrence::below(&crate::occurrence::of(path), &steps);
+            (
+                Area::part(crate::test_document(), path.clone()),
+                stored,
+                drawn,
+            )
+        })
+        .collect();
     let shown = place(&model);
     assert_eq!(
         calls.replace(0),

@@ -57,22 +57,16 @@ fn declining_after_sampling_halts_the_evaluation() {
         ),
         &crate::test_support::TestHost(|cell| {
             if cell == function {
-                Some((
-                    gid::Resolution::Document,
-                    grap::Definition::Value(grap::lambda(
-                        [],
-                        grap::call(
-                            grap::lambda([ignored], ::grap::absent::decline()),
-                            [(ignored, next.clone())],
-                        ),
-                    )),
-                ))
+                Some(grap::Definition::Value(grap::lambda(
+                    [],
+                    grap::call(
+                        grap::lambda([ignored], ::grap::absent::decline()),
+                        [(ignored, next.clone())],
+                    ),
+                )))
             } else {
                 functions.get(cell).map(|function| {
-                    (
-                        gid::Resolution::Library(ID),
-                        grap::Definition::foreign(cell, gid::Value::record([]), function.clone()),
-                    )
+                    grap::Definition::foreign(cell, gid::Value::record([]), function.clone())
                 })
             }
         }),

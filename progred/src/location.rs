@@ -9,15 +9,14 @@
 use crate::library::Libraries;
 use crate::sources::Sources;
 use crate::spine;
-use gid::{CellId, Document, Resolution, Step, Value};
+use gid::{CellId, Document, Step, Value};
 use std::borrow::Cow;
 use std::rc::Rc;
 
 /// A location as GID data, as a pane declares the place it shows:
-/// `{isa: location, in: cell, follow: resolution, steps: […]}` inside a
-/// cell's definition, or `{isa: location, steps: […]}` from the document's
-/// root. The steps and resolution use the path convention's encoding. The
-/// editor library names these cells.
+/// `{isa: location, in: cell, steps: […]}` inside a cell's definition, or
+/// `{isa: location, steps: […]}` from the document's root. The steps use the
+/// path convention's encoding. The editor library names these cells.
 pub mod vocabulary {
     use gid::CellId;
 
@@ -39,17 +38,7 @@ pub fn value(location: &Location) -> Value {
     let kind = vocabulary::kind::LOCATION;
     match location.start {
         Start::Root => ::grap::isa::record(kind, [steps]),
-        Start::Cell { cell, resolution } => ::grap::isa::record(
-            kind,
-            [
-                (vocabulary::IN, cell.into()),
-                (
-                    ::grap::path::vocabulary::FOLLOW,
-                    ::grap::path::resolution_value(resolution),
-                ),
-                steps,
-            ],
-        ),
+        Start::Cell(cell) => ::grap::isa::record(kind, [(vocabulary::IN, cell.into()), steps]),
     }
 }
 
@@ -75,12 +64,7 @@ pub fn read(value: &Value) -> Option<Location<'static>> {
     let path = ::grap::path::read(fields.get(&vocabulary::STEPS)?)?;
     let start = match fields.get(&vocabulary::IN) {
         None => Start::Root,
-        Some(cell) => Start::Cell {
-            cell: cell.as_cell()?,
-            resolution: ::grap::path::read_resolution(
-                fields.get(&::grap::path::vocabulary::FOLLOW)?,
-            )?,
-        },
+        Some(cell) => Start::Cell(cell.as_cell()?),
     };
     Some(Location {
         start,
@@ -93,11 +77,8 @@ pub fn read(value: &Value) -> Option<Location<'static>> {
 pub enum Start {
     /// The document's root value.
     Root,
-    /// The definition `resolution` gives `cell`.
-    Cell {
-        cell: CellId,
-        resolution: Resolution,
-    },
+    /// The definition of `cell`, wherever lookup finds it.
+    Cell(CellId),
 }
 
 /// A start and the steps from it. The steps can still follow cells, as a
@@ -117,9 +98,9 @@ impl<'a> Location<'a> {
         }
     }
 
-    pub fn in_cell(cell: CellId, resolution: Resolution, path: impl Into<Cow<'a, [Step]>>) -> Self {
+    pub fn in_cell(cell: CellId, path: impl Into<Cow<'a, [Step]>>) -> Self {
         Self {
-            start: Start::Cell { cell, resolution },
+            start: Start::Cell(cell),
             path: path.into(),
         }
     }
@@ -136,10 +117,10 @@ impl<'a> Location<'a> {
     /// Follow no longer reaches a cell.
     pub fn stored(&self, sources: &Sources) -> Option<Location<'_>> {
         match last_follow(&self.path) {
-            Some((before, source, after)) => sources
+            Some((before, after)) => sources
                 .read_from(self.start, before)?
                 .as_cell()
-                .map(|cell| Location::in_cell(cell, source, after)),
+                .map(|cell| Location::in_cell(cell, after)),
             None => Some(Location {
                 start: self.start,
                 path: Cow::Borrowed(&self.path),
@@ -148,17 +129,14 @@ impl<'a> Location<'a> {
     }
 }
 
-/// Whether writes can land where `start` stores its data: the root, or one of
-/// the document's own definitions. A library's definitions are read-only.
-pub fn owned(start: Start) -> bool {
-    matches!(
-        start,
-        Start::Root
-            | Start::Cell {
-                resolution: Resolution::Document,
-                ..
-            }
-    )
+/// Whether writes can land where `start` stores its data: the root, or a
+/// cell no library supplies the definition of. A library's definitions are
+/// read-only.
+pub fn owned(sources: &Sources, start: Start) -> bool {
+    match start {
+        Start::Root => true,
+        Start::Cell(cell) => !sources.external(cell),
+    }
 }
 
 /// Whether a value could be written at `location`, ignoring permissions: it
@@ -191,7 +169,7 @@ pub fn set_value(
         };
         location
             .stored(&sources)
-            .filter(|stored| owned(stored.start))
+            .filter(|stored| owned(&sources, stored.start))
             .and_then(|stored| {
                 spine::set(sources.read_from(stored.start, &[]), &stored.path, value)
                     .map(|rebuilt| (stored.start, rebuilt))
@@ -216,7 +194,7 @@ pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, location: &Loc
         };
         location
             .stored(&sources)
-            .filter(|stored| owned(stored.start))
+            .filter(|stored| owned(&sources, stored.start))
             .and_then(|stored| {
                 let owner = sources.read_from(stored.start, &[])?;
                 if stored.path.is_empty() {
@@ -236,21 +214,15 @@ fn store(doc: &mut Rc<Document>, start: Start, value: Option<Value>) {
     let doc = Rc::make_mut(doc);
     match (start, value) {
         (Start::Root, value) => doc.root = value,
-        (Start::Cell { cell, .. }, Some(value)) => doc.cells.set_value(cell, value),
-        (Start::Cell { cell, .. }, None) => doc.cells.clear_value(cell),
+        (Start::Cell(cell), Some(value)) => doc.cells.set_value(cell, value),
+        (Start::Cell(cell), None) => doc.cells.clear_value(cell),
     }
 }
 
 /// The path's last Follow, between the steps before and after it.
-fn last_follow(path: &[Step]) -> Option<(&[Step], Resolution, &[Step])> {
-    let (before, rest) = path.split_at(
-        path.iter()
-            .rposition(|step| matches!(step, Step::Follow(_)))?,
-    );
-    match rest.split_first()? {
-        (Step::Follow(source), after) => Some((before, *source, after)),
-        _ => None,
-    }
+fn last_follow(path: &[Step]) -> Option<(&[Step], &[Step])> {
+    let index = path.iter().rposition(|step| *step == Step::Follow)?;
+    Some((&path[..index], &path[index + 1..]))
 }
 
 #[cfg(test)]

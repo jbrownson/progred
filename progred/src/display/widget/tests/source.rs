@@ -7,7 +7,6 @@ fn secondaries_in_a_cell_compare_their_paths_from_where_each_enters_it() {
     let cell = new_cell_id();
     let secondary = |path: Vec<Step>, relative_from| Secondary::InCell {
         cell,
-        resolution: Resolution::Document,
         path: path.into(),
         relative_from,
     };

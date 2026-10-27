@@ -85,14 +85,7 @@ fn lambda_with_unnamed_parameters() -> (Driver, [CellId; 3]) {
 }
 
 fn in_lambda(rest: &[Step]) -> Vec<Step> {
-    [
-        &[
-            Step::Key(vocabulary::GRAP),
-            Step::Follow(gid::Resolution::Document),
-        ],
-        rest,
-    ]
-    .concat()
+    [&[Step::Key(vocabulary::GRAP), Step::Follow], rest].concat()
 }
 
 #[test]
@@ -143,10 +136,7 @@ fn clicking_a_missing_name_picks_one() {
     let name = driver.element(
         &in_lambda(&[Step::Key(PARAMS)]),
         1,
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
+        &[Step::Follow, Step::Key(name::vocabulary::NAME)],
     );
     driver.click(&name);
     assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
@@ -168,10 +158,7 @@ fn arrowing_left_out_of_a_name_stops_on_its_parameter() {
     let cell = driver.element(&in_lambda(&[Step::Key(PARAMS)]), 1, &[]);
     let name = [
         &cell[..],
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
+        &[Step::Follow, Step::Key(name::vocabulary::NAME)],
     ]
     .concat();
     driver.click(&name);
@@ -195,10 +182,7 @@ fn backspacing_a_parameter_s_name_unnames_it_then_removes_it_never_its_definitio
     let cell = driver.element(&params, 0, &[]);
     let name = [
         &cell[..],
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
+        &[Step::Follow, Step::Key(name::vocabulary::NAME)],
     ]
     .concat();
     let defined = |driver: &Driver| {
@@ -257,12 +241,9 @@ fn a_parameter_with_no_definition_is_a_hole_that_typing_a_name_defines() {
     let unnamed = driver.element(
         &params,
         0,
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
+        &[Step::Follow, Step::Key(name::vocabulary::NAME)],
     );
-    let missing = driver.element(&params, 1, &[Step::Follow(gid::Resolution::Document)]);
+    let missing = driver.element(&params, 1, &[Step::Follow]);
     assert_eq!(
         driver.glyphs_at(&unnamed).len(),
         1,

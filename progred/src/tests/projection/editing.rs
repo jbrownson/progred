@@ -115,31 +115,22 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     ]);
     let edit = |doc: &Document, path: Vec<Step>| make_projected_editing_selection(doc, &lib, path);
     assert_eq!(
-        edit(
-            &doc,
-            vec![Step::Follow(gid::Resolution::Document), key("name").into()]
-        )
-        .edit()
-        .map(LineEditState::text),
+        edit(&doc, vec![Step::Follow, key("name").into()])
+            .edit()
+            .map(LineEditState::text),
         Some("old")
     );
     assert_eq!(
-        edit(
-            &doc,
-            vec![Step::Follow(gid::Resolution::Document), key("x").into()]
-        )
-        .edit()
-        .map(LineEditState::text),
+        edit(&doc, vec![Step::Follow, key("x").into()])
+            .edit()
+            .map(LineEditState::text),
         Some("1.5")
     );
     // Missing fields and links carry no editor.
     assert!(
-        make_selection(vec![
-            gid::Step::Follow(gid::Resolution::Document),
-            key("missing")
-        ])
-        .edit()
-        .is_none()
+        make_selection(vec![gid::Step::Follow, key("missing")])
+            .edit()
+            .is_none()
     );
     assert!(make_selection(vec![]).edit().is_none());
     Rc::make_mut(&mut doc).cells.set_value(
@@ -147,12 +138,9 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         Value::record([(crate::test_values::label("b"), Value::from(vec![0xff_u8]))]),
     );
     assert_eq!(
-        edit(
-            &doc,
-            vec![Step::Follow(gid::Resolution::Document), key("b").into()]
-        )
-        .edit()
-        .map(LineEditState::text),
+        edit(&doc, vec![Step::Follow, key("b").into()])
+            .edit()
+            .map(LineEditState::text),
         Some("ff")
     );
     // A cell holding text edits at its Follow path.
@@ -160,7 +148,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         .cells
         .set_value(cell, crate::libraries::text::value("held"));
     assert_eq!(
-        edit(&doc, vec![Step::Follow(gid::Resolution::Document)])
+        edit(&doc, vec![Step::Follow])
             .edit()
             .map(LineEditState::text),
         Some("held")
@@ -170,15 +158,9 @@ fn line_projection_descriptions_mount_the_rust_editor() {
         .cells
         .set_value(cell, name::record("roof", []));
     assert_eq!(
-        edit(
-            &doc,
-            vec![
-                Step::Follow(gid::Resolution::Document),
-                Step::Key(name::vocabulary::NAME),
-            ],
-        )
-        .edit()
-        .map(LineEditState::text),
+        edit(&doc, vec![Step::Follow, Step::Key(name::vocabulary::NAME),],)
+            .edit()
+            .map(LineEditState::text),
         Some("roof")
     );
 }
@@ -190,11 +172,7 @@ fn a_line_control_selects_without_storing_its_default_editor() {
         crate::test_values::label("name"),
         crate::libraries::text::value("old"),
     )]);
-    let selected = make_projected_selection(
-        &doc,
-        &lib,
-        vec![Step::Follow(gid::Resolution::Document), key("name").into()],
-    );
+    let selected = make_projected_selection(&doc, &lib, vec![Step::Follow, key("name").into()]);
     assert!(selected.edit().is_none());
     assert_eq!(selected.payload(), selection_payload::edge());
 }
@@ -332,11 +310,7 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
     );
     for (raw, value, path) in [
         (true, text::value("raw"), vec![]),
-        (
-            false,
-            cell.into(),
-            vec![gid::Step::Follow(gid::Resolution::Library(library))],
-        ),
+        (false, cell.into(), vec![gid::Step::Follow]),
     ] {
         let mut editor = crate::editor_of(value);
         editor.stack.libraries = libraries.clone();
@@ -392,7 +366,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
         crate::test_values::label("name"),
         text::value("hello"),
     )]);
-    let path = vec![Step::Follow(gid::Resolution::Document), key("name").into()];
+    let path = vec![Step::Follow, key("name").into()];
     let mut selection = make_projected_editing_selection(&doc, &libraries, path.clone());
     assert_eq!(selection.edit().unwrap().selection_offsets(), (5, 5));
     selection.edit_mut().unwrap().cursor_to_start();
@@ -415,7 +389,7 @@ fn edits_write_through_to_the_field() {
         crate::test_values::label("name"),
         crate::libraries::text::value("old"),
     )]);
-    let path = vec![gid::Step::Follow(gid::Resolution::Document), key("name")];
+    let path = vec![gid::Step::Follow, key("name")];
     let mut selection = make_projected_editing_selection(&doc, &lib, crate::occurrence::of(&path));
     selection.edit_mut().unwrap().set_text("new");
     write_text(&mut doc, &lib, &mut selection);
@@ -424,10 +398,7 @@ fn edits_write_through_to_the_field() {
         Some(&crate::libraries::text::value("new"))
     );
     // A selection without an editor writes nothing.
-    let mut plain = make_selection(vec![
-        gid::Step::Follow(gid::Resolution::Document),
-        key("missing"),
-    ]);
+    let mut plain = make_selection(vec![gid::Step::Follow, key("missing")]);
     assert!(!write_text(&mut doc, &lib, &mut plain));
     assert_eq!(
         src(&doc, &lib).resolve_path(&path),
@@ -448,7 +419,7 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
         }),
         Driver::VIEWPORT,
     );
-    let path = [gid::Step::Follow(gid::Resolution::Document)];
+    let path = [gid::Step::Follow];
     let original = driver.editor().model.doc.clone();
     driver.select(&path);
     driver.press(NamedKey::End);
@@ -498,7 +469,7 @@ fn compact_f64_values_edit_as_decimal_text() {
         }),
         Driver::VIEWPORT,
     );
-    let path = [gid::Step::Follow(gid::Resolution::Document)];
+    let path = [gid::Step::Follow];
     driver.select(&path);
     driver.press(NamedKey::End);
     assert_eq!(driver.line(), Some("2.5"));
@@ -532,7 +503,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
         }),
         Driver::VIEWPORT,
     );
-    let path = [gid::Step::Follow(gid::Resolution::Document)];
+    let path = [gid::Step::Follow];
     driver.select(&path);
     driver.press(NamedKey::End);
     select_line(&mut driver);
@@ -558,10 +529,10 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
             crate::libraries::text::value("3"),
         ]),
     )]);
-    let list_path = vec![gid::Step::Follow(gid::Resolution::Document), key("dash")];
+    let list_path = vec![gid::Step::Follow, key("dash")];
     let ps = positions(src(&doc, &lib).resolve_path(&list_path).unwrap());
     let element = vec![
-        gid::Step::Follow(gid::Resolution::Document),
+        gid::Step::Follow,
         key("dash"),
         gid::Step::Element(ps[1].clone()),
     ];
@@ -596,7 +567,7 @@ fn write_through_opens_one_step_per_editor_life() {
         crate::test_values::label("name"),
         crate::libraries::text::value("a"),
     )]);
-    let path = vec![Step::Follow(gid::Resolution::Document), key("name").into()];
+    let path = vec![Step::Follow, key("name").into()];
     let mut selection = make_projected_editing_selection(&doc, &lib, path);
 
     // First write opens the step; the rest of the run is silent,
@@ -613,11 +584,8 @@ fn write_through_opens_one_step_per_editor_life() {
     assert!(write_text(&mut doc, &lib, &mut selection));
 
     // A re-minted editor is a new run by construction.
-    let mut fresh = make_projected_editing_selection(
-        &doc,
-        &lib,
-        vec![Step::Follow(gid::Resolution::Document), key("name").into()],
-    );
+    let mut fresh =
+        make_projected_editing_selection(&doc, &lib, vec![Step::Follow, key("name").into()]);
     fresh.edit_mut().unwrap().set_text("x");
     assert!(write_text(&mut doc, &lib, &mut fresh));
 }
@@ -632,10 +600,7 @@ fn a_simple_name_is_an_ordinary_editable_field() {
             crate::libraries::text::value("1"),
         ),
     ]);
-    let path = vec![
-        gid::Step::Follow(gid::Resolution::Document),
-        gid::Step::Key(name::vocabulary::NAME),
-    ];
+    let path = vec![gid::Step::Follow, gid::Step::Key(name::vocabulary::NAME)];
 
     let mut selection = make_projected_editing_selection(&doc, &lib, crate::occurrence::of(&path));
     selection.edit_mut().unwrap().set_text("new");
@@ -683,10 +648,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
     let position = gid::position::between(None, None).unwrap();
     for (value, path) in [
         (None, vec![]),
-        (
-            Some(Value::from(cell)),
-            vec![Step::Follow(gid::Resolution::Document)],
-        ),
+        (Some(Value::from(cell)), vec![Step::Follow]),
         (Some(Value::record([])), vec![Step::Key(field)]),
         (Some(Value::list([])), vec![Step::Element(position)]),
     ] {
@@ -734,10 +696,7 @@ fn an_anonymous_lambda_name_opens_for_typing_without_creating_a_field() {
         (grap::vocabulary::PARAMS, Value::list([])),
         (grap::vocabulary::BODY, Value::from(vec![1])),
     ]);
-    let path = vec![
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(name::vocabulary::NAME),
-    ];
+    let path = vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
     let unwritten = |driver: &mut Driver| {
         let editor = &mut driver.runner.editor;
         assert!(!write_text(
@@ -802,10 +761,7 @@ fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
         root: Some(cell.into()),
         cells: Cells::new(),
     };
-    let path = vec![
-        Step::Follow(gid::Resolution::Library(library)),
-        Step::Key(name::vocabulary::NAME),
-    ];
+    let path = vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
     let mut world = {
         let mut editor = crate::test_editor(doc.clone());
         editor.stack.libraries = libraries.clone();

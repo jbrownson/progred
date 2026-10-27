@@ -63,41 +63,20 @@ impl SourceCalls {
                 path.as_slice() == target.as_ref()
             }
             (
-                grap::SourceOrigin::Cell {
-                    cell,
-                    resolution,
-                    path,
-                },
+                grap::SourceOrigin::Cell { cell, path },
                 SourceTrace::InCell {
                     cell: target,
-                    resolution: target_resolution,
                     path: target_path,
                 },
-            ) => {
-                cell == target
-                    && resolution == target_resolution
-                    && path.as_slice() == target_path.as_ref()
-            }
+            ) => cell == target && path.as_slice() == target_path.as_ref(),
             (grap::SourceOrigin::Input(suffix), target) => match (&self.input, target) {
                 (Some(SourceTrace::Stored(base)), SourceTrace::Stored(path)) => {
                     base.iter().chain(suffix).eq(path.iter())
                 }
                 (
-                    Some(SourceTrace::InCell {
-                        cell,
-                        resolution,
-                        path: base,
-                    }),
-                    SourceTrace::InCell {
-                        cell: target,
-                        resolution: target_resolution,
-                        path,
-                    },
-                ) => {
-                    cell == target
-                        && resolution == target_resolution
-                        && base.iter().chain(suffix).eq(path.iter())
-                }
+                    Some(SourceTrace::InCell { cell, path: base }),
+                    SourceTrace::InCell { cell: target, path },
+                ) => cell == target && base.iter().chain(suffix).eq(path.iter()),
                 _ => false,
             },
             _ => false,
@@ -109,13 +88,8 @@ impl SourceCalls {
 pub(crate) fn to_grap(trace: SourceTrace) -> grap::SourceOrigin {
     match trace {
         SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
-        SourceTrace::InCell {
+        SourceTrace::InCell { cell, path } => grap::SourceOrigin::Cell {
             cell,
-            resolution,
-            path,
-        } => grap::SourceOrigin::Cell {
-            cell,
-            resolution,
             path: path.to_vec(),
         },
     }
@@ -128,13 +102,8 @@ pub(crate) fn from_grap(
     match origin {
         grap::SourceOrigin::Stored(path) => Some(SourceTrace::Stored(path.into())),
         grap::SourceOrigin::Input(path) => input.map(|input| input.descendant(&path)),
-        grap::SourceOrigin::Cell {
+        grap::SourceOrigin::Cell { cell, path } => Some(SourceTrace::InCell {
             cell,
-            resolution,
-            path,
-        } => Some(SourceTrace::InCell {
-            cell,
-            resolution,
             path: path.into(),
         }),
     }

@@ -1,7 +1,7 @@
 //! Projection composition, box descriptions, and editor-facing native widgets.
 //! Document recursion is a projection operation; boxes compose opaque continuations.
 
-use gid::{CellId, Resolution, Step, Value};
+use gid::{CellId, Step, Value};
 use peniko::Brush;
 pub use puri::delim::Delim;
 use puri::draw::Leaf;
@@ -211,10 +211,10 @@ pub enum CompletionScope {
 /// Read-only definition metadata; native implementations are never exposed here.
 #[derive(Clone, Copy)]
 pub struct ResolvedCell<'a> {
-    /// Whether the document or a library defines it.
-    pub resolution: Resolution,
     pub value: &'a Value,
     pub native: bool,
+    /// The library supplying the definition, or none for the document's own.
+    pub library: Option<CellId>,
 }
 
 /// The path names the missing value, or the record receiving a new label,

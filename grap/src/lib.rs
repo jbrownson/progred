@@ -3,7 +3,7 @@
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
-use gid::{CellId, Record, Resolution, Value};
+use gid::{CellId, Record, Value};
 use std::cell::{OnceCell, RefCell};
 use std::fmt;
 use std::rc::Rc;
@@ -82,11 +82,7 @@ pub enum Shape<'a> {
 pub enum SourceOrigin {
     Input(Vec<gid::Step>),
     Stored(Vec<gid::Step>),
-    Cell {
-        cell: CellId,
-        resolution: Resolution,
-        path: Vec<gid::Step>,
-    },
+    Cell { cell: CellId, path: Vec<gid::Step> },
 }
 
 /// A staged foreign function's per-visit form, returned by its
@@ -161,9 +157,8 @@ impl Definition {
 /// on every changing read being a `resolve`, except where `untracked` says
 /// otherwise.
 pub trait Host {
-    /// `cell`'s definition and the resolution it came through, which source
-    /// origins record.
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)>;
+    /// `cell`'s definition.
+    fn resolve(&self, cell: CellId) -> Option<Definition>;
     /// A foreign call not declared tracked ran, so the result may depend on
     /// reads the host didn't see.
     fn untracked(&self) {}
@@ -1133,10 +1128,7 @@ struct OriginId(Rc<OriginNode>);
 enum OriginRoot {
     Input,
     Located(SourceOrigin),
-    Cell {
-        cell: CellId,
-        resolution: Resolution,
-    },
+    Cell(CellId),
 }
 
 enum OriginNode {
@@ -1697,7 +1689,7 @@ impl<'a> Context<'a> {
             Some(target) => target,
             None => {
                 let kind = match self.host.resolve(cell) {
-                    Some((_, Definition::Foreign(definition))) => {
+                    Some(Definition::Foreign(definition)) => {
                         match &definition.implementation.primitive {
                             Some(primitive) => PreparedCallTargetKind::Primitive(
                                 **primitive,
@@ -1708,8 +1700,8 @@ impl<'a> Context<'a> {
                             }
                         }
                     }
-                    Some((resolution, Definition::Value(value))) => {
-                        PreparedCallTargetKind::Value(self.lowered_cell(cell, resolution, &value))
+                    Some(Definition::Value(value)) => {
+                        PreparedCallTargetKind::Value(self.lowered_cell(cell, &value))
                     }
                     None => PreparedCallTargetKind::Missing,
                 };
@@ -1757,18 +1749,16 @@ impl<'a> Context<'a> {
     /// `cell`'s definition lowered once per evaluation and shared by every
     /// call site that calls it, so their compiled code and call caches are
     /// shared too.
-    fn lowered_cell(&mut self, cell: CellId, resolution: Resolution, value: &Value) -> Expression {
+    fn lowered_cell(&mut self, cell: CellId, value: &Value) -> Expression {
         let index = cell_index(&self.indices, cell);
         while self.cell_states.len() <= index.0 {
             self.cell_states.push(CellState::Unknown);
         }
         match &self.cell_states[index.0] {
             CellState::Ready(expression) => expression.clone(),
-            CellState::Evaluating { .. } => {
-                self.lower_source(value, OriginRoot::Cell { cell, resolution })
-            }
+            CellState::Evaluating { .. } => self.lower_source(value, OriginRoot::Cell(cell)),
             CellState::Unknown => {
-                let expression = self.lower_source(value, OriginRoot::Cell { cell, resolution });
+                let expression = self.lower_source(value, OriginRoot::Cell(cell));
                 self.cell_states[index.0] = CellState::Ready(expression.clone());
                 expression
             }
@@ -1879,7 +1869,7 @@ impl<'a> Context<'a> {
                     Ok(RuntimeValue::from(foreign_function(cell)))
                 }
                 None => Ok(missing_cell(cell)),
-                Some((resolution, definition)) => {
+                Some(definition) => {
                     while self.cell_states.len() <= index.0 {
                         self.cell_states.push(CellState::Unknown);
                     }
@@ -1891,10 +1881,8 @@ impl<'a> Context<'a> {
                             Ok(cell_cycle(&self.resolving[stack_index..], cell))
                         }
                         CellState::Unknown => {
-                            let expression = self.lower_source(
-                                definition.value(),
-                                OriginRoot::Cell { cell, resolution },
-                            );
+                            let expression =
+                                self.lower_source(definition.value(), OriginRoot::Cell(cell));
                             self.cell_states[index.0] = CellState::Ready(expression.clone());
                             self.eval_resolved_cell(index, cell, expression, environment)
                         }
@@ -2157,15 +2145,14 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         self.checked_call(|context| match context.host.resolve(cell) {
-            Some((_, Definition::Foreign(definition))) => context.apply_foreign(
+            Some(Definition::Foreign(definition)) => context.apply_foreign(
                 &ResolvedForeign::Function(definition.implementation.clone()),
                 callable,
                 arguments,
                 environment,
             ),
-            Some((resolution, Definition::Value(value))) => {
-                let expression =
-                    context.lower_source(&value, OriginRoot::Cell { cell, resolution });
+            Some(Definition::Value(value)) => {
+                let expression = context.lower_source(&value, OriginRoot::Cell(cell));
                 let callable = context.eval_definition(cell, expression, environment)?;
                 if callable.absent_reason().is_some() {
                     Ok(callable)
@@ -2611,8 +2598,8 @@ pub fn apply(
 struct TestHost<F>(F);
 
 #[cfg(test)]
-impl<F: Fn(CellId) -> Vec<(Resolution, Definition)>> Host for TestHost<F> {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
+impl<F: Fn(CellId) -> Vec<Definition>> Host for TestHost<F> {
+    fn resolve(&self, cell: CellId) -> Option<Definition> {
         (self.0)(cell).into_iter().next()
     }
 }

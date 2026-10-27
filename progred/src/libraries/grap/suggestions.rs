@@ -63,10 +63,10 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
 
 /// Quote is drawn as `"`, so typing that mark offers it beside the string.
 fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
-    let source = (request.resolve)(control::QUOTE)?.resolution;
+    let library = (request.resolve)(control::QUOTE)?.library;
     Some(
         super::call_completion(control::QUOTE.into(), control::QUOTE, request.resolve)
-            .with_detail(super::function_detail(request, "call", source))
+            .with_detail(super::function_detail(request, "call", library))
             .with_aliases(["\""]),
     )
 }

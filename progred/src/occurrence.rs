@@ -8,7 +8,7 @@
 
 use crate::location::{Location, Start};
 use crate::sources::Sources;
-use gid::{CellId, Position, Resolution, Value};
+use gid::{CellId, Position, Value};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -19,8 +19,8 @@ pub enum Step {
     Key(CellId),
     /// Into a list's element.
     Element(Position),
-    /// Through a reference to its cell's definition from `resolution`.
-    Follow(Resolution),
+    /// Through a reference to its cell's definition.
+    Follow,
     /// From here on, the data at `location`: where a projection jumped, or a
     /// cell followed inside a computed value, which has no stored route to it.
     Jump(Rc<Location<'static>>),
@@ -43,12 +43,11 @@ impl Hash for Step {
         match self {
             Self::Key(cell) => cell.hash(state),
             Self::Element(position) => position.hash(state),
-            Self::Follow(resolution) => resolution.hash(state),
             Self::Jump(location) => {
                 location.start.hash(state);
                 location.path.len().hash(state);
             }
-            Self::Computed => {}
+            Self::Follow | Self::Computed => {}
         }
     }
 }
@@ -58,7 +57,7 @@ impl From<gid::Step> for Step {
         match step {
             gid::Step::Key(cell) => Self::Key(cell),
             gid::Step::Element(position) => Self::Element(position),
-            gid::Step::Follow(resolution) => Self::Follow(resolution),
+            gid::Step::Follow => Self::Follow,
         }
     }
 }
@@ -97,7 +96,7 @@ impl Step {
         match self {
             Self::Key(cell) => Some(gid::Step::Key(*cell)),
             Self::Element(position) => Some(gid::Step::Element(position.clone())),
-            Self::Follow(resolution) => Some(gid::Step::Follow(*resolution)),
+            Self::Follow => Some(gid::Step::Follow),
             Self::Jump(_) | Self::Computed => None,
         }
     }
@@ -158,7 +157,7 @@ pub fn read<'a>(sources: &Sources<'a>, path: &[Step]) -> Option<&'a Value> {
 
 /// Whether a write can land where `path`'s data is stored.
 pub fn writable(sources: &Sources, path: &[Step]) -> bool {
-    stored_start(sources, path).is_some_and(crate::location::owned)
+    stored_start(sources, path).is_some_and(|start| crate::location::owned(sources, start))
 }
 
 /// Where the data at `path` is stored starts, as [`Location::stored`] finds
@@ -176,14 +175,8 @@ pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
             _ => return None,
         },
     };
-    match rest
-        .iter()
-        .rposition(|step| matches!(step, Step::Follow(_)))
-    {
+    match rest.iter().rposition(|step| matches!(step, Step::Follow)) {
         Some(follow) => {
-            let Step::Follow(resolution) = rest[follow] else {
-                unreachable!("found as a Follow")
-            };
             let start = from.map_or(Start::Root, |location| location.start);
             let before = from.map_or(&[][..], |location| &location.path);
             let cell = rest[..follow]
@@ -193,7 +186,7 @@ pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
                     sources.step(value, &step)
                 })?
                 .as_cell()?;
-            Some(Start::Cell { cell, resolution })
+            Some(Start::Cell(cell))
         }
         None => match from {
             None => Some(Start::Root),

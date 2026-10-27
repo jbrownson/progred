@@ -37,7 +37,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
     }
     .resolve(function)
     .unwrap();
-    assert_eq!(native.resolution, Resolution::Library(library));
+    assert_eq!(native.library, Some(library));
     assert!(native.native);
     assert_eq!(native.value, &grap::foreign_function(function));
     let answer = Value::from(b"document".to_vec());
@@ -60,7 +60,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
             libraries: &libraries,
         };
         let resolved = sources.resolve(function).unwrap();
-        assert_eq!(resolved.resolution, Resolution::Document);
+        assert_eq!(resolved.library, None);
         assert!(!resolved.native);
         assert_eq!(Some(resolved.value), doc.cells.value(function));
         for result in [
@@ -129,20 +129,17 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
             assert_eq!(evaluation.result, ::grap::absent::decline());
             assert_eq!(
                 origins.into_inner(),
-                [Resolution::Document].map(|resolution| {
-                    grap::SourceOrigin::Cell {
-                        cell: function,
-                        resolution,
-                        path: vec![Step::Key(grap::vocabulary::BODY)],
-                    }
-                })
+                [grap::SourceOrigin::Cell {
+                    cell: function,
+                    path: vec![Step::Key(grap::vocabulary::BODY)],
+                }]
             );
         }
     }
 }
 
 #[test]
-fn values_are_resolved_by_their_stable_sources() {
+fn the_document_s_definition_comes_before_a_library_s() {
     let cell = new_cell_id();
     let library_id = new_cell_id();
     let mut library_cells = Cells::new();
@@ -163,12 +160,7 @@ fn values_are_resolved_by_their_stable_sources() {
         doc: &doc,
         libraries: &libraries,
     };
-    assert_eq!(
-        sources
-            .value(cell, &Resolution::Library(library_id))
-            .and_then(name::read),
-        Some("lib-name")
-    );
+    assert_eq!(sources.value(cell).and_then(name::read), Some("lib-name"));
 
     let mut cells = Cells::new();
     cells.set_value(cell, name::record("mine", []));
@@ -177,19 +169,14 @@ fn values_are_resolved_by_their_stable_sources() {
         doc: &doc,
         libraries: &libraries,
     };
-    assert_eq!(
-        sources
-            .value(cell, &Resolution::Document)
-            .and_then(name::read),
-        Some("mine")
-    );
+    assert_eq!(sources.value(cell).and_then(name::read), Some("mine"));
     assert_eq!(
         crate::libraries::name::of(&sources, cell),
         Some(crate::display::Name::Plain("mine"))
     );
     assert_eq!(
         sources
-            .value(cell, &Resolution::Document)
+            .value(cell)
             .and_then(Value::as_record)
             .and_then(|fields| fields.get(&crate::test_values::label("a"))),
         None
@@ -197,7 +184,7 @@ fn values_are_resolved_by_their_stable_sources() {
 }
 
 #[test]
-fn plural_lookup_keeps_document_first_and_names_library_origins() {
+fn lookup_says_which_library_supplies_a_definition() {
     let cell = new_cell_id();
     let library_id = new_cell_id();
     let mut document_cells = Cells::new();
@@ -211,13 +198,18 @@ fn plural_lookup_keeps_document_first_and_names_library_origins() {
         libraries: &libraries,
     };
 
-    assert_eq!(
-        sources
-            .values(cell)
-            .map(|definition| definition.resolution)
-            .collect::<Vec<_>>(),
-        [Resolution::Document, Resolution::Library(library_id)]
-    );
+    let resolved = sources.resolve(cell).unwrap();
+    assert_eq!(resolved.library, None);
+    assert_eq!(name::read(resolved.value), Some("document"));
+    let empty = doc_of(Cells::new());
+    let resolved = Sources {
+        doc: &empty,
+        libraries: &libraries,
+    }
+    .resolve(cell)
+    .unwrap();
+    assert_eq!(resolved.library, Some(library_id));
+    assert_eq!(name::read(resolved.value), Some("library"));
     assert_eq!(
         crate::libraries::name::of(&sources, library_id),
         Some(crate::display::Name::Plain("test"))
@@ -225,7 +217,7 @@ fn plural_lookup_keeps_document_first_and_names_library_origins() {
 }
 
 #[test]
-fn follow_names_a_library_source_not_its_load_order() {
+fn lookup_and_follows_take_the_first_library_in_load_order() {
     let cell = new_cell_id();
     let left_id = new_cell_id();
     let right_id = new_cell_id();
@@ -248,7 +240,7 @@ fn follow_names_a_library_source_not_its_load_order() {
         (left_id, library(left_id, "left")),
     ])
     .0;
-    let path = [Step::Follow(Resolution::Library(right_id))];
+    let path = [Step::Follow];
 
     for (libraries, first) in [(&left_then_right, "left"), (&right_then_left, "right")] {
         let sources = Sources {
@@ -265,17 +257,13 @@ fn follow_names_a_library_source_not_its_load_order() {
             grap::evaluate_value(&cell.into(), &sources, 100).result,
             crate::libraries::text::value(first),
         );
+        assert_eq!(
+            sources
+                .resolve_path(&path)
+                .and_then(crate::libraries::text::read),
+            Some(first)
+        );
     }
-
-    assert_eq!(
-        Sources {
-            doc: &doc,
-            libraries: &left_then_right,
-        }
-        .resolve_path(&path)
-        .and_then(crate::libraries::text::read),
-        Some("right")
-    );
     assert_eq!(
         Sources {
             doc: &doc,
@@ -298,18 +286,18 @@ fn external_means_the_library_answers() {
     let mut cells = Cells::new();
     cells.set_value(doc_cell, crate::libraries::text::value("doc"));
 
-    let owned = |cell, resolution| crate::location::owned(Start::Cell { cell, resolution });
-    let library = Resolution::Library(libraries.iter().next().unwrap().0);
+    let owned = |sources: &Sources, cell| crate::location::owned(sources, Start::Cell(cell));
     let doc = doc_of(cells.clone());
     let sources = Sources {
         doc: &doc,
         libraries: &libraries,
     };
     assert!(sources.external(lib_cell));
-    assert!(!owned(lib_cell, library));
+    assert!(!owned(&sources, lib_cell));
     assert!(!sources.external(doc_cell));
+    assert!(owned(&sources, doc_cell));
     assert!(!sources.external(bare));
-    assert!(owned(bare, Resolution::Document));
+    assert!(owned(&sources, bare));
 
     cells.set_value(lib_cell, crate::libraries::text::value("mine"));
     let doc = doc_of(cells);
@@ -318,8 +306,7 @@ fn external_means_the_library_answers() {
         libraries: &libraries,
     };
     assert!(!sources.external(lib_cell));
-    assert!(owned(lib_cell, Resolution::Document));
-    assert!(!owned(lib_cell, library));
+    assert!(owned(&sources, lib_cell));
 }
 
 #[test]
@@ -354,16 +341,10 @@ fn resolve_follows_links_keys_and_elements() {
 
     assert_eq!(sources.resolve_path(&[]), Some(&Value::from(root)));
     assert_eq!(
-        sources.resolve_path(&[
-            Step::Follow(Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ]),
+        sources.resolve_path(&[Step::Follow, Step::Key(name::vocabulary::NAME),]),
         Some(&crate::libraries::text::value("scene"))
     );
-    let items = [
-        Step::Follow(Resolution::Document),
-        Step::Key(crate::test_values::label("items")),
-    ];
+    let items = [Step::Follow, Step::Key(crate::test_values::label("items"))];
     let positions: Vec<_> = sources
         .resolve_path(&items)
         .unwrap()
@@ -373,7 +354,7 @@ fn resolve_follows_links_keys_and_elements() {
         .cloned()
         .collect();
     let deep = [
-        Step::Follow(Resolution::Document),
+        Step::Follow,
         Step::Key(crate::test_values::label("items")),
         Step::Element(positions[1].clone()),
         Step::Key(crate::test_values::label("x")),
@@ -392,14 +373,11 @@ fn resolve_follows_links_keys_and_elements() {
         libraries: &libraries,
     };
     assert!(bare_sources.resolve_path(&[]).is_some());
-    assert_eq!(
-        bare_sources.resolve_path(&[Step::Follow(Resolution::Document)]),
-        None
-    );
+    assert_eq!(bare_sources.resolve_path(&[Step::Follow]), None);
     let gone = gid::position::between(Some(&positions[1]), None).unwrap();
     assert_eq!(
         sources.resolve_path(&[
-            Step::Follow(Resolution::Document),
+            Step::Follow,
             Step::Key(crate::test_values::label("items")),
             Step::Element(gone),
         ]),

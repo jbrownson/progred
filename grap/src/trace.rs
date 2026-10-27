@@ -5,7 +5,7 @@
 //! call that answered a particular value.
 
 use crate::{ByNode, Definition, Expression, Host, RuntimeValue, SourceOrigin};
-use gid::{CellId, Resolution};
+use gid::CellId;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -29,7 +29,7 @@ impl<'a> Observed<'a> {
 }
 
 impl Host for Observed<'_> {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
+    fn resolve(&self, cell: CellId) -> Option<Definition> {
         self.host.resolve(cell)
     }
 

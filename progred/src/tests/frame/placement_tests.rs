@@ -754,9 +754,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     );
     let popup = widget::navigation::landmark(
         popup,
-        crate::occurrence::Trail::from([crate::occurrence::Step::Follow(
-            gid::Resolution::Document,
-        )]),
+        crate::occurrence::Trail::from([crate::occurrence::Step::Follow]),
         std::rc::Rc::new(|count, _| {
             *count += 10;
             true
@@ -802,10 +800,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     };
     assert_eq!(landmark.area, Some(owner.clone()));
     assert_eq!(landmark.rect, rect);
-    assert_eq!(
-        landmark.path,
-        [gid::Step::Follow(gid::Resolution::Document)][..]
-    );
+    assert_eq!(landmark.path, [gid::Step::Follow][..]);
     let mut count = 0;
     assert!((landmark.select)(
         &mut count,

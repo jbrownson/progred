@@ -3,7 +3,7 @@
 //! The evaluation's host records each definition it resolves, and gives up
 //! reuse when Grap reports an untracked call or an effect the memo doesn't own.
 
-use gid::{CellId, Resolution, Value};
+use gid::{CellId, Value};
 use grap::{Definition, Evaluation, Host, absent};
 use incremental::{Read, Source};
 use std::{cell::RefCell, rc::Rc};
@@ -27,16 +27,14 @@ pub fn failure(error: incremental::Error) -> Value {
 }
 
 #[derive(Clone)]
-pub struct Resolved(pub Option<(Resolution, Definition)>);
+pub struct Resolved(pub Option<Definition>);
 
 impl PartialEq for Resolved {
     fn eq(&self, other: &Self) -> bool {
         match (&self.0, &other.0) {
             (None, None) => true,
-            (Some((a, Definition::Value(x))), Some((b, Definition::Value(y)))) => a == b && x == y,
-            (Some((a, Definition::Foreign(x))), Some((b, Definition::Foreign(y)))) => {
-                a == b && Rc::ptr_eq(x, y)
-            }
+            (Some(Definition::Value(x)), Some(Definition::Value(y))) => x == y,
+            (Some(Definition::Foreign(x)), Some(Definition::Foreign(y))) => Rc::ptr_eq(x, y),
             _ => false,
         }
     }
@@ -51,7 +49,7 @@ struct ObservingHost<'a, S> {
 }
 
 impl<S: 'static> Host for ObservingHost<'_, S> {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
+    fn resolve(&self, cell: CellId) -> Option<Definition> {
         self.definitions.read(cell, &mut self.read.borrow_mut()).0
     }
     fn untracked(&self) {

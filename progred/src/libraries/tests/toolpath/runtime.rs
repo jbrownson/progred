@@ -30,18 +30,15 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let unobserved = crate::test_support::TestHost(|cell| {
         if cell == inspect {
             let (origins, tracer) = (origins.clone(), tracer.clone());
-            Some((
-                gid::Resolution::Document,
-                ::grap::Definition::foreign(
-                    inspect,
-                    Value::record([]),
-                    ForeignFunction::new(move |context, call, environment| {
-                        origins
-                            .borrow_mut()
-                            .push(tracer.trace().unwrap().origins().next().unwrap().clone());
-                        context.eval(context.field(call, captured).unwrap(), environment)
-                    }),
-                ),
+            Some(::grap::Definition::foreign(
+                inspect,
+                Value::record([]),
+                ForeignFunction::new(move |context, call, environment| {
+                    origins
+                        .borrow_mut()
+                        .push(tracer.trace().unwrap().origins().next().unwrap().clone());
+                    context.eval(context.field(call, captured).unwrap(), environment)
+                }),
             ))
         } else {
             libraries.resolve(cell)
@@ -78,18 +75,15 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let unobserved_receiver = crate::test_support::TestHost(|cell| {
         if cell == place {
             let (origins, tracer) = (origins.clone(), tracer.clone());
-            Some((
-                gid::Resolution::Document,
-                ::grap::Definition::foreign(
-                    place,
-                    Value::record([]),
-                    ForeignFunction::new(move |_, _, _| {
-                        origins
-                            .borrow_mut()
-                            .push(tracer.trace().unwrap().origins().next().unwrap().clone());
-                        Ok(RuntimeValue::record([]))
-                    }),
-                ),
+            Some(::grap::Definition::foreign(
+                place,
+                Value::record([]),
+                ForeignFunction::new(move |_, _, _| {
+                    origins
+                        .borrow_mut()
+                        .push(tracer.trace().unwrap().origins().next().unwrap().clone());
+                    Ok(RuntimeValue::record([]))
+                }),
             ))
         } else {
             host.resolve(cell)

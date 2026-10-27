@@ -178,7 +178,7 @@ fn part_at<'v>(value: &'v Value, path: &[Step]) -> Option<&'v Value> {
     path.iter().try_fold(value, |value, step| match step {
         Step::Key(key) => value.as_record()?.get(key),
         Step::Element(position) => value.as_list()?.get(position),
-        Step::Follow(_) => None,
+        Step::Follow => None,
     })
 }
 
@@ -735,7 +735,7 @@ impl Workspace {
                 && area.view.place(&[]).is_some_and(|place| {
                     place
                         .stored(sources)
-                        .is_some_and(|stored| crate::location::owned(stored.start))
+                        .is_some_and(|stored| crate::location::owned(sources, stored.start))
                 })
         }
     }

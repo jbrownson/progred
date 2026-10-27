@@ -300,16 +300,12 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
             .any(|d| d.path.len() > path.len() && d.path.starts_with(&crate::occurrence::of(path)))
     };
     for slot in ["first", "second"] {
-        let callee = [
-            Step::Key(names[slot]),
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(FUNCTION),
-        ];
+        let callee = [Step::Key(names[slot]), Step::Follow, Step::Key(FUNCTION)];
         assert!(placed(&callee), "{slot} shows its call's function");
         assert!(!opened(&callee), "{slot} doesn't inline the definition");
         assert!(placed(&[
             Step::Key(names[slot]),
-            Step::Follow(gid::Resolution::Document),
+            Step::Follow,
             Step::Key(names["x"]),
         ]));
     }
@@ -351,7 +347,7 @@ fn swapping_libraries_keeps_the_document_and_selection() {
     );
     let planet = [
         Step::Key(names["first"]),
-        Step::Follow(gid::Resolution::Document),
+        Step::Follow,
         Step::Key(names["planet"]),
     ];
     let bytes: Vec<Step> = [&planet[..], &[Step::Key(text::vocabulary::UTF8)]].concat();

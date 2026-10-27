@@ -13,10 +13,10 @@ The logical model currently consists of:
   identities;
 - a direct cell-identity-to-value table, where an absent entry is a bare cell;
 - documents containing one optional root value and their cell table;
-- stable list positions and traversal steps used while manipulating a document;
-- stable resolution sources: a `Follow` step names the document or library
-  whose value it crosses. Duplicate definitions across sources are tolerated,
-  but ordinary lookup selects one; they are not implicit composition.
+- stable list positions and traversal steps used while manipulating a document.
+  A `Follow` step crosses a cell reference into the cell's definition, wherever
+  lookup finds it; which tables lookup searches, and in what order, is up to
+  the caller.
 
 Names, UTF-8 text, numbers, Grap (including its tagged absence values), and
 CAD concepts are open conventions or libraries embedded in GID values. They
@@ -54,9 +54,10 @@ order and reject anything else as corrupt.
 
 The path convention represents traversal steps and list-position bytes as ordinary
 records, lists, and blobs: a path is a list of `{key: cell}`,
-`{element: {indexable: blob}}`, and `{follow: document}` or
-`{follow: {library: cell}}` steps, and decoding checks each step and the
-canonical list-position bytes. This is a library convention, not another GID atom.
+`{element: {indexable: blob}}`, and `{follow: {}}` steps, and decoding checks
+each step and the canonical list-position bytes. A follow step saved with a
+source, as earlier paths were, reads as a plain follow. This is a library
+convention, not another GID atom.
 List positions are saved with the document, so a path serialized as data,
 element addresses included, survives a reload.
 

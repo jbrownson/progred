@@ -15,65 +15,34 @@ fn the_sample_document_shows_the_constructs() {
         .unwrap()
         .as_cell()
         .unwrap();
-    assert_eq!(
-        sources
-            .value(roof, &gid::Resolution::Document)
-            .and_then(name::read),
-        Some("roof")
-    );
+    assert_eq!(sources.value(roof).and_then(name::read), Some("roof"));
     // The material cell is referenced and fully bare.
     let material = sources
-        .resolve_path(&[
-            key("shape"),
-            Step::Follow(gid::Resolution::Document),
-            key("material"),
-        ])
+        .resolve_path(&[key("shape"), Step::Follow, key("material")])
         .unwrap()
         .as_cell()
         .unwrap();
-    assert!(
-        sources
-            .value(material, &gid::Resolution::Document)
-            .is_none()
-    );
+    assert!(sources.value(material).is_none());
     // The stroke cell is a name-only ordinary record, referenced
     // as a label.
     let stroke = sources
-        .value(roof, &gid::Resolution::Document)
+        .value(roof)
         .unwrap()
         .as_record()
         .unwrap()
         .keys()
         .copied()
-        .find(|cell| {
-            sources
-                .value(*cell, &gid::Resolution::Document)
-                .and_then(name::read)
-                == Some("stroke")
-        })
+        .find(|cell| sources.value(*cell).and_then(name::read) == Some("stroke"))
         .unwrap();
-    assert_eq!(
-        sources
-            .value(stroke, &gid::Resolution::Document)
-            .and_then(name::read),
-        Some("stroke")
-    );
+    assert_eq!(sources.value(stroke).and_then(name::read), Some("stroke"));
     // The style cell is shared by the root and the roof.
     assert_eq!(
         sources.resolve_path(&[key("style")]),
-        sources.resolve_path(&[
-            key("shape"),
-            Step::Follow(gid::Resolution::Document),
-            key("style")
-        ])
+        sources.resolve_path(&[key("shape"), Step::Follow, key("style")])
     );
     // Points hold inline records; the swatch is a blob.
     let points = sources
-        .resolve_path(&[
-            key("shape"),
-            Step::Follow(gid::Resolution::Document),
-            key("points"),
-        ])
+        .resolve_path(&[key("shape"), Step::Follow, key("points")])
         .unwrap();
     let origin = points
         .as_list()
@@ -85,18 +54,14 @@ fn the_sample_document_shows_the_constructs() {
         .unwrap();
     assert!(matches!(
         sources
-            .value(origin, &gid::Resolution::Document)
+            .value(origin)
             .and_then(|value| value.as_record())
             .and_then(|fields| fields.get(&crate::test_values::label("at"))),
         Some(Value::Record(_))
     ));
     assert!(
         sources
-            .resolve_path(&[
-                key("style"),
-                Step::Follow(gid::Resolution::Document),
-                key("swatch")
-            ])
+            .resolve_path(&[key("style"), Step::Follow, key("swatch")])
             .unwrap()
             .as_blob()
             .is_some()

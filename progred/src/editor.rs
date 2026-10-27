@@ -694,11 +694,7 @@ impl Editor {
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
             DocCommand::OpenLibrary(library) => {
-                self.show_in_pane(crate::location::Location::in_cell(
-                    library,
-                    gid::Resolution::Library(library),
-                    Vec::new(),
-                ))
+                self.show_in_pane(crate::location::Location::in_cell(library, Vec::new()))
             }
             DocCommand::MovePane(direction) => self.move_selected_pane(direction),
             DocCommand::Preset(preset) => {

@@ -1,5 +1,5 @@
 use super::*;
-use gid::{Resolution, Step, new_cell_id};
+use gid::{Step, new_cell_id};
 
 #[test]
 fn origins_round_trip_with_open_metadata_and_stable_paths() {
@@ -12,12 +12,6 @@ fn origins_round_trip_with_open_metadata_and_stable_paths() {
         SourceOrigin::Stored(path.clone()),
         SourceOrigin::Cell {
             cell: new_cell_id(),
-            resolution: Resolution::Document,
-            path: path.clone(),
-        },
-        SourceOrigin::Cell {
-            cell: new_cell_id(),
-            resolution: Resolution::Library(new_cell_id()),
             path,
         },
     ] {

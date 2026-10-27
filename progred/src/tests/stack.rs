@@ -156,7 +156,7 @@ fn a_call_draws_as_its_function_provides_else_as_a_call() {
 fn each_library_s_own_cell_holds_the_library() {
     use crate::library::vocabulary::{CELLS, kind::LIBRARY};
     let stack = load();
-    let value = stack.libraries.resolve(presentation::ID).unwrap().1;
+    let value = stack.libraries.resolve(presentation::ID).unwrap();
     let fields = value.value().as_record().unwrap();
     assert_eq!(::grap::isa::of(fields), Some(LIBRARY));
     assert_eq!(

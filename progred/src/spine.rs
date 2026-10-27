@@ -26,7 +26,7 @@ pub fn set(current: Option<&Value>, spine: &[Step], leaf: Value) -> Option<Value
             let rebuilt = set(child, rest, leaf)?;
             Some(Value::List(elements.with(position.clone(), rebuilt)))
         }
-        Some((Step::Follow(_), _)) => None,
+        Some((Step::Follow, _)) => None,
     }
 }
 
@@ -56,7 +56,7 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
             let rebuilt = without(elements.get(position)?, rest)?;
             Some(Value::List(elements.with(position.clone(), rebuilt)))
         }
-        Some((Step::Follow(_), _)) => None,
+        Some((Step::Follow, _)) => None,
     }
 }
 

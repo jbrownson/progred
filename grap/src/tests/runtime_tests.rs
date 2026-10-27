@@ -549,7 +549,7 @@ fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
         definitions
             .iter()
             .find(|(key, _)| *key == cell)
-            .map(|(_, value)| (Resolution::Document, value.clone()))
+            .map(|(_, value)| value.clone())
             .into_iter()
             .collect()
     })
@@ -814,7 +814,6 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
             [
                 SourceOrigin::Cell {
                     cell: factory,
-                    resolution: Resolution::Document,
                     path: vec![
                         gid::Step::Key(vocabulary::BODY),
                         gid::Step::Key(vocabulary::BODY)
@@ -833,13 +832,8 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
 
 #[test]
 fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() {
-    let (sink, creation, invocation, ancestor, library) = (
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-    );
+    let (sink, creation, invocation, ancestor) =
+        (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let empty = host(vec![]);
     let path = vec![
         gid::Step::Key(creation),
@@ -849,7 +843,6 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         Some(SourceOrigin::Stored(path.clone())),
         Some(SourceOrigin::Cell {
             cell: ancestor,
-            resolution: Resolution::Library(library),
             path,
         }),
         None,
@@ -876,7 +869,7 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         let overlay = ForeignOverlay::new(&ids, &capture);
         let observed = Observed::new(&empty, &tracer);
         for _ in 0..3 {
-            // The source library is deliberately absent from the receiving host.
+            // The origin's cell is deliberately undefined in the receiving host.
             let mut context = context(&observed, Some(&overlay), 100);
             let closure = RuntimeValue::new(RuntimeValueKind::Closure(
                 context.runtime_closure(&encoded.clone().into()).unwrap(),
@@ -968,24 +961,16 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
 
 #[test]
 fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
-    let (first, second, enclosing, library, sink) = (
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-    );
+    let (first, second, enclosing, sink) =
+        (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let creator = TestHost(move |cell| {
         if cell == first || cell == second {
-            vec![(Resolution::Document, Definition::Value(enclosing.into()))]
+            vec![Definition::Value(enclosing.into())]
         } else if cell == enclosing {
-            vec![(
-                Resolution::Library(library),
-                Definition::Value(isa::record(
-                    vocabulary::kind::VALUE_WRAPPER,
-                    [(vocabulary::VALUE, lambda([], call(sink.into(), [])))],
-                )),
-            )]
+            vec![Definition::Value(isa::record(
+                vocabulary::kind::VALUE_WRAPPER,
+                [(vocabulary::VALUE, lambda([], call(sink.into(), [])))],
+            ))]
         } else {
             vec![]
         }
@@ -998,7 +983,6 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
         source::read(fields.get(&source::vocabulary::BODY_ORIGIN).unwrap()),
         Some(SourceOrigin::Cell {
             cell: enclosing,
-            resolution: Resolution::Library(library),
             path: vec![
                 gid::Step::Key(vocabulary::VALUE),
                 gid::Step::Key(vocabulary::BODY)

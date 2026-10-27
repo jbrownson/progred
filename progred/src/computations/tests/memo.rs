@@ -7,7 +7,7 @@ use grap::{
 use incremental::{Input, Memo, Runtime};
 use std::cell::Cell;
 
-type Table = Vec<(CellId, Resolution, Definition)>;
+type Table = Vec<(CellId, Definition)>;
 
 fn definitions(runtime: &Runtime, table: Table) -> (Input<Table>, Definitions<Table>) {
     let input = runtime.input(table);
@@ -15,8 +15,8 @@ fn definitions(runtime: &Runtime, table: Table) -> (Input<Table>, Definitions<Ta
         Resolved(
             table
                 .iter()
-                .find(|(cell, _, _)| cell == key)
-                .map(|(_, origin, value)| (*origin, value.clone())),
+                .find(|(cell, _)| cell == key)
+                .map(|(_, value)| value.clone()),
         )
     });
     (input, source)
@@ -65,29 +65,19 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
         Some(absent::MISSING_CELL)
     );
     let first = counted(cell, &runs, Value::from(vec![1]));
-    table.set_by(vec![(cell, Resolution::Document, first.clone())], |_, _| {
-        false
-    });
+    table.set_by(vec![(cell, first.clone())], |_, _| false);
     assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![1]));
     table.set_by(
         vec![
-            (cell, Resolution::Document, first),
-            (
-                unrelated,
-                Resolution::Document,
-                Definition::Value(Value::record([])),
-            ),
+            (cell, first),
+            (unrelated, Definition::Value(Value::record([]))),
         ],
         |_, _| false,
     );
     runtime.read(&query).unwrap();
     assert_eq!(runs.get(), 1);
     table.set_by(
-        vec![(
-            cell,
-            Resolution::Document,
-            counted(cell, &runs, Value::from(vec![2])),
-        )],
+        vec![(cell, counted(cell, &runs, Value::from(vec![2])))],
         |_, _| false,
     );
     assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![2]));
@@ -98,21 +88,9 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
 fn library_order_document_override_and_removal_are_observed() {
     let runtime = Runtime::default();
     let cell = new_cell_id();
-    let a = (
-        cell,
-        Resolution::Library(new_cell_id()),
-        Definition::Value(Value::from(vec![1])),
-    );
-    let b = (
-        cell,
-        Resolution::Library(new_cell_id()),
-        Definition::Value(Value::from(vec![2])),
-    );
-    let doc = (
-        cell,
-        Resolution::Document,
-        Definition::Value(Value::from(vec![3])),
-    );
+    let a = (cell, Definition::Value(Value::from(vec![1])));
+    let b = (cell, Definition::Value(Value::from(vec![2])));
+    let doc = (cell, Definition::Value(Value::from(vec![3])));
     let (table, source) = definitions(&runtime, vec![a.clone(), b.clone()]);
     let query = evaluate(
         &runtime,
@@ -152,7 +130,7 @@ fn undeclared_foreign_reads_disable_reuse() {
             move |_, _, _| Ok(Value::from(vec![hidden.get()]))
         }),
     );
-    let (_, source) = definitions(&runtime, vec![(cell, Resolution::Document, definition)]);
+    let (_, source) = definitions(&runtime, vec![(cell, definition)]);
     let query = evaluate(
         &runtime,
         source,
@@ -212,14 +190,7 @@ fn normally_returned_absents_are_cacheable_including_halt_reasons() {
         let cell = new_cell_id();
         let runs = Rc::new(Cell::new(0));
         let result = absent::value(reason);
-        let (_, source) = definitions(
-            &runtime,
-            vec![(
-                cell,
-                Resolution::Document,
-                counted(cell, &runs, result.clone()),
-            )],
-        );
+        let (_, source) = definitions(&runtime, vec![(cell, counted(cell, &runs, result.clone()))]);
         let query = evaluate(
             &runtime,
             source,

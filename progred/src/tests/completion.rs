@@ -5,7 +5,7 @@ use crate::selection::{Stage, pending_edge};
 use crate::test_support::{
     core_libraries, inserted_value, projected_completion_entries, root_completions, src,
 };
-use gid::{Cells, Document, Resolution, Step, new_cell_id};
+use gid::{Cells, Document, Step, new_cell_id};
 use std::rc::Rc;
 
 #[test]
@@ -145,7 +145,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
             selected.path(),
             [
                 crate::occurrence::of(&main),
-                crate::occurrence::of(&[Step::Key(field), Step::Follow(Resolution::Document)]),
+                crate::occurrence::of(&[Step::Key(field), Step::Follow]),
             ]
             .concat()
         );
@@ -215,7 +215,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
             crate::test_examples::main_part(),
             vec![
                 Step::Key(crate::libraries::grap::vocabulary::GRAP),
-                Step::Follow(Resolution::Document),
+                Step::Follow,
             ],
         ]
         .concat()

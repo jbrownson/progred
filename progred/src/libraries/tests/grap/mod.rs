@@ -54,10 +54,10 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
     let mut cells = [new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id()];
     cells.sort();
     let definitions = [
-        (gid::Resolution::Library(library), "Zoo"),
-        (gid::Resolution::Document, "sun"),
-        (gid::Resolution::Library(library), "apple"),
-        (gid::Resolution::Document, "Clouds"),
+        (Some(library), "Zoo"),
+        (None, "sun"),
+        (Some(library), "apple"),
+        (None, "Clouds"),
     ]
     .map(|(source, name)| {
         (
@@ -81,7 +81,7 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
                 .iter()
                 .position(|candidate| *candidate == cell)
                 .map(|index| ResolvedCell {
-                    resolution: definitions[index].0,
+                    library: definitions[index].0,
                     value: &definitions[index].1,
                     native: false,
                 })
@@ -175,7 +175,7 @@ fn projected(
 
 #[test]
 fn declaration_cells_follow_their_source_and_edit_the_name_field() {
-    struct DefinitionEnv(Value, gid::Resolution);
+    struct DefinitionEnv(Value);
     impl Env for DefinitionEnv {
         fn apply_expression_runtime(
             &self,
@@ -224,18 +224,15 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
         fn resolve(&self, _: CellId) -> Option<ResolvedCell<'_>> {
             Some(ResolvedCell {
                 value: &self.0,
-                resolution: self.1,
                 native: false,
+                library: None,
             })
         }
     }
 
-    for source in [
-        gid::Resolution::Document,
-        gid::Resolution::Library(new_cell_id()),
-    ] {
+    {
         for spelling in ["size", ""] {
-            let env = DefinitionEnv(name::record(spelling, []), source);
+            let env = DefinitionEnv(name::record(spelling, []));
             let cell = Value::from(new_cell_id());
             let declaration = declaration_cell(
                 &projection_input(&env, &cell).with_value(Some(&(&cell).into())),
@@ -255,7 +252,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             else {
                 panic!("a declaration follows the cell definition");
             };
-            assert_eq!(*steps, [Step::Follow(source)]);
+            assert_eq!(*steps, [Step::Follow]);
             assert!(*part, "the cell and its definition are one thing");
             let ProjectionCall::Descend {
                 steps,
@@ -391,7 +388,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     let reference = Value::from(function);
     let resolve = |cell| {
         Some(ResolvedCell {
-            resolution: gid::Resolution::Library(ID),
+            library: Some(ID),
             value: if cell == alias { &reference } else { &lambda },
             native: false,
         })
@@ -403,7 +400,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     assert_eq!(function_parameters(&(&reference).into(), &|_| None), None);
     assert_eq!(
         function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
-            resolution: gid::Resolution::Document,
+            library: None,
             value: &reference,
             native: false,
         })),
@@ -416,7 +413,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     ] {
         assert_eq!(
             function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
-                resolution: gid::Resolution::Library(ID),
+                library: Some(ID),
                 value: description,
                 native: true,
             })),
@@ -720,7 +717,7 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
 
         fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
             (cell == FUNCTION_CELL).then_some(ResolvedCell {
-                resolution: gid::Resolution::Document,
+                library: None,
                 value: &self.definition,
                 native: self.native,
             })
@@ -1260,11 +1257,7 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
         }),
         crate::driver::Driver::VIEWPORT,
     );
-    let params = [
-        Step::Key(vocabulary::GRAP),
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(PARAMS),
-    ];
+    let params = [Step::Key(vocabulary::GRAP), Step::Follow, Step::Key(PARAMS)];
     driver.select(&params);
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("x");
@@ -1313,11 +1306,7 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
         }),
         crate::driver::Driver::VIEWPORT,
     );
-    let params = [
-        Step::Key(vocabulary::GRAP),
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(PARAMS),
-    ];
+    let params = [Step::Key(vocabulary::GRAP), Step::Follow, Step::Key(PARAMS)];
     driver.select(&params);
     assert!(driver.keystroke(
         ui_events::keyboard::Key::Named(NamedKey::Enter),
@@ -1332,7 +1321,7 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
     let name = [
         parameter.as_slice(),
         &[
-            Step::Follow(gid::Resolution::Document),
+            Step::Follow,
             Step::Key(crate::libraries::name::vocabulary::NAME),
         ],
     ]
@@ -1389,10 +1378,7 @@ fn a_new_lambda_starts_at_its_first_parameter() {
     use ui_events::keyboard::NamedKey;
     let mut driver =
         crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
-    let program = [
-        Step::Key(vocabulary::GRAP),
-        Step::Follow(gid::Resolution::Document),
-    ];
+    let program = [Step::Key(vocabulary::GRAP), Step::Follow];
     driver.select(&program);
     driver.type_text("λ");
     driver.choose("new lambda");
@@ -1431,10 +1417,7 @@ fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
     use ui_events::keyboard::NamedKey;
     let mut driver =
         crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
-    let program = [
-        Step::Key(vocabulary::GRAP),
-        Step::Follow(gid::Resolution::Document),
-    ];
+    let program = [Step::Key(vocabulary::GRAP), Step::Follow];
     driver.select(&program);
     driver.choose("new call");
     let function = [&program[..], &[Step::Key(FUNCTION)]].concat();

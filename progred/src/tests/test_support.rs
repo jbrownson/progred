@@ -77,8 +77,8 @@ pub(crate) fn test_document() -> Rc<crate::workspace::View> {
 /// A Grap host resolving each cell through its function.
 pub(crate) struct TestHost<F>(pub F);
 
-impl<F: Fn(CellId) -> Option<(gid::Resolution, grap::Definition)>> grap::Host for TestHost<F> {
-    fn resolve(&self, cell: CellId) -> Option<(gid::Resolution, grap::Definition)> {
+impl<F: Fn(CellId) -> Option<grap::Definition>> grap::Host for TestHost<F> {
+    fn resolve(&self, cell: CellId) -> Option<grap::Definition> {
         (self.0)(cell)
     }
 }
@@ -88,17 +88,14 @@ pub(crate) fn test_host<'a>(
     resolve: impl Fn(CellId) -> Option<Value> + 'a,
     foreign: &'a grap::ForeignFunctions,
 ) -> impl grap::Host + 'a {
-    TestHost(move |cell| {
-        match (resolve(cell), foreign.get(cell)) {
-            (value, Some(function)) => Some(grap::Definition::foreign(
-                cell,
-                value.unwrap_or_else(|| Value::record([])),
-                function.clone(),
-            )),
-            (Some(value), None) => Some(grap::Definition::Value(value)),
-            (None, None) => None,
-        }
-        .map(|definition| (gid::Resolution::Document, definition))
+    TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
+        (value, Some(function)) => Some(grap::Definition::foreign(
+            cell,
+            value.unwrap_or_else(|| Value::record([])),
+            function.clone(),
+        )),
+        (Some(value), None) => Some(grap::Definition::Value(value)),
+        (None, None) => None,
     })
 }
 
@@ -300,7 +297,7 @@ pub(crate) fn value_at<'a>(value: &'a Value, spine: &[Step]) -> Option<&'a Value
     spine.iter().try_fold(value, |value, step| match step {
         Step::Key(label) => value.as_record()?.get(label),
         Step::Element(position) => value.as_list()?.get(position),
-        Step::Follow(_) => None,
+        Step::Follow => None,
     })
 }
 

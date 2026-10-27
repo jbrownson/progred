@@ -506,19 +506,18 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
     );
     let before = world.model.doc.clone();
     let mut driver = Driver::new(world, Driver::VIEWPORT);
-    let definition = gid::Resolution::Library(text::ID);
     let path = [
         Step::Key(source),
         Step::Computed,
         Step::Key(field),
-        Step::jump(Location::in_cell(text::ID, definition, Vec::new())),
+        Step::jump(Location::in_cell(text::ID, Vec::new())),
     ];
     driver.select(&path);
     let editor = driver.editor();
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(
         selected.location(),
-        Some(Location::in_cell(text::ID, definition, Vec::new()))
+        Some(Location::in_cell(text::ID, Vec::new()))
     );
     assert!(selected.value(&editor.sources()).is_some());
     assert!(!selected.writable(&editor.sources()));
@@ -535,22 +534,14 @@ fn a_cell_followed_from_a_computed_value_is_its_stored_definition() {
         Step::Key(source),
         Step::Computed,
         Step::Key(field),
-        Step::jump(Location::in_cell(
-            cell,
-            gid::Resolution::Document,
-            Vec::new(),
-        )),
+        Step::jump(Location::in_cell(cell, Vec::new())),
     ];
     driver.select(&path);
     let selected = driver.editor().model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), path);
     assert_eq!(
         selected.location(),
-        Some(Location::in_cell(
-            cell,
-            gid::Resolution::Document,
-            Vec::new()
-        ))
+        Some(Location::in_cell(cell, Vec::new()))
     );
     assert!(driver.paste(&text::value("pasted")));
     assert_eq!(

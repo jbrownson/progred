@@ -63,8 +63,8 @@ pub fn descend_key(key: CellId) -> Value {
     descend_step(Step::Key(key))
 }
 
-pub fn descend_follow(resolution: gid::Resolution) -> Value {
-    descend_step(Step::Follow(resolution))
+pub fn descend_follow() -> Value {
+    descend_step(Step::Follow)
 }
 
 pub fn descend_step(step: Step) -> Value {

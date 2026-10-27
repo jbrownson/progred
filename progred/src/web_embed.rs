@@ -4,7 +4,7 @@ use crate::display::widget::view::Area;
 use crate::location::{Location, Start};
 use crate::{Editor, selection::Stage};
 use ::grap::path;
-use gid::{Document, Resolution, Step, Value};
+use gid::{Document, Step, Value};
 use std::rc::Rc;
 
 pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack, String> {
@@ -269,18 +269,13 @@ struct Selection {
     stage: Stage,
 }
 
-/// A stored location as JSON: the cell whose definition it starts in, and the
-/// library defining that cell when the document doesn't, then the path from
-/// there.
+/// A stored location as JSON: the cell whose definition it starts in, if
+/// any, then the path from there.
 fn source(location: &Location) -> serde_json::Value {
     match location.start {
         Start::Root => serde_json::json!({"path": value_json(&path::value(&location.path))}),
-        Start::Cell { cell, resolution } => serde_json::json!({
+        Start::Cell(cell) => serde_json::json!({
             "cell": cell.to_string(),
-            "library": match resolution {
-                Resolution::Document => None,
-                Resolution::Library(library) => Some(library.to_string()),
-            },
             "path": value_json(&path::value(&location.path)),
         }),
     }

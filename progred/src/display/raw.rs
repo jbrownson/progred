@@ -88,17 +88,7 @@ fn cell_view<W: Host>(
     let resolved = input.env.resolve(cell);
     let open = crate::display::structure::authoring(crate::display::selectable_bracket(
         Delim::Paren,
-        crate::display::descend(
-            [gid::Step::Follow(
-                resolved
-                    .as_ref()
-                    .map_or(gid::Resolution::Document, |definition| {
-                        definition.resolution
-                    }),
-            )],
-            None,
-            None,
-        ),
+        crate::display::descend([gid::Step::Follow], None, None),
     ));
     let Some(definition) = resolved else {
         return open;

@@ -11,7 +11,6 @@ pub mod vocabulary {
     pub const STORED: CellId = CellId::from_u128(0x7548280579760b782d1f1ce75b5394e9);
     pub const CELL: CellId = CellId::from_u128(0xad9b456873ec85947b96bab375b3e28e);
     pub const PATH: CellId = CellId::from_u128(0x7da5a4ab1d994cc1f9df7af5668b6c85);
-    pub const SOURCE: CellId = CellId::from_u128(0xb6e1a63b61cda48d634807e0ff298a68);
 }
 
 pub fn value(origin: &SourceOrigin) -> Value {
@@ -19,15 +18,9 @@ pub fn value(origin: &SourceOrigin) -> Value {
     match origin {
         SourceOrigin::Input(steps) => Value::record([(INPUT, path::value(steps))]),
         SourceOrigin::Stored(steps) => Value::record([(STORED, path::value(steps))]),
-        SourceOrigin::Cell {
-            cell,
-            resolution,
-            path: steps,
-        } => Value::record([
-            (CELL, (*cell).into()),
-            (SOURCE, path::resolution_value(*resolution)),
-            (PATH, path::value(steps)),
-        ]),
+        SourceOrigin::Cell { cell, path: steps } => {
+            Value::record([(CELL, (*cell).into()), (PATH, path::value(steps))])
+        }
     }
 }
 
@@ -39,7 +32,6 @@ pub fn read(value: &Value) -> Option<SourceOrigin> {
         (None, Some(steps), None) => path::read(steps).map(SourceOrigin::Stored),
         (None, None, Some(cell)) => Some(SourceOrigin::Cell {
             cell: cell.as_cell()?,
-            resolution: path::read_resolution(fields.get(&SOURCE)?)?,
             path: path::read(fields.get(&PATH)?)?,
         }),
         _ => None,
@@ -59,11 +51,7 @@ pub(crate) fn origin(expression: &Expression) -> Option<SourceOrigin> {
             prefix.extend(path);
             base
         }
-        OriginRoot::Cell { cell, resolution } => SourceOrigin::Cell {
-            cell: *cell,
-            resolution: *resolution,
-            path,
-        },
+        OriginRoot::Cell(cell) => SourceOrigin::Cell { cell: *cell, path },
     })
 }
 

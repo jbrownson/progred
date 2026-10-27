@@ -4,7 +4,7 @@ use crate::libraries::{fidget, name, text};
 use crate::library::Libraries;
 use crate::selection::payload as selection_payload;
 use crate::test_support::{activated, src, test_entry};
-use gid::{Cells, Document, Resolution, Step, new_cell_id};
+use gid::{Cells, Document, Step, new_cell_id};
 
 #[test]
 fn retained_completion_offers_follow_live_names_before_filtering() {
@@ -88,7 +88,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
 }
 
 #[test]
-fn providers_receive_the_query_kind_and_source_qualified_list_path() {
+fn providers_receive_the_query_kind_and_the_path_through_a_followed_cell() {
     use crate::display::{CompletionKind, CompletionProvider, CompletionScope};
     let cell = new_cell_id();
     let present = new_cell_id();
@@ -105,19 +105,14 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         )),
     )])
     .0;
-    let mut cells = Cells::new();
-    cells.set_value(cell, text::value("document"));
     let list = Value::list([cell.into()]);
     let position = list.as_list().unwrap().keys().next().unwrap().clone();
     let document = Document {
         root: Some(list),
-        cells,
+        cells: Cells::new(),
     };
     let sources = src(&document, &libraries);
-    let path = vec![
-        Step::Element(position),
-        Step::Follow(Resolution::Library(library_id)),
-    ];
+    let path = vec![Step::Element(position), Step::Follow];
     let expected_path = path.clone();
     let provider: crate::display::CompletionProvider = Rc::new(move |request| {
         assert_eq!(request.path, expected_path);

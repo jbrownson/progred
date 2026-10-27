@@ -40,10 +40,7 @@ fn value_at_walks_keys_and_elements() {
     );
     assert_eq!(value_at(&value, &[key("missing")]), None);
     assert_eq!(value_at(&value, &[key("name"), key("deeper")]), None);
-    assert_eq!(
-        value_at(&value, &[Step::Follow(gid::Resolution::Document)]),
-        None
-    );
+    assert_eq!(value_at(&value, &[Step::Follow]), None);
 }
 
 #[test]
@@ -94,14 +91,7 @@ fn set_replaces_inserts_and_rebuilds_deeply() {
     // caller's boundary.
     assert!(set(Some(&value), &[key("missing"), key("x")], blob("v")).is_none());
     assert!(set(Some(&value), &[key("name"), key("x")], blob("v")).is_none());
-    assert!(
-        set(
-            Some(&value),
-            &[Step::Follow(gid::Resolution::Document)],
-            blob("v")
-        )
-        .is_none()
-    );
+    assert!(set(Some(&value), &[Step::Follow], blob("v")).is_none());
     assert!(set(None, &[key("x")], blob("v")).is_none());
     // An empty spine authors the value whole — a bare cell's
     // first value, the root's replacement.
@@ -134,7 +124,7 @@ fn without_removes_fields_and_elements() {
 
     assert!(without(&value, &[]).is_none());
     assert!(without(&value, &[key("missing")]).is_none());
-    assert!(without(&value, &[Step::Follow(gid::Resolution::Document)]).is_none());
+    assert!(without(&value, &[Step::Follow]).is_none());
 }
 
 #[test]

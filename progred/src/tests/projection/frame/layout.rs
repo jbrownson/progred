@@ -81,7 +81,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
     let result = gid::new_cell_id();
     struct Empty;
     impl ::grap::Host for Empty {
-        fn resolve(&self, _: CellId) -> Option<(gid::Resolution, ::grap::Definition)> {
+        fn resolve(&self, _: CellId) -> Option<::grap::Definition> {
             None
         }
     }
@@ -460,10 +460,7 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
         root: Some(Value::from(new_cell_id())),
         cells: Cells::new(),
     };
-    let selected = pending_value(
-        &crate::test_document(),
-        vec![Step::Follow(gid::Resolution::Document)],
-    );
+    let selected = pending_value(&crate::test_document(), vec![Step::Follow]);
     let mut context = BenchContext::new();
     for scale in [1.0, 2.0] {
         context.styles = crate::display::widget::style::editor(
@@ -511,7 +508,7 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
 }
 
 #[test]
-fn secondary_marks_only_the_same_definition_in_other_occurrences() {
+fn secondary_marks_the_same_definition_in_other_occurrences() {
     let stack = crate::stack::load();
     let cell = name::vocabulary::NAME;
     let mut cells = Cells::new();
@@ -527,23 +524,17 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         root: Some(root),
         cells,
     };
-    let path = |index: usize, source| {
+    let path = |index: usize| {
         vec![
             Step::Element(positions[index].clone()),
-            Step::Follow(source),
+            Step::Follow,
             Step::Key(name::vocabulary::NAME),
         ]
     };
-    for source in [
-        gid::Resolution::Document,
-        gid::Resolution::Library(name::ID),
-    ] {
-        let selected = Selection::edge(&crate::test_document(), path(0, source));
+    {
+        let selected = Selection::edge(&crate::test_document(), path(0));
         let (bench, _) = place(&doc, Some(&selected), 900.0);
-        let target = bench
-            .landmarks
-            .landmark(&path(1, gid::Resolution::Document))
-            .unwrap();
+        let target = bench.landmarks.landmark(&path(1)).unwrap();
         let marks: Vec<_> = bench
             .list
             .0
@@ -566,14 +557,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
                 _ => None,
             })
             .collect();
-        assert_eq!(
-            marks,
-            if source == gid::Resolution::Document {
-                vec![highlight_outline(1.0, target.rect)]
-            } else {
-                vec![]
-            }
-        );
+        assert_eq!(marks, vec![highlight_outline(1.0, target.rect)]);
     }
 }
 
@@ -593,7 +577,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
     let paths = [0, 1].map(|index| {
         vec![
             Step::Element(positions[index].clone()),
-            Step::Follow(gid::Resolution::Document),
+            Step::Follow,
             Step::Element(position.clone()),
         ]
     });
@@ -688,11 +672,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
 #[test]
 fn sample_text_line_claims_its_own_hover() {
     let doc = sample_document();
-    let path = crate::occurrence::of(&[
-        key("style"),
-        gid::Step::Follow(gid::Resolution::Document),
-        key("color"),
-    ]);
+    let path = crate::occurrence::of(&[key("style"), gid::Step::Follow, key("color")]);
     let (bench, _) = place(&doc, None, 900.0);
     let rect = bench
         .landmarks
@@ -1402,9 +1382,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         bench
             .landmarks
             .iter()
-            .find(|landmark| {
-                landmark.path == [Step::Follow(gid::Resolution::Document), Step::Key(key)][..]
-            })
+            .find(|landmark| landmark.path == [Step::Follow, Step::Key(key)][..])
             .expect("the cell's record field has a landmark")
     };
     let mut fields = [field(upper_key), field(lower_key)];

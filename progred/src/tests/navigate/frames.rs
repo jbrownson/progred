@@ -152,7 +152,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                 let body: Path = paths[1]
                     .iter()
                     .cloned()
-                    .chain(in_cell.then_some(Step::Follow(gid::Resolution::Document)))
+                    .chain(in_cell.then_some(Step::Follow))
                     .collect();
                 let children: Vec<Path> = child_steps
                     .into_iter()
@@ -530,13 +530,8 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
         );
         let first = crate::occurrence::below(&body, &[Step::Element(check_positions[0].clone())]);
         let cell = crate::occurrence::below(&body, &[Step::Element(check_positions[1].clone())]);
-        let name = crate::occurrence::below(
-            &cell,
-            &[
-                Step::Follow(gid::Resolution::Document),
-                Step::Key(name::vocabulary::NAME),
-            ],
-        );
+        let name =
+            crate::occurrence::below(&cell, &[Step::Follow, Step::Key(name::vocabulary::NAME)]);
         let mut world = crate::test_editor(document.clone());
         let before = world.model.doc.clone();
         world.model.selection = Some(crate::selection::Selection::edge(
@@ -558,7 +553,7 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
             Step::Key(binders["inspection"]),
             Step::Key(binders["checks"]),
             Step::Element(check_positions[1].clone()),
-            Step::Follow(gid::Resolution::Document),
+            Step::Follow,
             Step::Key(name::vocabulary::NAME),
         ];
         // The cell's definition stores what's selected, however the outline
@@ -569,7 +564,7 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
         assert_eq!(stored, Location::root(source.as_slice()).stored(&sources));
         assert!(matches!(
             stored.map(|location| location.start),
-            Some(Start::Cell { .. })
+            Some(Start::Cell(_))
         ));
         assert!(Rc::ptr_eq(&world.model.doc, &before));
         let mut driver = Driver::new(world, Driver::VIEWPORT);
@@ -669,10 +664,7 @@ fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
     let (world, cells) = navigation_example_cells();
     let name = crate::occurrence::below(
         &cells[0],
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
+        &[Step::Follow, Step::Key(name::vocabulary::NAME)],
     );
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&cells[0]);
@@ -720,9 +712,7 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
 #[test]
 fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
     let (world, cells) = navigation_example_cells();
-    let number = |cell: &crate::occurrence::Path| {
-        crate::occurrence::below(cell, &[Step::Follow(gid::Resolution::Document)])
-    };
+    let number = |cell: &crate::occurrence::Path| crate::occurrence::below(cell, &[Step::Follow]);
     let name = |cell: &crate::occurrence::Path| {
         crate::occurrence::below(&number(cell), &[Step::Key(name::vocabulary::NAME)])
     };
@@ -779,11 +769,7 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
                 driver.press(NamedKey::ArrowLeft);
             }
         }
-        let contents: Path = paths[1]
-            .iter()
-            .cloned()
-            .chain([Step::Follow(gid::Resolution::Document)])
-            .collect();
+        let contents: Path = paths[1].iter().cloned().chain([Step::Follow]).collect();
         let stops = if start == 0 {
             [&paths[1], &contents]
         } else {

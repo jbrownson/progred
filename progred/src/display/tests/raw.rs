@@ -440,7 +440,7 @@ fn a_new_cell_list_or_record_opens_for_what_goes_inside_it() {
         driver.type_text(text);
         driver.press(NamedKey::Enter);
     };
-    let cell = [Step::Follow(gid::Resolution::Document)];
+    let cell = [Step::Follow];
     for key in ["(", "[", "{"] {
         let (mut driver, place) = made(key);
         let inside = driver.selection();

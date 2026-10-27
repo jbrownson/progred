@@ -1,6 +1,6 @@
 use super::*;
 use crate::libraries::{editor::selection as selection_data, editor::site, grap::control, text};
-use gid::{Cells, Document, Resolution, new_cell_id};
+use gid::{Cells, Document, new_cell_id};
 use std::rc::Rc;
 
 /// An occurrence at a fresh path that jumps to `source`, as a projection's
@@ -255,7 +255,7 @@ fn gesture_writes_share_the_occurrence_and_one_undo_step() {
 #[test]
 fn library_values_reached_by_a_jump_remain_read_only_and_failed_writes_change_nothing() {
     let mut editor = crate::editor_of(text::ID.into());
-    let occurrence = jump(&[gid::Step::Follow(Resolution::Library(text::ID))]);
+    let occurrence = jump(&[gid::Step::Follow]);
     let document = editor.model.doc.clone();
     assert!(read(&editor, &occurrence).is_some());
     assert!(
@@ -331,7 +331,7 @@ fn following_a_cell_starts_a_location_at_its_definition() {
     let inside = [
         reference.clone(),
         vec![
-            Step::jump(Location::in_cell(cell, Resolution::Document, vec![])),
+            Step::jump(Location::in_cell(cell, vec![])),
             Step::Key(inner),
         ],
     ]
@@ -354,12 +354,12 @@ fn a_route_through_a_cell_and_its_definitions_location_are_the_same_place() {
     let (editor, [field, inner, cell]) = referenced_cell();
     let routed = crate::occurrence::of(&[
         gid::Step::Key(field),
-        gid::Step::Follow(Resolution::Document),
+        gid::Step::Follow,
         gid::Step::Key(inner),
     ]);
     let jumped = vec![
         Step::Key(field),
-        Step::jump(Location::in_cell(cell, Resolution::Document, vec![])),
+        Step::jump(Location::in_cell(cell, vec![])),
         Step::Key(inner),
     ];
     let [routed_location, jumped_location] =

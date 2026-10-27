@@ -182,7 +182,7 @@ pub(crate) fn author_in<W>(
     // value a cell there refers to: a cheap test before the full one.
     let reached = container
         .iter()
-        .rposition(|step| !matches!(step, Step::Follow(_)))
+        .rposition(|step| !matches!(step, Step::Follow))
         .map_or(&[][..], |last| &container[..=last]);
     let within = command.pressed(&event.modifiers);
     let sources = session.sources();

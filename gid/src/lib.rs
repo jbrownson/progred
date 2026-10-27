@@ -25,7 +25,7 @@ pub use document::Document;
 pub use entries::{Entries, sorted_entries};
 pub use hex::{hex_string, read_hex};
 pub use list::List;
-pub use path::{Path, Resolution, Step};
+pub use path::{Path, Step};
 pub use position::Position;
 pub use record::Record;
 pub use value::Value;

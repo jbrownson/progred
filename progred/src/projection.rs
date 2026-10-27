@@ -170,7 +170,7 @@ impl crate::display::Viewing for Occurrence<'_> {
     }
 
     fn writable(&self) -> bool {
-        self.ancestors.writable()
+        self.ancestors.writable(&self.cx.sources)
     }
 
     fn host(&self) -> &dyn grap::Host {
@@ -202,7 +202,7 @@ impl crate::display::Viewing for Occurrence<'_> {
     fn inside_a_cell(&self) -> bool {
         self.ancestors
             .enclosing
-            .is_some_and(|(_, _, start)| self.path.len() > start)
+            .is_some_and(|(_, start)| self.path.len() > start)
     }
 }
 
@@ -362,7 +362,7 @@ impl crate::display::Env for Occurrence<'_> {
             |value, step| match step {
                 gid::Step::Key(field) => value.as_record()?.get(field),
                 gid::Step::Element(position) => value.as_list()?.get(position),
-                gid::Step::Follow(_) => None,
+                gid::Step::Follow => None,
             },
         )
     }
@@ -373,7 +373,7 @@ struct Ancestry {
     /// Cells crossed by `Follow`, used to stop projection cycles.
     cells: HashSet<CellId>,
     /// The nearest followed definition and the start of its relative path.
-    enclosing: Option<(CellId, gid::Resolution, usize)>,
+    enclosing: Option<(CellId, usize)>,
     /// Where the data here is stored starts, as
     /// [`crate::occurrence::stored_start`] finds it from the path, kept as
     /// the projection descends so no occurrence reads its route again. None
@@ -391,8 +391,9 @@ struct Ancestry {
 
 impl Ancestry {
     /// Whether a write can land where the data here is stored.
-    fn writable(&self) -> bool {
-        self.stored.is_some_and(crate::location::owned)
+    fn writable(&self, sources: &Sources) -> bool {
+        self.stored
+            .is_some_and(|start| crate::location::owned(sources, start))
     }
 }
 
@@ -460,42 +461,34 @@ impl ProjectionScope<'_, '_> {
         let mut value = self.value.cloned();
         for step in steps {
             let followed = match step {
-                gid::Step::Follow(source) => value
-                    .as_ref()
-                    .and_then(grap::RuntimeValue::as_cell)
-                    .map(|cell| (cell, *source)),
+                gid::Step::Follow => value.as_ref().and_then(grap::RuntimeValue::as_cell),
                 gid::Step::Key(_) | gid::Step::Element(_) => None,
             };
             let step_here = match followed {
                 // A cell inside a computed value has no stored route to it, so
                 // following it jumps to its definition, which starts a
                 // location again.
-                Some((cell, source)) if path.computed() => {
-                    Step::jump(Location::in_cell(cell, source, Vec::new()))
-                }
+                Some(cell) if path.computed() => Step::jump(Location::in_cell(cell, Vec::new())),
                 _ => step.into(),
             };
             state = state.and_then(|node| node.child(&step_here));
             path = path.push(step_here);
             match (step, followed) {
-                (_, Some((cell, source))) => {
+                (_, Some(cell)) => {
                     ancestors.cells.insert(cell);
                     ancestors.computed = None;
-                    ancestors.enclosing = Some((cell, source, path.len()));
+                    ancestors.enclosing = Some((cell, path.len()));
                     // Following a cell enters its definition, which stores
                     // what's below.
-                    ancestors.stored = Some(Start::Cell {
-                        cell,
-                        resolution: source,
-                    });
+                    ancestors.stored = Some(Start::Cell(cell));
                 }
                 // A Follow from something that isn't a cell reaches nothing.
-                (gid::Step::Follow(_), None) => ancestors.stored = None,
+                (gid::Step::Follow, None) => ancestors.stored = None,
                 _ => {}
             }
-            value = value.as_ref().and_then(|value| {
-                child::of(value, step, |cell, source| cx.sources.value(cell, source))
-            });
+            value = value
+                .as_ref()
+                .and_then(|value| child::of(value, step, |cell| cx.sources.value(cell)));
         }
         prepare_value(
             ProjectionScope {
@@ -571,7 +564,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             let location = &document;
             ancestry.cells.extend(
                 match location.start {
-                    Start::Cell { cell, .. } => Some(cell),
+                    Start::Cell(cell) => Some(cell),
                     Start::Root => None,
                 }
                 .into_iter()
@@ -580,7 +573,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                         .path
                         .iter()
                         .enumerate()
-                        .filter(|(_, step)| matches!(step, gid::Step::Follow(_)))
+                        .filter(|(_, step)| matches!(step, gid::Step::Follow))
                         .filter_map(|(i, _)| {
                             cx.sources
                                 .read_from(location.start, &location.path[..i])
@@ -780,10 +773,10 @@ fn prepare_project(
                 .map(crate::location::Location::into_owned)
         })
         .and_then(|stored| match stored.start {
-            Start::Cell { cell, resolution } => root_path
+            Start::Cell(cell) => root_path
                 .len()
                 .checked_sub(stored.path.len())
-                .map(|start| (cell, resolution, start)),
+                .map(|start| (cell, start)),
             Start::Root => None,
         });
     let cx = Cx {
@@ -802,9 +795,9 @@ fn prepare_project(
     let mut build = ChoiceBuild::default();
     let ancestry = Ancestry {
         stored: crate::occurrence::stored_start(&sources, root_path),
-        ..followed.map_or_else(Ancestry::default, |(cell, source, start)| Ancestry {
+        ..followed.map_or_else(Ancestry::default, |(cell, start)| Ancestry {
             cells: HashSet::from([cell]),
-            enclosing: Some((cell, source, start)),
+            enclosing: Some((cell, start)),
             ..Ancestry::default()
         })
     };
@@ -940,7 +933,7 @@ fn prepare_value(
     } = scope;
     // A picker over a value draws its hole instead.
     let value = scope.value.filter(|_| !cx.pending_at(path));
-    let writable = ancestors.writable();
+    let writable = ancestors.writable(&cx.sources);
     let ground = ground(cx, path, value, writable);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
     let changed_ancestors = changed_ground.map(|ground| Ancestry {
@@ -1023,7 +1016,7 @@ fn prepare_value(
                 // is the data's own, it says what's shared without reading it.
                 // An empty place shares its location too, so a hole drawn in two
                 // places is one hole.
-                let descends = path.data_from(ancestors.enclosing.map_or(0, |(_, _, start)| start));
+                let descends = path.data_from(ancestors.enclosing.map_or(0, |(_, start)| start));
                 let cell = value.and_then(grap::RuntimeValue::as_cell);
                 let secondary = if descends {
                     Some(Secondary::from_context(

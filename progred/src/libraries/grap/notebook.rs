@@ -7,7 +7,7 @@
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{Completion, alternatives, col, indent, row, selectable, shared};
-use gid::{Position, Resolution, Step, Value};
+use gid::{Position, Step, Value};
 use puri::handler::HasHandler;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -134,7 +134,7 @@ fn new_entry_hole<W: Host>() -> Layout<W> {
                         picking.commit(
                             gid::new_cell_id().into(),
                             Some(crate::selection::at(
-                                &[Step::Follow(Resolution::Document)],
+                                &[Step::Follow],
                                 crate::selection::payload::pending(&typed),
                             )),
                         );
@@ -152,10 +152,7 @@ fn entry_of<W: Host>(
     reference: &::grap::RuntimeValue,
 ) -> Option<Layout<W>> {
     let definition = input.env.resolve(reference.as_cell()?);
-    let source = definition
-        .as_ref()
-        .map_or(Resolution::Document, |definition| definition.resolution);
-    let expression = super::expression_path(input, [Step::Follow(source)]);
+    let expression = super::expression_path(input, [Step::Follow]);
     let site = input.site();
     // An entry with nothing to evaluate yet still shows its arrow, so it
     // reads as an entry, not as the expression it holds.
@@ -258,7 +255,7 @@ fn start_entry(
     let entry = list.below(&[Step::Element(fresh)]);
     let mut edit = entry.open(session);
     edit.replace(gid::new_cell_id().into()) && {
-        edit.pend(&[Step::Follow(Resolution::Document)]);
+        edit.pend(&[Step::Follow]);
         true
     }
 }
@@ -288,7 +285,7 @@ pub(super) fn starter() -> Completion {
         Some(crate::selection::pending_at(&[
             Step::Key(vocabulary::ENTRIES),
             Step::Element(first),
-            Step::Follow(Resolution::Document),
+            Step::Follow,
         ])),
     )
     .with_detail(super::ID)

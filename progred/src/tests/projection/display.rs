@@ -77,11 +77,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
             move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
-                    0 => Some(descend(
-                        [Step::Follow(gid::Resolution::Document)],
-                        None,
-                        None,
-                    )),
+                    0 => Some(descend([Step::Follow], None, None)),
                     1 => Some(at([Step::Key(field)], Value::from(vec![7]), None, None)),
                     _ => None,
                 }
