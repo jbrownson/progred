@@ -441,4 +441,5 @@ fn on_event<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/scope.rs"]
 mod tests;

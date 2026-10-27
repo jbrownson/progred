@@ -63,4 +63,5 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
 }
 
 #[cfg(test)]
+#[path = "tests/spine.rs"]
 mod tests;

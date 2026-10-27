@@ -735,4 +735,5 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverOutput<C, H> {
     }
 }
 #[cfg(test)]
+#[path = "tests/frame.rs"]
 mod tests;

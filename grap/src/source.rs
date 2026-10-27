@@ -80,4 +80,5 @@ fn route(origin: &OriginId) -> (&OriginRoot, Vec<gid::Step>) {
 }
 
 #[cfg(test)]
+#[path = "tests/source.rs"]
 mod tests;

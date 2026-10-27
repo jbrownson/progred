@@ -158,9 +158,13 @@ upstream when it can be.
   flow's test with the code that implements it, and send its keys and clicks
   through the driver: a frame's handler alone skips the shell's key routing.
 - Check visual changes without launching the app, through the SVG captures.
-- Keep a module's tests in their own file, `foo/tests.rs` declared by
-  `#[cfg(test)] mod tests;` in `foo.rs`, not inline, so reading code doesn't
-  mean reading its tests.
+- Keep test-only code out of the source folders: the tests and test support
+  of the modules in a folder live in that folder's `tests/`. `foo.rs` declares
+  its tests with `#[cfg(test)] #[path = "tests/foo.rs"] mod tests;`, a suite of
+  several files is `tests/foo/mod.rs`, and its other test-only modules are
+  `tests/foo/<name>.rs`. The crate root's go in `src/tests/` by their own
+  names, and its tests are `src/tests/lib.rs`. So reading code doesn't mean
+  reading its tests, and no folder exists only to hold them.
 - `docs/testing.md` covers the layers, captures, and opt-in GPU and performance
   tests.
 

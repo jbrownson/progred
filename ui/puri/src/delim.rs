@@ -319,4 +319,5 @@ fn tapered(
 }
 
 #[cfg(test)]
+#[path = "tests/delim.rs"]
 mod tests;

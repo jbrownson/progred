@@ -46,4 +46,5 @@ pub fn insertion_gap<W: 'static, H: Clone + PartialEq + 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/list.rs"]
 mod tests;

@@ -39,4 +39,5 @@ impl Completion {
 }
 
 #[cfg(test)]
+#[path = "tests/timer.rs"]
 mod tests;

@@ -72,4 +72,5 @@ impl Placement {
 }
 
 #[cfg(test)]
+#[path = "tests/lib.rs"]
 mod tests;

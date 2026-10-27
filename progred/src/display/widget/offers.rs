@@ -150,4 +150,5 @@ fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> (String, Vec<
 }
 
 #[cfg(test)]
+#[path = "tests/offers.rs"]
 mod tests;

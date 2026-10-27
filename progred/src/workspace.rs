@@ -1076,4 +1076,5 @@ fn allocate(weights: &[f64], total: f64, minimum: f64) -> Vec<f64> {
 }
 
 #[cfg(test)]
+#[path = "tests/workspace.rs"]
 mod tests;

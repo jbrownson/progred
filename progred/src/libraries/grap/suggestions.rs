@@ -226,4 +226,5 @@ pub(super) fn scope<'a>(
 }
 
 #[cfg(test)]
+#[path = "tests/suggestions.rs"]
 mod tests;

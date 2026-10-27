@@ -333,4 +333,5 @@ fn ranked_constructors<W: Host>(request: &CompletionRequest<'_>) -> Vec<(Entry<W
 }
 
 #[cfg(test)]
+#[path = "tests/raw.rs"]
 mod tests;

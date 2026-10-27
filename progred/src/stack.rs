@@ -222,4 +222,5 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
 ];
 
 #[cfg(test)]
+#[path = "tests/stack.rs"]
 mod tests;

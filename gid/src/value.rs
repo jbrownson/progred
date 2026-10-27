@@ -471,4 +471,5 @@ impl<'de> Deserialize<'de> for Value {
 }
 
 #[cfg(test)]
+#[path = "tests/value.rs"]
 mod tests;

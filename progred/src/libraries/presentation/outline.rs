@@ -136,4 +136,5 @@ fn heading<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
 }
 
 #[cfg(test)]
+#[path = "tests/outline/mod.rs"]
 mod tests;

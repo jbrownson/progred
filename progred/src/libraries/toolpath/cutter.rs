@@ -8,4 +8,5 @@ pub(super) use value::{functions, names};
 pub(super) use view::{color, display};
 
 #[cfg(test)]
+#[path = "tests/cutter/mod.rs"]
 mod tests;

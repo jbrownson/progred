@@ -790,7 +790,9 @@ mod view {
 pub use view::{Description, bar_height, view};
 
 #[cfg(test)]
+#[path = "tests/menu/interaction_tests.rs"]
 mod interaction_tests;
 
 #[cfg(test)]
+#[path = "tests/menu.rs"]
 mod tests;

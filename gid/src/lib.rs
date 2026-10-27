@@ -9,6 +9,10 @@ mod document;
 pub mod position;
 mod value;
 
+#[cfg(test)]
+#[path = "tests/blob_profile.rs"]
+mod blob_profile;
+
 pub use blob::Blob;
 pub use cell_id::{CellId, ParseCellIdError, new_cell_id};
 pub use cells::Cells;

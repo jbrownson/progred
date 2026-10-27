@@ -230,6 +230,8 @@ fn shape_contains(shape: &puri::draw::Shape, point: Point) -> bool {
 }
 
 #[cfg(test)]
+#[path = "tests/recorded/test_support.rs"]
 pub(crate) mod test_support;
 #[cfg(test)]
+#[path = "tests/recorded.rs"]
 mod tests;

@@ -453,4 +453,5 @@ fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -
 }
 
 #[cfg(test)]
+#[path = "tests/numbers/mod.rs"]
 mod tests;

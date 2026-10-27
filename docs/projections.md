@@ -12,7 +12,7 @@ lambda/application, value wrappers, environments, callable representations, fuel
 origins, and stable evaluator absence reasons. It has no editor, geometry,
 window, or file services.
 
-Progred's [libraries module](../progred/src/libraries/mod.rs) contains
+Progred's [libraries module](../progred/src/libraries.rs) contains
 conceptual libraries as modules alongside their editor-facing widgets, each a
 contribution through the [library interface](../progred/src/library.rs): names,
 text, f64, Grap, presentation, layout, and other domains. The built-in
@@ -148,7 +148,7 @@ evidence and stay open unless a domain explicitly defines a closed shape.
 Active field insertion can use the general presentation to keep its picker
 visible.
 
-[`ProjectionInput`](../progred/src/display/mod.rs) supplies the environment, value,
+[`ProjectionInput`](../progred/src/display.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and a
 lazily built `Site` for its occurrence. Its `default_projection` is one composed
 partial function, passed explicitly through recursion rather than buried in
@@ -557,7 +557,7 @@ back to normal projection.
 
 ## Lowering and interaction
 
-The [projection runtime](../progred/src/projection/mod.rs) resolves document
+The [projection runtime](../progred/src/projection.rs) resolves document
 locations and supplies borrowed widget inputs. The
 [box interpreter](../progred/src/display/measure.rs) composes measurements without
 interpreting document traversal or control requests. A value no projection

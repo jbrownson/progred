@@ -57,4 +57,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/u64.rs"]
 mod tests;

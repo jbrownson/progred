@@ -12,4 +12,5 @@ pub mod vocabulary {
 }
 
 #[cfg(test)]
+#[path = "tests/selection.rs"]
 pub(crate) mod tests;

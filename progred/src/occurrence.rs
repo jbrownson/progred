@@ -249,4 +249,5 @@ pub fn from_value(value: &Value) -> Option<Path> {
 }
 
 #[cfg(test)]
+#[path = "tests/occurrence.rs"]
 mod tests;

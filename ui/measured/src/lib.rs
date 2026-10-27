@@ -19,6 +19,7 @@ use uig::Placement;
 pub mod choices;
 
 #[cfg(test)]
+#[path = "tests/structure_tests.rs"]
 mod structure_tests;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -425,4 +426,5 @@ pub(crate) fn padded_placement(placement: Placement, insets: Insets, child: Exte
 }
 
 #[cfg(test)]
+#[path = "tests/lib.rs"]
 mod tests;

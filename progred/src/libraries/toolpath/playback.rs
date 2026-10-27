@@ -151,4 +151,5 @@ impl Removal {
 }
 
 #[cfg(test)]
+#[path = "tests/playback.rs"]
 mod tests;

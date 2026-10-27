@@ -29,6 +29,7 @@ mod events;
 pub use events::on_event;
 pub mod scope;
 #[cfg(test)]
+#[path = "tests/layout/test_support.rs"]
 pub(crate) mod test_support;
 
 pub mod vocabulary {
@@ -776,4 +777,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/layout/mod.rs"]
 mod tests;

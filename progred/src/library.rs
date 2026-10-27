@@ -242,4 +242,5 @@ impl ::grap::Host for Libraries {
 }
 
 #[cfg(test)]
+#[path = "tests/library.rs"]
 mod tests;

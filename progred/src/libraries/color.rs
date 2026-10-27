@@ -410,4 +410,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/color.rs"]
 pub(crate) mod tests;

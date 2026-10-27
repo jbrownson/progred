@@ -94,4 +94,5 @@ fn left(anchor: Rect, size: Size, bounds: Rect) -> f64 {
 }
 
 #[cfg(test)]
+#[path = "tests/popover.rs"]
 mod tests;

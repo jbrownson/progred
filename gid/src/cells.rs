@@ -60,4 +60,5 @@ impl<'de> Deserialize<'de> for Cells {
 }
 
 #[cfg(test)]
+#[path = "tests/cells.rs"]
 mod tests;

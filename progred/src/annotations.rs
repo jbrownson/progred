@@ -166,4 +166,5 @@ pub fn set_folded(annotations: &mut Annotations, path: &[Step], default: bool, n
 }
 
 #[cfg(test)]
+#[path = "tests/annotations.rs"]
 mod tests;

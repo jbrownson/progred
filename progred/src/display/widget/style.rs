@@ -181,4 +181,5 @@ pub fn face_style(styles: &Styles, face: crate::display::Face) -> &TextStyle {
 }
 
 #[cfg(test)]
+#[path = "tests/style.rs"]
 mod tests;

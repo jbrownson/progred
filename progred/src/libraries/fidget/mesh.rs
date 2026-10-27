@@ -7,6 +7,7 @@ use puri::mesh::{Geometry, Mesh, Surface, View};
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
 #[cfg(test)]
+#[path = "tests/mesh/mod.rs"]
 pub(crate) mod tests;
 
 const DEFAULT_DEPTH: u64 = 6;

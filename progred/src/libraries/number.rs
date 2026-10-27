@@ -238,4 +238,5 @@ pub(crate) fn rounded(value: f64, step: f64) -> f64 {
 }
 
 #[cfg(test)]
+#[path = "tests/number/mod.rs"]
 mod tests;

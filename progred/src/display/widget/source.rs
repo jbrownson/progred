@@ -154,4 +154,5 @@ impl PartialEq for Secondary {
 impl Eq for Secondary {}
 
 #[cfg(test)]
+#[path = "tests/source.rs"]
 mod tests;

@@ -174,4 +174,5 @@ pub(super) fn display<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/preview/mod.rs"]
 mod tests;

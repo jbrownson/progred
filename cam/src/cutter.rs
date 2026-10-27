@@ -9,6 +9,7 @@ mod profile;
 pub use profile::{Bend, Bounds, Point, Section, SectionKind, Segment, Tool};
 
 #[cfg(test)]
+#[path = "tests/cutter/mod.rs"]
 mod tests;
 
 /// Exact lowering for a hemisphere followed by a cylindrical profile.

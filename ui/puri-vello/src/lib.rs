@@ -5,6 +5,10 @@ pub mod capture;
 pub mod compositor;
 pub mod mesh;
 
+#[cfg(all(test, feature = "capture"))]
+#[path = "tests/gpu/mod.rs"]
+mod gpu;
+
 use puri::draw::{GlyphRun, Shape};
 use vello::Scene;
 use vello::kurbo::{Affine, Stroke};

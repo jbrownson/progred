@@ -171,4 +171,5 @@ pub fn rank_with_aliases<A, S: AsRef<str>>(
 }
 
 #[cfg(test)]
+#[path = "tests/filter.rs"]
 mod tests;

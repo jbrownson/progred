@@ -95,4 +95,5 @@ impl Reify {
 }
 
 #[cfg(test)]
+#[path = "tests/reify.rs"]
 mod tests;

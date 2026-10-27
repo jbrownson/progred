@@ -325,4 +325,5 @@ fn render_passes(
 }
 
 #[cfg(test)]
+#[path = "tests/raster/mod.rs"]
 mod tests;

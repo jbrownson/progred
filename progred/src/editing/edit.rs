@@ -155,4 +155,5 @@ impl Edit<'_> {
 }
 
 #[cfg(test)]
+#[path = "tests/edit.rs"]
 mod tests;

@@ -20,6 +20,7 @@ mod playback;
 mod preview;
 mod refined;
 #[cfg(test)]
+#[path = "tests/toolpath/mod.rs"]
 mod tests;
 
 pub const ID: CellId = CellId::from_u128(0xa3f84c8e8c0930058475518fe17bf84a);

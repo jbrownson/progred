@@ -592,4 +592,5 @@ pub fn resolve_choices<Out: crate::ObserveLayout + 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/choices/choice_tests.rs"]
 mod choice_tests;

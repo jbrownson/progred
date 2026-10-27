@@ -204,4 +204,5 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
 }
 
 #[cfg(test)]
+#[path = "tests/fidget.rs"]
 pub(super) mod tests;

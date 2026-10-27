@@ -69,4 +69,5 @@ pub fn clickable<C: 'static, P: HasHandler<C>>(
 }
 
 #[cfg(test)]
+#[path = "tests/interact.rs"]
 mod tests;

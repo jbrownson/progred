@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 pub(super) mod computation;
 #[cfg(test)]
+#[path = "tests/mesh.rs"]
 mod tests;
 mod tubes;
 

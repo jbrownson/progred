@@ -161,4 +161,5 @@ pub(crate) fn hover_secondary<C>(
 }
 
 #[cfg(test)]
+#[path = "tests/hover.rs"]
 mod tests;

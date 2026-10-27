@@ -274,4 +274,5 @@ impl std::fmt::Debug for Trail {
 }
 
 #[cfg(test)]
+#[path = "tests/trail.rs"]
 mod tests;

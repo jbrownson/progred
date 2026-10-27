@@ -12,6 +12,7 @@ use std::sync::{
 pub mod background;
 
 #[cfg(test)]
+#[path = "tests/lib.rs"]
 mod tests;
 
 #[derive(Clone, Default)]

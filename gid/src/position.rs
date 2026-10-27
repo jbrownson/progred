@@ -147,4 +147,5 @@ fn between_bytes(low: &[u8], high: Option<&[u8]>) -> Vec<u8> {
 }
 
 #[cfg(test)]
+#[path = "tests/position.rs"]
 mod tests;

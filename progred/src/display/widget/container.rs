@@ -89,4 +89,5 @@ pub fn gate_starts<World: 'static, Input: 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/container.rs"]
 mod tests;

@@ -82,4 +82,5 @@ impl EditRun {
 }
 
 #[cfg(test)]
+#[path = "tests/gesture.rs"]
 mod tests;

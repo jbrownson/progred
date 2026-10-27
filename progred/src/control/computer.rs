@@ -406,4 +406,5 @@ fn key_named(name: &str) -> Option<Key> {
 }
 
 #[cfg(test)]
+#[path = "tests/computer.rs"]
 mod tests;

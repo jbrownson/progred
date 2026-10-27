@@ -428,4 +428,5 @@ impl Toggles {
 }
 
 #[cfg(test)]
+#[path = "tests/command.rs"]
 mod tests;

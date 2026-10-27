@@ -182,4 +182,5 @@ impl Observer for Answering {
 }
 
 #[cfg(test)]
+#[path = "tests/trace.rs"]
 mod tests;

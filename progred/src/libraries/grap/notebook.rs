@@ -295,4 +295,5 @@ pub(super) fn starter() -> Completion {
 }
 
 #[cfg(test)]
+#[path = "tests/notebook.rs"]
 mod tests;

@@ -15,6 +15,7 @@ use incremental::{Input, Memo};
 use std::rc::Rc;
 
 #[cfg(test)]
+#[path = "tests/refined.rs"]
 mod tests;
 
 pub(super) fn preview(

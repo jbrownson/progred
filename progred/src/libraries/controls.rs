@@ -14,6 +14,7 @@ use puri_widgets::slider::Slider;
 use std::{cell::RefCell, rc::Rc};
 
 #[cfg(test)]
+#[path = "tests/controls.rs"]
 mod tests;
 pub(crate) mod tree_range;
 

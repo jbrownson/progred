@@ -218,4 +218,5 @@ impl grap::Host for Sources<'_> {
 }
 
 #[cfg(test)]
+#[path = "tests/sources.rs"]
 mod tests;

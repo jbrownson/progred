@@ -123,4 +123,5 @@ impl Model {
 }
 
 #[cfg(test)]
+#[path = "tests/model.rs"]
 mod tests;

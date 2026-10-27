@@ -142,4 +142,5 @@ fn record(
 }
 
 #[cfg(test)]
+#[path = "tests/computation.rs"]
 mod tests;

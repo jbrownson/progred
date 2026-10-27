@@ -23,6 +23,7 @@ mod frame;
 mod gesture;
 mod gid_text;
 #[cfg(test)]
+#[path = "tests/grap_examples.rs"]
 mod grap_examples;
 mod history;
 mod hover;
@@ -45,6 +46,7 @@ mod occurrence;
 #[cfg(feature = "cam-profile")]
 pub mod orbit_profile;
 #[cfg(test)]
+#[path = "tests/perf/mod.rs"]
 mod perf;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod picture;
@@ -52,26 +54,33 @@ mod picture;
 mod platform;
 mod projection;
 #[cfg(test)]
+#[path = "tests/sample/mod.rs"]
 mod sample;
 mod selection;
 #[cfg(test)]
+#[path = "tests/shell_tests/mod.rs"]
 mod shell_tests;
 mod site;
 mod sources;
 mod spine;
 mod stack;
 #[cfg(test)]
+#[path = "tests/svg/mod.rs"]
 mod svg;
 #[cfg(test)]
+#[path = "tests/test_examples.rs"]
 mod test_examples;
 #[cfg(test)]
+#[path = "tests/test_support.rs"]
 mod test_support;
 #[cfg(test)]
+#[path = "tests/test_values.rs"]
 mod test_values;
 #[cfg(not(target_arch = "wasm32"))]
 mod text_store;
 mod timers;
 #[cfg(test)]
+#[path = "tests/tutorials/mod.rs"]
 mod tutorials;
 #[cfg(target_arch = "wasm32")]
 mod web;

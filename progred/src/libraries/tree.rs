@@ -10,6 +10,7 @@ use gid::{CellId, Value};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(test)]
+#[path = "tests/tree/mod.rs"]
 mod tests;
 
 pub const ID: CellId = CellId::from_u128(0x0680eec8cc78f0aebe7ab8a68562a65f);

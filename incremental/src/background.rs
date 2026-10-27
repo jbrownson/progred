@@ -6,6 +6,7 @@ use concurrent_queue::ConcurrentQueue;
 use std::sync::{Arc, Mutex, mpsc};
 
 #[cfg(test)]
+#[path = "tests/background.rs"]
 mod tests;
 
 pub type Job = Box<dyn FnOnce() + Send + 'static>;

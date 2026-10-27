@@ -23,4 +23,5 @@ impl Debounce {
 }
 
 #[cfg(test)]
+#[path = "tests/debounce.rs"]
 mod tests;

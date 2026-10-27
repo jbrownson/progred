@@ -254,4 +254,5 @@ fn last_follow(path: &[Step]) -> Option<(&[Step], Resolution, &[Step])> {
 }
 
 #[cfg(test)]
+#[path = "tests/location.rs"]
 mod tests;

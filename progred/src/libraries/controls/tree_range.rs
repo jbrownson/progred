@@ -376,4 +376,5 @@ fn range_widget<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/tree_range.rs"]
 mod tests;

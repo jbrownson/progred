@@ -483,4 +483,5 @@ impl EditorRunner {
 }
 
 #[cfg(test)]
+#[path = "tests/input.rs"]
 mod tests;

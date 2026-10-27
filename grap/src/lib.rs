@@ -12,9 +12,11 @@ use unboxed::{Native, Unboxed};
 pub use trace::{Answering, CallTrace, Observed, Observer, Tracer};
 
 #[cfg(test)]
+#[path = "tests/effect_tests.rs"]
 mod effect_tests;
 
 #[cfg(test)]
+#[path = "tests/runtime_tests.rs"]
 mod runtime_tests;
 
 pub mod absent;
@@ -2615,4 +2617,5 @@ impl<F: Fn(CellId) -> Vec<(Resolution, Definition)>> Host for TestHost<F> {
 }
 
 #[cfg(test)]
+#[path = "tests/lib.rs"]
 mod tests;

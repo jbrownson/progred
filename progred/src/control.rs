@@ -387,4 +387,5 @@ pub fn main() {
 }
 
 #[cfg(test)]
+#[path = "tests/control.rs"]
 mod tests;

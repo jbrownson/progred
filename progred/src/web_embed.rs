@@ -361,4 +361,5 @@ impl Observer {
 }
 
 #[cfg(test)]
+#[path = "tests/web_embed/mod.rs"]
 mod tests;

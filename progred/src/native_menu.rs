@@ -475,4 +475,5 @@ fn checked(
 }
 
 #[cfg(test)]
+#[path = "tests/native_menu.rs"]
 mod tests;

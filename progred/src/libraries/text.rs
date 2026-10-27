@@ -88,4 +88,5 @@ fn completions(
 }
 
 #[cfg(test)]
+#[path = "tests/text.rs"]
 mod tests;

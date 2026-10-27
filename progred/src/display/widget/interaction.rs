@@ -58,4 +58,5 @@ pub(crate) fn pick<W: Host>(world: &mut W, value: &grap::RuntimeValue) -> bool {
 }
 
 #[cfg(test)]
+#[path = "tests/interaction.rs"]
 mod tests;

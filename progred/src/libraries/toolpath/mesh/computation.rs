@@ -239,4 +239,5 @@ pub(crate) fn paths(record: &Recorded, style: &PathStyle) -> Outcome<Mesh> {
 }
 
 #[cfg(test)]
+#[path = "tests/computation.rs"]
 mod tests;

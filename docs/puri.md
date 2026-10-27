@@ -137,7 +137,7 @@ interpreter-local slots, consumed by parent operations; they are not persistent
 identities or paths. Shared children use an explicit sharing key and prepare
 only once per frame. The selected graph invokes its leaves directly, and opaque
 wrappers receive a child's extent and placement callback once choices have
-settled. [`recording`](../progred/src/display/recording.rs) is a test-only
+settled. [`recording`](../progred/src/tests/display/recording/mod.rs) is a test-only
 implementation of the same calls that retains structure for inspection without
 executing opaque widget programs; production has no layout enum. Layout
 programs are reusable closures, so their captures and the choice graph still
@@ -242,7 +242,7 @@ Puri does not know this policy; it still receives ordinary events and handlers.
 [Navigation](navigation.md) covers how whole values and multiline blocks join
 lines, dispatch, the arrow policy, and arrival.
 
-The [projection helpers](../progred/src/display/mod.rs) beside `row` and `col`
+The [projection helpers](../progred/src/display.rs) beside `row` and `col`
 compose common inline-or-indented head/body layouts. They use the ordinary
 layout functions; projections declare nothing for navigation, so there are no
 navigation-specific wrappers.

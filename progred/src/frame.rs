@@ -1067,8 +1067,11 @@ fn project_frame(
 }
 
 #[cfg(test)]
+#[path = "tests/frame/placement_tests.rs"]
 mod placement_tests;
 #[cfg(test)]
+#[path = "tests/frame/test_support.rs"]
 pub(crate) mod test_support;
 #[cfg(test)]
+#[path = "tests/frame.rs"]
 mod tests;

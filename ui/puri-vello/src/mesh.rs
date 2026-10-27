@@ -480,4 +480,5 @@ impl Renderer {
 }
 
 #[cfg(test)]
+#[path = "tests/mesh.rs"]
 mod tests;

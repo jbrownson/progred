@@ -308,4 +308,5 @@ fn set_selection(
 }
 
 #[cfg(test)]
+#[path = "tests/site.rs"]
 mod tests;

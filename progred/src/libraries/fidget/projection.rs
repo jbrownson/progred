@@ -9,6 +9,7 @@ use crate::libraries::representation::{self, Precedence};
 use gid::{CellId, Step, Value};
 
 #[cfg(test)]
+#[path = "tests/projection/mod.rs"]
 mod tests;
 
 fn precedence(kind: CellId) -> Option<Precedence> {

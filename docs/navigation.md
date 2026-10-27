@@ -165,7 +165,7 @@ constraint.
 [examples/navigation.gid](../examples/navigation.gid) includes nested cells around a
 multiline outline, document-authored side-by-side and offset-baseline columns,
 and content after a block; [examples/README.md](../examples/README.md) says what
-to try. Collector tests in `navigation/logical/tests.rs` drive the collector
+to try. Collector tests in `navigation/tests/logical.rs` drive the collector
 through shapes mirroring the layout traversal; frame tests exercise the same
 policies through real projections and the navigation example document. A
 sweep selects every occurrence the sample draws and checks some arrow leaves

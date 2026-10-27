@@ -181,4 +181,5 @@ fn follows(rect: Rect, anchor: Rect) -> bool {
 }
 
 #[cfg(test)]
+#[path = "tests/geometry.rs"]
 mod tests;

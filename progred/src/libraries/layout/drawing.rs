@@ -197,4 +197,5 @@ fn coordinate(value: &grap::RuntimeValue, key: CellId) -> Option<f64> {
 }
 
 #[cfg(test)]
+#[path = "tests/drawing.rs"]
 mod tests;

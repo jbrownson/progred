@@ -140,4 +140,5 @@ impl Geometry {
 }
 
 #[cfg(test)]
+#[path = "tests/mesh.rs"]
 mod tests;

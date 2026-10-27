@@ -98,4 +98,5 @@ pub fn combine(providers: impl IntoIterator<Item = CompletionProvider>) -> Compl
 }
 
 #[cfg(test)]
+#[path = "tests/completion.rs"]
 mod tests;

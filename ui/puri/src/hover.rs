@@ -124,4 +124,5 @@ impl<H: Clone + PartialEq> Probe<H> {
 }
 
 #[cfg(test)]
+#[path = "tests/hover.rs"]
 mod tests;

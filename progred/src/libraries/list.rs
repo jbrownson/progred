@@ -268,4 +268,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/list.rs"]
 mod tests;

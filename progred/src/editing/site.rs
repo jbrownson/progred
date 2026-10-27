@@ -10,6 +10,7 @@ use puri::edit::LineEditState;
 use std::rc::Rc;
 
 #[cfg(test)]
+#[path = "tests/site.rs"]
 mod tests;
 
 #[derive(Clone)]

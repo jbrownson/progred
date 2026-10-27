@@ -186,4 +186,5 @@ mod system {
 }
 
 #[cfg(test)]
+#[path = "tests/clipboard.rs"]
 mod tests;

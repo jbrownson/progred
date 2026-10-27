@@ -141,4 +141,5 @@ pub(crate) fn prepare(
 }
 
 #[cfg(test)]
+#[path = "tests/completion.rs"]
 mod tests;

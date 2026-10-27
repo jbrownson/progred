@@ -292,4 +292,5 @@ impl<Key: Clone + Ord> Selection<Key> {
 }
 
 #[cfg(test)]
+#[path = "tests/tree_slider.rs"]
 mod tests;

@@ -225,4 +225,5 @@ impl Gesture for PointControl {
 }
 
 #[cfg(test)]
+#[path = "tests/gesture.rs"]
 mod tests;

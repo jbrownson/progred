@@ -945,4 +945,5 @@ pub(super) fn contribution<W: Host>() -> (
 }
 
 #[cfg(test)]
+#[path = "tests/control.rs"]
 mod tests;

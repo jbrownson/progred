@@ -141,4 +141,5 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
 }
 
 #[cfg(test)]
+#[path = "tests/measure.rs"]
 mod tests;

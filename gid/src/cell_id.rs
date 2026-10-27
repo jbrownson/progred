@@ -79,4 +79,5 @@ pub fn new_cell_id() -> CellId {
 }
 
 #[cfg(test)]
+#[path = "tests/cell_id.rs"]
 mod tests;

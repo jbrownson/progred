@@ -609,10 +609,10 @@ An audit on 16 October 2026 ([the evidence](history/codebase-audit-2026-10-16.md
 found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
-files. projection/tests is still under projection/. It held 20.8k lines that
-mostly test the frame and the whole editor, and is down to 6.3k as suites move
-to their own modules (item 4). The private items it reaches point at misplaced
-code, not at internals the tests should see. A follow-up
+files. projection's tests, in `progred/src/tests/projection/`, held 20.8k lines
+that mostly test the frame and the whole editor, and are down to 6.3k as suites
+move to their own modules (item 4). The private items they reach point at
+misplaced code, not at internals the tests should see. A follow-up
 [crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
 that blocks a split and the steps that break it. The rest, most worthwhile
 first:
@@ -739,9 +739,9 @@ first:
      2026: the hover types and the picker's commit refer only to the core,
      and display reaches the runtime only through `Project`. The per-view bag
      stays the runtime's, which display reads through `Toolkit`.
-4. Move projection/tests' frame- and editor-level suites to where they belong,
-   leaving only the runtime's own tests; nothing stays anywhere for historical
-   reasons, and nothing became visible just for tests. The
+4. Move the frame- and editor-level suites in projection's tests to where they
+   belong, leaving only the runtime's own tests; nothing stays anywhere for
+   historical reasons, and nothing became visible just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
    1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
@@ -770,7 +770,7 @@ first:
       a paint, which the driver always does.
    6. Rewrite 30 tests that drive the whole editor but check one system. The
       event encoding has moved to the layout library. What's left is mostly
-      two groups. Nine write-through tests in projection/tests/editing.rs
+      two groups. Nine write-through tests in tests/projection/editing.rs
       get their editing selection by projecting a frame and pressing End;
       targeted, each would build it from its library's own line editor,
       mounted with `Selection::edit_line_mut`, before `editing::commit_line`.

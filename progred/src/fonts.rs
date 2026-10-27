@@ -51,4 +51,5 @@ pub(crate) fn bundled_font_context() -> FontContext {
 }
 
 #[cfg(test)]
+#[path = "tests/fonts.rs"]
 mod tests;

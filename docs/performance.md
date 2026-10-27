@@ -169,10 +169,10 @@ These are a smoke check of the checked-in example, not a performance guarantee.
 
 ## Frame timing
 
-The opt-in tests in `progred/src/perf/frames.rs`, and the layout library's FFI
+The opt-in tests in `progred/src/tests/perf/frames.rs`, and the layout library's FFI
 canary, share one headless frame harness,
-`progred/src/projection/test_support.rs`, which binds frames and sizes windows
-by the frame's own rules in `progred/src/frame/test_support.rs`. They are not
+`progred/src/tests/projection/test_support.rs`, which binds frames and sizes windows
+by the frame's own rules in `progred/src/tests/frame/test_support.rs`. They are not
 assertions about interactive frame rate, and ordinary builds and launches
 contain none of this instrumentation.
 
@@ -317,7 +317,7 @@ paints; keep the interactive orbit/scroll check as a separate test of smoothness
 Blob storage has a separate opt-in microbenchmark:
 
 ```sh
-./tools/sandbox-cargo test --release -p gid --test blob_profile -- \
+./tools/sandbox-cargo test --release -p gid --lib blob_profile -- \
   --ignored --nocapture --test-threads=1
 ```
 

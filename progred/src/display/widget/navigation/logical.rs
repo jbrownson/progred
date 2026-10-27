@@ -411,4 +411,5 @@ impl Collector {
 }
 
 #[cfg(test)]
+#[path = "tests/logical.rs"]
 mod tests;

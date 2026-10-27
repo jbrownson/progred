@@ -38,4 +38,5 @@ impl<T> History<T> {
 }
 
 #[cfg(test)]
+#[path = "tests/history.rs"]
 mod tests;

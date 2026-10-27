@@ -281,4 +281,5 @@ fn scene(request: SceneRequest) -> Outcome<Vec<volume::SceneObject>> {
 }
 
 #[cfg(test)]
+#[path = "tests/computation.rs"]
 mod tests;

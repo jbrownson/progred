@@ -19,4 +19,5 @@ impl Deref for Blob {
 }
 
 #[cfg(test)]
+#[path = "tests/blob.rs"]
 mod tests;

@@ -340,4 +340,5 @@ impl Editor {
 }
 
 #[cfg(test)]
+#[path = "tests/edit_keys.rs"]
 mod tests;

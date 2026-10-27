@@ -283,4 +283,5 @@ pub fn after_place<W: 'static, H: 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/widget.rs"]
 mod tests;

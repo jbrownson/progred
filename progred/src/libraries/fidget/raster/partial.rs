@@ -138,4 +138,5 @@ pub(super) fn render(
 }
 
 #[cfg(test)]
+#[path = "tests/partial.rs"]
 mod tests;

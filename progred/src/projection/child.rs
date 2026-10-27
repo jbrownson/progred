@@ -17,4 +17,5 @@ pub(super) fn of<'a>(
 }
 
 #[cfg(test)]
+#[path = "tests/child.rs"]
 mod tests;

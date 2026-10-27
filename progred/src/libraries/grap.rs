@@ -993,4 +993,5 @@ pub(crate) fn slot_offers() -> crate::display::CompletionProvider {
 }
 
 #[cfg(test)]
+#[path = "tests/grap/mod.rs"]
 mod tests;

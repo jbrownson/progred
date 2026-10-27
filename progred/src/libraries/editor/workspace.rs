@@ -89,4 +89,5 @@ fn sized_part<W: Host>() -> Partial<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/workspace.rs"]
 mod tests;

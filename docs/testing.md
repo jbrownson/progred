@@ -31,37 +31,38 @@ testing.
 - **Pure logic.** GID, Grap, `incremental`, layout, and the libraries test their
   functions directly. Prefer these where they can say what's being tested.
 - **Frames.** The frame harness in
-  [`projection/test_support.rs`](../progred/src/projection/test_support.rs)
-  and [`frame/test_support.rs`](../progred/src/frame/test_support.rs)
+  [`tests/projection/test_support.rs`](../progred/src/tests/projection/test_support.rs)
+  and [`tests/frame/test_support.rs`](../progred/src/tests/frame/test_support.rs)
   builds whole headless frames from an editor state and inspects their draw
   lists, hover, and handlers. A library's frame tests sit beside the library,
-  as the number types' do in `libraries/number/tests/frames.rs`.
-  [`projection/tests`](../progred/src/projection/tests/mod.rs) keeps the
+  as the number types' do in `libraries/tests/number/frames.rs`.
+  [`tests/projection`](../progred/src/tests/projection/mod.rs) keeps the
   engine's own tests, such as the phase-ordering ones: placement doesn't run
   hover, hover doesn't paint or dispatch, paint sees the final target, and
   discarding paint leaves a working handler. Projection-shape tests record
   layout calls and projection recursion through test-only recorders that
   production doesn't use.
-  [`display/test_support.rs`](../progred/src/display/test_support.rs) records
+  [`tests/display/test_support.rs`](../progred/src/tests/display/test_support.rs) records
   projection calls and supplies small helpers such as `painted`, `Landmarks`,
   and `mouse`, and the hosts a projection test needs: `NoEval`, which fails
   the test if asked to evaluate, and `EvaluatesTo`, which answers one value.
-  [`libraries/test_widgets.rs`](../progred/src/libraries/test_widgets.rs)
+  [`tests/libraries/test_widgets.rs`](../progred/src/tests/libraries/test_widgets.rs)
   builds a projection's input and targets for a library's tests. A test keeps
   its own host only when the host checks what it's asked. Some load the small
   documents in
   [`progred/fixtures`](../progred/fixtures). Helpers shared by tests in
-  several modules live in [`crate::test_support`](../progred/src/test_support.rs):
+  several modules live in [`crate::test_support`](../progred/src/tests/test_support.rs):
   - the loaded core libraries and reading contexts;
   - selections and key events;
   - completion entries, both directly and through a projection.
 
-  Each module's tests live beside it in its own `tests.rs`.
+  A module's tests are in the `tests/` folder beside it, one file per module:
+  `gid/src/value.rs`'s in `gid/src/tests/value.rs`.
 - **Interactions.** [`crate::driver::Driver`](../progred/src/driver.rs) drives
   the editor as a person would: pointer and modifier input arrives as Winit
   window events through the shell's own translation, keys as the platform
   delivers them, and the queries in
-  [`driver/inspect.rs`](../progred/src/driver/inspect.rs) read back what is
+  [`tests/driver/inspect.rs`](../progred/src/tests/driver/inspect.rs) read back what is
   drawn where by document path. It also selects a path as arriving there with
   the keyboard would, reads the selection, its stage and the edited line,
   chooses among the picker's entries, and takes input-method text and the
@@ -80,7 +81,7 @@ testing.
 ## Pictures
 
 The SVG writer and the captures that use it live in
-[`progred/src/svg.rs`](../progred/src/svg.rs). `make test` includes the
+[`progred/src/tests/svg`](../progred/src/tests/svg/mod.rs). `make test` includes the
 `svg_bench` tests, which render the sample, the Grap demo, and other fixtures
 to SVG in the build directory, `target/sandbox/build`. The ignored
 `editor_svg_captures` and progressive CAM captures paint whole editor frames;

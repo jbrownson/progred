@@ -98,4 +98,5 @@ impl CanvasSink for SplitCanvas {
 }
 
 #[cfg(test)]
+#[path = "tests/canvas.rs"]
 mod tests;

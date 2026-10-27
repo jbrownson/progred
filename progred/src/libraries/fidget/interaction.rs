@@ -47,4 +47,5 @@ impl Interaction {
 }
 
 #[cfg(test)]
+#[path = "tests/interaction.rs"]
 mod tests;

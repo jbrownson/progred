@@ -9,6 +9,7 @@ use incremental::{Read, Source};
 use std::{cell::RefCell, rc::Rc};
 
 #[cfg(test)]
+#[path = "tests/memo.rs"]
 mod tests;
 
 pub const CYCLE: CellId = CellId::from_u128(0xd32978a2ca119d053a8d326e116375d3);

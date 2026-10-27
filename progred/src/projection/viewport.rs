@@ -40,4 +40,5 @@ pub(crate) fn projection(ambient: &Projection, size: Size) -> Projection {
 }
 
 #[cfg(test)]
+#[path = "tests/viewport.rs"]
 mod tests;

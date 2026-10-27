@@ -344,4 +344,5 @@ pub(crate) fn line(value: Option<&Value>) -> Option<crate::display::LineEdit> {
 }
 
 #[cfg(test)]
+#[path = "tests/name.rs"]
 mod tests;

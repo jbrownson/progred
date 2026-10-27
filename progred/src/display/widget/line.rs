@@ -214,4 +214,5 @@ fn placeholder_text<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/line.rs"]
 mod tests;

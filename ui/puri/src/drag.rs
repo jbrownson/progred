@@ -41,4 +41,5 @@ impl Drag {
 }
 
 #[cfg(test)]
+#[path = "tests/drag.rs"]
 mod tests;

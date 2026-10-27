@@ -145,4 +145,5 @@ fn crop(rgba: &[u8], width: u32, region: Rect) -> Vec<u8> {
 }
 
 #[cfg(test)]
+#[path = "tests/picture.rs"]
 mod tests;

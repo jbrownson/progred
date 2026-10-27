@@ -24,4 +24,5 @@ impl ProgressBar {
 }
 
 #[cfg(test)]
+#[path = "tests/progress.rs"]
 mod tests;

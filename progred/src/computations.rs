@@ -247,4 +247,5 @@ fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
 }
 
 #[cfg(test)]
+#[path = "tests/computations.rs"]
 mod tests;

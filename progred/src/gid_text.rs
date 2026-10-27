@@ -576,7 +576,9 @@ fn plain_text(value: &Value) -> Option<&str> {
 }
 
 #[cfg(test)]
+#[path = "tests/gid_text.rs"]
 mod tests;
 
 #[cfg(test)]
+#[path = "tests/gid_text/checked_in_files.rs"]
 mod checked_in_files;

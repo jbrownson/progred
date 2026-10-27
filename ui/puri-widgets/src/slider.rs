@@ -113,4 +113,5 @@ impl Slider {
 }
 
 #[cfg(test)]
+#[path = "tests/slider.rs"]
 mod tests;

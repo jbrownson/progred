@@ -9,4 +9,5 @@ pub mod vocabulary {
 }
 
 #[cfg(test)]
+#[path = "tests/path.rs"]
 mod tests;

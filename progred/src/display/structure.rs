@@ -501,4 +501,5 @@ pub(crate) fn pending_field<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/structure.rs"]
 mod tests;

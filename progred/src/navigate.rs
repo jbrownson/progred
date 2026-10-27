@@ -181,4 +181,5 @@ fn siblings<'a, World>(
 }
 
 #[cfg(test)]
+#[path = "tests/navigate/mod.rs"]
 mod tests;

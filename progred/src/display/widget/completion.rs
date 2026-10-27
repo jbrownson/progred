@@ -271,4 +271,5 @@ fn completion_row<C: 'static, H: Clone + PartialEq + 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/completion.rs"]
 mod tests;
