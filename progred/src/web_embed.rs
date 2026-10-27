@@ -274,16 +274,47 @@ struct Selection {
 /// there.
 fn source(location: &Location) -> serde_json::Value {
     match location.start {
-        Start::Root => serde_json::json!({"path": path::value(&location.path)}),
+        Start::Root => serde_json::json!({"path": value_json(&path::value(&location.path))}),
         Start::Cell { cell, resolution } => serde_json::json!({
-            "cell": cell,
+            "cell": cell.to_string(),
             "library": match resolution {
                 Resolution::Document => None,
-                Resolution::Library(library) => Some(library),
+                Resolution::Library(library) => Some(library.to_string()),
             },
-            "path": path::value(&location.path),
+            "path": value_json(&path::value(&location.path)),
         }),
     }
+}
+
+/// A value as JSON: `{"cell": id}`, `{"blob": hex}`, `{"list": [value, …]}`
+/// without positions, or `{"record": [[label, value], …]}` in label order.
+fn value_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Cell(cell) => serde_json::json!({"cell": cell.to_string()}),
+        Value::Blob(bytes) => serde_json::json!({"blob": gid::hex_string(bytes)}),
+        Value::List(list) => {
+            serde_json::json!({"list": list.values().map(value_json).collect::<Vec<_>>()})
+        }
+        Value::Record(record) => serde_json::json!({
+            "record": record
+                .iter()
+                .map(|(label, value)| serde_json::json!([label.to_string(), value_json(value)]))
+                .collect::<Vec<_>>(),
+        }),
+    }
+}
+
+/// A document as JSON: its root value or null, and its cells as
+/// `{id: value, …}`.
+fn document_json(document: &Document) -> serde_json::Value {
+    serde_json::json!({
+        "root": document.root.as_ref().map(value_json),
+        "cells": document
+            .cells
+            .iter()
+            .map(|(cell, value)| (cell.to_string(), value_json(value)))
+            .collect::<serde_json::Map<_, _>>(),
+    })
 }
 
 #[derive(Default)]
@@ -315,17 +346,17 @@ impl Changes {
                 .as_ref()
                 .and_then(|selected| selected.value(&sources));
             let state = serde_json::json!({
-                "document": &*editor.model.doc,
+                "document": document_json(&editor.model.doc),
                 "selection": selection.as_ref().map(|selected| serde_json::json!({
                     "view": if selected.document { "document" } else { "opened" },
-                    "path": crate::occurrence::value(&selected.path),
+                    "path": value_json(&crate::occurrence::value(&selected.path)),
                     "source": selected.source.as_ref().map(source),
                     "stage": match selected.stage {
                         Stage::Edge => "value",
                         Stage::Pending => "pending",
                         Stage::Label => "label",
                     },
-                    "value": value,
+                    "value": value.map(value_json),
                 })),
             });
             self.previous = Some((editor.model.doc.clone(), selection));

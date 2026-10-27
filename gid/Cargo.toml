@@ -7,7 +7,3 @@ license.workspace = true
 [dependencies]
 getrandom.workspace = true
 imbl = "7"
-serde = { workspace = true, features = ["derive"] }
-
-[dev-dependencies]
-serde_json.workspace = true

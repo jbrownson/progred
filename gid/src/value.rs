@@ -7,7 +7,6 @@
 use crate::blob::Blob;
 use crate::cell_id::CellId;
 use crate::{List, Record};
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A value: anything sayable — pure structure, no identity of its
@@ -15,8 +14,7 @@ use std::fmt;
 /// value linking back through `Value::Cell`. Positions are element
 /// identity, saved with the document, but lists compare without them:
 /// two occurrences of `[2, 3]` are the same value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     Cell(CellId),
     Blob(Blob),

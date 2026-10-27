@@ -25,8 +25,8 @@ convention over a blob. Grap keeps its encoding beside f64's, in `grap::text`,
 and the text library owns its names, functions and projections.
 
 A `CellId` is not an RFC 4122 UUID: all 128 bits are random, with no version
-or variant fields. Every textual spelling, including `Display` and Serde, is
-32 lowercase hex digits with no hyphenated form. Well-known library cell IDs
+or variant fields. Every textual spelling, including `Display`, is 32
+lowercase hex digits with no hyphenated form. Well-known library cell IDs
 are once-minted random identities, never names or hashes of names; their
 readable names are ordinary `libraries::name` facts. Mint a fixed identity
 from 16 unmodified OS-CSPRNG bytes (`new_cell_id`, or `openssl rand -hex 16`
@@ -43,7 +43,9 @@ The native binary representation is not designed yet. It should follow
 the model directly and eventually support the needs of a projectional
 system: direct manipulation, cross-document references, indexing, and
 partial or lazy access where useful. Those goals must not be constrained
-by the temporary text bridge.
+by the temporary text bridge. Unlike text, which people write and which may
+list a record's labels in any order, it should write labels in increasing
+order and reject anything else as corrupt.
 
 The path convention represents traversal steps and list-position bytes as ordinary
 records, lists, and blobs: a path is a list of `{key: cell}`,

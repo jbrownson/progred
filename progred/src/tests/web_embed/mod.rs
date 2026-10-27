@@ -153,12 +153,34 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     assert_eq!(committed["selection"]["stage"], "value");
     assert_eq!(
         committed["selection"]["value"],
-        serde_json::to_value(crate::libraries::text::value("peaches")).unwrap()
+        value_json(&crate::libraries::text::value("peaches"))
     );
     editor.model.selection = Some(selection::Selection::edge(&crate::test_document(), vec![]));
     let whole: serde_json::Value = serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
     assert_eq!(whole["selection"]["path"], serde_json::json!({"list": []}));
     assert!(changes.sample(&editor).is_none());
+}
+
+#[test]
+fn values_and_documents_are_sent_in_the_shape_the_tutorial_reads() {
+    let cell = gid::CellId::from_u128(0x00112233445566778899aabbccddeeff);
+    let id = "00112233445566778899aabbccddeeff";
+    let value = Value::record([(
+        cell,
+        Value::list([Value::from(vec![0xde, 0xad]), Value::from(cell)]),
+    )]);
+    assert_eq!(
+        value_json(&value),
+        serde_json::json!({"record": [[id, {"list": [{"blob": "dead"}, {"cell": id}]}]]})
+    );
+    let mut document = Document::default();
+    document
+        .cells
+        .set_value(cell, Value::from(vec![0xde, 0xad]));
+    assert_eq!(
+        document_json(&document),
+        serde_json::json!({"root": null, "cells": {id: {"blob": "dead"}}})
+    );
 }
 
 mod frames;

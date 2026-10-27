@@ -3,7 +3,6 @@
 //! variant bits.
 
 use crate::{hex_string, read_hex};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
 
@@ -55,20 +54,6 @@ impl FromStr for CellId {
             .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
             .map(Self)
             .ok_or(ParseCellIdError)
-    }
-}
-
-impl Serialize for CellId {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
-    }
-}
-
-impl<'de> Deserialize<'de> for CellId {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
     }
 }
 

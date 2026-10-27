@@ -101,12 +101,6 @@ fn the_sample_document_shows_the_constructs() {
             .as_blob()
             .is_some()
     );
-    // Documents round trip with convention data unchanged.
-    let json = serde_json::to_string(&doc).unwrap();
-    let loaded: Document = serde_json::from_str(&json).unwrap();
-    assert_eq!(loaded.root, doc.root);
-    assert_eq!(loaded.cells.value(roof).and_then(name::read), Some("roof"));
-    assert_eq!(serde_json::to_string(&loaded).unwrap(), json);
 }
 
 #[test]

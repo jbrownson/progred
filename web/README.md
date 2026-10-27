@@ -98,8 +98,11 @@ and worker setup, not separately stripped-down builds.
 The optional callback receives a JSON string after the initial browser paint
 and after document or selection changes. Hover, caret movement within the same
 value, and ordinary repainting do not serialize the document. With no callback,
-there is no observer or snapshot cost. Observations contain `document` using
-GID's existing Serde representation, and `selection` (or null): `view` is
+there is no observer or snapshot cost. Observations contain `document` as
+`{root, cells}`: the root value or null, and each cell's value under its id. A
+value is `{"cell": id}`, `{"blob": hex}`, `{"list": [value, …]}` without
+positions, or `{"record": [[label, value], …]}` in label order. Observations
+also contain `selection` (or null): `view` is
 `"document"`, or `"opened"` for a view the editor opened, `path` is the occurrence, `source` is where the
 selected data is stored, if anywhere, and `stage` is `"value"`, `"pending"`, or
 `"label"`. A `source` is `{path}` from the document's root, or

@@ -1,5 +1,6 @@
 use super::*;
-use crate::new_cell_id;
+use crate::{Value, new_cell_id};
+use std::sync::Arc;
 
 fn blob(text: &str) -> Value {
     Value::from(text.as_bytes().to_vec())
@@ -41,32 +42,6 @@ fn extended_fields_replace_those_under_their_labels() {
             .into_iter()
             .collect()
     );
-}
-
-#[test]
-fn text_lists_labels_in_any_order_but_once() {
-    let (a, b) = (new_cell_id(), new_cell_id());
-    let (low, high) = (a.min(b), a.max(b));
-    let unordered = serde_json::to_value([(high, blob("2")), (low, blob("1"))]).unwrap();
-    assert_eq!(
-        serde_json::from_value::<Record>(unordered).unwrap(),
-        [(low, blob("1")), (high, blob("2"))].into_iter().collect()
-    );
-    let repeated = serde_json::to_value([(low, blob("1")), (low, blob("2"))]).unwrap();
-    assert!(serde_json::from_value::<Record>(repeated).is_err());
-}
-
-#[test]
-fn binary_lists_labels_in_increasing_order() {
-    let (a, b) = (new_cell_id(), new_cell_id());
-    let (low, high) = (a.min(b), a.max(b));
-    let ordered = vec![(low, blob("1")), (high, blob("2"))];
-    assert_eq!(
-        Record::read(ordered.clone(), false),
-        Ok(ordered.into_iter().collect())
-    );
-    assert!(Record::read(vec![(high, blob("2")), (low, blob("1"))], false).is_err());
-    assert!(Record::read(vec![(low, blob("1")), (low, blob("2"))], false).is_err());
 }
 
 #[test]

@@ -21,12 +21,4 @@ fn cell_ids_are_opaque_128_bit_values_with_stable_spellings() {
     ] {
         assert_eq!(malformed.parse::<CellId>(), Err(ParseCellIdError));
     }
-    assert_eq!(
-        serde_json::to_string(&id).unwrap(),
-        r#""00112233445566778899aabbccddeeff""#
-    );
-    assert_eq!(
-        serde_json::from_str::<CellId>(r#""00112233445566778899aabbccddeeff""#).unwrap(),
-        id
-    );
 }
