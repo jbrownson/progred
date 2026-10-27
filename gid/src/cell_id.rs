@@ -2,7 +2,6 @@
 //! spellings. All 128 bits are identity; there are no UUID version or
 //! variant bits.
 
-use crate::{hex_string, read_hex};
 use std::fmt;
 use std::str::FromStr;
 
@@ -28,7 +27,7 @@ impl CellId {
 
 impl fmt::Display for CellId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&hex_string(&self.0))
+        write!(f, "{:032x}", u128::from_be_bytes(self.0))
     }
 }
 
@@ -49,11 +48,15 @@ impl std::error::Error for ParseCellIdError {}
 impl FromStr for CellId {
     type Err = ParseCellIdError;
 
+    /// Exactly 32 hex digits, in either case; `from_str_radix` alone would
+    /// also take fewer digits or a leading `+`.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        read_hex(input)
-            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
-            .map(Self)
-            .ok_or(ParseCellIdError)
+        if input.len() != 32 || !input.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(ParseCellIdError);
+        }
+        u128::from_str_radix(input, 16)
+            .map(Self::from_u128)
+            .map_err(|_| ParseCellIdError)
     }
 }
 

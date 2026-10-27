@@ -166,20 +166,8 @@ impl Parser<'_> {
             .rest
             .find(|c: char| !c.is_ascii_hexdigit())
             .unwrap_or(self.rest.len());
-        let hex = &self.rest[..end];
-        if !hex.len().is_multiple_of(2) {
-            return Err("a blob needs whole bytes (even hex digits)".to_string());
-        }
-        let bytes = hex
-            .as_bytes()
-            .chunks(2)
-            .map(|pair| {
-                std::str::from_utf8(pair)
-                    .ok()
-                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| "a blob holds hex digits".to_string())?;
+        let bytes = gid::read_hex(&self.rest[..end])
+            .ok_or_else(|| "a blob needs whole bytes (even hex digits)".to_string())?;
         self.rest = &self.rest[end..];
         Ok(bytes)
     }
@@ -555,9 +543,7 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
 
 fn print_bytes(out: &mut String, bytes: &[u8]) {
     out.push_str("0x");
-    for byte in bytes {
-        let _ = write!(out, "{byte:02x}");
-    }
+    out.push_str(&gid::hex_string(bytes));
 }
 
 fn plain_text(value: &Value) -> Option<&str> {
