@@ -1,4 +1,4 @@
-use crate::{CellId, Value};
+use crate::{CellId, Value, sorted_entries};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::Arc;
@@ -125,20 +125,6 @@ impl FromIterator<(CellId, Value)> for Record {
     fn from_iter<T: IntoIterator<Item = (CellId, Value)>>(iter: T) -> Self {
         Self(Arc::new(sorted_entries(iter)))
     }
-}
-
-/// Entries sorted by key; a repeated key keeps its last value. Entries
-/// already in strictly increasing key order stay as they are. Inline, since
-/// Grap builds every runtime record through it.
-#[inline]
-pub fn sorted_entries<K: Ord, V>(entries: impl IntoIterator<Item = (K, V)>) -> Vec<(K, V)> {
-    let mut entries: Vec<_> = entries.into_iter().collect();
-    if !entries.is_sorted_by(|(a, _), (b, _)| a < b) {
-        entries.reverse();
-        entries.sort_by(|(a, _), (b, _)| a.cmp(b));
-        entries.dedup_by(|(a, _), (b, _)| a == b);
-    }
-    entries
 }
 
 impl IntoIterator for Record {
