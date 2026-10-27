@@ -146,7 +146,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     assert_eq!(pending["selection"]["view"], "document");
     assert_eq!(pending["selection"]["value"], serde_json::Value::Null);
     let mut items = list.clone();
-    items.insert(position, crate::libraries::text::value("peaches"));
+    items.set(&position, crate::libraries::text::value("peaches"));
     Rc::make_mut(&mut editor.model.doc).root = Some(Value::List(items));
     let committed: serde_json::Value =
         serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();

@@ -123,10 +123,10 @@ fn spelling(color: Encoded) -> String {
 
 fn replace_color(current: &Value, color: Encoded) -> Option<Value> {
     let mut fields = current.as_record()?.clone();
-    fields.remove(&vocabulary::RGB);
-    fields.remove(&vocabulary::RGBA);
+    fields.set(vocabulary::RGB, None);
+    fields.set(vocabulary::RGBA, None);
     let (field, value) = encoded_field(color);
-    fields.insert(field, value);
+    fields.set(field, value);
     Some(Value::Record(fields))
 }
 
@@ -207,7 +207,7 @@ fn without_picker(selection: Option<&Value>) -> Value {
         .and_then(Value::as_record)
         .cloned()
         .unwrap_or_default();
-    fields.remove(&vocabulary::PICKER);
+    fields.set(vocabulary::PICKER, None);
     Value::Record(fields)
 }
 

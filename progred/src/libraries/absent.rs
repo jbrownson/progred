@@ -122,13 +122,11 @@ fn with_callers_open(state: Option<&gid::Value>, open: bool) -> gid::Value {
     let fields = state
         .and_then(gid::Value::as_record)
         .cloned()
-        .unwrap_or_default()
-        .without(&vocabulary::CALLERS);
-    gid::Value::Record(if open {
-        fields.update(vocabulary::CALLERS, crate::annotations::EXPANDED.into())
-    } else {
-        fields
-    })
+        .unwrap_or_default();
+    gid::Value::Record(fields.with(
+        vocabulary::CALLERS,
+        open.then(|| gid::Value::from(crate::annotations::EXPANDED)),
+    ))
 }
 
 /// How an absent draws its field `key`: the call as [`call`] does, the

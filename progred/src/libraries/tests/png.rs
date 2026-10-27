@@ -142,7 +142,7 @@ fn the_editor_shows_the_picture_and_the_record_around_it() {
             .as_record()
             .unwrap()
             .clone()
-            .update(note, crate::libraries::text::value("red, then faint blue")),
+            .with(note, crate::libraries::text::value("red, then faint blue")),
     );
     let shown = Driver::of(picture);
     assert_eq!(shown.images(), [rgba.to_vec()]);

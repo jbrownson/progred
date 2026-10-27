@@ -490,7 +490,7 @@ fn named_color_name_and_spelling_form_one_horizontal_row() {
         color
             .as_record()
             .unwrap()
-            .update(name::vocabulary::NAME, text::value("copper")),
+            .with(name::vocabulary::NAME, text::value("copper")),
     );
     let mut f = Fixture::new(color, Cells::new());
     let name = f.child([Step::Key(name::vocabulary::NAME)]);

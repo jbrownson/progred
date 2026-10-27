@@ -61,7 +61,7 @@ fn representation_is_library_data() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(b"degrees".to_vec())),
+            .with(extra, Value::from(b"degrees".to_vec())),
     );
     assert_eq!(read(&with_extra), Some(2.5));
     let update = |input: &str| number::edit(input, Some(&with_extra), value);
@@ -74,7 +74,7 @@ fn representation_is_library_data() {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(extra, Value::from(b"degrees".to_vec())),
+                .with(extra, Value::from(b"degrees".to_vec())),
         ))
     );
 }

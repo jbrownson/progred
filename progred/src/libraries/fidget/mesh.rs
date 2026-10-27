@@ -35,7 +35,7 @@ pub(crate) fn preview(
                 vocabulary::kind::MESH_PREVIEW,
             )?;
             match of_kind(&value, vocabulary::kind::MESH_PREVIEW) {
-                Some(fields) => Value::Record(fields.update(
+                Some(fields) => Value::Record(fields.with(
                     vocabulary::MESH_DEPTH,
                     crate::libraries::u64::value(u64::from(depth)),
                 )),

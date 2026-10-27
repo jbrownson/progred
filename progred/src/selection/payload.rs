@@ -100,8 +100,8 @@ pub fn with_completion_view(payload: &Value, scroll: f64, choice: usize) -> Valu
     let fields = payload.as_record().cloned().unwrap_or_default();
     Value::Record(
         fields
-            .update(vocabulary::COMPLETION_SCROLL, f64_convention::value(scroll))
-            .update(vocabulary::CHOICE, f64_convention::value(choice as f64)),
+            .with(vocabulary::COMPLETION_SCROLL, f64_convention::value(scroll))
+            .with(vocabulary::CHOICE, f64_convention::value(choice as f64)),
     )
 }
 
@@ -114,14 +114,14 @@ pub fn without_editor(payload: &Value) -> Value {
         vocabulary::PREEDIT,
         vocabulary::DRAG,
     ] {
-        fields.remove(&field);
+        fields.set(field, None);
     }
     Value::Record(fields)
 }
 
 fn with_field(payload: &Value, key: CellId, value: Value) -> Value {
     let fields = payload.as_record().cloned().unwrap_or_default();
-    Value::Record(fields.update(key, value))
+    Value::Record(fields.with(key, value))
 }
 
 /// Encode the whole live editor into the payload: its in-motion
@@ -134,41 +134,30 @@ pub fn with_editor(payload: &Value, line: &LineEditState, own_text: bool) -> Val
         payload.clone()
     };
     let mut fields = payload.as_record().cloned().unwrap_or_default();
-    fields.insert(vocabulary::EDITOR_TEXT, text::value(line.text()));
+    fields.set(vocabulary::EDITOR_TEXT, text::value(line.text()));
     let (anchor, focus) = line.selection_offsets();
-    fields.insert(vocabulary::ANCHOR, f64_convention::value(anchor as f64));
-    fields.insert(vocabulary::FOCUS, f64_convention::value(focus as f64));
-    match line.preedit_parts() {
-        Some((preedit, cursor)) => {
-            let mut composed = text::value(preedit)
-                .as_record()
-                .cloned()
-                .unwrap_or_default();
-            if let Some((start, end)) = cursor {
-                composed.insert(vocabulary::START, f64_convention::value(start as f64));
-                composed.insert(vocabulary::END, f64_convention::value(end as f64));
-            }
-            fields.insert(vocabulary::PREEDIT, Value::Record(composed));
+    fields.set(vocabulary::ANCHOR, f64_convention::value(anchor as f64));
+    fields.set(vocabulary::FOCUS, f64_convention::value(focus as f64));
+    let preedit = line.preedit_parts().map(|(preedit, cursor)| {
+        let mut composed = text::value(preedit)
+            .as_record()
+            .cloned()
+            .unwrap_or_default();
+        if let Some((start, end)) = cursor {
+            composed.set(vocabulary::START, f64_convention::value(start as f64));
+            composed.set(vocabulary::END, f64_convention::value(end as f64));
         }
-        None => {
-            fields.remove(&vocabulary::PREEDIT);
-        }
-    }
-    match line.drag_parts() {
-        Some((origin, count)) => {
-            fields.insert(
-                vocabulary::DRAG,
-                Value::record([
-                    (vocabulary::X, f64_convention::value(origin.x)),
-                    (vocabulary::Y, f64_convention::value(origin.y)),
-                    (vocabulary::COUNT, f64_convention::value(f64::from(count))),
-                ]),
-            );
-        }
-        None => {
-            fields.remove(&vocabulary::DRAG);
-        }
-    }
+        Value::Record(composed)
+    });
+    fields.set(vocabulary::PREEDIT, preedit);
+    let drag = line.drag_parts().map(|(origin, count)| {
+        Value::record([
+            (vocabulary::X, f64_convention::value(origin.x)),
+            (vocabulary::Y, f64_convention::value(origin.y)),
+            (vocabulary::COUNT, f64_convention::value(f64::from(count))),
+        ])
+    });
+    fields.set(vocabulary::DRAG, drag);
     Value::Record(fields)
 }
 

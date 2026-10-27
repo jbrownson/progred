@@ -132,7 +132,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
                         == Some(&Value::from(function)) =>
                 {
                     let mut record = record.clone();
-                    record.insert(field, value.clone());
+                    record.set(field, value.clone());
                     Value::Record(record)
                 }
                 Value::Record(record) => Value::record(
@@ -197,7 +197,7 @@ fn website_growing_forest_insert(
                     .cloned()
                     .collect();
                 expressions.insert(1, clouds.clone());
-                fields.insert(EXPRESSIONS, Value::list(expressions));
+                fields.set(EXPRESSIONS, Value::list(expressions));
                 Value::Record(fields)
             }
             Value::Record(fields) => Value::record(
@@ -398,7 +398,7 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
         .as_record()
         .unwrap()
         .clone();
-    call.insert(names["rows"], f64::value(5.0));
+    call.set(names["rows"], f64::value(5.0));
     doc.cells.set_value(names["sample"], Value::Record(call));
     driver.runner.editor.model.doc = Rc::new(doc);
     let edited = render(&mut driver);
@@ -448,7 +448,7 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
             .as_record()
             .unwrap()
             .clone();
-        call.insert(names[parameter], f64::value(value));
+        call.set(names[parameter], f64::value(value));
         doc.cells.set_value(names["sample"], Value::Record(call));
         driver.runner.editor.model.doc = Rc::new(doc);
         let current = positions(&render(&mut driver));

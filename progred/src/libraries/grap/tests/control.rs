@@ -274,7 +274,7 @@ fn do_projects_its_expression_list_despite_unrelated_fields() {
     let decorated = expression
         .as_record()
         .unwrap()
-        .update(new_cell_id(), blob("extra"));
+        .with(new_cell_id(), blob("extra"));
     assert!(do_display(&projection_input(&NoEval, &Value::record(decorated).into())).is_some());
 }
 
@@ -305,13 +305,13 @@ fn compact_control_projections_recognize_required_fields_in_open_records() {
         (partial(do_display), do_call([blob("result")])),
     ] {
         let fields = value.as_record().unwrap();
-        let decorated = Value::record(fields.update(new_cell_id(), blob("metadata")).update(
+        let decorated = Value::record(fields.with(new_cell_id(), blob("metadata")).with(
             name::vocabulary::NAME,
             crate::libraries::text::value("named"),
         ));
         assert!(projection(&projection_input(&NoEval, &(&decorated).into())).is_some());
         for key in fields.keys() {
-            let missing = Value::record(decorated.as_record().unwrap().without(key));
+            let missing = Value::record(decorated.as_record().unwrap().with(*key, None));
             assert!(projection(&projection_input(&NoEval, &(&missing).into())).is_none());
         }
         // A field being added joins the others after the form.

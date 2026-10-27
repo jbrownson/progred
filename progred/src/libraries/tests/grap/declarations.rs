@@ -672,7 +672,7 @@ fn quote_prefixes_draw_extra_fields_after_them_and_keep_field_insertion_availabl
             root: Some(Value::record(
                 root.as_record()
                     .unwrap()
-                    .update(extra, text::value("metadata")),
+                    .with(extra, text::value("metadata")),
             )),
         });
         let has_metadata = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>| {
@@ -725,7 +725,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
         root: Some(Value::record(
             sum.as_record()
                 .unwrap()
-                .update(extra, text::value("metadata")),
+                .with(extra, text::value("metadata")),
         )),
     };
     let mut world = crate::test_editor(doc.clone());
@@ -794,7 +794,7 @@ fn compact_grap_forms_draw_other_fields_after_them_and_keep_field_insertion_avai
             root: Some(Value::record(
                 root.as_record()
                     .unwrap()
-                    .update(extra, text::value("metadata")),
+                    .with(extra, text::value("metadata")),
             )),
         };
         let mut world = crate::test_editor(doc.clone());

@@ -316,9 +316,9 @@ fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
     );
     let inserted = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
     let mut stored = gid::List::new();
-    stored.insert(positions[0].clone(), Value::record([]));
-    stored.insert(inserted.clone(), f64::value(1.0));
-    stored.insert(positions[1].clone(), f64::value(2.0));
+    stored.set(&positions[0], Value::record([]));
+    stored.set(&inserted, f64::value(1.0));
+    stored.set(&positions[1], f64::value(2.0));
     let stored = RuntimeValue::from(Value::List(stored));
     assert_eq!(
         stored.list_positions(),
@@ -924,7 +924,7 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
     let serialized = generated.to_value();
     let fields = serialized.as_record().unwrap();
     assert_eq!(fields.get(&source::vocabulary::BODY_ORIGIN), None);
-    let malformed = Value::Record(fields.update(source::vocabulary::BODY_ORIGIN, f64::value(3.0)));
+    let malformed = Value::Record(fields.with(source::vocabulary::BODY_ORIGIN, f64::value(3.0)));
     let driver = evaluate_runtime_at(
         &RuntimeValue::from(lambda([callback], call(callback.into(), []))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(caller)])),

@@ -137,7 +137,7 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
     );
     assert_eq!(env.0.get(), 1);
     for fuel in [f64::value(-1.0), f64::value(0.5), Value::record([])] {
-        fields.insert(layout::vocabulary::FUEL, fuel);
+        fields.set(layout::vocabulary::FUEL, fuel);
         assert!(viewport_output(&Value::Record(fields.clone()), &env, 400.0, 300.0).is_none());
     }
     assert_eq!(env.0.get(), 1, "malformed fuel declines before preparation");

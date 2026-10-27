@@ -4,7 +4,7 @@ use gid::new_cell_id;
 #[test]
 fn names_are_extensible_ordinary_record_data() {
     let mut fields = record("roof", []).as_record().unwrap().clone();
-    fields.insert(new_cell_id(), text::value("anything"));
+    fields.set(new_cell_id(), text::value("anything"));
     assert_eq!(read(&Value::Record(fields)), Some("roof"));
     assert_eq!(read(&text::value("roof")), None);
 

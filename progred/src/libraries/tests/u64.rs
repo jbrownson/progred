@@ -10,7 +10,7 @@ fn representation_is_open_library_data() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(b"metadata".to_vec())),
+            .with(extra, Value::from(b"metadata".to_vec())),
     );
     let update = |input: &str| number::edit(input, Some(&current), value);
 
@@ -22,7 +22,7 @@ fn representation_is_open_library_data() {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(extra, Value::from(b"metadata".to_vec())),
+                .with(extra, Value::from(b"metadata".to_vec())),
         ))
     );
     assert_eq!(update("-1"), None);

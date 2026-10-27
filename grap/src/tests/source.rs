@@ -27,7 +27,7 @@ fn origins_round_trip_with_open_metadata_and_stable_paths() {
             encoded
                 .as_record()
                 .unwrap()
-                .update(new_cell_id(), Value::record([])),
+                .with(new_cell_id(), Value::record([])),
         );
         assert_eq!(read(&enriched), Some(origin));
     }

@@ -331,7 +331,7 @@ fn a_record_is_drawn_as_the_one_kind_it_says_it_is() {
         .as_record()
         .unwrap()
         .clone();
-    let lambda = Value::Record(lambda.update(VALUE, Value::record([])));
+    let lambda = Value::Record(lambda.with(VALUE, Value::record([])));
     let input = projection_input(&env, &lambda);
     assert!(project_runtime(lambda_display, &input).is_some());
     assert!(project_runtime(value_display, &input).is_none());
@@ -341,7 +341,7 @@ fn a_record_is_drawn_as_the_one_kind_it_says_it_is() {
             .as_record()
             .unwrap()
             .clone()
-            .update(VALUE, Value::record([])),
+            .with(VALUE, Value::record([])),
     );
     let input = projection_input(&env, &call);
     assert!(project_runtime(call_display, &input).is_some());

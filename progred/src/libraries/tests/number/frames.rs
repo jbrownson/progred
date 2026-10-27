@@ -216,7 +216,7 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
             call.as_record()
                 .unwrap()
                 .clone()
-                .update(extra, text::value("extra")),
+                .with(extra, text::value("extra")),
         );
         let doc = Document {
             root: Some(call),

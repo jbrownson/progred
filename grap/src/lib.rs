@@ -132,12 +132,12 @@ impl Definition {
     /// its own.
     pub fn foreign(cell: CellId, mut value: Value, implementation: ForeignFunction) -> Self {
         if let Value::Record(fields) = &mut value {
-            fields.insert(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
-            fields.insert(vocabulary::IMPLEMENTATION, Value::from(cell));
+            fields.set(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
+            fields.set(vocabulary::IMPLEMENTATION, Value::from(cell));
             if let Some(parameters) = &implementation.parameters
                 && fields.get(&vocabulary::PARAMS).is_none()
             {
-                fields.insert(
+                fields.set(
                     vocabulary::PARAMS,
                     Value::list(parameters.iter().map(|&parameter| parameter.into())),
                 );

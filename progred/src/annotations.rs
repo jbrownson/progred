@@ -104,14 +104,7 @@ impl Annotations {
             .and_then(Value::as_record)
             .cloned()
             .unwrap_or_default();
-        match value {
-            Some(value) => {
-                fields.insert(key, value);
-            }
-            None => {
-                fields.remove(&key);
-            }
-        }
+        fields.set(key, value);
         self.set(path, (!fields.is_empty()).then_some(Value::Record(fields)));
     }
 

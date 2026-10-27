@@ -335,7 +335,7 @@ fn list(elements: Vec<(Option<gid::Position>, Value)>) -> Result<Value, String> 
     Ok(Value::List(elements.into_iter().fold(
         gid::List::new(),
         |mut list, (position, value)| {
-            list.insert(position, value);
+            list.set(&position, value);
             list
         },
     )))

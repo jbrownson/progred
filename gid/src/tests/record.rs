@@ -25,7 +25,7 @@ fn records_are_canonical_copy_on_write_values() {
 
     let snapshot = original.clone();
     assert!(Arc::ptr_eq(&original.0, &snapshot.0));
-    original.insert(x, blob("changed"));
+    original.set(x, blob("changed"));
     assert!(!Arc::ptr_eq(&original.0, &snapshot.0));
     assert_eq!(original.get(&x), Some(&blob("changed")));
     assert_eq!(snapshot.get(&x), Some(&blob("x")));
@@ -96,4 +96,21 @@ fn binary_lists_labels_in_increasing_order() {
     );
     assert!(Record::read(vec![(high, blob("2")), (low, blob("1"))], false).is_err());
     assert!(Record::read(vec![(low, blob("1")), (low, blob("2"))], false).is_err());
+}
+
+#[test]
+fn a_field_is_set_or_dropped_and_returns_what_was_there() {
+    let (a, b) = (new_cell_id(), new_cell_id());
+    let mut fields: Record = [(a, blob("a"))].into_iter().collect();
+    assert_eq!(fields.set(b, blob("b")), None);
+    assert_eq!(fields.set(a, blob("changed")), Some(blob("a")));
+    assert_eq!(fields.set(b, None), Some(blob("b")));
+    assert_eq!(fields.set(b, None), None);
+    assert_eq!(fields, [(a, blob("changed"))].into_iter().collect());
+
+    // Writing back what was read changes nothing; `with` leaves the original.
+    assert_eq!(fields.with(a, fields.get(&a).cloned()), fields);
+    assert_eq!(fields.with(b, fields.get(&b).cloned()), fields);
+    assert_eq!(fields.with(a, None), Record::new());
+    assert_eq!(fields.get(&a), Some(&blob("changed")));
 }

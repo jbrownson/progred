@@ -42,34 +42,28 @@ impl List {
         self.0.iter().map(|(_, value)| value)
     }
 
-    pub fn insert(&mut self, key: Position, value: Value) -> Option<Value> {
-        let elements = Arc::make_mut(&mut self.0);
-        match elements.binary_search_by(|(position, _)| position.cmp(&key)) {
-            Ok(index) => Some(std::mem::replace(&mut elements[index].1, value)),
-            Err(index) => {
-                elements.insert(index, (key, value));
+    /// Sets the element at `position`, or with `None` drops it, and returns
+    /// what was there.
+    pub fn set(&mut self, position: &Position, value: impl Into<Option<Value>>) -> Option<Value> {
+        let found = self.0.binary_search_by(|(at, _)| at.cmp(position));
+        match (found, value.into()) {
+            (Ok(index), Some(value)) => Some(std::mem::replace(
+                &mut Arc::make_mut(&mut self.0)[index].1,
+                value,
+            )),
+            (Err(index), Some(value)) => {
+                Arc::make_mut(&mut self.0).insert(index, (position.clone(), value));
                 None
             }
+            (Ok(index), None) => Some(Arc::make_mut(&mut self.0).remove(index).1),
+            (Err(_), None) => None,
         }
     }
 
-    pub fn remove(&mut self, key: &Position) -> Option<Value> {
-        let index = self
-            .0
-            .binary_search_by(|(position, _)| position.cmp(key))
-            .ok()?;
-        Some(Arc::make_mut(&mut self.0).remove(index).1)
-    }
-
-    pub fn update(&self, key: Position, value: Value) -> Self {
+    /// A copy with the element at `position` set, or with `None` dropped.
+    pub fn with(&self, position: &Position, value: impl Into<Option<Value>>) -> Self {
         let mut next = self.clone();
-        next.insert(key, value);
-        next
-    }
-
-    pub fn without(&self, key: &Position) -> Self {
-        let mut next = self.clone();
-        next.remove(key);
+        next.set(position, value);
         next
     }
 }

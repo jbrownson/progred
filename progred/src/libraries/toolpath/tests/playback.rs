@@ -12,12 +12,12 @@ fn accuracy_belongs_to_playback_and_is_required_and_validated() {
     .clone();
     assert!(Settings::read(&Value::Record(fields.clone())).is_none());
     for tolerance in [0.0, -0.1, f64::NAN, f64::INFINITY] {
-        fields.insert(PROFILE_TOLERANCE, f64::value(tolerance));
+        fields.set(PROFILE_TOLERANCE, f64::value(tolerance));
         assert!(Settings::read(&Value::Record(fields.clone())).is_none());
     }
-    fields.insert(PROFILE_TOLERANCE, f64::value(0.001));
+    fields.set(PROFILE_TOLERANCE, f64::value(0.001));
     let fine = Settings::read(&Value::Record(fields.clone())).unwrap();
-    fields.insert(PROFILE_TOLERANCE, f64::value(0.01));
+    fields.set(PROFILE_TOLERANCE, f64::value(0.01));
     let coarse = Settings::read(&Value::Record(fields)).unwrap();
     assert!(
         fine != coarse,

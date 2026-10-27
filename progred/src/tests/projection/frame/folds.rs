@@ -198,7 +198,7 @@ fn a_cell_a_projection_draws_its_own_way_doesnt_fold() {
         .as_record()
         .unwrap()
         .clone();
-    lambda.insert(
+    lambda.set(
         crate::libraries::name::vocabulary::NAME,
         crate::libraries::text::value("f"),
     );

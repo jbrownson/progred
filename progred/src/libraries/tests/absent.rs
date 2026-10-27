@@ -16,7 +16,7 @@ fn default_preserves_present_values_without_type_validation() {
             .as_record()
             .unwrap()
             .clone()
-            .update(metadata, Value::from(vec![7])),
+            .with(metadata, Value::from(vec![7])),
     );
     for value in [
         enriched,
@@ -153,7 +153,7 @@ fn absence_is_an_open_tag_with_a_stable_reason() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(vec![1])),
+            .with(extra, Value::from(vec![1])),
     );
 
     assert!(::grap::absent::is_absent(&absent));

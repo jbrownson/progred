@@ -198,7 +198,7 @@ fn runtime_lowering_preserves_an_enriched_value_through_a_binding() {
             .as_record()
             .unwrap()
             .clone()
-            .update(metadata, Value::from(b"kept".to_vec())),
+            .with(metadata, Value::from(b"kept".to_vec())),
     );
     let expression = grap::call(
         grap::lambda([parameter], Value::from(parameter)),
@@ -409,7 +409,7 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
             grouped
         );
     }
-    let without = |value: &Value, key| Value::record(value.as_record().unwrap().without(&key));
+    let without = |value: &Value, key| Value::record(value.as_record().unwrap().with(key, None));
     assert!(
         binary_display(&projection_input(
             &NoEval,

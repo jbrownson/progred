@@ -73,7 +73,7 @@ fn rgb_and_rgba_are_open_library_data() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(b"metadata".to_vec())),
+            .with(extra, Value::from(b"metadata".to_vec())),
     );
 
     assert_eq!(
@@ -98,7 +98,7 @@ fn spelling_round_trips_through_the_line_conversion() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(b"metadata".to_vec())),
+            .with(extra, Value::from(b"metadata".to_vec())),
     );
     let update = |input: &str| edit(input, Some(&current));
 
@@ -230,7 +230,7 @@ fn picker_mode_floats_point_controls_and_preserves_open_metadata() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(vec![7])),
+            .with(extra, Value::from(vec![7])),
     );
     let selection = picker_selection(0.1);
     // Its extra field would follow the color in a record of its own.
@@ -269,7 +269,7 @@ fn picker_mode_floats_point_controls_and_preserves_open_metadata() {
 fn closing_the_picker_removes_only_its_selection_state() {
     let other = new_cell_id();
     let mut selection = picker_selection(0.25).as_record().unwrap().clone();
-    selection.insert(other, Value::from(vec![7]));
+    selection.set(other, Value::from(vec![7]));
     let closed = without_picker(Some(&Value::Record(selection)));
 
     assert_eq!(picker_hue(Some(&closed)), None);

@@ -52,7 +52,7 @@ impl Reify {
             // body came from, beside it.
             RuntimeValueKind::Closure(closure) => {
                 let mut lambda = closure.fields.clone();
-                lambda.insert(vocabulary::BODY, self.value(&closure.body.0.source));
+                lambda.set(vocabulary::BODY, self.value(&closure.body.0.source));
                 Value::record(
                     [
                         (crate::isa::ISA, Value::from(vocabulary::kind::CLOSURE)),

@@ -14,7 +14,7 @@ fn utf8_is_an_open_convention_over_bytes() {
             .as_record()
             .unwrap()
             .clone()
-            .update(extra, Value::from(vec![1])),
+            .with(extra, Value::from(vec![1])),
     );
     assert_eq!(read(&enriched), Some("hello"));
     assert_eq!(
@@ -24,7 +24,7 @@ fn utf8_is_an_open_convention_over_bytes() {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(extra, Value::from(vec![1])),
+                .with(extra, Value::from(vec![1])),
         ))
     );
 }

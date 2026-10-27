@@ -522,7 +522,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(unit, crate::libraries::text::value("mm")),
+                .with(unit, crate::libraries::text::value("mm")),
         ),
     );
     let mut driver = Driver::new(

@@ -62,7 +62,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
         .as_record()
         .unwrap()
         .clone()
-        .update(note, text::value("hi"));
+        .with(note, text::value("hi"));
     let mut driver = Driver::of(Value::record([(x, Value::record(number))]));
     // The number view leaves its own field undrawn, unlike the record view.
     assert!(driver.drawn(&[Step::Key(x), Step::Key(note)]));

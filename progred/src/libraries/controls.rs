@@ -99,8 +99,8 @@ fn set_state(state: Option<&Value>, key: CellId, value: Value) -> Value {
         .and_then(Value::as_record)
         .cloned()
         .unwrap_or_default();
-    controls.insert(key, value);
-    fields.insert(STATE, Value::Record(controls));
+    controls.set(key, value);
+    fields.set(STATE, Value::Record(controls));
     Value::Record(fields)
 }
 
@@ -167,7 +167,7 @@ fn apply_change(
             .and_then(Value::as_record)
             .cloned()
             .unwrap_or_default();
-        annotation.insert(STATE, value);
+        annotation.set(STATE, value);
         edit.set_state(Value::Record(annotation));
     }
 }

@@ -10,7 +10,7 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
             value(expected)
                 .as_record()
                 .unwrap()
-                .update(extra, Value::record([])),
+                .with(extra, Value::record([])),
         );
         assert_eq!(read(&boolean), Some(expected));
         let evaluated = crate::test_support::test_evaluate(

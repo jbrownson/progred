@@ -17,7 +17,7 @@ fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
         .as_record()
         .unwrap()
         .clone()
-        .update(name::vocabulary::NAME, text::value("tree"));
+        .with(name::vocabulary::NAME, text::value("tree"));
     cells.set_value(function, Value::record(tree));
     cells.set_value(x, name::record("x", []));
     cells.set_value(height, name::record("height", []));

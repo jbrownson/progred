@@ -574,10 +574,10 @@ fn with_camera(state: Option<&Value>, camera: Camera) -> Value {
         .and_then(Value::as_record)
         .cloned()
         .unwrap_or_default();
-    fields.insert(vocabulary::YAW, f32::value(camera.yaw));
-    fields.insert(vocabulary::PITCH, f32::value(camera.pitch));
-    fields.insert(vocabulary::ZOOM, f32::value(camera.zoom));
-    state.insert(vocabulary::CAMERA, Value::Record(fields));
+    fields.set(vocabulary::YAW, f32::value(camera.yaw));
+    fields.set(vocabulary::PITCH, f32::value(camera.pitch));
+    fields.set(vocabulary::ZOOM, f32::value(camera.zoom));
+    state.set(vocabulary::CAMERA, Value::Record(fields));
     Value::Record(state)
 }
 

@@ -13,7 +13,7 @@ fn representation_is_open_library_data() {
             .as_record()
             .unwrap()
             .clone()
-            .update(metadata, Value::from(vec![1])),
+            .with(metadata, Value::from(vec![1])),
     );
     assert_eq!(read(&enriched), Some(1.25));
 }

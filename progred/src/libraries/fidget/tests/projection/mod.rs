@@ -130,7 +130,7 @@ fn unrelated_fields_do_not_block_notation_or_change_grouping() {
         assert_eq!(grouped(parent, key, &value), expected);
     }
     for value in [unary(kind::SIN, number(1.0)), axis(X)] {
-        let enriched = Value::record(value.as_record().unwrap().update(extra, number(3.0)));
+        let enriched = Value::record(value.as_record().unwrap().with(extra, number(3.0)));
         assert!(field(&projection_input(&Names, &enriched)).is_some());
     }
 }

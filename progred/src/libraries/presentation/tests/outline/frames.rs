@@ -185,7 +185,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             let Value::Record(fields) = doc.root.as_mut().unwrap() else {
                 unreachable!()
             };
-            fields.remove(&extra);
+            fields.set(extra, None);
         }
         let editor = crate::test_editor(doc.clone());
         let a_heading = entry(&editor, &[], a);
@@ -265,7 +265,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     let Value::Record(fields) = doc.root.as_mut().unwrap() else {
         unreachable!()
     };
-    fields.remove(&extra);
+    fields.set(extra, None);
     let mut driver = Driver::new(crate::test_editor(doc.clone()), Driver::VIEWPORT);
     let root_rect = driver.rect::<Step>(&[]);
     let list_rect = driver.rect(&[Step::Key(SECTIONS)]);
@@ -400,7 +400,7 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     let Value::Record(fields) = doc.root.as_mut().unwrap() else {
         unreachable!()
     };
-    fields.insert(SECTIONS, Value::list([a.into(), a.into(), b.into()]));
+    fields.set(SECTIONS, Value::list([a.into(), a.into(), b.into()]));
     let entries = entry_paths(doc.root.as_ref().unwrap(), &[], a);
     let sections = entries.iter().map(|p| section(p, a)).collect::<Vec<_>>();
     let bodies = entries.iter().map(|p| body(p, a)).collect::<Vec<_>>();
@@ -687,7 +687,7 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let Value::Record(fields) = Rc::make_mut(&mut world.model.doc).root.as_mut().unwrap() else {
         unreachable!()
     };
-    fields.insert(SECTIONS, Value::list([]));
+    fields.set(SECTIONS, Value::list([]));
     world.model.selection = None;
     let f = editing_frame(&mut world);
     let empty = stop(&f, &[Step::Key(SECTIONS)]);

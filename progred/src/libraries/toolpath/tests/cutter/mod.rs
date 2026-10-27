@@ -48,7 +48,7 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         );
         assert_eq!(Tool::read(&value), Some(tool));
         let mut fields = value.as_record().unwrap().clone();
-        fields.insert(
+        fields.set(
             crate::libraries::name::vocabulary::NAME,
             crate::libraries::text::value("user name"),
         );

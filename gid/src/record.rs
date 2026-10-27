@@ -42,25 +42,28 @@ impl Record {
         self.0.iter().map(|(_, value)| value)
     }
 
-    pub fn insert(&mut self, key: CellId, value: Value) -> Option<Value> {
-        let fields = Arc::make_mut(&mut self.0);
-        match fields.binary_search_by_key(&key, |(field, _)| *field) {
-            Ok(index) => Some(std::mem::replace(&mut fields[index].1, value)),
-            Err(index) => {
-                fields.insert(index, (key, value));
+    /// Sets the field under `label`, or with `None` drops it, and returns what
+    /// was there.
+    pub fn set(&mut self, label: CellId, value: impl Into<Option<Value>>) -> Option<Value> {
+        let found = self.0.binary_search_by_key(&label, |(field, _)| *field);
+        match (found, value.into()) {
+            (Ok(index), Some(value)) => Some(std::mem::replace(
+                &mut Arc::make_mut(&mut self.0)[index].1,
+                value,
+            )),
+            (Err(index), Some(value)) => {
+                Arc::make_mut(&mut self.0).insert(index, (label, value));
                 None
             }
+            (Ok(index), None) => Some(Arc::make_mut(&mut self.0).remove(index).1),
+            (Err(_), None) => None,
         }
     }
 
-    pub fn remove(&mut self, key: &CellId) -> Option<Value> {
-        let index = self.0.binary_search_by_key(key, |(field, _)| *field).ok()?;
-        Some(Arc::make_mut(&mut self.0).remove(index).1)
-    }
-
-    pub fn update(&self, key: CellId, value: Value) -> Self {
+    /// A copy with the field under `label` set, or with `None` dropped.
+    pub fn with(&self, label: CellId, value: impl Into<Option<Value>>) -> Self {
         let mut next = self.clone();
-        next.insert(key, value);
+        next.set(label, value);
         next
     }
 
@@ -78,12 +81,6 @@ impl Record {
             }
         }
         Ok(Self(Arc::new(fields)))
-    }
-
-    pub fn without(&self, key: &CellId) -> Self {
-        let mut next = self.clone();
-        next.remove(key);
-        next
     }
 }
 
@@ -119,7 +116,7 @@ impl<'de> Deserialize<'de> for Record {
 impl Extend<(CellId, Value)> for Record {
     fn extend<T: IntoIterator<Item = (CellId, Value)>>(&mut self, fields: T) {
         for (label, value) in fields {
-            self.insert(label, value);
+            self.set(label, value);
         }
     }
 }

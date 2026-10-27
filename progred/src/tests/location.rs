@@ -396,6 +396,6 @@ fn only_a_record_that_says_it_is_one_reads_as_a_location() {
     assert_eq!(read(&stored), Some(place.into_owned()));
     // The same fields without the kind are data that happens to look like one.
     let mut fields = stored.as_record().unwrap().clone();
-    fields.remove(&::grap::isa::ISA);
+    fields.set(::grap::isa::ISA, None);
     assert_eq!(read(&Value::Record(fields)), None);
 }
