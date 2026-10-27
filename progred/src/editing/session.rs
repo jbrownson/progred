@@ -17,7 +17,7 @@ use puri::edit::TextClipboard;
 use std::rc::Rc;
 
 /// Its fields are the core's, which acts on the model through them.
-pub(crate) struct Session<'a> {
+pub struct Session<'a> {
     pub(crate) model: &'a mut Model,
     pub(crate) libraries: &'a Libraries,
     /// The drag a press started, which owns motion until release.

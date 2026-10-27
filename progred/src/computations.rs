@@ -12,12 +12,12 @@ use web_time::Instant;
 pub(crate) mod memo;
 
 #[derive(Clone)]
-pub(crate) struct Snapshot {
+pub struct Snapshot {
     doc: Rc<Document>,
     libraries: Libraries,
 }
 
-pub(crate) struct Computations {
+pub struct Computations {
     pub runtime: Runtime,
     /// Jobs run off the editor's thread, when the host has somewhere to run
     /// them: a browser page without shared memory has nowhere.
