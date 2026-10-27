@@ -24,7 +24,7 @@ fn figures(doc: &Document, names: &Binders) -> Vec<(Position, Record, &'static s
         .iter()
         .map(|(position, figure)| {
             let figure = figure.as_record().unwrap().clone();
-            let (part, preview) = if figure.contains_key(&names["figure"]) {
+            let (part, preview) = if figure.get(&names["figure"]).is_some() {
                 ("figure", "rendered")
             } else {
                 ("mesh", "meshed")

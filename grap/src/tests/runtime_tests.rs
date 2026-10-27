@@ -923,7 +923,7 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
     };
     let serialized = generated.to_value();
     let fields = serialized.as_record().unwrap();
-    assert!(!fields.contains_key(&source::vocabulary::BODY_ORIGIN));
+    assert_eq!(fields.get(&source::vocabulary::BODY_ORIGIN), None);
     let malformed = Value::Record(fields.update(source::vocabulary::BODY_ORIGIN, f64::value(3.0)));
     let driver = evaluate_runtime_at(
         &RuntimeValue::from(lambda([callback], call(callback.into(), []))),

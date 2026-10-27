@@ -12,7 +12,7 @@ fn ranges_are_lazy_and_collection_is_explicit() {
     let huge = crate::test_support::test_evaluate(&range(1e12), |_| None, &functions, 30);
     assert!(huge.completed);
     let fields = huge.result.as_record().unwrap();
-    assert!(fields.contains_key(&::grap::vocabulary::LAMBDA));
+    assert!(fields.get(&::grap::vocabulary::LAMBDA).is_some());
     let saved = crate::test_support::test_evaluate(&range(3.0), |_| None, &functions, 30).result;
     let restored = crate::test_support::test_evaluate(
         &call(COLLECT, [(ITEMS, saved)]),

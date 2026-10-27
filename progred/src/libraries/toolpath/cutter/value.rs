@@ -88,9 +88,7 @@ fn sections(value: &Value, kind: SectionKind, current: &mut Point) -> Option<Vec
     let mut result = Vec::new();
     for value in value.as_list()?.values() {
         let fields = value.as_record()?;
-        if !fields.contains_key(&RADIUS) && !fields.contains_key(&AXIAL) {
-            return None;
-        }
+        fields.get(&RADIUS).or(fields.get(&AXIAL))?;
         let end = Point::new(
             coordinate(fields, RADIUS, current.radius)?,
             coordinate(fields, AXIAL, current.axial)?,

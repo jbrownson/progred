@@ -37,16 +37,14 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
     match spine.split_first() {
         None => None,
         Some((Step::Key(label), [])) => {
-            let fields = value.as_record()?;
-            fields
-                .contains_key(label)
-                .then(|| Value::Record(fields.without(label)))
+            let mut fields = value.as_record()?.clone();
+            fields.remove(label)?;
+            Some(Value::Record(fields))
         }
         Some((Step::Element(position), [])) => {
-            let elements = value.as_list()?;
-            elements
-                .contains_key(position)
-                .then(|| Value::List(elements.without(position)))
+            let mut elements = value.as_list()?.clone();
+            elements.remove(position)?;
+            Some(Value::List(elements))
         }
         Some((Step::Key(label), rest)) => {
             let fields = value.as_record()?;

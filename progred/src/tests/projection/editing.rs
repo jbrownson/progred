@@ -51,7 +51,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
         let root = driver.value(&[]);
         assert_eq!(text::read(&root), Some(expected));
         let fields = root.as_record().unwrap();
-        assert!(fields.contains_key(&marker));
+        assert!(fields.get(&marker).is_some());
         assert_eq!(fields.len(), 2);
     }
     let editor = driver.editor();
@@ -669,7 +669,8 @@ fn a_simple_name_is_an_ordinary_editable_field() {
         doc.cells
             .value(cell)
             .and_then(Value::as_record)
-            .is_some_and(|fields| fields.contains_key(&crate::test_values::label("x")))
+            .and_then(|fields| fields.get(&crate::test_values::label("x")))
+            .is_some()
     );
     assert!(make_selection(path).edit().is_none());
 }

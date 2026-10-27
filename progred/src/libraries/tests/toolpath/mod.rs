@@ -194,7 +194,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         "mode changes only stock removal, not the model or program"
     );
     let playback = model_playback.as_record().unwrap();
-    assert!(!playback.contains_key(&super::cutter::vocabulary::TOOL));
+    assert_eq!(playback.get(&super::cutter::vocabulary::TOOL), None);
     assert_eq!(f64::read(playback.get(&ui::POSITION).unwrap()), Some(0.7));
     assert_eq!(
         playback.get(&FOCUS),

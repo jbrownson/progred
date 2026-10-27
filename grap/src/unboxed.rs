@@ -124,7 +124,7 @@ impl Unboxed {
 
     pub(crate) fn contains_field(&self, label: CellId) -> bool {
         match &self.original {
-            Some(original) => original.contains_key(&label),
+            Some(original) => original.get(&label).is_some(),
             None => label == self.native.label(),
         }
     }

@@ -29,12 +29,6 @@ impl Record {
             .map(|index| &self.0[index].1)
     }
 
-    pub fn contains_key(&self, key: &CellId) -> bool {
-        self.0
-            .binary_search_by_key(key, |(field, _)| *field)
-            .is_ok()
-    }
-
     pub fn iter(&self) -> std::slice::Iter<'_, (CellId, Value)> {
         self.0.iter()
     }

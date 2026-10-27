@@ -100,7 +100,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
         },
     ));
     assert_eq!(last_kind(&events), Some(event_fields::TOUCH_START));
-    assert!(!last_event(&events).contains_key(&event_fields::BUTTON));
+    assert_eq!(last_event(&events).get(&event_fields::BUTTON), None);
     assert!(handler.dispatch_pointer_move(
         &mut events,
         &PointerUpdate {

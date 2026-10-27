@@ -588,9 +588,7 @@ fn read_path_element(value: &Value) -> Option<PathEl> {
             ),
         ))
     } else {
-        fields
-            .contains_key(&vocabulary::CLOSE)
-            .then_some(PathEl::ClosePath)
+        fields.get(&vocabulary::CLOSE).map(|_| PathEl::ClosePath)
     }
 }
 

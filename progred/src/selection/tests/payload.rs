@@ -38,8 +38,8 @@ fn the_whole_editor_round_trips_through_the_payload() {
     line = LineEditState::from_parts("hëllo", 1, 4, None, None);
     let settled = with_editor(&encoded, &line, true);
     let fields = settled.as_record().unwrap();
-    assert!(!fields.contains_key(&vocabulary::PREEDIT));
-    assert!(!fields.contains_key(&vocabulary::DRAG));
+    assert_eq!(fields.get(&vocabulary::PREEDIT), None);
+    assert_eq!(fields.get(&vocabulary::DRAG), None);
 }
 
 #[test]

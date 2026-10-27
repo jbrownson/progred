@@ -29,7 +29,8 @@ fn every_built_in_declares_its_parameters() {
                         && !definition
                             .value()
                             .as_record()
-                            .is_some_and(|fields| fields.contains_key(&PARAMS))
+                            .and_then(|fields| fields.get(&PARAMS))
+                            .is_some()
                 })
                 .map(move |(cell, definition)| {
                     let name = name::read(definition.value())

@@ -135,7 +135,7 @@ impl Definition {
             fields.insert(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
             fields.insert(vocabulary::IMPLEMENTATION, Value::from(cell));
             if let Some(parameters) = &implementation.parameters
-                && !fields.contains_key(&vocabulary::PARAMS)
+                && fields.get(&vocabulary::PARAMS).is_none()
             {
                 fields.insert(
                     vocabulary::PARAMS,
@@ -549,7 +549,8 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Data(value) => value
                 .as_record()
-                .is_some_and(|fields| fields.contains_key(&field)),
+                .and_then(|fields| fields.get(&field))
+                .is_some(),
             RuntimeValueKind::Record(fields) => runtime_field(fields, field).is_some(),
             RuntimeValueKind::Unboxed(unboxed) => unboxed.contains_field(field),
             RuntimeValueKind::Closure(closure) => closure_keys(closure).contains(&field),

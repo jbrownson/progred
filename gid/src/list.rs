@@ -29,12 +29,6 @@ impl List {
             .map(|index| &self.0[index].1)
     }
 
-    pub fn contains_key(&self, key: &Position) -> bool {
-        self.0
-            .binary_search_by(|(position, _)| position.cmp(key))
-            .is_ok()
-    }
-
     pub fn iter(&self) -> std::slice::Iter<'_, (Position, Value)> {
         self.0.iter()
     }

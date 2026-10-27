@@ -24,10 +24,9 @@ fn form(value: &Value) -> Option<CellId> {
     if kind == super::vocabulary::kind::AXIS {
         fields.get(&AXIS)?.as_cell()?;
     } else {
-        parameters(kind)?
-            .iter()
-            .all(|key| fields.contains_key(key))
-            .then_some(())?;
+        for key in parameters(kind)? {
+            fields.get(key)?;
+        }
     }
     Some(kind)
 }
@@ -37,7 +36,8 @@ fn form(value: &Value) -> Option<CellId> {
 fn grouped(kind: CellId, key: CellId, value: &Value) -> bool {
     value
         .as_record()
-        .is_some_and(|fields| fields.contains_key(&name::vocabulary::NAME))
+        .and_then(|fields| fields.get(&name::vocabulary::NAME))
+        .is_some()
         || match (precedence(kind), form(value).and_then(precedence)) {
             (Some(parent), Some(nested)) => parent.groups(nested, key == RIGHT),
             _ => false,

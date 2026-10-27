@@ -111,7 +111,7 @@ fn spelling_round_trips_through_the_line_conversion() {
         updated.as_record().unwrap().get(&extra),
         Some(&Value::from(b"metadata".to_vec())),
     );
-    assert!(!updated.as_record().unwrap().contains_key(&vocabulary::RGB));
+    assert_eq!(updated.as_record().unwrap().get(&vocabulary::RGB), None);
     assert_eq!(
         updated.as_record().unwrap().get(&vocabulary::RGBA),
         Some(&Value::from(vec![0xeb, 0xb4, 0xcc, 0x99])),
@@ -293,7 +293,8 @@ fn a_read_only_swatch_selects_its_color() {
         selection
             .payload()
             .as_record()
-            .is_none_or(|fields| !fields.contains_key(&vocabulary::PICKER)),
+            .and_then(|fields| fields.get(&vocabulary::PICKER))
+            .is_none(),
         "no picker opens on a read-only color"
     );
 }

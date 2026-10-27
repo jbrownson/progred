@@ -86,7 +86,7 @@ fn section_tags_are_explicit_exclusive_and_open_to_metadata() {
         .unwrap()
         .as_record()
         .unwrap();
-    assert!(!section.contains_key(&NON_CUTTING));
+    assert_eq!(section.get(&NON_CUTTING), None);
     let shape = section.get(&CUTTING).unwrap().clone();
     assert_eq!(shape.as_list().unwrap().len(), 2);
     let name = crate::libraries::name::vocabulary::NAME;

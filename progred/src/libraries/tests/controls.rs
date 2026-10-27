@@ -971,7 +971,8 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
             .unwrap()
             .as_record()
             .unwrap()
-            .contains_key(&camera)
+            .get(&camera)
+            .is_some()
     );
     assert_eq!(
         read_state(
@@ -1333,7 +1334,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
         puri_widgets::tree_slider::Intent::All
     );
     assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
-    assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
+    assert!(state.unwrap().as_record().unwrap().get(&camera).is_some());
     editor.advance_gesture(&[Point::new(150.0, 0.0), Point::new(-100.0, -100.0)]);
     let state = editor.model.workspace.document_pane().annotations.at(&[]);
     assert_eq!(
@@ -1423,7 +1424,7 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
             let state = editor.model.workspace.document_pane().annotations.at(&[]);
             assert_eq!(read_state(state, A), Some(&expected));
             assert_eq!(read_state(state, B).and_then(f64::read), Some(0.35));
-            assert!(state.unwrap().as_record().unwrap().contains_key(&camera));
+            assert!(state.unwrap().as_record().unwrap().get(&camera).is_some());
             assert!(Rc::ptr_eq(&original, &editor.model.doc));
         }
     }

@@ -10,7 +10,7 @@ fn outline_order_preserves_repeated_occurrences_and_unrelated_fields() {
         (a, Value::record([])),
     ]);
     assert_eq!(sections(&value), Some(vec![b, a, b]));
-    assert!(!value.as_record().unwrap().contains_key(&b));
+    assert_eq!(value.as_record().unwrap().get(&b), None);
     assert!(
         sections(&Value::record([
             (::grap::isa::ISA, kind::OUTLINE.into()),

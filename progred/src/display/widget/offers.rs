@@ -75,7 +75,8 @@ pub(crate) fn rank<W: Host>(
                                 request
                                     .value()
                                     .and_then(Value::as_record)
-                                    .is_some_and(|fields| fields.contains_key(&cell))
+                                    .and_then(|fields| fields.get(&cell))
+                                    .is_some()
                             }))
             })
             .map(|offer| (text(request, &offer.display), offer))

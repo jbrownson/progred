@@ -122,7 +122,8 @@ impl Annotations {
             .filter(|(_, value)| {
                 value
                     .as_record()
-                    .is_some_and(|fields| fields.contains_key(&key))
+                    .and_then(|fields| fields.get(&key))
+                    .is_some()
             })
             .map(|(path, _)| path)
             .collect();

@@ -579,14 +579,14 @@ fn explicit_jump_can_establish_a_source_below_at() {
         &world,
         d::partial(move |input| {
             let fields = input.value?.as_record()?;
-            if fields.contains_key(&marker) {
+            if fields.get(&marker).is_some() {
                 Some(d::at(
                     [gid::Step::Key(computed)],
                     Value::record([(computed, Value::record([]))]),
                     None,
                     None,
                 ))
-            } else if fields.contains_key(&computed) {
+            } else if fields.get(&computed).is_some() {
                 Some(d::jump(
                     [gid::Step::Key(occurrence)],
                     crate::location::Location::root(vec![gid::Step::Key(source)]),

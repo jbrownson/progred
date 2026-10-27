@@ -574,8 +574,10 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
             })
             .and_then(Value::as_record)
             .is_some_and(|fields| {
-                fields.contains_key(&crate::libraries::grap::vocabulary::GRAP)
-                    || fields.contains_key(&fidget::vocabulary::FIDGET)
+                fields
+                    .get(&crate::libraries::grap::vocabulary::GRAP)
+                    .is_some()
+                    || fields.get(&fidget::vocabulary::FIDGET).is_some()
             })
     };
     let empty = Document::default();

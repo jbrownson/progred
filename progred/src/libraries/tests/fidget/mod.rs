@@ -534,12 +534,13 @@ fn camera_gestures_update_open_projection_state() {
         }
     );
     let fields = state.as_record().expect("annotation record");
-    assert!(fields.contains_key(&other_state));
+    assert!(fields.get(&other_state).is_some());
     assert!(
         fields
             .get(&vocabulary::CAMERA)
             .and_then(Value::as_record)
-            .is_some_and(|camera| camera.contains_key(&other_camera))
+            .and_then(|camera| camera.get(&other_camera))
+            .is_some()
     );
 
     let state = scroll_zoom(Some(&state), Vec2::new(0.0, 100.0))

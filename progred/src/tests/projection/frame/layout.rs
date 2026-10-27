@@ -802,7 +802,8 @@ fn expression_children_are_real() {
             entries.iter().find_map(|(position, value)| {
                 value
                     .as_record()
-                    .is_some_and(|entry| entry.contains_key(&label))
+                    .and_then(|entry| entry.get(&label))
+                    .is_some()
                     .then(|| position.clone())
             })
         })

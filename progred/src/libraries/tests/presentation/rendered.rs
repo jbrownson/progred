@@ -137,10 +137,10 @@ fn a_missing_argument_is_given_from_the_error() {
     let call = driver.editor().model.doc.cells.value(program).unwrap();
     let arguments = call.as_record().unwrap();
     assert!(
-        arguments.contains_key(&numbers::vocabulary::LEFT),
+        arguments.get(&numbers::vocabulary::LEFT).is_some(),
         "{call:?}"
     );
-    assert!(!arguments.contains_key(&numbers::vocabulary::RIGHT));
+    assert_eq!(arguments.get(&numbers::vocabulary::RIGHT), None);
     assert!(
         !driver.drawn(&left),
         "the left argument is no longer missing"
