@@ -50,7 +50,6 @@ fn lowered_field(fields: &[(CellId, Expression)], label: CellId) -> Option<Expre
         .map(|index| fields[index].1.clone())
 }
 
-#[derive(Clone)]
 pub(crate) struct Lowered {
     pub(crate) source: RuntimeValue,
     pub(crate) origin: Option<OriginId>,
