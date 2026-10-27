@@ -4,10 +4,10 @@
 //! finite trees; the graph lives in the links. One canonical spelling
 //! per value, owned by the constructors. See `docs/gid.md`.
 
-use crate::blob::{Blob, hex_bytes, hex_string};
+use crate::blob::Blob;
 use crate::cell_id::CellId;
 use crate::{List, Record};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// A value: anything sayable — pure structure, no identity of its
@@ -15,7 +15,8 @@ use std::fmt;
 /// value linking back through `Value::Cell`. Positions are element
 /// identity, saved with the document, but lists compare without them:
 /// two occurrences of `[2, 3]` are the same value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Value {
     Cell(CellId),
     Blob(Blob),
@@ -98,44 +99,6 @@ impl fmt::Display for Value {
             Value::Blob(bytes) => bytes.fmt(f),
             Value::List(elements) => elements.fmt(f),
             Value::Record(fields) => fields.fmt(f),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum ValueRepr {
-    Cell(CellId),
-    Blob(String),
-    List(Vec<Value>),
-    Record(Vec<(CellId, Value)>),
-}
-
-impl Serialize for Value {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let repr = match self {
-            Value::Cell(cell) => ValueRepr::Cell(*cell),
-            Value::Blob(bytes) => ValueRepr::Blob(hex_string(bytes)),
-            Value::List(elements) => ValueRepr::List(elements.values().cloned().collect()),
-            // Record storage is sorted by label, so the file's pair
-            // order is canonical without an explicit sort.
-            Value::Record(fields) => {
-                ValueRepr::Record(fields.iter().map(|(k, v)| (*k, v.clone())).collect())
-            }
-        };
-        repr.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Value {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        match ValueRepr::deserialize(deserializer)? {
-            ValueRepr::Cell(cell) => Ok(Value::from(cell)),
-            ValueRepr::Blob(hex) => hex_bytes(&hex)
-                .map(Value::from)
-                .map_err(serde::de::Error::custom),
-            ValueRepr::List(elements) => Ok(Value::list(elements)),
-            ValueRepr::Record(fields) => Ok(Value::record(fields)),
         }
     }
 }

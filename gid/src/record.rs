@@ -1,4 +1,5 @@
 use crate::{CellId, Value};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::Arc;
 
@@ -80,6 +81,21 @@ impl fmt::Display for Record {
             write!(f, "{label}: {value}")?;
         }
         write!(f, "}}")
+    }
+}
+
+/// Spelled as its label-value pairs, in the label order it keeps them in.
+impl Serialize for Record {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.iter())
+    }
+}
+
+impl<'de> Deserialize<'de> for Record {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Vec::<(CellId, Value)>::deserialize(deserializer)?
+            .into_iter()
+            .collect())
     }
 }
 

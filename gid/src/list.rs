@@ -1,4 +1,5 @@
 use crate::{Position, Value, sorted_entries};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -129,6 +130,22 @@ impl fmt::Display for List {
             element.fmt(f)?;
         }
         write!(f, "]")
+    }
+}
+
+/// Spelled as its values in order. Positions aren't spelled: reading mints
+/// fresh ones in the same order.
+impl Serialize for List {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.values())
+    }
+}
+
+impl<'de> Deserialize<'de> for List {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Vec::<Value>::deserialize(deserializer)?
+            .into_iter()
+            .collect())
     }
 }
 
