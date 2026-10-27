@@ -37,7 +37,7 @@ fn run(
     invocation: Invocation,
     function: Value,
     operations: &Operations,
-    definitions: impl Fn(CellId) -> Vec<Definition>,
+    definitions: impl Fn(CellId) -> Option<Definition>,
     initial: Value,
     fuel: usize,
 ) -> (Evaluation<Value>, Value) {
@@ -94,13 +94,13 @@ const INVOCATIONS: [Invocation; 3] = [
 #[test]
 fn a_returned_halt_shaped_value_is_still_a_completed_result() {
     let absent = absent::value(absent::FUEL_EXHAUSTED);
-    let evaluation = evaluate_value(&absent, &TestHost(|_| Vec::new()), 10);
+    let evaluation = evaluate_value(&absent, &TestHost(|_| None), 10);
     assert_eq!(evaluation.result, absent);
     assert!(evaluation.completed);
 }
 
 #[test]
-fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
+fn effects_in_arguments_and_nested_calls_make_a_decline_effectful() {
     let operations = Operations::new();
     let function = new_cell_id();
     let initial = Value::from(b"initial".to_vec());
@@ -118,16 +118,10 @@ fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
                 &operations,
                 |cell| {
                     assert_eq!(cell, function);
-                    vec![
-                        Definition::Value(lambda([], after(effect.clone(), absent::decline()))),
-                        Definition::foreign(
-                            function,
-                            gid::Value::record([]),
-                            ForeignFunction::from_value(|_, _, _| {
-                                panic!("effectful decline must stop before fallback")
-                            }),
-                        ),
-                    ]
+                    Some(Definition::Value(lambda(
+                        [],
+                        after(effect.clone(), absent::decline()),
+                    )))
                 },
                 initial.clone(),
                 100,
@@ -143,7 +137,7 @@ fn effects_in_arguments_and_nested_calls_prevent_fallthrough() {
 }
 
 #[test]
-fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
+fn ordinary_absent_returns_keep_their_effects() {
     let operations = Operations::new();
     let function = new_cell_id();
     let result = absent::value(new_cell_id());
@@ -155,19 +149,10 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
             &operations,
             |cell| {
                 assert_eq!(cell, function);
-                vec![
-                    Definition::Value(lambda(
-                        [],
-                        after(operations.write(written.clone()), result.clone()),
-                    )),
-                    Definition::foreign(
-                        function,
-                        gid::Value::record([]),
-                        ForeignFunction::from_value(|_, _, _| {
-                            panic!("ordinary absence is definitive")
-                        }),
-                    ),
-                ]
+                Some(Definition::Value(lambda(
+                    [],
+                    after(operations.write(written.clone()), result.clone()),
+                )))
             },
             Value::record([]),
             100,
@@ -179,41 +164,28 @@ fn ordinary_absent_returns_keep_effects_and_stop_dispatch() {
 }
 
 #[test]
-fn a_pure_decline_keeps_its_details_without_collecting_other_definitions() {
+fn a_pure_decline_keeps_its_details() {
     let operations = Operations::new();
     let function = new_cell_id();
-    let first = absent::with_detail(
+    let decline = absent::with_detail(
         absent::DECLINED,
         absent::VALUE,
-        Value::from(b"first".to_vec()),
+        Value::from(b"details".to_vec()),
     );
-    let second = absent::with_detail(
-        absent::DECLINED,
-        absent::VALUE,
-        Value::from(b"second".to_vec()),
+    let (evaluation, state) = run(
+        Invocation::Expression,
+        function.into(),
+        &operations,
+        |_| Some(Definition::Value(lambda([], decline.clone()))),
+        Value::record([]),
+        100,
     );
-    for count in [1, 2] {
-        let (evaluation, state) = run(
-            Invocation::Expression,
-            function.into(),
-            &operations,
-            |_| {
-                [first.clone(), second.clone()]
-                    .into_iter()
-                    .take(count)
-                    .map(|decline| Definition::Value(lambda([], decline)))
-                    .collect()
-            },
-            Value::record([]),
-            100,
-        );
-        assert_eq!(evaluation.result, first);
-        assert_eq!(state, Value::record([]));
-    }
+    assert_eq!(evaluation.result, decline);
+    assert_eq!(state, Value::record([]));
 }
 
 #[test]
-fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
+fn halts_stop_without_rolling_back_temporary_state() {
     let operations = Operations::new();
     let function = new_cell_id();
     let recurse = new_cell_id();
@@ -224,25 +196,16 @@ fn halts_stop_without_fallback_or_rolling_back_temporary_state() {
             &operations,
             |cell| {
                 if cell == recurse {
-                    vec![Definition::Value(lambda([], call(recurse.into(), [])))]
+                    Some(Definition::Value(lambda([], call(recurse.into(), []))))
                 } else {
                     assert_eq!(cell, function);
-                    vec![
-                        Definition::Value(lambda(
-                            [],
-                            after(
-                                operations.write(Value::from(vec![42])),
-                                call(recurse.into(), []),
-                            ),
-                        )),
-                        Definition::foreign(
-                            function,
-                            gid::Value::record([]),
-                            ForeignFunction::from_value(|_, _, _| {
-                                panic!("halt must not fall through")
-                            }),
+                    Some(Definition::Value(lambda(
+                        [],
+                        after(
+                            operations.write(Value::from(vec![42])),
+                            call(recurse.into(), []),
                         ),
-                    ]
+                    )))
                 }
             },
             Value::record([]),
@@ -277,7 +240,7 @@ fn an_effectful_decline_cannot_be_ignored_by_its_caller() {
             invocation,
             function,
             &operations,
-            |_| Vec::new(),
+            |_| None,
             initial.clone(),
             100,
         );
@@ -291,7 +254,7 @@ fn an_effectful_decline_cannot_be_ignored_by_its_caller() {
 }
 
 #[test]
-fn a_non_callable_definition_returns_absent_without_trying_another_source() {
+fn a_non_callable_definition_returns_absent() {
     let operations = Operations::new();
     let function = new_cell_id();
     let (evaluation, state) = run(
@@ -299,13 +262,10 @@ fn a_non_callable_definition_returns_absent_without_trying_another_source() {
         function.into(),
         &operations,
         |_| {
-            vec![
-                Definition::Value(after(
-                    operations.write(Value::from(vec![42])),
-                    Value::record([]),
-                )),
-                Definition::Value(lambda([], call(operations.read.into(), []))),
-            ]
+            Some(Definition::Value(after(
+                operations.write(Value::from(vec![42])),
+                Value::record([]),
+            )))
         },
         Value::record([]),
         100,
@@ -334,12 +294,7 @@ fn earlier_effects_do_not_prevent_a_later_pure_decline() {
                 ),
             ),
             &operations,
-            |_| {
-                vec![
-                    Definition::Value(lambda([], absent::decline())),
-                    Definition::Value(lambda([], call(operations.read.into(), []))),
-                ]
-            },
+            |_| Some(Definition::Value(lambda([], absent::decline()))),
             Value::record([]),
             100,
         );
@@ -375,17 +330,11 @@ fn rust_functions_obey_the_same_decline_contract() {
                     function.into(),
                     &operations,
                     |_| {
-                        vec![
-                            Definition::foreign(function, gid::Value::record([]), foreign.clone()),
-                            Definition::foreign(
-                                function,
-                                gid::Value::record([]),
-                                ForeignFunction::from_value(move |_, _, _| {
-                                    assert!(!effectful, "effectful decline must not fall through");
-                                    Ok(Value::record([]))
-                                }),
-                            ),
-                        ]
+                        Some(Definition::foreign(
+                            function,
+                            gid::Value::record([]),
+                            foreign.clone(),
+                        ))
                     },
                     Value::record([]),
                     100,

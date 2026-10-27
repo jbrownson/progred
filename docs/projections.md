@@ -576,8 +576,8 @@ The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 
 Grap's `descend`, `descend path`, `jump`, and `at` forms decode through the
 [path convention](../progred/src/libraries/editor/path.rs), also used by site and
-selection capabilities. Field keys, list positions, and source-qualified definition
-follows have one encoder/decoder. They produce ordinary preparation functions
+selection capabilities. Field keys, list positions, and definition follows have
+one encoder/decoder. They produce ordinary preparation functions
 using an explicit projection scope; layout has no parallel path vocabulary or
 traversal opcodes. Preparation interleaves descendant projection and measurement
 before choices resolve. Shared children prepare once per frame, and only chosen
@@ -1076,7 +1076,7 @@ the closure. The ordinary record forms are:
 
 ```text
 {document source: path}
-{source cell: cell, definition source: document | {library: id}, source path: path}
+{source cell: cell, source path: path}
 {input source: path}
 ```
 
@@ -1127,7 +1127,7 @@ argument syntax to interpret. This is distinct from `apply`, whose callable and
 arguments are already evaluated.
 
 Inline code retained by the editor is anchored to its original document
-occurrence before evaluation; cell code retains its definition source and path.
+occurrence before evaluation; cell code retains its cell and path.
 Later invocation does not rebase those locations onto the drawing program.
 Cmd-hover chooses the innermost call with an available projected occurrence.
 Memo input and result comparisons conservatively include native closure
@@ -1150,8 +1150,7 @@ and `RuntimeValue` containers, leaving conversion to a real GID boundary.
 Environment lookups and structural matching operate on these equivalent host
 representations. Unboxing must be transparent to Grap behavior, including
 when a value comes through a cell or a constructed container. Origin metadata
-preserves both the definition source and the relative path; it cannot identify
-a definition by cell alone. See [source identity](model.md#occurrences-definitions-and-views).
+preserves the cell and the path relative to its definition. See [source identity](model.md#occurrences-definitions-and-views).
 
 ## Examples
 

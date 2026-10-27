@@ -51,7 +51,7 @@ fn records_and_existing_gid_data_preserve_sharing_and_positions() {
 #[test]
 fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
     let captured = gid::new_cell_id();
-    let host = crate::TestHost(|_: CellId| Vec::new());
+    let host = crate::TestHost(|_: CellId| None);
     let mut context = crate::context(&host, None, 100);
     let data = RuntimeValue::list([RuntimeValue::f64(42.0)]);
     let environment = Environment::with_indices(context.indices.clone())
@@ -87,7 +87,7 @@ fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
 #[test]
 fn different_closure_environments_preserve_shared_outer_containers() {
     let (list, record, local) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
-    let host = crate::TestHost(|_: CellId| Vec::new());
+    let host = crate::TestHost(|_: CellId| None);
     let mut context = crate::context(&host, None, 100);
     let outer = Environment::with_indices(context.indices.clone()).extended_runtime([
         (list, RuntimeValue::list([RuntimeValue::f64(42.0)])),

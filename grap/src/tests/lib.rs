@@ -6,18 +6,14 @@ fn definitions_from_parts<'a>(
     resolve: impl Fn(CellId) -> Option<Value> + 'a,
     foreign: &'a ForeignFunctions,
 ) -> impl Host + 'a {
-    TestHost(move |cell| {
-        match (resolve(cell), foreign.get(cell)) {
-            (value, Some(function)) => Some(Definition::foreign(
-                cell,
-                value.unwrap_or_else(|| Value::record([])),
-                function.clone(),
-            )),
-            (Some(value), None) => Some(Definition::Value(value)),
-            (None, None) => None,
-        }
-        .into_iter()
-        .collect()
+    TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
+        (value, Some(function)) => Some(Definition::foreign(
+            cell,
+            value.unwrap_or_else(|| Value::record([])),
+            function.clone(),
+        )),
+        (Some(value), None) => Some(Definition::Value(value)),
+        (None, None) => None,
     })
 }
 
@@ -47,27 +43,18 @@ fn apply(
 }
 
 #[test]
-fn direct_cell_calls_return_decline_without_trying_another_definition() {
+fn a_direct_cell_call_returns_its_definitions_decline() {
     let function = new_cell_id();
     let expression = call(Value::from(function), []);
     let evaluation = super::evaluate_value(
         &expression,
         &TestHost(|cell| {
             assert_eq!(cell, function);
-            vec![
-                Definition::foreign(
-                    cell,
-                    gid::Value::record([]),
-                    ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
-                ),
-                Definition::Value(Value::record([])),
-                Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
-                Definition::foreign(
-                    cell,
-                    gid::Value::record([]),
-                    ForeignFunction::from_value(|_, _, _| Ok(Value::from(b"too late".to_vec()))),
-                ),
-            ]
+            Some(Definition::foreign(
+                cell,
+                gid::Value::record([]),
+                ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
+            ))
         }),
         20,
     );
@@ -76,18 +63,14 @@ fn direct_cell_calls_return_decline_without_trying_another_definition() {
 }
 
 #[test]
-fn an_ordinary_absent_stops_dispatch_with_its_details() {
+fn an_ordinary_absent_keeps_its_details() {
     let function = new_cell_id();
-    let first_missing = new_cell_id();
-    let second_missing = new_cell_id();
+    let missing = new_cell_id();
     let evaluation = super::evaluate_value(
         &call(Value::from(function), []),
         &TestHost(|cell| match cell {
-            cell if cell == function => vec![
-                Definition::Value(Value::from(first_missing)),
-                Definition::Value(Value::from(second_missing)),
-            ],
-            cell if cell == first_missing => Vec::new(),
+            cell if cell == function => Some(Definition::Value(Value::from(missing))),
+            cell if cell == missing => None,
             _ => unreachable!(),
         }),
         20,
@@ -95,25 +78,22 @@ fn an_ordinary_absent_stops_dispatch_with_its_details() {
 
     assert_eq!(
         evaluation.result,
-        absent::with_detail(absent::MISSING_CELL, absent::CELL, first_missing.into()),
+        absent::with_detail(absent::MISSING_CELL, absent::CELL, missing.into()),
     );
 }
 
 #[test]
-fn host_apply_returns_the_selected_definitions_decline() {
+fn host_apply_returns_the_definitions_decline() {
     let function = new_cell_id();
     let evaluation = super::apply_value(
         &Value::from(function),
         [],
         &TestHost(|_| {
-            vec![
-                Definition::foreign(
-                    function,
-                    gid::Value::record([]),
-                    ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
-                ),
-                Definition::Value(lambda([], Value::from(b"grap".to_vec()))),
-            ]
+            Some(Definition::foreign(
+                function,
+                gid::Value::record([]),
+                ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
+            ))
         }),
         None,
         20,
@@ -566,11 +546,11 @@ fn a_foreign_call_outside_a_shadowing_scope_still_uses_the_registry() {
 
 #[test]
 fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
-    struct DataHost(CellId, Vec<Definition>);
+    struct DataHost(CellId, Option<Definition>);
     impl Host for DataHost {
         fn resolve(&self, cell: CellId) -> Option<Definition> {
             assert_eq!(cell, self.0);
-            self.1.first().cloned()
+            self.1.clone()
         }
     }
     let cell = new_cell_id();
@@ -590,10 +570,9 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
     // A foreign function's value is its definition, or where only a scope
     // supplies it, a foreign function implemented under its cell.
     for (values, expected) in [
-        (vec![], super::foreign_function(cell)),
-        (vec![first.clone()], first.value().clone()),
-        (vec![second.clone()], second.value().clone()),
-        (vec![first.clone(), second], first.value().clone()),
+        (None, super::foreign_function(cell)),
+        (Some(first.clone()), first.value().clone()),
+        (Some(second.clone()), second.value().clone()),
     ] {
         let result = super::evaluate_runtime_scoped(
             &RuntimeValue::from(Value::from(cell)),
@@ -1411,7 +1390,7 @@ fn a_value_definitions_origin_is_its_cell() {
         &RuntimeValue::from(Value::from(cell)),
         &TestHost(|queried| {
             assert_eq!(queried, cell);
-            vec![Definition::Value(call(Value::from(foreign), []))]
+            Some(Definition::Value(call(Value::from(foreign), [])))
         }),
         &overlay,
         20,

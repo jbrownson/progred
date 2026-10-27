@@ -47,8 +47,7 @@ which stages input until commit.
 Normal lookup selects the document definition, otherwise the first library
 definition in load order. Duplicate definitions are tolerated, not an intended
 composition mechanism. Later we may show an indicator and an inspector for the
-other sources; no such UI is implemented now. Explicit source-qualified paths
-remain available internally.
+other sources; no such UI is implemented now.
 
 ## Editor-authored libraries
 
@@ -270,12 +269,11 @@ came from*.
 
 ## Address lifetime
 
-Paths and source traces already preserve definition source. A future identity
-review should specify what survives list moves, deletion/undo, definition
-replacement, and transient-root changes. A cell has meaning in a resolution
-context; neither a path nor a cell-relative trace is a global address.
-Keep occurrence identity, cell identity, definition source, and view identity
-distinct while answering those questions.
+A future identity review should specify what survives list moves,
+deletion/undo, definition replacement, loading or reordering libraries, and
+transient-root changes. A cell has meaning in a lookup context; neither a path
+nor a cell-relative trace is a global address. Keep occurrence identity, cell
+identity, and view identity distinct while answering those questions.
 
 ## Virtual steps for projections
 

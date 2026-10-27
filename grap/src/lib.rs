@@ -2598,9 +2598,9 @@ pub fn apply(
 struct TestHost<F>(F);
 
 #[cfg(test)]
-impl<F: Fn(CellId) -> Vec<Definition>> Host for TestHost<F> {
+impl<F: Fn(CellId) -> Option<Definition>> Host for TestHost<F> {
     fn resolve(&self, cell: CellId) -> Option<Definition> {
-        (self.0)(cell).into_iter().next()
+        (self.0)(cell)
     }
 }
 

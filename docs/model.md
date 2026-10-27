@@ -92,10 +92,9 @@ follows from the path, the part whose path leads it.
 
 [`SourceTrace`](../progred/src/display/widget/source.rs) serves source-linked
 widgets, drawing, and highlighting. It is a location in the form it is stored
-in: a path from the root, or a cell, definition source, and path relative to
-that definition. Normalizing to the nearest followed definition lets different
-occurrences highlight the same source without conflating two libraries'
-definitions of one cell. Both forms still need the caller's resolution context.
+in: a path from the root, or a cell and a path relative to its definition.
+Normalizing to the nearest followed definition lets different occurrences
+highlight the same source. Both forms still need the caller's lookup context.
 Neither is an execution stack or global address.
 
 Computed values use `at` at their own displayed occurrences. They and their

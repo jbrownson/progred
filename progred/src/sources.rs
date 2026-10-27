@@ -1,6 +1,6 @@
 //! The reading context: a document followed by an ordered set of
-//! libraries. Ordinary lookup selects the document, then the first
-//! library definition. A stored Follow step still names its source.
+//! libraries. Lookup selects the document's definition, then the first
+//! library's; reads, follows and evaluation all go through it.
 
 use crate::display::ResolvedCell;
 use crate::library::Libraries;
@@ -102,41 +102,39 @@ impl crate::display::Env for Sources<'_> {
 }
 
 impl<'a> Sources<'a> {
-    /// Every definition of `cell` in lookup order: the document's, then each
-    /// library's in load order. Ordinary lookup takes the first.
-    fn definitions(&self, cell: CellId) -> impl Iterator<Item = Contribution<'a>> {
+    /// The definition lookup selects: the document's, else the first
+    /// library's in load order.
+    fn definition(&self, cell: CellId) -> Option<Contribution<'a>> {
         self.doc
             .cells
             .value(cell)
             .map(Contribution::Document)
-            .into_iter()
-            .chain(
+            .or_else(|| {
                 self.libraries
                     .definitions(cell)
-                    .map(|(library, definition)| Contribution::Library(library, definition)),
-            )
-    }
-
-    /// The value of the definition ordinary lookup selects.
-    pub fn value(&self, cell: CellId) -> Option<&'a Value> {
-        self.definitions(cell).next().map(Contribution::value)
-    }
-
-    /// The definition ordinary lookup selects.
-    pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
-        self.definitions(cell)
-            .next()
-            .map(|contribution| ResolvedCell {
-                value: contribution.value(),
-                native: matches!(
-                    contribution,
-                    Contribution::Library(_, grap::Definition::Foreign(_))
-                ),
-                library: match contribution {
-                    Contribution::Document(_) => None,
-                    Contribution::Library(library, _) => Some(library),
-                },
+                    .next()
+                    .map(|(library, definition)| Contribution::Library(library, definition))
             })
+    }
+
+    /// The value of the definition lookup selects.
+    pub fn value(&self, cell: CellId) -> Option<&'a Value> {
+        self.definition(cell).map(Contribution::value)
+    }
+
+    /// The definition lookup selects.
+    pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
+        self.definition(cell).map(|contribution| ResolvedCell {
+            value: contribution.value(),
+            native: matches!(
+                contribution,
+                Contribution::Library(_, grap::Definition::Foreign(_))
+            ),
+            library: match contribution {
+                Contribution::Document(_) => None,
+                Contribution::Library(library, _) => Some(library),
+            },
+        })
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -193,17 +191,13 @@ impl<'a> Sources<'a> {
     /// The library is authoritative only when it supplies the value
     /// and the document does not. A bare cell remains writable.
     pub fn external(&self, cell: CellId) -> bool {
-        matches!(
-            self.definitions(cell).next(),
-            Some(Contribution::Library(..))
-        )
+        matches!(self.definition(cell), Some(Contribution::Library(..)))
     }
 }
 
 impl grap::Host for Sources<'_> {
     fn resolve(&self, cell: CellId) -> Option<grap::Definition> {
-        self.definitions(cell)
-            .next()
+        self.definition(cell)
             .map(|contribution| match contribution {
                 Contribution::Document(value) => grap::Definition::Value(value.clone()),
                 Contribution::Library(_, definition) => definition.clone(),

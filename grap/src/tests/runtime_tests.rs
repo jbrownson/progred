@@ -550,8 +550,6 @@ fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
             .iter()
             .find(|(key, _)| *key == cell)
             .map(|(_, value)| value.clone())
-            .into_iter()
-            .collect()
     })
 }
 
@@ -965,14 +963,14 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let creator = TestHost(move |cell| {
         if cell == first || cell == second {
-            vec![Definition::Value(enclosing.into())]
+            Some(Definition::Value(enclosing.into()))
         } else if cell == enclosing {
-            vec![Definition::Value(isa::record(
+            Some(Definition::Value(isa::record(
                 vocabulary::kind::VALUE_WRAPPER,
                 [(vocabulary::VALUE, lambda([], call(sink.into(), [])))],
-            ))]
+            )))
         } else {
-            vec![]
+            None
         }
     });
     let a = evaluate(&first.into(), &creator, 100).result.to_value();

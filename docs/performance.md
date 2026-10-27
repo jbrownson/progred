@@ -236,7 +236,7 @@ are phase totals, not attributed back to each originating widget. In particular,
 The same instrumented harness also accepts `color_picker_form_profile` to
 measure an open RGBA picker; `_form_profile` runs both workloads.
 
-`BenchFrame` takes a document, source-qualified root path, selection,
+`BenchFrame` takes a document, root path, selection,
 annotations, available width, placement origin, clipping rectangle, and pointer.
 `BenchContext` retains the library stack, fonts, layout context, text shaping,
 and caller-owned computation graph. A `ProfileView` configures logical size and display scale, using zero
