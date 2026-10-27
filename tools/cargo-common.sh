@@ -117,8 +117,17 @@ cargo_command() {
                     -Z "build-std=$web_build_std" --target "$web_target"
             fi
             ;;
+        # rust-analyzer's proc-macro server, from the toolchain that built the
+        # macros, so they run with the same boundaries when it expands them.
+        # It starts only for rust-analyzer, which says so through RUST_ANALYZER_INTERNALS_DO_NOT_USE.
+        proc-macro-srv)
+            shift
+            run_sandboxed 0 0 env \
+                "RUST_ANALYZER_INTERNALS_DO_NOT_USE=${RUST_ANALYZER_INTERNALS_DO_NOT_USE-}" \
+                "$toolchain_root/libexec/rust-analyzer-proc-macro-srv" "$@"
+            ;;
         "")
-            echo "usage: tools/$wrapper audit | fetch | update | resolve | web-threaded-fetch | web-threaded <cargo command> | web-fallback <cargo command> | <cargo command> [arguments...]" >&2
+            echo "usage: tools/$wrapper audit | fetch | update | resolve | proc-macro-srv | web-threaded-fetch | web-threaded <cargo command> | web-fallback <cargo command> | <cargo command> [arguments...]" >&2
             exit 2
             ;;
         # Builds are offline; fetch the locked graph first if anything is

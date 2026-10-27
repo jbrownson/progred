@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Cargo for rust-analyzer: its metadata, build scripts and checks run in the
+# build sandbox, as make's do. Editors start rust-analyzer with CARGO set to
+# this script; see docs/build-security.md.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+case $(uname -s) in
+    Darwin) exec "$tool_dir/sandbox-cargo" "$@" ;;
+    *) exec "$tool_dir/linux-cargo" "$@" ;;
+esac

@@ -1,8 +1,28 @@
 #!/bin/sh
 
+# Cargo calls this in place of rustc outside the build sandbox, through
+# .cargo/config.toml, with the real rustc and its arguments. Questions about
+# the compiler and target, which compile nothing, pass through, so `cargo
+# metadata` works; anything that would compile is refused.
+
 set -eu
 
-cat >&2 <<'EOF'
+rustc=$1
+shift
+
+query=0
+for argument do
+    case $argument in
+        -vV | -V | --version) query=1 ;;
+        --print | --print=*) query=1 ;;
+        *.rs) query=0; break ;;
+    esac
+done
+if [ "$query" = 1 ]; then
+    exec "$rustc" "$@"
+fi
+
+cat >&2 <<'MESSAGE'
 error: an unsandboxed Rust build was refused by this repository
 
 Cargo build scripts and procedural macros execute native dependency code.
@@ -13,8 +33,6 @@ Use one of the repository's entry points instead, for example:
     make test
     ./tools/sandbox-cargo <cargo command> [arguments...]   (macOS, sandboxed)
     ./tools/linux-cargo <cargo command> [arguments...]     (Linux, sandboxed)
-
-See docs/build-security.md for the boundary and its limitations.
-EOF
+MESSAGE
 
 exit 86

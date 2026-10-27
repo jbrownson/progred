@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# rust-analyzer's proc-macro server in the build sandbox. The procedural
+# macros it loads are dependency code, so they expand with the boundaries they
+# were built with; see docs/build-security.md.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+case $(uname -s) in
+    Darwin) exec "$tool_dir/sandbox-cargo" proc-macro-srv "$@" ;;
+    *) exec "$tool_dir/linux-cargo" proc-macro-srv "$@" ;;
+esac
