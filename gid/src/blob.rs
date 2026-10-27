@@ -1,3 +1,4 @@
+use crate::hex_string;
 use std::{fmt, ops::Deref, sync::Arc};
 
 /// Bytes with value semantics: clones share storage.
@@ -22,23 +23,6 @@ impl fmt::Display for Blob {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x{}", hex_string(self))
     }
-}
-
-pub fn hex_string(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-/// The bytes that hex digit pairs spell, in either case; [`hex_string`]
-/// writes them.
-pub fn read_hex(hex: &str) -> Option<Vec<u8>> {
-    let digit = |byte: u8| char::from(byte).to_digit(16);
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| match pair {
-            [high, low] => Some((digit(*high)? << 4 | digit(*low)?) as u8),
-            _ => None,
-        })
-        .collect()
 }
 
 #[cfg(test)]
