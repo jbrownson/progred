@@ -31,16 +31,11 @@ pub fn hex_string(bytes: &[u8]) -> String {
 /// The bytes that hex digit pairs spell, in either case; [`hex_string`]
 /// writes them.
 pub fn read_hex(hex: &str) -> Option<Vec<u8>> {
-    let digit = |c: u8| match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' => Some(c - b'a' + 10),
-        b'A'..=b'F' => Some(c - b'A' + 10),
-        _ => None,
-    };
+    let digit = |byte: u8| char::from(byte).to_digit(16);
     hex.as_bytes()
         .chunks(2)
         .map(|pair| match pair {
-            [high, low] => Some(digit(*high)? << 4 | digit(*low)?),
+            [high, low] => Some((digit(*high)? << 4 | digit(*low)?) as u8),
             _ => None,
         })
         .collect()
