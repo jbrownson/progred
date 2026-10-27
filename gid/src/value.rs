@@ -27,13 +27,7 @@ pub enum Value {
 impl Value {
     /// Builds a list, minting evenly spread positions.
     pub fn list(elements: impl IntoIterator<Item = Value>) -> Value {
-        let elements: Vec<Value> = elements.into_iter().collect();
-        Value::List(
-            crate::position::spread(elements.len())
-                .into_iter()
-                .zip(elements)
-                .collect(),
-        )
+        Value::List(elements.into_iter().collect())
     }
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
@@ -128,6 +122,24 @@ impl From<CellId> for Value {
 impl From<Vec<u8>> for Value {
     fn from(bytes: Vec<u8>) -> Self {
         Value::Blob(bytes.into())
+    }
+}
+
+impl From<Blob> for Value {
+    fn from(bytes: Blob) -> Self {
+        Value::Blob(bytes)
+    }
+}
+
+impl From<List> for Value {
+    fn from(elements: List) -> Self {
+        Value::List(elements)
+    }
+}
+
+impl From<Record> for Value {
+    fn from(fields: Record) -> Self {
+        Value::Record(fields)
     }
 }
 

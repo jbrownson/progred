@@ -1,5 +1,5 @@
 use super::*;
-use crate::position::{between, spread};
+use crate::position::between;
 use crate::{CellId, new_cell_id};
 use std::collections::hash_map::DefaultHasher;
 
@@ -160,17 +160,6 @@ fn malformed_spellings_refuse() {
     // Numbers left the data model.
     assert!(serde_json::from_str::<Value>(r#"{"number":1.0}"#).is_err());
     assert!(serde_json::from_str::<CellId>(r#"{"number":1.0}"#).is_err());
-}
-
-#[test]
-fn spread_positions_carry_list_construction() {
-    let list = Value::list((0..100).map(|i| blob(&i.to_string())));
-    let elements = list.as_list().unwrap();
-    assert_eq!(elements.len(), 100);
-    let positions: Vec<_> = elements.keys().cloned().collect();
-    assert_eq!(positions, spread(100));
-    let values: Vec<_> = elements.values().cloned().collect();
-    assert_eq!(values[3], blob("3"));
 }
 
 #[test]

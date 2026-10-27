@@ -84,6 +84,17 @@ impl FromIterator<(Position, Value)> for List {
     }
 }
 
+/// Bare values get evenly spread positions, in order.
+impl FromIterator<Value> for List {
+    fn from_iter<T: IntoIterator<Item = Value>>(iter: T) -> Self {
+        let elements: Vec<Value> = iter.into_iter().collect();
+        crate::position::spread(elements.len())
+            .into_iter()
+            .zip(elements)
+            .collect()
+    }
+}
+
 impl IntoIterator for List {
     type Item = (Position, Value);
     type IntoIter = std::vec::IntoIter<Self::Item>;

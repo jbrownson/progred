@@ -29,3 +29,13 @@ fn lists_are_canonical_copy_on_write_sequences() {
     assert_eq!(original.get(&first), Some(&blob("changed")));
     assert_eq!(snapshot.get(&first), Some(&blob("first")));
 }
+
+#[test]
+fn collected_values_get_spread_positions() {
+    let elements: List = (0..100).map(|i| blob(&i.to_string())).collect();
+    assert_eq!(elements.len(), 100);
+    let positions: Vec<_> = elements.keys().cloned().collect();
+    assert_eq!(positions, spread(100));
+    let values: Vec<_> = elements.values().cloned().collect();
+    assert_eq!(values[3], blob("3"));
+}
