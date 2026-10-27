@@ -332,13 +332,7 @@ fn list(elements: Vec<(Option<gid::Position>, Value)>) -> Result<Value, String> 
     if !elements.windows(2).all(|pair| pair[0].0 < pair[1].0) {
         return Err("a list's positions must increase, without repeats".to_string());
     }
-    Ok(Value::List(elements.into_iter().fold(
-        gid::List::new(),
-        |mut list, (position, value)| {
-            list.set(&position, value);
-            list
-        },
-    )))
+    Ok(Value::List(elements.into_iter().collect()))
 }
 
 /// The canonical printer — deterministic from (document, binders).

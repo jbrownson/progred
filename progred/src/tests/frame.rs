@@ -884,7 +884,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
         .unwrap();
     let position = gid::position::between(content.keys().last(), None).unwrap();
     let path = vec![Step::Element(position.clone())];
-    let content = Value::List(content.with(&position, crate::libraries::f64::value(40.0)));
+    let content = Value::List(content.with(position, crate::libraries::f64::value(40.0)));
     assert!(!runner.frame.dispatch.landmarks.landmark(&path).is_some());
     runner.update_frame(1.0, viewport, |editor, dispatch, _| {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);

@@ -68,15 +68,15 @@ fn stored_paths_track_insertions_and_survive_missing_endpoints() {
     let full_span = all.select(0, 0..4, None);
     let mut edited = original.as_list().unwrap().clone();
     edited.set(
-        &gid::position::between(None, positions.first()).unwrap(),
+        gid::position::between(None, positions.first()).unwrap(),
         leaf(),
     );
     edited.set(
-        &gid::position::between(Some(&positions[1]), Some(&positions[2])).unwrap(),
+        gid::position::between(Some(&positions[1]), Some(&positions[2])).unwrap(),
         leaf(),
     );
     edited.set(
-        &gid::position::between(positions.last(), None).unwrap(),
+        gid::position::between(positions.last(), None).unwrap(),
         leaf(),
     );
     let edited_value = Value::List(edited.clone());
@@ -109,8 +109,8 @@ fn stored_paths_track_insertions_and_survive_missing_endpoints() {
             .and_then(f64::read),
         Some(4.25)
     );
-    edited.set(&positions[1], None);
-    edited.set(&positions[2], None);
+    edited.set(positions[1].clone(), None);
+    edited.set(positions[2].clone(), None);
     let survivors = Selection::new(&Value::List(edited), Some(&chosen.state()));
     assert_eq!(survivors.leaves, 2..3);
     assert_eq!(survivors.state(), chosen.state());
@@ -121,7 +121,7 @@ fn missing_ranges_and_hidden_rows_do_not_destroy_state() {
     let tree = Value::list([Value::list([]), leaf(), leaf()]);
     let chosen = Selection::new(&tree, None).select(0, 1..2, None);
     let position = tree.as_list().unwrap().keys().last().unwrap();
-    let edited = Value::List(tree.as_list().unwrap().with(&position, None));
+    let edited = Value::List(tree.as_list().unwrap().with(position.clone(), None));
     let stale = Selection::new(&edited, Some(&chosen.state()));
     assert_eq!(stale.leaves, 0..1);
     assert_eq!(stale.state(), chosen.state());

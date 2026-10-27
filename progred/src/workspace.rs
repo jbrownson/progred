@@ -201,7 +201,7 @@ pub fn move_part(root: &Value, path: &[Step], direction: Move) -> Option<(Value,
         index.checked_sub(1)?
     };
     let value = parts.get(position)?.clone();
-    let remaining = parts.with(&position, None);
+    let remaining = parts.with(position.clone(), None);
     let keys: Vec<_> = remaining.keys().collect();
     let position = gid::position::between(
         destination
@@ -218,7 +218,7 @@ pub fn move_part(root: &Value, path: &[Step], direction: Move) -> Option<(Value,
         crate::spine::set(
             Some(root),
             &list,
-            Value::List(remaining.with(&position, value)),
+            Value::List(remaining.with(position.clone(), value)),
         )?,
         part_path(container, &position),
     ))

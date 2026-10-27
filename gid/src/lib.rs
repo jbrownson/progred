@@ -21,7 +21,7 @@ pub use blob::{Blob, hex_string, read_hex};
 pub use cell_id::{CellId, ParseCellIdError, new_cell_id};
 pub use cells::Cells;
 pub use document::Document;
-pub use entries::sorted_entries;
+pub use entries::{Entries, sorted_entries};
 pub use list::List;
 pub use path::{Path, Resolution, Step};
 pub use position::Position;

@@ -24,7 +24,7 @@ fn lists_are_canonical_copy_on_write_sequences() {
 
     let snapshot = original.clone();
     assert!(Arc::ptr_eq(&original.0, &snapshot.0));
-    original.set(&first, blob("changed"));
+    original.set(first.clone(), blob("changed"));
     assert!(!Arc::ptr_eq(&original.0, &snapshot.0));
     assert_eq!(original.get(&first), Some(&blob("changed")));
     assert_eq!(snapshot.get(&first), Some(&blob("first")));

@@ -316,9 +316,9 @@ fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
     );
     let inserted = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
     let mut stored = gid::List::new();
-    stored.set(&positions[0], Value::record([]));
-    stored.set(&inserted, f64::value(1.0));
-    stored.set(&positions[1], f64::value(2.0));
+    stored.set(positions[0].clone(), Value::record([]));
+    stored.set(inserted.clone(), f64::value(1.0));
+    stored.set(positions[1].clone(), f64::value(2.0));
     let stored = RuntimeValue::from(Value::List(stored));
     assert_eq!(
         stored.list_positions(),
