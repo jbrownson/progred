@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{fmt, ops::Deref, sync::Arc};
 
 /// Bytes with value semantics: clones share storage.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -15,6 +15,12 @@ impl Deref for Blob {
 
     fn deref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl fmt::Display for Blob {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}", hex_string(self))
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::{CellId, Value};
+use std::fmt;
 use std::sync::Arc;
 
 /// A small immutable map keyed by durable cell identity. Records are
@@ -72,6 +73,19 @@ impl Record {
         let mut next = self.clone();
         next.remove(key);
         next
+    }
+}
+
+impl fmt::Display for Record {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+        for (index, (label, value)) in self.iter().enumerate() {
+            if index > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{label}: {value}")?;
+        }
+        write!(f, "}}")
     }
 }
 

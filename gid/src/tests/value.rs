@@ -162,3 +162,16 @@ fn malformed_spellings_refuse() {
     assert!(serde_json::from_str::<Value>(r#"{"number":1.0}"#).is_err());
     assert!(serde_json::from_str::<CellId>(r#"{"number":1.0}"#).is_err());
 }
+
+#[test]
+fn values_display_through_their_parts() {
+    let cell = CellId::from_u128(0x00112233445566778899aabbccddeeff);
+    let value = Value::record([(
+        label("k"),
+        Value::list([Value::from(vec![0xde, 0xad]), Value::from(cell)]),
+    )]);
+    assert_eq!(
+        value.to_string(),
+        format!("{{{}: [0xdead, {cell}]}}", label("k"))
+    );
+}

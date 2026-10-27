@@ -94,28 +94,10 @@ impl From<Record> for Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Cell(cell) => write!(f, "{cell}"),
-            Value::Blob(bytes) => write!(f, "0x{}", hex_string(bytes)),
-            Value::List(elements) => {
-                write!(f, "[")?;
-                for (index, element) in elements.values().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    element.fmt(f)?;
-                }
-                write!(f, "]")
-            }
-            Value::Record(fields) => {
-                write!(f, "{{")?;
-                for (index, (label, value)) in fields.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{label}: {value}")?;
-                }
-                write!(f, "}}")
-            }
+            Value::Cell(cell) => cell.fmt(f),
+            Value::Blob(bytes) => bytes.fmt(f),
+            Value::List(elements) => elements.fmt(f),
+            Value::Record(fields) => fields.fmt(f),
         }
     }
 }
