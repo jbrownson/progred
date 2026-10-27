@@ -9,14 +9,13 @@ use crate::cell_id::CellId;
 use crate::{List, Record};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use std::hash::{Hash, Hasher};
 
 /// A value: anything sayable — pure structure, no identity of its
 /// own. Cycles are unrepresentable here; they exist only by a cell's
 /// value linking back through `Value::Cell`. Positions are element
-/// identity, saved with the document, and the hand-written Eq/Hash
-/// below IGNORE them: two occurrences of `[2, 3]` are the same value.
-#[derive(Debug, Clone)]
+/// identity, saved with the document, but lists compare without them:
+/// two occurrences of `[2, 3]` are the same value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
     Cell(CellId),
     Blob(Blob),
@@ -70,46 +69,6 @@ impl Value {
                 Value::Record(fields.iter().chain(patched).cloned().collect())
             }
             _ => patch,
-        }
-    }
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Cell(a), Value::Cell(b)) => a == b,
-            (Value::Blob(a), Value::Blob(b)) => a == b,
-            (Value::List(a), Value::List(b)) => a == b,
-            (Value::Record(a), Value::Record(b)) => a == b,
-            _ => false,
-        }
-    }
-}
-impl Eq for Value {}
-
-impl Hash for Value {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Value::Cell(cell) => {
-                0_u8.hash(state);
-                cell.hash(state);
-            }
-            Value::Blob(bytes) => {
-                1_u8.hash(state);
-                bytes.hash(state);
-            }
-            Value::List(elements) => {
-                2_u8.hash(state);
-                elements.hash(state);
-            }
-            Value::Record(fields) => {
-                3_u8.hash(state);
-                fields.len().hash(state);
-                for (label, value) in fields {
-                    label.hash(state);
-                    value.hash(state);
-                }
-            }
         }
     }
 }

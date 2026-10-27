@@ -2,6 +2,7 @@ use super::*;
 use crate::position::between;
 use crate::{CellId, new_cell_id};
 use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 fn relation(name: &str) -> CellId {
     CellId::from_u128(match name {

@@ -5,7 +5,7 @@ use std::sync::Arc;
 /// kept sorted and contiguous for cheap reads and iteration; clones
 /// share their storage, while edits copy only when another value still
 /// owns the same record.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Record(Arc<Vec<(CellId, Value)>>);
 
 impl Record {
