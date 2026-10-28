@@ -246,10 +246,8 @@ staged writes; an explicitly declined or halted handler commits no effects.
 Ordinary absent results keep preceding effects. Setters return `{}` on successful
 set or clear; absent remains an input convention for clearing, not its return value.
 Site and selection getters return their own missing-state reasons when empty.
-A function must decline before performing effects, including effects in its
-arguments or nested calls. Declining afterward halts the evaluation. Only the
-complete editor operation is staged,
-with no per-call snapshots or rollback. Tests can replace these foreign functions
+Only the complete editor operation is staged, with no per-call snapshots or
+rollback. Tests can replace these foreign functions
 with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and conversion callback.

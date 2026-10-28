@@ -415,29 +415,27 @@ impl<'a> Context<'a> {
                 {
                     context.call_cell(cell, &call, environment, Some(&target))
                 } else {
-                    context.checked_call(|context| {
-                        let callable = match function_cell {
-                            Some((cell, index)) => {
-                                context.burn()?;
-                                match environment.get_at(&context.indices, cell, index) {
-                                    Some(value) => unbox(value.clone()),
-                                    // Ordinary cells took the direct path above.
-                                    None => RuntimeValue::from(Value::from(cell)),
-                                }
+                    let callable = match function_cell {
+                        Some((cell, index)) => {
+                            context.burn()?;
+                            match environment.get_at(&context.indices, cell, index) {
+                                Some(value) => unbox(value.clone()),
+                                // Ordinary cells took the direct path above.
+                                None => RuntimeValue::from(Value::from(cell)),
                             }
-                            None => context.eval(function.clone(), environment)?,
-                        };
-                        match context.try_call_callable(
-                            callable.clone(),
-                            &call,
-                            environment,
-                            &plan,
-                            &stages,
-                        ) {
-                            Some(result) => result,
-                            None => Ok(not_callable(&callable)),
                         }
-                    })
+                        None => context.eval(function.clone(), environment)?,
+                    };
+                    match context.try_call_callable(
+                        callable.clone(),
+                        &call,
+                        environment,
+                        &plan,
+                        &stages,
+                    ) {
+                        Some(result) => result,
+                        None => Ok(not_callable(&callable)),
+                    }
                 }
             })
         })

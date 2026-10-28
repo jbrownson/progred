@@ -787,10 +787,6 @@ pub fn library<W: Host>() -> Library<W> {
                 "computation belongs to another runtime",
             ),
             (memo::CANCELLED, "computation cancelled"),
-            (
-                ::grap::absent::EFFECTFUL_DECLINE,
-                "declined after an effect",
-            ),
             (::grap::absent::MISSING_CELL, "missing cell"),
             (::grap::absent::CELL_CYCLE, "cell cycle"),
             (::grap::absent::MALFORMED_LAMBDA, "malformed lambda"),

@@ -128,34 +128,33 @@ impl<'a> Context<'a> {
                 target
             }
         };
-        self.checked_call(|context| match &target.kind {
-            PreparedCallTargetKind::Foreign(function) => context.call_foreign_staged(
+        match &target.kind {
+            PreparedCallTargetKind::Foreign(function) => self.call_foreign_staged(
                 &ResolvedForeign::Function(function.clone()),
                 call,
                 environment,
                 Some(&target.stages),
             ),
             PreparedCallTargetKind::Value(expression) => {
-                let callable = context.eval_definition(cell, expression.clone(), environment)?;
+                let callable = self.eval_definition(cell, expression.clone(), environment)?;
                 if callable.absent_reason().is_some() {
                     Ok(callable)
                 } else {
-                    context
-                        .try_call_callable(
-                            callable.clone(),
-                            call,
-                            environment,
-                            &target.plan,
-                            &target.stages,
-                        )
-                        .unwrap_or_else(|| Ok(not_callable(&callable)))
+                    self.try_call_callable(
+                        callable.clone(),
+                        call,
+                        environment,
+                        &target.plan,
+                        &target.stages,
+                    )
+                    .unwrap_or_else(|| Ok(not_callable(&callable)))
                 }
             }
             PreparedCallTargetKind::Primitive(primitive, operands) => {
-                primitive.run(context, call, operands, environment)
+                primitive.run(self, call, operands, environment)
             }
             PreparedCallTargetKind::Absent(absent) => Ok(absent.clone()),
-        })
+        }
     }
 
     /// What a call of `cell` runs when its definition, `value`, is a foreign
@@ -361,34 +360,32 @@ impl<'a> Context<'a> {
         callable: &PreparedCallable,
         arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     ) -> Result<RuntimeValue, Halt> {
-        self.checked_call(|context| {
-            context.burn()?;
-            context.burn()?;
-            let arguments: Vec<_> = arguments.into_iter().collect();
-            match &callable.value.0 {
-                RuntimeValueKind::Closure(closure) => {
-                    context.call_closure(closure.clone(), &callable.value, &arguments)
-                }
-                RuntimeValueKind::Data(_)
-                | RuntimeValueKind::Unboxed(_)
-                | RuntimeValueKind::Record(_) => {
-                    let value = &callable.value;
-                    match callee_cell(value) {
-                        Some(cell) => {
-                            let call = runtime_call(value.clone(), arguments);
-                            match context.foreign_target_cell(cell) {
-                                Some(foreign) => {
-                                    context.call_foreign(&foreign, &call, &callable.environment)
-                                }
-                                None => context.call_cell(cell, &call, &callable.environment, None),
-                            }
-                        }
-                        None => Ok(not_callable(value)),
-                    }
-                }
-                RuntimeValueKind::List(_) => Ok(not_callable(&callable.value)),
+        self.burn()?;
+        self.burn()?;
+        let arguments: Vec<_> = arguments.into_iter().collect();
+        match &callable.value.0 {
+            RuntimeValueKind::Closure(closure) => {
+                self.call_closure(closure.clone(), &callable.value, &arguments)
             }
-        })
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => {
+                let value = &callable.value;
+                match callee_cell(value) {
+                    Some(cell) => {
+                        let call = runtime_call(value.clone(), arguments);
+                        match self.foreign_target_cell(cell) {
+                            Some(foreign) => {
+                                self.call_foreign(&foreign, &call, &callable.environment)
+                            }
+                            None => self.call_cell(cell, &call, &callable.environment, None),
+                        }
+                    }
+                    None => Ok(not_callable(value)),
+                }
+            }
+            RuntimeValueKind::List(_) => Ok(not_callable(&callable.value)),
+        }
     }
 
     /// Apply runtime-held callable syntax. Grap parameters receive values;
@@ -408,24 +405,22 @@ impl<'a> Context<'a> {
         {
             self.apply_cell(cell, function.clone(), arguments, &environment)
         } else {
-            self.checked_call(|context| {
-                let callable = if function.as_cell().is_some() {
-                    context.burn()?;
-                    function.clone()
-                } else {
-                    let function = match &function.0 {
-                        RuntimeValueKind::Data(value) => {
-                            context.lower_source(value, SourceOrigin::Input(Vec::new()))
-                        }
-                        _ => context.lower_runtime_code(function),
-                    };
-                    context.eval(function, &environment)?
+            let callable = if function.as_cell().is_some() {
+                self.burn()?;
+                function.clone()
+            } else {
+                let function = match &function.0 {
+                    RuntimeValueKind::Data(value) => {
+                        self.lower_source(value, SourceOrigin::Input(Vec::new()))
+                    }
+                    _ => self.lower_runtime_code(function),
                 };
-                match context.try_apply_callable(callable.clone(), &arguments, &environment) {
-                    Some(result) => result,
-                    None => Ok(not_callable(&callable)),
-                }
-            })
+                self.eval(function, &environment)?
+            };
+            match self.try_apply_callable(callable.clone(), &arguments, &environment) {
+                Some(result) => result,
+                None => Ok(not_callable(&callable)),
+            }
         }
     }
 
@@ -437,32 +432,29 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
-        self.checked_call(|context| {
-            let Some(value) = context.host.definition(cell) else {
-                return Ok(missing_cell(cell));
-            };
-            match context.own_implementation(cell, &value) {
-                Some(Ok(implementation)) => context.apply_foreign(
-                    &ResolvedForeign::Function(implementation),
-                    callable,
-                    arguments,
-                    environment,
-                ),
-                Some(Err(absent)) => Ok(absent),
-                None => {
-                    // Lowered once per evaluation, as a call of the cell is.
-                    let expression = context.lowered_cell(cell, &value);
-                    let callable = context.eval_definition(cell, expression, environment)?;
-                    if callable.absent_reason().is_some() {
-                        Ok(callable)
-                    } else {
-                        context
-                            .try_apply_callable(callable.clone(), &arguments, environment)
-                            .unwrap_or_else(|| Ok(not_callable(&callable)))
-                    }
+        let Some(value) = self.host.definition(cell) else {
+            return Ok(missing_cell(cell));
+        };
+        match self.own_implementation(cell, &value) {
+            Some(Ok(implementation)) => self.apply_foreign(
+                &ResolvedForeign::Function(implementation),
+                callable,
+                arguments,
+                environment,
+            ),
+            Some(Err(absent)) => Ok(absent),
+            None => {
+                // Lowered once per evaluation, as a call of the cell is.
+                let expression = self.lowered_cell(cell, &value);
+                let callable = self.eval_definition(cell, expression, environment)?;
+                if callable.absent_reason().is_some() {
+                    Ok(callable)
+                } else {
+                    self.try_apply_callable(callable.clone(), &arguments, environment)
+                        .unwrap_or_else(|| Ok(not_callable(&callable)))
                 }
             }
-        })
+        }
     }
 
     /// Host calls bind argument values as a call expression binds its

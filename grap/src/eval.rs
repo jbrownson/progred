@@ -9,11 +9,9 @@ use crate::{Context, Evaluation, Expression, SourceOrigin, absent};
 use gid::{CellId, Value};
 
 /// Why an evaluation stopped before finishing.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Halt {
     FuelExhausted,
-    /// A call wrote something, then declined with this value.
-    EffectfulDecline(RuntimeValue),
 }
 
 impl Halt {
@@ -21,9 +19,6 @@ impl Halt {
     fn into_absent(self) -> RuntimeValue {
         RuntimeValue::from(match self {
             Self::FuelExhausted => absent::value(absent::FUEL_EXHAUSTED),
-            Self::EffectfulDecline(value) => {
-                absent::with_detail(absent::EFFECTFUL_DECLINE, absent::VALUE, value.into_value())
-            }
         })
     }
 }
@@ -40,7 +35,7 @@ impl<'a> Context<'a> {
         mut self,
         run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>,
     ) -> Evaluation {
-        let outcome = self.checked_call(run);
+        let outcome = run(&mut self);
         Evaluation {
             completed: outcome.is_ok(),
             result: outcome.unwrap_or_else(Halt::into_absent),
@@ -52,21 +47,7 @@ impl<'a> Context<'a> {
     /// evaluate arguments and check applicability before entering this operation.
     pub fn effect<T>(&mut self, run: impl FnOnce() -> T) -> T {
         self.host.effect();
-        self.effects += 1;
         run()
-    }
-
-    pub(crate) fn checked_call(
-        &mut self,
-        run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>,
-    ) -> Result<RuntimeValue, Halt> {
-        let before = self.effects;
-        let result = run(self)?;
-        if self.effects != before && result.declines() {
-            Err(Halt::EffectfulDecline(result))
-        } else {
-            Ok(result)
-        }
     }
 
     pub(crate) fn run(self, expression: &Value) -> Evaluation {

@@ -812,26 +812,18 @@ sources for an implementation. An absent callable is its own reason, so a call
 of one answers it unchanged, as an absent argument passes on. Scoped capability functions can override this
 lookup. Higher-level operations own any deliberate dispatch or composition.
 Projection environments expose one borrowed resolution containing the selected
-definition's value, source, and whether it has a native implementation. Call
-projections and completion providers can inspect this metadata without evaluating
-the callable or mistaking a native function's description for a Grap lambda.
+definition's value and source. Call projections and completion providers can
+inspect it without evaluating the callable, and tell a foreign function from a
+Grap lambda by its kind.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
 wrap selection, annotation, drawing/path writes, and deterministic random
 advancement in `context.effect(|| operation)`. The combinator marks the effect,
-runs the operation, and returns its result. Arguments and applicability checks
-stay outside the closure, so declining before a write remains possible. Reads
-do not mark an effect. The context owns one effect counter; each call remembers
-its starting count. This includes effects in strict arguments and nested calls,
-but excludes effects performed before that call began.
-
-A function must explicitly decline before performing effects. A decline after
-an effect halts evaluation with
-`{isa: absent, reason: effectful-decline, value: cause}`.
-This contract remains useful to explicit compositions
-and event handlers, independently of cell resolution. It applies to Grap and Rust
-functions alike. Other absents remain ordinary results, including a non-callable
-result. Effect-only commands, including selection and site-state setters, return
+runs the operation, and returns its result, telling the host so a reused result
+can't leave a write out. Reads do not mark an effect. A decline, like any other
+absent, is an ordinary result: the host that asked for the evaluation decides
+what its writes come to, and the editor's handlers, drawings and controls drop
+a declined evaluation's output. Effect-only commands, including selection and site-state setters, return
 `{}` on success, including when clearing state. Getters return specific absents
 when the requested state is missing.
 
@@ -1033,7 +1025,6 @@ accumulates no ambient failure trace.
 
 Fuel exhaustion halts immediately; at the public boundary it is still an absent
 value, with `Evaluation.completed` recording that execution did not finish.
-An effectful decline also halts rather than returning normally.
 Returning that same value normally still counts as completed execution.
 Drawing-source origins are separate from failures.
 

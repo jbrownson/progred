@@ -36,50 +36,6 @@ fn a_seeded_scope_repeats_and_zero_is_the_default() {
 }
 
 #[test]
-fn declining_after_sampling_halts_the_evaluation() {
-    let function = new_cell_id();
-    let ignored = new_cell_id();
-    let next = grap::call(
-        vocabulary::BETWEEN.into(),
-        [
-            (vocabulary::MIN, f64::value(-2.0)),
-            (vocabulary::MAX, f64::value(3.0)),
-        ],
-    );
-    let functions = functions();
-    let evaluation = grap::evaluate_value(
-        &grap::call(
-            vocabulary::WITH_RANDOM.into(),
-            [(
-                grap::vocabulary::EXPRESSION,
-                grap::call(function.into(), []),
-            )],
-        ),
-        &crate::test_support::TestHost(|cell| {
-            if cell == function {
-                Some(crate::test_support::TestDefinition::from(grap::lambda(
-                    [],
-                    grap::call(
-                        grap::lambda([ignored], ::grap::absent::decline()),
-                        [(ignored, next.clone())],
-                    ),
-                )))
-            } else {
-                functions.get(cell).map(|function| {
-                    crate::test_support::TestDefinition::foreign(cell, function.clone())
-                })
-            }
-        }),
-        100,
-    );
-    assert!(!evaluation.completed);
-    assert_eq!(
-        ::grap::absent::reason(&evaluation.result),
-        Some(grap::absent::EFFECTFUL_DECLINE),
-    );
-}
-
-#[test]
 fn successive_samples_advance_the_scoped_stream() {
     let pair = new_cell_id();
     let first_field = new_cell_id();

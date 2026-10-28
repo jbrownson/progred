@@ -100,50 +100,19 @@ fn a_returned_halt_shaped_value_is_still_a_completed_result() {
     assert!(evaluation.completed);
 }
 
+/// A decline after a write is an ordinary result: the host decides what a
+/// declined evaluation's writes come to.
 #[test]
-fn effects_in_arguments_and_nested_calls_make_a_decline_effectful() {
+fn absent_and_declined_returns_keep_their_effects() {
     let operations = Operations::new();
     let function = new_cell_id();
-    let initial = Value::from(b"initial".to_vec());
-    for invocation in INVOCATIONS {
-        for nested in [false, true] {
-            let write = operations.write(Value::from(b"discarded".to_vec()));
-            let effect = if nested {
-                call(lambda([], after(write, Value::record([]))), [])
-            } else {
-                write
-            };
-            let (evaluation, state) = run(
-                invocation,
-                function.into(),
-                &operations,
-                |cell| {
-                    assert_eq!(cell, function);
-                    Some(TestDefinition::from(lambda(
-                        [],
-                        after(effect.clone(), absent::decline()),
-                    )))
-                },
-                initial.clone(),
-                100,
-            );
-            assert_eq!(
-                absent::reason(&evaluation.result),
-                Some(absent::EFFECTFUL_DECLINE)
-            );
-            assert_eq!(state, Value::from(b"discarded".to_vec()));
-            assert!(!evaluation.completed);
-        }
-    }
-}
-
-#[test]
-fn ordinary_absent_returns_keep_their_effects() {
-    let operations = Operations::new();
-    let function = new_cell_id();
-    let result = absent::value(new_cell_id());
     let written = Value::from(b"written".to_vec());
-    for invocation in INVOCATIONS {
+    for (invocation, result) in INVOCATIONS.into_iter().flat_map(|invocation| {
+        [
+            (invocation, absent::value(new_cell_id())),
+            (invocation, absent::decline()),
+        ]
+    }) {
         let (evaluation, state) = run(
             invocation,
             function.into(),
@@ -220,41 +189,6 @@ fn halts_stop_without_rolling_back_temporary_state() {
 }
 
 #[test]
-fn an_effectful_decline_cannot_be_ignored_by_its_caller() {
-    let operations = Operations::new();
-    let initial = Value::from(b"initial".to_vec());
-    for invocation in INVOCATIONS {
-        let function = lambda(
-            [],
-            after(
-                call(
-                    lambda(
-                        [],
-                        after(operations.write(Value::from(vec![42])), absent::decline()),
-                    ),
-                    [],
-                ),
-                call(operations.read.into(), []),
-            ),
-        );
-        let (evaluation, state) = run(
-            invocation,
-            function,
-            &operations,
-            |_| None,
-            initial.clone(),
-            100,
-        );
-        assert_eq!(
-            absent::reason(&evaluation.result),
-            Some(absent::EFFECTFUL_DECLINE)
-        );
-        assert!(!evaluation.completed);
-        assert_eq!(state, Value::from(vec![42]));
-    }
-}
-
-#[test]
 fn a_non_callable_definition_returns_absent() {
     let operations = Operations::new();
     let function = new_cell_id();
@@ -277,79 +211,4 @@ fn a_non_callable_definition_returns_absent() {
     );
     assert!(evaluation.completed);
     assert_eq!(state, Value::from(vec![42]));
-}
-
-#[test]
-fn earlier_effects_do_not_prevent_a_later_pure_decline() {
-    let operations = Operations::new();
-    let function = new_cell_id();
-    let written = Value::from(vec![42]);
-    for invocation in INVOCATIONS {
-        let (evaluation, state) = run(
-            invocation,
-            lambda(
-                [],
-                after(
-                    operations.write(written.clone()),
-                    after(call(function.into(), []), written.clone()),
-                ),
-            ),
-            &operations,
-            |_| Some(TestDefinition::from(lambda([], absent::decline()))),
-            Value::record([]),
-            100,
-        );
-        assert!(evaluation.completed);
-        assert_eq!(evaluation.result, written);
-        assert_eq!(state, written);
-    }
-}
-
-#[test]
-fn rust_functions_obey_the_same_decline_contract() {
-    for staged in [false, true] {
-        for effectful in [false, true] {
-            let operations = Operations::new();
-            let function = new_cell_id();
-            let implementation = move |context: &mut Context<'_>, _: &Environment| {
-                Ok(RuntimeValue::from(if effectful {
-                    context.effect(absent::decline)
-                } else {
-                    absent::decline()
-                }))
-            };
-            let foreign = if staged {
-                ForeignFunction::staged(move |_| Rc::new(implementation))
-            } else {
-                ForeignFunction::new(move |context, _, environment| {
-                    implementation(context, environment)
-                })
-            };
-            for invocation in INVOCATIONS {
-                let (evaluation, _) = run(
-                    invocation,
-                    function.into(),
-                    &operations,
-                    |_| {
-                        Some(TestDefinition::foreign(
-                            function,
-                            gid::Record::default(),
-                            foreign.clone(),
-                        ))
-                    },
-                    Value::record([]),
-                    100,
-                );
-                assert_eq!(evaluation.completed, !effectful);
-                if effectful {
-                    assert_eq!(
-                        absent::reason(&evaluation.result),
-                        Some(absent::EFFECTFUL_DECLINE)
-                    );
-                } else {
-                    assert_eq!(evaluation.result, absent::decline());
-                }
-            }
-        }
-    }
 }
