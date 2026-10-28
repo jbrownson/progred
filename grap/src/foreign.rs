@@ -10,7 +10,7 @@ use std::rc::Rc;
 /// prepare stage with the once-parsed call structure in its captures.
 pub type Stage = Rc<dyn Fn(&mut Context, &Environment) -> Result<RuntimeValue, Halt>>;
 
-pub(crate) type Prepare = Rc<dyn Fn(&Context, &Expression) -> Stage>;
+pub(crate) type Prepare = Rc<dyn Fn(&Expression) -> Stage>;
 
 #[derive(Clone)]
 pub(crate) enum ForeignImplementation {
@@ -62,7 +62,7 @@ impl ForeignFunction {
     /// or fuel) and re-runnable. The returned stage owns
     /// every observable, including the fuel the straightforward shape
     /// would burn.
-    pub fn staged(prepare: impl Fn(&Context, &Expression) -> Stage + 'static) -> Self {
+    pub fn staged(prepare: impl Fn(&Expression) -> Stage + 'static) -> Self {
         Self {
             tracked: false,
             implementation: ForeignImplementation::Staged(Rc::new(prepare)),

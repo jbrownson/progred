@@ -110,8 +110,8 @@ pub(crate) type Operands = Rc<[Argument]>;
 impl Primitive {
     /// The foreign function a library registers for this operation.
     pub fn function(self) -> ForeignFunction {
-        ForeignFunction::staged(move |context, call| {
-            let operands = self.operands(context, call);
+        ForeignFunction::staged(move |call| {
+            let operands = self.operands(call);
             let call = call.clone();
             Rc::new(move |context, environment| self.run(context, &call, &operands, environment))
         })
@@ -128,10 +128,10 @@ impl Primitive {
     }
 
     /// The call's operands, found once per call site.
-    pub(crate) fn operands(&self, context: &Context, call: &Expression) -> Operands {
+    pub(crate) fn operands(&self, call: &Expression) -> Operands {
         self.labels()
             .into_iter()
-            .map(|label| context.argument(call, label))
+            .map(|label| call.argument(label))
             .collect()
     }
 

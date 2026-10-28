@@ -103,11 +103,11 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                     context: &mut ::grap::Context,
                     call: &::grap::Expression,
                     environment: &::grap::Environment| {
-            let key = context.field(call, ui::KEY).unwrap();
+            let key = call.field(ui::KEY).unwrap();
             let key = context.eval_to_value(key, environment)?;
             if function == ui::RADIO {
                 assert_eq!(key, names["preview_mode"].into());
-                let options = context.field(call, ui::OPTIONS).unwrap();
+                let options = call.field(ui::OPTIONS).unwrap();
                 let options = context.eval_to_value(options, environment)?;
                 assert_eq!(
                     options
@@ -125,7 +125,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                         .collect::<Vec<_>>(),
                     [names["model"].into(), STOCK.into()]
                 );
-                let initial = context.field(call, ui::INITIAL).unwrap();
+                let initial = call.field(ui::INITIAL).unwrap();
                 let initial = context.eval_to_value(initial, environment)?;
                 assert_eq!(
                     initial,

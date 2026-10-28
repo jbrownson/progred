@@ -48,11 +48,11 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     unit.clone()
                 })),
                 vocabulary::MOVE_TO | vocabulary::LINE_TO => {
-                    let Some(x) = context.field(call, vocabulary::X) else {
-                        return Ok(context.missing_argument(call, vocabulary::X));
+                    let Some(x) = call.field(vocabulary::X) else {
+                        return Ok(call.missing_argument(vocabulary::X));
                     };
-                    let Some(y) = context.field(call, vocabulary::Y) else {
-                        return Ok(context.missing_argument(call, vocabulary::Y));
+                    let Some(y) = call.field(vocabulary::Y) else {
+                        return Ok(call.missing_argument(vocabulary::Y));
                     };
                     Ok(
                         match (
@@ -67,7 +67,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                                 }
                                 unit.clone()
                             }),
-                            _ => invalid_drawing(context, call),
+                            _ => invalid_drawing(call),
                         },
                     )
                 }
@@ -79,13 +79,13 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     let Some(paint) =
                         evaluated_field(context, call, environment, vocabulary::PAINT)?
                     else {
-                        return Ok(context.missing_argument(call, vocabulary::PAINT));
+                        return Ok(call.missing_argument(vocabulary::PAINT));
                     };
-                    let shape = match context.field(call, vocabulary::SHAPE) {
+                    let shape = match call.field(vocabulary::SHAPE) {
                         Some(shape) => evaluated_shape(&context.eval(shape, environment)?),
                         None => Some(puri::draw::Shape::Path(path.borrow().clone())),
                     };
-                    let transform = match context.field(call, vocabulary::TRANSFORM) {
+                    let transform = match call.field(vocabulary::TRANSFORM) {
                         Some(transform) => {
                             evaluated_transform(&context.eval(transform, environment)?)
                         }
@@ -99,7 +99,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                                 unit.clone()
                             })
                         }
-                        _ => invalid_drawing(context, call),
+                        _ => invalid_drawing(call),
                     })
                 }
                 _ => unreachable!("the overlay only advertises drawing functions"),
@@ -117,11 +117,11 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
 }
 
 /// An absent naming `call`, a drawing call with an argument it can't read.
-fn invalid_drawing(context: &grap::Context, call: &grap::Expression) -> Value {
+fn invalid_drawing(call: &grap::Expression) -> Value {
     ::grap::absent::with_detail(
         vocabulary::INVALID_DRAWING,
         ::grap::absent::VALUE,
-        context.value(call).clone(),
+        call.value().clone(),
     )
 }
 
@@ -131,8 +131,7 @@ fn evaluated_field(
     environment: &grap::Environment,
     field: CellId,
 ) -> Result<Option<Value>, grap::Halt> {
-    context
-        .field(call, field)
+    call.field(field)
         .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }

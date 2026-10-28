@@ -257,8 +257,8 @@ struct Arguments<'a, 'context> {
 
 impl Arguments<'_, '_> {
     fn value(&mut self, parameter: CellId) -> Result<Option<Value>, Halt> {
-        self.context
-            .field(self.call, parameter)
+        self.call
+            .field(parameter)
             .map(|expression| self.context.eval_to_value(expression, self.environment))
             .transpose()
     }

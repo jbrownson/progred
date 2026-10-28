@@ -5,7 +5,7 @@
 
 use crate::environment::CellIndices;
 use crate::eval::CellState;
-use crate::lower::{ByNode, Lowered, OriginId, OriginNode, OriginRoot, Thunk};
+use crate::lower::{ByNode, OriginId, OriginNode, OriginRoot, Thunk};
 use crate::runtime::RuntimeValueKind;
 use gid::{CellId, Value};
 use std::rc::Rc;
@@ -13,6 +13,7 @@ use std::rc::Rc;
 pub use call::PreparedCallable;
 pub use environment::Environment;
 pub use foreign::{ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function};
+pub use lower::Expression;
 pub use runtime::{RuntimeListValues, RuntimeValue};
 pub use trace::{Answering, CallTrace, Observed, Observer, Tracer};
 
@@ -45,36 +46,6 @@ mod trace;
 pub mod u64;
 mod unboxed;
 pub mod vocabulary;
-
-/// Shared code, independent of the evaluator that executes it.
-#[derive(Clone)]
-pub struct Expression(Rc<Lowered>);
-
-impl PartialEq for Expression {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Eq for Expression {}
-
-impl std::hash::Hash for Expression {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::ptr::hash(Rc::as_ptr(&self.0), state);
-    }
-}
-
-impl std::fmt::Debug for Expression {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.value().fmt(formatter)
-    }
-}
-
-impl Expression {
-    fn value(&self) -> &Value {
-        self.0.source.as_value()
-    }
-}
 
 /// GID's structural shapes, as a runtime value presents them.
 pub enum Shape<'a> {

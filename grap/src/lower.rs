@@ -7,7 +7,7 @@ use crate::eval::{CellState, unbox};
 use crate::foreign::{Prepare, Stage};
 use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
 use crate::unboxed::Unboxed;
-use crate::{Context, Expression, Halt, SourceOrigin, absent, arguments, isa, source, vocabulary};
+use crate::{Context, Halt, SourceOrigin, absent, arguments, isa, source, vocabulary};
 use gid::{CellId, Record, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -48,6 +48,75 @@ fn lowered_field(fields: &[(CellId, Expression)], label: CellId) -> Option<Expre
         .binary_search_by_key(&label, |(field, _)| *field)
         .ok()
         .map(|index| fields[index].1.clone())
+}
+
+/// A node of lowered code: its source, where it came from, how it evaluates,
+/// and its lowered children. It's equal only to itself, so each node is its
+/// own call site; clones share the node.
+#[derive(Clone)]
+pub struct Expression(pub(crate) Rc<Lowered>);
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Expression {}
+
+impl std::hash::Hash for Expression {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::ptr::hash(Rc::as_ptr(&self.0), state);
+    }
+}
+
+impl std::fmt::Debug for Expression {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value().fmt(formatter)
+    }
+}
+
+impl Expression {
+    /// The code as written.
+    pub fn value(&self) -> &Value {
+        self.0.source.as_value()
+    }
+
+    pub fn source_origin(&self) -> Option<SourceOrigin> {
+        source::origin(self)
+    }
+
+    pub fn field(&self, label: CellId) -> Option<Expression> {
+        lowered_field(self.0.fields.as_ref()?, label)
+    }
+
+    pub fn fields(&self) -> Option<&[(CellId, Expression)]> {
+        self.0.fields.as_deref()
+    }
+
+    pub fn elements(&self) -> Option<&[Expression]> {
+        self.0.elements.as_deref()
+    }
+
+    /// The positions of this list's elements, in order.
+    pub fn element_positions(&self) -> Option<Vec<gid::Position>> {
+        self.0.source.list_positions()
+    }
+
+    /// Why this call has no argument under `cell`, naming where the call is.
+    pub fn missing_argument(&self, cell: CellId) -> Value {
+        absent::missing_argument(cell, self.source_origin().as_ref())
+    }
+
+    pub fn missing_runtime_argument(&self, cell: CellId) -> RuntimeValue {
+        self.missing_argument(cell).into()
+    }
+
+    /// This call's argument under `label`, or why it has none.
+    pub fn argument(&self, label: CellId) -> arguments::Argument {
+        self.field(label)
+            .ok_or_else(|| self.missing_runtime_argument(label))
+    }
 }
 
 pub(crate) struct Lowered {
@@ -240,14 +309,6 @@ impl<'a> Context<'a> {
         }))
     }
 
-    pub fn value<'b>(&self, expression: &'b Expression) -> &'b Value {
-        expression.value()
-    }
-
-    pub fn source_origin(&self, expression: &Expression) -> Option<SourceOrigin> {
-        source::origin(expression)
-    }
-
     /// Run `call`, telling an observer it's entered and left.
     fn at_call(
         &mut self,
@@ -373,38 +434,6 @@ impl<'a> Context<'a> {
                 expression
             }
         }
-    }
-
-    pub fn field(&self, call: &Expression, label: CellId) -> Option<Expression> {
-        lowered_field(call.0.fields.as_ref()?, label)
-    }
-
-    pub fn fields<'b>(&self, expression: &'b Expression) -> Option<&'b [(CellId, Expression)]> {
-        expression.0.fields.as_deref()
-    }
-
-    pub fn elements<'b>(&self, expression: &'b Expression) -> Option<&'b [Expression]> {
-        expression.0.elements.as_deref()
-    }
-
-    /// The positions of `expression`'s elements, in order, when it's a list.
-    pub fn element_positions(&self, expression: &Expression) -> Option<Vec<gid::Position>> {
-        expression.0.source.list_positions()
-    }
-
-    /// Why `call` has no argument under `cell`, naming where the call is.
-    pub fn missing_argument(&self, call: &Expression, cell: CellId) -> Value {
-        absent::missing_argument(cell, self.source_origin(call).as_ref())
-    }
-
-    pub fn missing_runtime_argument(&self, call: &Expression, cell: CellId) -> RuntimeValue {
-        self.missing_argument(call, cell).into()
-    }
-
-    /// `call`'s argument under `label`, or why it has none.
-    pub fn argument(&self, call: &Expression, label: CellId) -> arguments::Argument {
-        self.field(call, label)
-            .ok_or_else(|| self.missing_runtime_argument(call, label))
     }
 }
 

@@ -77,8 +77,8 @@ impl ForeignFunction {
         R: Into<RuntimeValue>,
     {
         let body = Rc::new(body);
-        Self::staged(move |context, call| {
-            let arguments = labels.map(|label| (label, context.argument(call, label)));
+        Self::staged(move |call| {
+            let arguments = labels.map(|label| (label, call.argument(label)));
             let (call, body) = (call.clone(), body.clone());
             Rc::new(move |context, environment| {
                 let arguments = arguments

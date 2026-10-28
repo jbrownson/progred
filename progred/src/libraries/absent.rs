@@ -268,14 +268,14 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::OR_DEFAULT,
         ForeignFunction::new(|context, call, environment| {
-            let Some(expression) = context.field(call, vocabulary::VALUE) else {
-                return Ok(context.missing_runtime_argument(call, vocabulary::VALUE));
+            let Some(expression) = call.field(vocabulary::VALUE) else {
+                return Ok(call.missing_runtime_argument(vocabulary::VALUE));
             };
             let value = context.eval(expression, environment)?;
             if value.absent_reason().is_some() {
-                match context.field(call, vocabulary::DEFAULT) {
+                match call.field(vocabulary::DEFAULT) {
                     Some(default) => context.eval(default, environment),
-                    None => Ok(context.missing_runtime_argument(call, vocabulary::DEFAULT)),
+                    None => Ok(call.missing_runtime_argument(vocabulary::DEFAULT)),
                 }
             } else {
                 Ok(value)

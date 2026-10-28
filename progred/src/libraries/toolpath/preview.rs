@@ -102,7 +102,7 @@ pub(super) fn preview(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Error> {
-    let program = argument(context, call, presentation::vocabulary::VALUE)?;
+    let program = argument(call, presentation::vocabulary::VALUE)?;
     let program = context.eval(program, environment)?;
     let width = number(context, call, environment, layout::vocabulary::WIDTH)?;
     let height = number(context, call, environment, layout::vocabulary::HEIGHT)?;

@@ -65,7 +65,7 @@ pub(super) fn preview_with(
     kind: gid::CellId,
     model: impl FnOnce(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
 ) -> Result<RuntimeValue, Error> {
-    let playback = match context.field(call, PLAYBACK) {
+    let playback = match call.field(PLAYBACK) {
         Some(expression) => {
             let value = present(context.eval_to_value(expression, environment)?.into())?;
             playback::Settings::read(value.as_value()).ok_or_else(invalid)?;
@@ -73,11 +73,11 @@ pub(super) fn preview_with(
         }
         None => None,
     };
-    let program = argument(context, call, PROGRAM)?;
+    let program = argument(call, PROGRAM)?;
     let program = present(context.eval(program, environment)?)?;
     let radius = number(context, call, environment, LINE_RADIUS)?;
     read_radius(radius).ok_or_else(invalid)?;
-    let color = argument(context, call, fidget::vocabulary::COLOR)?;
+    let color = argument(call, fidget::vocabulary::COLOR)?;
     let color = context.eval_to_value(color, environment)?;
     color::read_opaque(&color).ok_or_else(|| {
         Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())

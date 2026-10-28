@@ -181,10 +181,9 @@ fn background_unavailable<W: Host>(
     )
 }
 
-fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
-    context
-        .field(call, field)
-        .ok_or_else(|| Error::Invalid(context.missing_runtime_argument(call, field)))
+fn argument(call: &Expression, field: CellId) -> Result<Expression, Error> {
+    call.field(field)
+        .ok_or_else(|| Error::Invalid(call.missing_runtime_argument(field)))
 }
 
 fn number(
@@ -193,7 +192,7 @@ fn number(
     environment: &Environment,
     field: CellId,
 ) -> Result<f64, Error> {
-    let expression = argument(context, call, field)?;
+    let expression = argument(call, field)?;
     context
         .eval_f64(expression, environment)?
         .filter(|n| n.is_finite())
@@ -229,7 +228,7 @@ fn fuel(
     call: &Expression,
     environment: &Environment,
 ) -> Result<usize, Error> {
-    if context.field(call, layout::vocabulary::FUEL).is_some() {
+    if call.field(layout::vocabulary::FUEL).is_some() {
         ::grap::f64::to_usize(number(
             context,
             call,
@@ -330,7 +329,7 @@ fn operation(
                     Ok(result?)
                 }
             }
-            let program = argument(context, call, PROGRAM)?;
+            let program = argument(call, PROGRAM)?;
             let program = present(context.eval(program, environment)?)?;
             sequence(context, &program, output)
         }
@@ -338,7 +337,7 @@ fn operation(
             let point = point(context, call, environment)?;
             let mut emission = Emission { output, context };
             if function == START_AT {
-                let axis = if let Some(expression) = emission.context.field(call, TOOL_AXIS) {
+                let axis = if let Some(expression) = call.field(TOOL_AXIS) {
                     let value = emission.context.eval(expression, environment)?;
                     Axis::new(read_runtime_point(&value).ok_or_else(invalid)?)
                         .ok_or_else(invalid)?
@@ -352,8 +351,8 @@ fn operation(
             Ok(RuntimeValue::record([]))
         }
         MAP_POINTS | MAP_AXES => {
-            let mapper = argument(context, call, MAPPER)?;
-            let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
+            let mapper = argument(call, MAPPER)?;
+            let expression = argument(call, ::grap::vocabulary::EXPRESSION)?;
             let mapper = context.eval(mapper, environment)?;
             let mappers = if function == MAP_POINTS {
                 &output.mappers
@@ -367,8 +366,8 @@ fn operation(
             Ok(value?)
         }
         WITH_TOOL => {
-            let tool = argument(context, call, cutter::vocabulary::TOOL)?;
-            let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
+            let tool = argument(call, cutter::vocabulary::TOOL)?;
+            let expression = argument(call, ::grap::vocabulary::EXPRESSION)?;
             let value = present(context.eval(tool, environment)?)?;
             let tool = cutter::Tool::read(value.as_value()).ok_or_else(invalid)?;
             // Release the sink borrow before evaluating the body: nested calls

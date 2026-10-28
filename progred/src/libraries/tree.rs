@@ -61,14 +61,14 @@ fn children<S: Sink>(
     environment: &Environment,
     output: &Output<S>,
 ) -> Result<RuntimeValue, Halt> {
-    if let Some(elements) = context.elements(&expression).map(<[_]>::to_vec) {
+    if let Some(elements) = expression.elements().map(<[_]>::to_vec) {
         for child in elements {
             context.burn()?;
-            let result = if context.elements(&child).is_some() {
+            let result = if child.elements().is_some() {
                 group(
                     context,
                     child.clone(),
-                    context.source_origin(&child),
+                    child.source_origin(),
                     environment,
                     output,
                 )?
@@ -95,13 +95,13 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
         .register(
             GROUP,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = context.field(call, CHILDREN) else {
-                    return Ok(context.missing_runtime_argument(call, CHILDREN));
+                let Some(expression) = call.field(CHILDREN) else {
+                    return Ok(call.missing_runtime_argument(CHILDREN));
                 };
                 group(
                     context,
                     expression,
-                    context.source_origin(call),
+                    call.source_origin(),
                     environment,
                     &group_output,
                 )
@@ -111,11 +111,11 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
         .register(
             MAP,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = context.field(call, CHILDREN) else {
-                    return Ok(context.missing_runtime_argument(call, CHILDREN));
+                let Some(expression) = call.field(CHILDREN) else {
+                    return Ok(call.missing_runtime_argument(CHILDREN));
                 };
-                let Some(map) = context.field(call, MAPPING) else {
-                    return Ok(context.missing_runtime_argument(call, MAPPING));
+                let Some(map) = call.field(MAPPING) else {
+                    return Ok(call.missing_runtime_argument(MAPPING));
                 };
                 let map = context.prepare_callable(map, environment)?;
                 map_output.maps.borrow_mut().push(map);
@@ -128,10 +128,10 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
         .register(
             LEAF,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = context.field(call, VALUE) else {
-                    return Ok(context.missing_runtime_argument(call, VALUE));
+                let Some(expression) = call.field(VALUE) else {
+                    return Ok(call.missing_runtime_argument(VALUE));
                 };
-                let source = context.source_origin(call);
+                let source = call.source_origin();
                 let maps = output
                     .maps
                     .borrow()
@@ -258,8 +258,8 @@ fn evaluate(
 ) -> (::grap::Evaluation, Option<Result<Built, RuntimeValue>>) {
     let built = RefCell::new(None);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-        let Some(expression) = context.field(call, PROGRAM) else {
-            return Ok(context.missing_runtime_argument(call, PROGRAM));
+        let Some(expression) = call.field(PROGRAM) else {
+            return Ok(call.missing_runtime_argument(PROGRAM));
         };
         let callable = context.prepare_callable(expression, environment)?;
         let result = collect(context, &callable)?;
@@ -372,8 +372,8 @@ pub fn library<W: Host>() -> Library<W> {
         .register(
             COLLECT,
             ForeignFunction::new(|context, call, environment| {
-                let Some(program) = context.field(call, PROGRAM) else {
-                    return Ok(context.missing_runtime_argument(call, PROGRAM));
+                let Some(program) = call.field(PROGRAM) else {
+                    return Ok(call.missing_runtime_argument(PROGRAM));
                 };
                 let program = context.prepare_callable(program, environment)?;
                 Ok(match collect(context, &program)? {

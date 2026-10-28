@@ -87,16 +87,16 @@ fn successive_samples_advance_the_scoped_stream() {
     let functions = functions().register(
         pair,
         ForeignFunction::from_value(move |context, call, environment| {
-            let first = context
-                .field(call, first_field)
+            let first = call
+                .field(first_field)
                 .map(|expression| context.eval_to_value(expression, environment))
                 .transpose()?
-                .unwrap_or_else(|| context.missing_argument(call, first_field));
-            let second = context
-                .field(call, second_field)
+                .unwrap_or_else(|| call.missing_argument(first_field));
+            let second = call
+                .field(second_field)
                 .map(|expression| context.eval_to_value(expression, environment))
                 .transpose()?
-                .unwrap_or_else(|| context.missing_argument(call, second_field));
+                .unwrap_or_else(|| call.missing_argument(second_field));
             Ok(Value::list([first, second]))
         }),
     );

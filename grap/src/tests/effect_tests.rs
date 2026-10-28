@@ -49,7 +49,7 @@ fn run(
     let foreign =
         |cell, context: &mut Context<'_>, expression: &Expression, environment: &Environment| {
             if cell == operations.write {
-                let argument = context.field(expression, operations.value).unwrap();
+                let argument = expression.field(operations.value).unwrap();
                 let value = context.eval_to_value(argument, environment)?;
                 Ok(context.effect(|| {
                     *effects.borrow_mut() = value.clone();
@@ -58,7 +58,7 @@ fn run(
             } else if cell == operations.read {
                 Ok(effects.borrow().clone())
             } else {
-                let argument = context.field(expression, operations.value).unwrap();
+                let argument = expression.field(operations.value).unwrap();
                 let callable = context.prepare_callable(argument, environment)?;
                 context
                     .call_prepared(&callable, [])
@@ -319,7 +319,7 @@ fn rust_functions_obey_the_same_decline_contract() {
                 }))
             };
             let foreign = if staged {
-                ForeignFunction::staged(move |_, _| Rc::new(implementation))
+                ForeignFunction::staged(move |_| Rc::new(implementation))
             } else {
                 ForeignFunction::new(move |context, _, environment| {
                     implementation(context, environment)

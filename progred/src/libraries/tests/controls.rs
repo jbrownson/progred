@@ -671,7 +671,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
             let runs = runs.clone();
             move |context, call, environment| {
                 runs.set(runs.get() + 1);
-                let argument = context.field(call, VALUE).unwrap();
+                let argument = call.field(VALUE).unwrap();
                 let value = context.eval(argument, environment)?;
                 if mode == "effectful" {
                     context.effect(|| ());
@@ -1058,8 +1058,8 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     libraries.insert(library, definitions);
     let captured = RefCell::new(None);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-        let expression = context.field(call, ITEMS).unwrap();
-        captured.replace(stored_item_links(context, expression.clone()));
+        let expression = call.field(ITEMS).unwrap();
+        captured.replace(stored_item_links(expression.clone()));
         context.eval_to_value(expression, environment)
     };
     let result = ::grap::apply_value(
@@ -1203,8 +1203,8 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
     let mut libraries = crate::stack::load().libraries;
     libraries.insert(library, definitions);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-        let expression = context.field(call, ITEMS).unwrap();
-        assert!(stored_item_links::<crate::Editor>(context, expression.clone()).is_none());
+        let expression = call.field(ITEMS).unwrap();
+        assert!(stored_item_links::<crate::Editor>(expression.clone()).is_none());
         context.eval_to_value(expression, environment)
     };
     assert_eq!(

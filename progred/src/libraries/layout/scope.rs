@@ -35,7 +35,7 @@ pub(super) fn program(
     call: &Expression,
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
-    match context.field(call, ::grap::vocabulary::EXPRESSION) {
+    match call.field(::grap::vocabulary::EXPRESSION) {
         Some(expression) => {
             let closure = context.closure([], expression, environment);
             Ok(::grap::isa::runtime(
@@ -43,7 +43,7 @@ pub(super) fn program(
                 [(PROGRAM, closure)],
             ))
         }
-        None => Ok(context.missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION)),
+        None => Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
     }
 }
 
@@ -130,7 +130,7 @@ fn argument<T>(
     field: CellId,
     read: impl FnOnce(&RuntimeValue) -> Option<T>,
 ) -> Result<T, BuildError> {
-    match context.field(call, field) {
+    match call.field(field) {
         Some(expression) => {
             read(&context.eval(expression, environment)?).ok_or(BuildError::Invalid)
         }
@@ -147,7 +147,7 @@ fn number_argument(
     field: CellId,
     default: Option<f64>,
 ) -> Result<f64, BuildError> {
-    match context.field(call, field) {
+    match call.field(field) {
         Some(expression) => context
             .eval_f64(expression, environment)?
             .filter(|value| value.is_finite())
@@ -184,7 +184,7 @@ fn children<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Vec<Layout<W>>, BuildError> {
-    let body = context.field(call, CHILDREN).ok_or(BuildError::Invalid)?;
+    let body = call.field(CHILDREN).ok_or(BuildError::Invalid)?;
     emitted(context, body, environment, output)
 }
 
@@ -195,7 +195,7 @@ fn single_child<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Layout<W>, BuildError> {
-    let body = context.field(call, CHILD).ok_or(BuildError::Invalid)?;
+    let body = call.field(CHILD).ok_or(BuildError::Invalid)?;
     <[_; 1]>::try_from(emitted(context, body, environment, output)?)
         .map(|[child]| child)
         .map_err(|_| BuildError::Invalid)
@@ -244,7 +244,7 @@ fn row<W: Host>(
 ) -> Result<Layout<W>, BuildError> {
     let gap = number_argument(context, call, environment, GAP, Some(0.0))?;
     // A row given a baseline aligns tops, as a column does.
-    let baseline = match context.field(call, BASELINE) {
+    let baseline = match call.field(BASELINE) {
         Some(_) => Some(number_argument(context, call, environment, BASELINE, None)?),
         None => None,
     };
@@ -321,7 +321,7 @@ fn text<W: Host>(
     call: &Expression,
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
-    let paint = match context.field(call, PAINT) {
+    let paint = match call.field(PAINT) {
         Some(_) => argument(context, call, environment, PAINT, |value| {
             read_paint(value.as_value())
         })?,
@@ -378,7 +378,7 @@ fn at<W: Host>(
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
-    let value = context.field(call, VALUE).ok_or(BuildError::Invalid)?;
+    let value = call.field(VALUE).ok_or(BuildError::Invalid)?;
     Ok(crate::display::at(
         steps,
         context.eval(value, environment)?,
@@ -410,7 +410,7 @@ fn drawing<W: Host>(
         Some(crate::sources::DEFAULT_FUEL as f64),
     )?)
     .ok_or(BuildError::Invalid)?;
-    let program = context.field(call, PROGRAM).ok_or(BuildError::Invalid)?;
+    let program = call.field(PROGRAM).ok_or(BuildError::Invalid)?;
     let program = context.eval(program, environment)?;
     // An evaluated program has no stored location.
     Ok(super::drawing::program(extent, fuel, None, program))
@@ -423,7 +423,7 @@ fn pickable<W: Host>(
     output: &RefCell<Vec<Layout<W>>>,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Result<Layout<W>, BuildError> {
-    let value = context.field(call, VALUE).ok_or(BuildError::Invalid)?;
+    let value = call.field(VALUE).ok_or(BuildError::Invalid)?;
     let value = context.eval(value, environment)?;
     single_child(context, call, environment, output)
         .map(|child| crate::display::pickable(child, W::Hover::from(site().hover()), value))
@@ -435,7 +435,7 @@ fn on_event<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Layout<W>, BuildError> {
-    let handler = context.field(call, HANDLER).ok_or(BuildError::Invalid)?;
+    let handler = call.field(HANDLER).ok_or(BuildError::Invalid)?;
     let handler = context.eval(handler, environment)?;
     single_child(context, call, environment, output).map(|child| super::on_event(child, handler))
 }

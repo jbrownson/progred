@@ -69,7 +69,7 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
                 ForeignFunction::new({
                     let defaults = defaults.clone();
                     move |context, call, environment| {
-                        let value = context.field(call, vocabulary::VALUE).unwrap();
+                        let value = call.field(vocabulary::VALUE).unwrap();
                         let result = context.eval(value, environment)?;
                         Ok(context.effect(|| {
                             defaults.set(defaults.get() + 1);

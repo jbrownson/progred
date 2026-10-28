@@ -13,10 +13,9 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
             let runs = runs.clone();
             move |context, call, environment| {
                 runs.set(runs.get() + 1);
-                let value =
-                    context.eval_to_value(context.field(call, argument).unwrap(), environment)?;
+                let value = context.eval_to_value(call.field(argument).unwrap(), environment)?;
                 let observed =
-                    context.eval_to_value(context.field(call, dependency).unwrap(), environment)?;
+                    context.eval_to_value(call.field(dependency).unwrap(), environment)?;
                 if mode == "effectful" {
                     context.effect(|| ());
                 }
@@ -104,7 +103,7 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
                 let runs = runs.clone();
                 move |context, call, environment| {
                     runs.set(runs.get() + 1);
-                    let argument = context.field(call, input).unwrap();
+                    let argument = call.field(input).unwrap();
                     context.eval_to_value(argument, environment)
                 }
             })

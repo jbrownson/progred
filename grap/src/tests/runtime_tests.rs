@@ -161,11 +161,11 @@ fn runtime_syntax_origins_descend_through_generated_lists_and_lambdas() {
             origin,
         ))))),
     );
-    let list = context.field(&lowered, field).unwrap();
-    let lambda = context.elements(&list).unwrap()[0].clone();
-    let body = context.field(&lambda, vocabulary::BODY).unwrap();
+    let list = lowered.field(field).unwrap();
+    let lambda = list.elements().unwrap()[0].clone();
+    let body = lambda.field(vocabulary::BODY).unwrap();
     assert_eq!(
-        context.source_origin(&body),
+        body.source_origin(),
         Some(SourceOrigin::Stored(vec![
             gid::Step::Key(root),
             gid::Step::Key(field),
@@ -566,7 +566,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
                 identity,
                 Value::record([]),
                 ForeignFunction::new(move |context, call, environment| {
-                    context.eval(context.field(call, argument).unwrap(), environment)
+                    context.eval(call.field(argument).unwrap(), environment)
                 }),
             ),
         ),
@@ -628,7 +628,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             identity,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
-                context.eval(context.field(call, argument).unwrap(), environment)
+                context.eval(call.field(argument).unwrap(), environment)
             }),
         ),
     )]);
@@ -688,7 +688,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
             identity,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
-                context.eval(context.field(call, argument).unwrap(), environment)
+                context.eval(call.field(argument).unwrap(), environment)
             }),
         ),
     )]);
@@ -789,8 +789,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
                 Value::record([]),
                 ForeignFunction::new(move |context, call, environment| {
                     output.borrow_mut().push(observer.trace().unwrap());
-                    let value =
-                        context.eval(context.field(call, captured).unwrap(), environment)?;
+                    let value = context.eval(call.field(captured).unwrap(), environment)?;
                     Ok(RuntimeValue::f64(value.as_f64().unwrap() + offset))
                 }),
             ),
@@ -1052,7 +1051,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
             identity,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
-                let expression = context.field(call, argument).unwrap();
+                let expression = call.field(argument).unwrap();
                 assert!(expression.0.source.1.get().is_none());
                 context.eval(expression, environment)
             }),
@@ -1095,7 +1094,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
                     capture,
                     Value::record([]),
                     ForeignFunction::new(move |context, call, environment| {
-                        let expression = context.field(call, argument).unwrap();
+                        let expression = call.field(argument).unwrap();
                         Ok(context.prepare_callable(expression, environment)?.value)
                     }),
                 ),
@@ -1149,7 +1148,7 @@ fn retained_callables_use_the_receiving_scoped_capability() {
             capture,
             Value::record([]),
             ForeignFunction::new(move |context, call, environment| {
-                let expression = context.field(call, argument).unwrap();
+                let expression = call.field(argument).unwrap();
                 Ok(context.prepare_callable(expression, environment)?.value)
             }),
         ),

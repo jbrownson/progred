@@ -37,9 +37,9 @@ fn evaluated(
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<RuntimeValue, Halt> {
-    match context.field(call, field) {
+    match call.field(field) {
         Some(expression) => context.eval(expression, environment),
-        None => Ok(context.missing_runtime_argument(call, field)),
+        None => Ok(call.missing_runtime_argument(field)),
     }
 }
 
@@ -95,8 +95,8 @@ fn consume(
         let action = if collect {
             None
         } else {
-            let Some(expression) = context.field(call, ACTION) else {
-                return Ok(context.missing_runtime_argument(call, ACTION));
+            let Some(expression) = call.field(ACTION) else {
+                return Ok(call.missing_runtime_argument(ACTION));
             };
             Some(context.prepare_callable(expression, env)?)
         };

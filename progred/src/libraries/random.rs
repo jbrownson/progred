@@ -29,8 +29,7 @@ fn evaluated(
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<Value>, Halt> {
-    context
-        .field(call, field)
+    call.field(field)
         .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }
@@ -71,16 +70,13 @@ fn functions() -> ForeignFunctions {
                 match evaluated(context, call, environment, vocabulary::SEED)?
                     .map_or(Some(0), |seed| u64::read(&seed))
                 {
-                    Some(seed) => {
-                        match context.field(call, ::grap::vocabulary::EXPRESSION) {
-                            Some(expression) => context.with_foreign_functions(
-                                stream(Rc::new(Cell::new(seed))),
-                                |context| context.eval(expression, environment),
-                            ),
-                            None => Ok(context
-                                .missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION)),
-                        }
-                    }
+                    Some(seed) => match call.field(::grap::vocabulary::EXPRESSION) {
+                        Some(expression) => context
+                            .with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
+                                context.eval(expression, environment)
+                            }),
+                        None => Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
+                    },
                     None => Ok(::grap::absent::value(vocabulary::INVALID_SEED).into()),
                 }
             })

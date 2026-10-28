@@ -105,15 +105,11 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
         for host_apply in [false, true] {
             let origins = std::cell::RefCell::new(Vec::new());
             let functions = [probe];
-            let observe = |_,
-                           context: &mut grap::Context<'_>,
-                           call: &grap::Expression,
-                           _: &grap::Environment| {
-                origins
-                    .borrow_mut()
-                    .push(context.source_origin(call).unwrap());
-                Ok(context.value(&context.field(call, result).unwrap()).clone())
-            };
+            let observe =
+                |_, _: &mut grap::Context<'_>, call: &grap::Expression, _: &grap::Environment| {
+                    origins.borrow_mut().push(call.source_origin().unwrap());
+                    Ok(call.field(result).unwrap().value().clone())
+                };
             let overlay = grap::ForeignOverlay::from_value(&functions, &observe);
             let evaluation = if host_apply {
                 grap::apply_value(&Value::from(function), [], &sources, Some(&overlay), 100)

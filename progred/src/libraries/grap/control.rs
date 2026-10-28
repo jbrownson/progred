@@ -59,12 +59,8 @@ pub mod vocabulary {
 }
 
 /// Whether the clause `expression` says it's of `kind`.
-fn says(context: &Context, expression: &Expression, kind: CellId) -> bool {
-    context
-        .value(expression)
-        .as_record()
-        .and_then(::grap::isa::of)
-        == Some(kind)
+fn says(expression: &Expression, kind: CellId) -> bool {
+    expression.value().as_record().and_then(::grap::isa::of) == Some(kind)
 }
 
 /// An unquote of `expression`, as a quoted template holds one.
@@ -121,10 +117,10 @@ fn do_foreign(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
-        return Ok(context.missing_runtime_argument(call, vocabulary::EXPRESSIONS));
+    let Some(expressions) = call.field(vocabulary::EXPRESSIONS) else {
+        return Ok(call.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    match context.elements(&expressions) {
+    match expressions.elements() {
         Some(elements) => in_turn(elements, context, environment),
         None => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
     }
@@ -154,13 +150,10 @@ fn all_foreign(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
-        return Ok(context.missing_runtime_argument(call, vocabulary::EXPRESSIONS));
+    let Some(expressions) = call.field(vocabulary::EXPRESSIONS) else {
+        return Ok(call.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    match (
-        context.elements(&expressions),
-        context.element_positions(&expressions),
-    ) {
+    match (expressions.elements(), expressions.element_positions()) {
         (Some(elements), Some(positions)) => try_map_sized(elements, |expression| {
             context.eval(expression.clone(), environment)
         })
@@ -174,8 +167,8 @@ fn quote_foreign(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION));
+    let Some(expression) = call.field(::grap::vocabulary::EXPRESSION) else {
+        return Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
     };
     replace_unquotes(expression, context, environment)
 }
@@ -185,11 +178,10 @@ fn replace_unquotes(
     context: &mut Context,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    if let Some(fields) = context.fields(&expression) {
+    if let Some(fields) = expression.fields() {
         // An unquote, as its `isa` says, evaluates the expression it requires.
         let unquote = fields.iter().any(|(field, kind)| {
-            *field == ::grap::isa::ISA
-                && context.value(kind).as_cell() == Some(vocabulary::kind::UNQUOTE)
+            *field == ::grap::isa::ISA && kind.value().as_cell() == Some(vocabulary::kind::UNQUOTE)
         });
         if unquote {
             return match fields
@@ -207,16 +199,15 @@ fn replace_unquotes(
             ))
         })
         .map(RuntimeValue::record)
-    } else if let (Some(elements), Some(positions)) = (
-        context.elements(&expression),
-        context.element_positions(&expression),
-    ) {
+    } else if let (Some(elements), Some(positions)) =
+        (expression.elements(), expression.element_positions())
+    {
         try_map_sized(elements, |value| {
             replace_unquotes(value.clone(), context, environment)
         })
         .map(|values| RuntimeValue::positioned_list(positions.into_iter().zip(values)))
     } else {
-        Ok(context.value(&expression).clone().into())
+        Ok(expression.value().clone().into())
     }
 }
 
@@ -243,23 +234,23 @@ enum CompiledCase {
     Malformed,
 }
 
-fn match_prepare(context: &Context, call: &Expression) -> Stage {
-    let subject = context.argument(call, vocabulary::VALUE);
+fn match_prepare(call: &Expression) -> Stage {
+    let subject = call.argument(vocabulary::VALUE);
     // The cases are the match's own syntax, read where they're written.
-    let compiled = context.argument(call, vocabulary::CASES).map(|cases| {
-        context.elements(&cases).map(|elements| {
+    let compiled = call.argument(vocabulary::CASES).map(|cases| {
+        cases.elements().map(|elements| {
             elements
                 .iter()
                 .map(|case| {
-                    if !says(context, case, vocabulary::kind::CASE) {
+                    if !says(case, vocabulary::kind::CASE) {
                         return CompiledCase::Malformed;
                     }
                     match (
-                        context.field(case, vocabulary::PATTERN),
-                        context.field(case, ::grap::vocabulary::EXPRESSION),
+                        case.field(vocabulary::PATTERN),
+                        case.field(::grap::vocabulary::EXPRESSION),
                     ) {
                         (Some(pattern), Some(expression)) => CompiledCase::Case {
-                            pattern: context.value(&pattern).clone(),
+                            pattern: pattern.value().clone(),
                             expression,
                         },
                         _ => CompiledCase::Malformed,
@@ -319,40 +310,36 @@ enum CompiledBinding {
     Malformed(CellId),
 }
 
-fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
+fn bindings_prepare(call: &Expression) -> Stage {
     // The bindings are the form's own syntax, read where they're written.
-    let compiled = context
-        .argument(call, vocabulary::BINDINGS)
-        .map(|bindings| {
-            context.elements(&bindings).map(|elements| {
-                elements
-                    .iter()
-                    .map(|binding| {
-                        if !says(context, binding, vocabulary::kind::BINDING) {
-                            return CompiledBinding::Malformed(vocabulary::INVALID_BINDING);
-                        }
-                        match (
-                            context.field(binding, vocabulary::VALUE),
-                            context.field(binding, vocabulary::BIND),
-                            context.field(binding, vocabulary::PATTERN),
-                        ) {
-                            (Some(value), Some(binder), None) => {
-                                match context.value(&binder).as_cell() {
-                                    Some(binder) => CompiledBinding::Bind { binder, value },
-                                    None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
-                                }
-                            }
-                            (Some(value), None, Some(pattern)) => CompiledBinding::Pattern {
-                                pattern: context.value(&pattern).clone(),
-                                value,
-                            },
-                            _ => CompiledBinding::Malformed(vocabulary::INVALID_BINDING),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
-        });
-    let expression = context.argument(call, ::grap::vocabulary::EXPRESSION);
+    let compiled = call.argument(vocabulary::BINDINGS).map(|bindings| {
+        bindings.elements().map(|elements| {
+            elements
+                .iter()
+                .map(|binding| {
+                    if !says(binding, vocabulary::kind::BINDING) {
+                        return CompiledBinding::Malformed(vocabulary::INVALID_BINDING);
+                    }
+                    match (
+                        binding.field(vocabulary::VALUE),
+                        binding.field(vocabulary::BIND),
+                        binding.field(vocabulary::PATTERN),
+                    ) {
+                        (Some(value), Some(binder), None) => match binder.value().as_cell() {
+                            Some(binder) => CompiledBinding::Bind { binder, value },
+                            None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
+                        },
+                        (Some(value), None, Some(pattern)) => CompiledBinding::Pattern {
+                            pattern: pattern.value().clone(),
+                            value,
+                        },
+                        _ => CompiledBinding::Malformed(vocabulary::INVALID_BINDING),
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+    });
+    let expression = call.argument(::grap::vocabulary::EXPRESSION);
     Rc::new(move |context, environment| {
         let bindings = match &compiled {
             Ok(bindings) => bindings,

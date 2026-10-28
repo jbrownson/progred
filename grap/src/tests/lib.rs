@@ -254,8 +254,8 @@ fn value_wrappers_preserve_the_inner_expression_source() {
     let function = new_cell_id();
     let functions = [function];
     let origin = RefCell::new(None);
-    let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-        *origin.borrow_mut() = context.source_origin(call);
+    let scoped = |_, _: &mut Context<'_>, call: &Expression, _: &Environment| {
+        *origin.borrow_mut() = call.source_origin();
         Ok(blob("result"))
     };
     let wrapper = isa::record(
@@ -303,7 +303,7 @@ fn a_staged_foreign_prepares_once_per_compiled_call_site() {
     let foreign = ForeignFunctions::default()
         .register(
             staged,
-            ForeignFunction::staged(move |_, _| {
+            ForeignFunction::staged(move |_| {
                 count.set(count.get() + 1);
                 Rc::new(|_, _| Ok(RuntimeValue::from(blob("staged"))))
             }),
@@ -311,8 +311,8 @@ fn a_staged_foreign_prepares_once_per_compiled_call_site() {
         .register(
             repeat,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(argument) = context.field(call, argument) else {
-                    return Ok(context.missing_runtime_argument(call, argument));
+                let Some(argument) = call.field(argument) else {
+                    return Ok(call.missing_runtime_argument(argument));
                 };
                 context.eval(argument.clone(), environment)?;
                 context.eval(argument.clone(), environment)
@@ -341,7 +341,7 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
     let scoped_count = scoped_preparations.clone();
     let scoped = ForeignFunctions::default().register(
         staged,
-        ForeignFunction::staged(move |_, _| {
+        ForeignFunction::staged(move |_| {
             scoped_count.set(scoped_count.get() + 1);
             Rc::new(|_, _| Ok(RuntimeValue::from(blob("scoped"))))
         }),
@@ -349,7 +349,7 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
     let foreign = ForeignFunctions::default()
         .register(
             staged,
-            ForeignFunction::staged(move |_, _| {
+            ForeignFunction::staged(move |_| {
                 base_count.set(base_count.get() + 1);
                 Rc::new(|_, _| Ok(RuntimeValue::from(blob("base"))))
             }),
@@ -357,8 +357,8 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
         .register(
             run_scoped,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(argument) = context.field(call, argument) else {
-                    return Ok(context.missing_runtime_argument(call, argument));
+                let Some(argument) = call.field(argument) else {
+                    return Ok(call.missing_runtime_argument(argument));
                 };
                 let before = context.eval(argument.clone(), environment)?;
                 let during = context.with_foreign_functions(scoped.clone(), |context| {
@@ -614,9 +614,9 @@ fn rust_functions_control_evaluation_while_graph_functions_are_strict() {
     let held = call(Value::from(hold), [(input, call_shaped_data.clone())]);
     let foreign = ForeignFunctions::default().register(
         hold,
-        ForeignFunction::from_value(|context, call, _| match context.field(call, INPUT) {
-            Some(value) => Ok(context.value(&value).clone()),
-            None => Ok(context.missing_argument(call, INPUT)),
+        ForeignFunction::from_value(|_, call, _| match call.field(INPUT) {
+            Some(value) => Ok(value.value().clone()),
+            None => Ok(call.missing_argument(INPUT)),
         }),
     );
     let graph = lambda([input], Value::from(input));
@@ -639,11 +639,9 @@ fn a_foreign_function_reads_as_its_definition_which_says_what_it_is() {
     let input = INPUT;
     let foreign = ForeignFunctions::default().register(
         echo,
-        ForeignFunction::from_value(|context, call, environment| {
-            match context.field(call, INPUT) {
-                Some(value) => context.eval_to_value(value, environment),
-                None => Ok(context.missing_argument(call, INPUT)),
-            }
+        ForeignFunction::from_value(|context, call, environment| match call.field(INPUT) {
+            Some(value) => context.eval_to_value(value, environment),
+            None => Ok(call.missing_argument(INPUT)),
         }),
     );
 
@@ -694,11 +692,9 @@ fn foreign_callables_pass_through_grap_bindings_as_values() {
     let input = INPUT;
     let foreign = ForeignFunctions::default().register(
         echo,
-        ForeignFunction::from_value(|context, call, environment| {
-            match context.field(call, INPUT) {
-                Some(value) => context.eval_to_value(value, environment),
-                None => Ok(context.missing_argument(call, INPUT)),
-            }
+        ForeignFunction::from_value(|context, call, environment| match call.field(INPUT) {
+            Some(value) => context.eval_to_value(value, environment),
+            None => Ok(call.missing_argument(INPUT)),
         }),
     );
     let apply = lambda(
@@ -731,14 +727,14 @@ fn rust_functions_choose_which_raw_operands_to_evaluate() {
     let foreign = ForeignFunctions::default().register(
         choose,
         ForeignFunction::from_value(|context, call, environment| {
-            let Some(condition) = context.field(call, CONDITION) else {
-                return Ok(context.missing_argument(call, CONDITION));
+            let Some(condition) = call.field(CONDITION) else {
+                return Ok(call.missing_argument(CONDITION));
             };
-            let Some(yes) = context.field(call, YES) else {
-                return Ok(context.missing_argument(call, YES));
+            let Some(yes) = call.field(YES) else {
+                return Ok(call.missing_argument(YES));
             };
-            let Some(no) = context.field(call, NO) else {
-                return Ok(context.missing_argument(call, NO));
+            let Some(no) = call.field(NO) else {
+                return Ok(call.missing_argument(NO));
             };
             if context.eval_to_value(condition, environment)? == blob("true") {
                 context.eval_to_value(yes, environment)
@@ -805,11 +801,11 @@ fn rust_functions_evaluate_raw_operands_in_extended_environments() {
     let foreign = ForeignFunctions::default().register(
         bind,
         ForeignFunction::from_value(|context, call, environment| {
-            let Some(value) = context.field(call, VALUE) else {
-                return Ok(context.missing_argument(call, VALUE));
+            let Some(value) = call.field(VALUE) else {
+                return Ok(call.missing_argument(VALUE));
             };
-            let Some(body) = context.field(call, BODY) else {
-                return Ok(context.missing_argument(call, BODY));
+            let Some(body) = call.field(BODY) else {
+                return Ok(call.missing_argument(BODY));
             };
             let value = context.eval_to_value(value, environment)?;
             context.eval_to_value(body, &environment.extended([(BINDING, value)]))
@@ -993,15 +989,15 @@ fn foreign_functions_may_consume_the_function_field() {
     let parameter = PARAMETER;
     let foreign = ForeignFunctions::default().register(
         function,
-        ForeignFunction::from_value(|context, call, _| {
-            let Some(function) = context.field(call, vocabulary::FUNCTION) else {
-                return Ok(context.missing_argument(call, vocabulary::FUNCTION));
+        ForeignFunction::from_value(|_, call, _| {
+            let Some(function) = call.field(vocabulary::FUNCTION) else {
+                return Ok(call.missing_argument(vocabulary::FUNCTION));
             };
-            let Some(value) = context.field(call, PARAMETER) else {
-                return Ok(context.missing_argument(call, PARAMETER));
+            let Some(value) = call.field(PARAMETER) else {
+                return Ok(call.missing_argument(PARAMETER));
             };
-            assert!(context.value(&function).as_cell().is_some());
-            Ok(context.value(&value).clone())
+            assert!(function.value().as_cell().is_some());
+            Ok(value.value().clone())
         }),
     );
     assert_eq!(
@@ -1087,7 +1083,7 @@ fn apply_reaches_foreign_targets_with_the_arguments_as_fields() {
     let foreign = ForeignFunctions::default().register(
         function,
         ForeignFunction::from_value(|context, call, environment| {
-            let argument = context.field(call, CellId::from_u128(7)).unwrap();
+            let argument = call.field(CellId::from_u128(7)).unwrap();
             context.eval_to_value(argument, environment)
         }),
     );
@@ -1111,8 +1107,8 @@ fn prepared_calls_pass_a_foreign_function_as_its_value() {
         .register(
             foreign,
             ForeignFunction::from_value(move |context, call, environment| {
-                let function = context.field(call, vocabulary::FUNCTION).unwrap();
-                let function = context.value(&function).as_record().unwrap();
+                let function = call.field(vocabulary::FUNCTION).unwrap();
+                let function = function.value().as_record().unwrap();
                 assert_eq!(isa::of(function), Some(vocabulary::kind::FOREIGN_FUNCTION));
                 assert_eq!(
                     function
@@ -1120,14 +1116,14 @@ fn prepared_calls_pass_a_foreign_function_as_its_value() {
                         .and_then(Value::as_cell),
                     Some(foreign)
                 );
-                let argument = context.field(call, argument).unwrap();
+                let argument = call.field(argument).unwrap();
                 context.eval_to_value(argument, environment)
             }),
         )
         .register(
             control,
             ForeignFunction::from_value(move |context, call, environment| {
-                let callable = context.field(call, callable).unwrap();
+                let callable = call.field(callable).unwrap();
                 let callable = context.prepare_callable(callable, environment)?;
                 context
                     .call_prepared(&callable, [(argument, blob("passed").into())])
@@ -1161,9 +1157,9 @@ fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
                 )
                 .map(RuntimeValue::into_value)
         } else {
-            let walked = context
-                .field(call_expression, argument)
-                .is_some_and(|list| context.elements(&list).is_some());
+            let walked = call_expression
+                .field(argument)
+                .is_some_and(|list| list.elements().is_some());
             Ok(blob(if walked { "walked" } else { "opaque" }))
         }
     };
@@ -1244,7 +1240,7 @@ fn captured_calls_share_ancestry_and_source_locations() {
         .register(
             repeat,
             ForeignFunction::from_value(move |context, call, environment| {
-                let body = context.field(call, body).unwrap();
+                let body = call.field(body).unwrap();
                 context.eval_to_value(body.clone(), environment)?;
                 context.eval_to_value(body.clone(), environment)
             }),
@@ -1295,7 +1291,7 @@ fn generated_prepared_calls_keep_their_source_callers() {
         .register(
             invoke,
             ForeignFunction::from_value(move |context, call, environment| {
-                let function = context.field(call, function).unwrap();
+                let function = call.field(function).unwrap();
                 let function = context.prepare_callable(function, environment)?;
                 context
                     .call_prepared(&function, [])
@@ -1304,7 +1300,7 @@ fn generated_prepared_calls_keep_their_source_callers() {
         )
         .register(
             leaf,
-            ForeignFunction::staged(move |_, _| {
+            ForeignFunction::staged(move |_| {
                 let (output, observer) = (output.clone(), observer.clone());
                 Rc::new(move |_, _| {
                     *output.borrow_mut() = observer.trace();
@@ -1346,8 +1342,8 @@ fn a_foreign_call_retains_its_cell_relative_source_origin() {
     let foreign = new_cell_id();
     let source = RefCell::new(None);
     let functions = [foreign];
-    let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-        *source.borrow_mut() = context.source_origin(call);
+    let scoped = |_, _: &mut Context<'_>, call: &Expression, _: &Environment| {
+        *source.borrow_mut() = call.source_origin();
         Ok(blob("drawn"))
     };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);
@@ -1381,8 +1377,8 @@ fn a_value_definitions_origin_is_its_cell() {
     let foreign = new_cell_id();
     let functions = [foreign];
     let origin = RefCell::new(None);
-    let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-        *origin.borrow_mut() = context.source_origin(call);
+    let scoped = |_, _: &mut Context<'_>, call: &Expression, _: &Environment| {
+        *origin.borrow_mut() = call.source_origin();
         Ok(blob("drawn"))
     };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);

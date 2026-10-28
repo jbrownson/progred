@@ -52,8 +52,7 @@ fn evaluated(
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<RuntimeValue>, Halt> {
-    context
-        .field(call, field)
+    call.field(field)
         .map(|value| context.eval(value, environment))
         .transpose()
 }
@@ -160,10 +159,10 @@ fn functions() -> ForeignFunctions {
             ForeignFunction::new(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::INITIAL));
+                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::STEP));
+                let Some(step) = call.field(vocabulary::STEP) else {
+                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
@@ -197,14 +196,14 @@ fn functions() -> ForeignFunctions {
             vocabulary::FOLD,
             ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::LIST));
+                    return Ok(call.missing_runtime_argument(vocabulary::LIST));
                 };
                 let Some(accumulator) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::INITIAL));
+                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::STEP));
+                let Some(step) = call.field(vocabulary::STEP) else {
+                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 match list.list_values() {
@@ -228,10 +227,10 @@ fn functions() -> ForeignFunctions {
             ForeignFunction::new(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::INITIAL));
+                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_runtime_argument(call, vocabulary::STEP));
+                let Some(step) = call.field(vocabulary::STEP) else {
+                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 loop {

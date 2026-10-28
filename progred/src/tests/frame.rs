@@ -1024,8 +1024,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
                     let calls = calls.clone();
                     let result = result.clone();
                     move |context, call, environment| {
-                        let value = context
-                            .field(call, presentation::vocabulary::VALUE)
+                        let value = call.field(presentation::vocabulary::VALUE)
                             .unwrap();
                         assert_eq!(context.eval_to_value(value, environment)?, source);
                         calls.set(calls.get() + 1);
@@ -1188,13 +1187,11 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
                 grap::ForeignFunction::from_value({
                     let calls = calls.clone();
                     move |context, call, environment| {
-                        let value = context
-                            .field(call, presentation::vocabulary::VALUE)
-                            .unwrap();
+                        let value = call.field(presentation::vocabulary::VALUE).unwrap();
                         assert_eq!(context.eval_to_value(value, environment)?, source);
-                        let width = context.field(call, layout::vocabulary::WIDTH).unwrap();
+                        let width = call.field(layout::vocabulary::WIDTH).unwrap();
                         let width = f64::read(&context.eval_to_value(width, environment)?).unwrap();
-                        let height = context.field(call, layout::vocabulary::HEIGHT).unwrap();
+                        let height = call.field(layout::vocabulary::HEIGHT).unwrap();
                         let height =
                             f64::read(&context.eval_to_value(height, environment)?).unwrap();
                         calls.borrow_mut().push(Size::new(width, height));

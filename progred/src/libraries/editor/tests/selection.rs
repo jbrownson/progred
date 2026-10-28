@@ -92,10 +92,10 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
         if function == crate::libraries::editor::site::vocabulary::PATH {
             Ok(crate::libraries::editor::path::value(&site))
         } else {
-            let path = context.field(call, vocabulary::PATH).unwrap();
+            let path = call.field(vocabulary::PATH).unwrap();
             let path = context.eval_to_value(path, environment)?;
-            let value = context
-                .field(call, crate::libraries::editor::site::vocabulary::VALUE)
+            let value = call
+                .field(crate::libraries::editor::site::vocabulary::VALUE)
                 .unwrap();
             let value = context.eval_to_value(value, environment)?;
             Ok(context.effect(|| {

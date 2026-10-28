@@ -89,7 +89,7 @@ fn a_sized_value_in_a_row_draws_at_the_default_size() {
                     let sizes = sizes.clone();
                     move |context, call, environment| {
                         let mut read = |label| {
-                            let value = context.field(call, label).unwrap();
+                            let value = call.field(label).unwrap();
                             context
                                 .eval_to_value(value, environment)
                                 .map(|value| f64::read(&value).unwrap())

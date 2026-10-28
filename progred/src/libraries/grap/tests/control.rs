@@ -142,8 +142,8 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
     let functions = functions().register(
         emit,
         ForeignFunction::from_value(move |context, call, environment| {
-            let value = context
-                .eval_to_value(context.field(call, vocabulary::VALUE).unwrap(), environment)?;
+            let value =
+                context.eval_to_value(call.field(vocabulary::VALUE).unwrap(), environment)?;
             Ok(context.effect(|| {
                 output.borrow_mut().push(value);
                 Value::record([])
@@ -195,8 +195,7 @@ fn all_retains_absents_and_effects_and_continues_in_order() {
     let functions = functions().register(
         emit,
         ForeignFunction::from_value(move |context, call, env| {
-            let value =
-                context.eval_to_value(context.field(call, vocabulary::VALUE).unwrap(), env)?;
+            let value = context.eval_to_value(call.field(vocabulary::VALUE).unwrap(), env)?;
             Ok(context.effect(|| {
                 output.borrow_mut().push(value.clone());
                 value

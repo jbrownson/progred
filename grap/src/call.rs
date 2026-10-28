@@ -68,7 +68,7 @@ impl<'a> Context<'a> {
                 vocabulary::PARAMS,
                 Value::list(params.iter().copied().map(Value::from)),
             ),
-            (vocabulary::BODY, self.value(&body).clone()),
+            (vocabulary::BODY, body.value().clone()),
         ]
         .into_iter()
         .collect();
@@ -107,7 +107,7 @@ impl<'a> Context<'a> {
                         match &definition.implementation.primitive {
                             Some(primitive) => PreparedCallTargetKind::Primitive(
                                 **primitive,
-                                primitive.operands(self, call),
+                                primitive.operands(call),
                             ),
                             None => {
                                 PreparedCallTargetKind::Foreign(definition.implementation.clone())
@@ -261,7 +261,7 @@ impl<'a> Context<'a> {
                     let stage = match cached {
                         Some(stage) => stage,
                         None => {
-                            let stage = prepare(self, call);
+                            let stage = prepare(call);
                             if let Some(slot) = stages {
                                 *slot.borrow_mut() = Some((prepare.clone(), stage.clone()));
                             }
@@ -527,7 +527,7 @@ impl<'a> Context<'a> {
                 let arguments: Rc<[arguments::Argument]> = closure
                     .params
                     .iter()
-                    .map(|&parameter| self.argument(call, parameter))
+                    .map(|&parameter| call.argument(parameter))
                     .collect();
                 let table = closure.environment.indices.clone();
                 let indices: Rc<[CellIndex]> = closure

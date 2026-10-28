@@ -972,7 +972,7 @@ through memory rather than registers, which covers most of the evaluator's.
 - Putting a halt's value behind a pointer would bring small results (`()`, an
   f64, a bool) to 16 bytes or less, in registers. The sizes are measured, the
   gain isn't.
-- Finding an argument by label (`Context::field`, a binary search over 16-byte
+- Finding an argument by label (`Expression::field`, a binary search over 16-byte
   cell IDs plus a handle clone) cost about 84 instructions a lookup, 4% of the
   IoP tree canary, until `ForeignFunction::with_arguments` found the ported
   functions' arguments once per call site. Its other callers, such as `quote`,

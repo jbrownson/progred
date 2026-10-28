@@ -37,7 +37,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
                     origins
                         .borrow_mut()
                         .push(tracer.trace().unwrap().origins().next().unwrap().clone());
-                    context.eval(context.field(call, captured).unwrap(), environment)
+                    context.eval(call.field(captured).unwrap(), environment)
                 }),
             ))
         } else {

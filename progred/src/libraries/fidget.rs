@@ -201,8 +201,7 @@ fn evaluated(
     environment: &Environment,
     field: CellId,
 ) -> Result<Option<Value>, Halt> {
-    context
-        .field(call, field)
+    call.field(field)
         .map(|expression| context.eval_to_value(expression, environment))
         .transpose()
 }
@@ -217,7 +216,7 @@ fn preview_value(
 ) -> Result<Value, Halt> {
     let Some(field) = evaluated(context, call, environment, presentation::vocabulary::VALUE)?
     else {
-        return Ok(context.missing_argument(call, presentation::vocabulary::VALUE));
+        return Ok(call.missing_argument(presentation::vocabulary::VALUE));
     };
     let validation = if matches!(
         kind,
