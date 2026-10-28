@@ -464,7 +464,7 @@ impl<'a> Context<'a> {
                     arguments
                         .iter()
                         .find(|(cell, _)| *cell == parameter)
-                        .map(|(_, value)| value.clone())
+                        .map(|(_, value)| unbox(value.clone()))
                 };
                 bound.push((
                     parameter,

@@ -972,6 +972,10 @@ through memory rather than registers, which covers most of the evaluator's.
 - Putting a halt's value behind a pointer would bring small results (`()`, an
   f64, a bool) to 16 bytes or less, in registers. The sizes are measured, the
   gain isn't.
+- Unboxing each value once as it's bound, instead of on every read of a
+  variable, ran 1% more instructions on the IoP canaries in October 2026 and
+  was reverted: a read of an already unboxed value costs only a tag check
+  inlined, while binding unboxed values that were never read.
 - Finding an argument by label (`Expression::field`, a binary search over 16-byte
   cell IDs plus a handle clone) cost about 84 instructions a lookup, 4% of the
   IoP tree canary, until `ForeignFunction::with_arguments` found the ported
@@ -1004,7 +1008,9 @@ difference of two frame counts:
 | `iop_tree` | 0.22% | 1.4% | 0% | 0% |
 | `cam_source_scroll` | 0.84% | 0.01% | 0.14% | 0.15% |
 
-Nearly all the lowering is cell definitions lowered again in every evaluation
+Each step was kept out of line to be counted, so one that's small and called
+millions of times reads higher than it costs inlined: unboxing on the IoP
+canaries is mostly a tag check. Nearly all the lowering is cell definitions lowered again in every evaluation
 although they didn't change; compiling is about a tenth of it. Deferred because
 it's about 10% of re-evaluation, not a multiple. The cheapest piece keeps each
 cell's lowering across evaluations, reused while its definition is the same

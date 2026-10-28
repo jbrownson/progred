@@ -205,7 +205,7 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         match environment.get_at(&self.indices, cell, index) {
-            Some(value) => Ok(value.clone()),
+            Some(value) => Ok(unbox(value.clone())),
             None => match self.host.resolve(cell) {
                 // A function only a scope supplies is a foreign function
                 // implemented under its cell.

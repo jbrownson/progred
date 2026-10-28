@@ -394,7 +394,7 @@ impl<'a> Context<'a> {
                             Some((cell, index)) => {
                                 context.burn()?;
                                 match environment.get_at(&context.indices, cell, index) {
-                                    Some(value) => value.clone(),
+                                    Some(value) => unbox(value.clone()),
                                     // Ordinary cells took the direct path above.
                                     None => RuntimeValue::from(Value::from(cell)),
                                 }
