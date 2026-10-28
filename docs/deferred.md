@@ -982,6 +982,50 @@ through memory rather than registers, which covers most of the evaluator's.
   replaced; staging more than made up for it, leaving the IoP tree canary 1.07%
   below its count before the construct, from 1.92% above.
 
+## A lowered in-memory document
+
+The document in memory could be a lowered form, with `gid::Value` kept only for
+loading and saving. GID's plain model stays the base; a lowered GID above it
+holds native numbers, booleans and text, each keeping its record's other fields,
+and Grap's layer adds lowered code and closures. Each view is built the first
+time something asks for it and kept; values are immutable, so nothing is ever
+invalidated. It belongs beneath Grap's evaluator, in Grap or a crate between GID
+and Grap, since the evaluator builds on it and Grap can't depend on Progred.
+
+Measured on 2026-10-28 with callgrind, as instructions per frame from the
+difference of two frame counts:
+
+| Canary | Lowering and compiling | Unboxing | To GID | Decoding numbers and text |
+| --- | --- | --- | --- | --- |
+| `forest_slider` | 10.3% | 0.25% | 0.06% | 0.09% |
+| `forest_source_hover` | 9.7% | 0.24% | 0.06% | 0.09% |
+| `cam_controls` | 12.3% | 0.13% | 2.2% | 0.02% |
+| `grap_layout_ffi` | 11.5% | 0.20% | 1.5% | 0.21% |
+| `iop_tree` | 0.22% | 1.4% | 0% | 0% |
+| `cam_source_scroll` | 0.84% | 0.01% | 0.14% | 0.15% |
+
+Nearly all the lowering is cell definitions lowered again in every evaluation
+although they didn't change; compiling is about a tenth of it. Deferred because
+it's about 10% of re-evaluation, not a multiple. The cheapest piece keeps each
+cell's lowering across evaluations, reused while its definition is the same
+shared value: the cell table is a persistent map, so untouched cells keep the
+same value. Each entry holds that value, so a freed value's address can't fake
+a hit. Compiled code stays per evaluation, since it reads the evaluation's cell
+index table.
+
+The full design has more to settle:
+
+- **Place.** A node can sit in two places, and origins and call-site caches
+  belong to a place, so a handle carries the place over a shared node.
+- **Threads.** Lowered code uses `Rc`, and document values cross threads.
+- **Equality.** No view may change a value's equality, field reads or GID form.
+- **A `Code` value.** A runtime value made from an `Expression` would let
+  evaluating runtime code reuse its lowering, and let quote return a template's
+  untouched parts with their lowering and origins, so errors in spliced code
+  point back at the template.
+- **Lazy children.** A list's elements need lowering only when a foreign
+  function walks them as code, and a record's fields one at a time.
+
 ## Decoding PNGs once while visible
 
 The [png library](../progred/src/libraries/png.rs) decodes each visible image
