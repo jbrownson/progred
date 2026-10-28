@@ -1,5 +1,5 @@
 use super::*;
-use crate::{ForeignFunction, call, lambda, vocabulary};
+use crate::{ForeignFunction, TestDefinition, call, lambda, vocabulary};
 use gid::new_cell_id;
 
 /// A host where `fail` answers an absent for `reason`, and nothing else is
@@ -7,7 +7,7 @@ use gid::new_cell_id;
 fn failing(fail: CellId, reason: CellId) -> impl Host {
     crate::TestHost(move |cell| {
         (cell == fail).then(|| {
-            Definition::foreign(
+            TestDefinition::foreign(
                 fail,
                 gid::Record::default(),
                 ForeignFunction::from_value(move |_, _, _| Ok(crate::absent::value(reason))),

@@ -16,8 +16,7 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
         Ok(gid::Value::record([]).into())
     });
     let host = crate::test_support::TestHost(move |cell| {
-        (cell == sink)
-            .then(|| grap::Definition::foreign(sink, gid::Record::default(), function.clone()))
+        (cell == sink).then(|| crate::test_support::TestDefinition::foreign(sink, function.clone()))
     });
     grap::evaluate_runtime_at(
         &grap::call(sink.into(), []).into(),

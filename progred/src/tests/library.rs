@@ -35,8 +35,8 @@ fn right_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
 /// The libraries defining `cell` as a foreign function, in load order.
 fn foreign_sources(libraries: &Libraries, cell: CellId) -> Vec<CellId> {
     libraries
-        .definitions(cell)
-        .filter(|(_, definition)| definition.implementation().is_some())
+        .iter()
+        .filter(|(_, definitions)| definitions.implementation(cell).is_some())
         .map(|(library, _)| library)
         .collect()
 }
@@ -75,7 +75,7 @@ fn library_definitions_and_projections_compose_in_order() {
     assert_eq!(
         libraries
             .definitions(SHARED_CELL)
-            .map(|(library, definition)| (library, definition.value().clone()))
+            .map(|(library, value)| (library, value.clone()))
             .collect::<Vec<_>>(),
         [
             (LEFT_LIBRARY, Value::from(b"left".to_vec())),
@@ -137,7 +137,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     assert_eq!(
         libraries
             .definitions(SHARED_FUNCTION)
-            .map(|(_, definition)| definition.value())
+            .map(|(_, value)| value)
             .collect::<Vec<_>>(),
         [&defined]
     );
@@ -167,23 +167,11 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
 #[test]
 fn definitions_are_sorted_unique_and_copy_on_write() {
     let mut definitions = Definitions::default();
-    definitions.insert(
-        SHARED_FUNCTION,
-        Definition::foreign(
-            SHARED_FUNCTION,
-            [name::field("native")].into_iter().collect(),
-            ForeignFunction::from_value(left_function),
-        ),
-    );
-    definitions.insert(
-        SHARED_CELL,
-        Definition::from(Value::from(b"original".to_vec())),
-    );
+    definitions.insert(SHARED_FUNCTION, name::record("native", []));
+    definitions.insert_foreign(SHARED_FUNCTION, ForeignFunction::from_value(left_function));
+    definitions.insert(SHARED_CELL, Value::from(b"original".to_vec()));
     let original = definitions.clone();
-    definitions.insert(
-        SHARED_CELL,
-        Definition::from(Value::from(b"replacement".to_vec())),
-    );
+    definitions.insert(SHARED_CELL, Value::from(b"replacement".to_vec()));
 
     assert_eq!(
         definitions.iter().map(|(id, _)| id).collect::<Vec<_>>(),
@@ -201,11 +189,7 @@ fn definitions_are_sorted_unique_and_copy_on_write() {
         definitions.value(SHARED_FUNCTION).and_then(name::read),
         Some("native")
     );
-    assert!(
-        definitions
-            .get(SHARED_FUNCTION)
-            .is_some_and(|definition| definition.implementation().is_some())
-    );
+    assert!(definitions.implementation(SHARED_FUNCTION).is_some());
 }
 
 #[test]
@@ -312,7 +296,7 @@ fn unnamed_native_definitions_say_only_what_they_are() {
     assert_eq!(
         libraries
             .definitions(SHARED_FUNCTION)
-            .map(|(_, definition)| definition.value().clone())
+            .map(|(_, value)| value.clone())
             .collect::<Vec<_>>(),
         [::grap::foreign_function(SHARED_FUNCTION)]
     );

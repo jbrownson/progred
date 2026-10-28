@@ -212,7 +212,6 @@ pub enum CompletionScope {
 #[derive(Clone, Copy)]
 pub struct ResolvedCell<'a> {
     pub value: &'a Value,
-    pub native: bool,
     /// The library supplying the definition, or none for the document's own.
     pub library: Option<CellId>,
 }

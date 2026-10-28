@@ -431,7 +431,7 @@ fn parameters_past<'a>(
         Some(cell) => {
             (!followed.contains(&cell)).then_some(())?;
             let definition = resolve(cell)?;
-            if definition.native {
+            if is_foreign(definition.value) {
                 definition
                     .value
                     .as_record()?
@@ -449,6 +449,11 @@ fn parameters_past<'a>(
             }
         }
     }
+}
+
+/// Whether `value` is a foreign function, which lists its own parameters.
+fn is_foreign(value: &Value) -> bool {
+    value.as_record().and_then(::grap::isa::of) == Some(kind::FOREIGN_FUNCTION)
 }
 
 /// Construct a call and focus its first declared parameter, when known.
@@ -925,7 +930,7 @@ fn function_offers(
                 cell,
             )?
             .spelling();
-            (definition.native
+            (is_foreign(definition.value)
                 || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
             .then(|| {
                 let offer = if as_function {

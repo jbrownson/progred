@@ -125,7 +125,7 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
             functions
                 .get(cell)
                 .cloned()
-                .map(|function| ::grap::Definition::foreign(cell, gid::Record::default(), function))
+                .map(|function| crate::test_support::TestDefinition::foreign(cell, function))
         }),
         Some(&overlay),
         100,

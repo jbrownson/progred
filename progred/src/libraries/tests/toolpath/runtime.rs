@@ -1,5 +1,5 @@
 use super::*;
-use ::grap::{Host, RuntimeValue, SourceOrigin};
+use ::grap::{RuntimeValue, SourceOrigin};
 use std::{cell::RefCell, rc::Rc};
 
 fn runtime_call(
@@ -30,9 +30,8 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let unobserved = crate::test_support::TestHost(|cell| {
         if cell == inspect {
             let (origins, tracer) = (origins.clone(), tracer.clone());
-            Some(::grap::Definition::foreign(
+            Some(crate::test_support::TestDefinition::foreign(
                 inspect,
-                gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
                     origins
                         .borrow_mut()
@@ -41,7 +40,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
                 }),
             ))
         } else {
-            libraries.resolve(cell)
+            crate::test_support::defined_in(&libraries, cell)
         }
     });
     let host = ::grap::Observed::new(&unobserved, &*tracer);
@@ -75,9 +74,8 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let unobserved_receiver = crate::test_support::TestHost(|cell| {
         if cell == place {
             let (origins, tracer) = (origins.clone(), tracer.clone());
-            Some(::grap::Definition::foreign(
+            Some(crate::test_support::TestDefinition::foreign(
                 place,
-                gid::Record::default(),
                 ForeignFunction::new(move |_, _, _| {
                     origins
                         .borrow_mut()
@@ -86,7 +84,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
                 }),
             ))
         } else {
-            host.resolve(cell)
+            (unobserved.0)(cell)
         }
     });
     let receiver = ::grap::Observed::new(&unobserved_receiver, &*tracer);

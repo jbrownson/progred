@@ -4,8 +4,8 @@
 //! [`CallTrace`] whenever it's asked, and an [`Answering`] watches for the
 //! call that answered a particular value.
 
-use crate::{ByNode, Definition, Expression, Host, RuntimeValue, SourceOrigin};
-use gid::CellId;
+use crate::{ByNode, Expression, ForeignFunction, Host, RuntimeValue, SourceOrigin};
+use gid::{CellId, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -29,8 +29,12 @@ impl<'a> Observed<'a> {
 }
 
 impl Host for Observed<'_> {
-    fn resolve(&self, cell: CellId) -> Option<Definition> {
+    fn resolve(&self, cell: CellId) -> Option<Value> {
         self.host.resolve(cell)
+    }
+
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
+        self.host.implementation(cell)
     }
 
     fn untracked(&self) {

@@ -685,10 +685,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
             implementation.tracked()
         };
         let mut definitions = Definitions::default();
-        definitions.insert(
-            function,
-            ::grap::Definition::foreign(function, gid::Record::default(), implementation),
-        );
+        definitions.insert_foreign(function, implementation);
         let mut libraries = crate::stack::load().libraries;
         libraries.insert(library, definitions);
         let mut doc = gid::Document::default();
@@ -1049,10 +1046,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     let mut definitions = crate::library::Definitions::default();
     definitions.insert(
         owner,
-        ::grap::Definition::from(::grap::lambda(
-            [],
-            ::grap::call(probe.into(), [(ITEMS, items.clone())]),
-        )),
+        ::grap::lambda([], ::grap::call(probe.into(), [(ITEMS, items.clone())])),
     );
     let mut libraries = crate::stack::load().libraries;
     libraries.insert(library, definitions);
@@ -1195,10 +1189,10 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
     let mut definitions = crate::library::Definitions::default();
     definitions.insert(
         owner,
-        ::grap::Definition::from(::grap::lambda(
+        ::grap::lambda(
             [],
             ::grap::call(probe.into(), [(ITEMS, quote(items.clone()))]),
-        )),
+        ),
     );
     let mut libraries = crate::stack::load().libraries;
     libraries.insert(library, definitions);

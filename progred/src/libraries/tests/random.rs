@@ -57,7 +57,7 @@ fn declining_after_sampling_halts_the_evaluation() {
         ),
         &crate::test_support::TestHost(|cell| {
             if cell == function {
-                Some(grap::Definition::from(grap::lambda(
+                Some(crate::test_support::TestDefinition::from(grap::lambda(
                     [],
                     grap::call(
                         grap::lambda([ignored], ::grap::absent::decline()),
@@ -66,7 +66,7 @@ fn declining_after_sampling_halts_the_evaluation() {
                 )))
             } else {
                 functions.get(cell).map(|function| {
-                    grap::Definition::foreign(cell, gid::Record::default(), function.clone())
+                    crate::test_support::TestDefinition::foreign(cell, function.clone())
                 })
             }
         }),

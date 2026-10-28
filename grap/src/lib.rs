@@ -7,12 +7,14 @@ use crate::environment::CellIndices;
 use crate::eval::CellState;
 use crate::lower::{ByNode, OriginId, Thunk};
 use crate::runtime::RuntimeValueKind;
-use gid::{CellId, Record, Value};
+use gid::{CellId, Value};
 use std::rc::Rc;
 
 pub use call::PreparedCallable;
 pub use environment::Environment;
-pub use foreign::{ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function};
+pub use foreign::{
+    ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function, implementation_cell,
+};
 pub use lower::Expression;
 pub use runtime::{RuntimeListValues, RuntimeValue, Shape};
 pub use source::SourceOrigin;
@@ -48,75 +50,15 @@ pub mod u64;
 mod unboxed;
 pub mod vocabulary;
 
-/// One host definition: a cell's value and, for a foreign function, the
-/// native code that implements it. A foreign function's value describes it,
-/// an ordinary value like any other; reading a definition never invokes
-/// native code.
-#[derive(Clone)]
-pub struct Definition {
-    value: Value,
-    implementation: Option<Rc<ForeignFunction>>,
-}
-
-impl From<Value> for Definition {
-    fn from(value: Value) -> Self {
-        Self {
-            value,
-            implementation: None,
-        }
-    }
-}
-
-impl Definition {
-    /// `cell`'s definition as `implementation`: its `description` says it's a
-    /// foreign function implemented under `cell`. Declared parameters join it
-    /// under `params`, as a lambda's do, unless it lists its own.
-    pub fn foreign(cell: CellId, mut description: Record, implementation: ForeignFunction) -> Self {
-        description.set(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
-        description.set(vocabulary::IMPLEMENTATION, Value::from(cell));
-        if let Some(parameters) = &implementation.parameters
-            && description.get(&vocabulary::PARAMS).is_none()
-        {
-            description.set(
-                vocabulary::PARAMS,
-                Value::list(parameters.iter().map(|&parameter| parameter.into())),
-            );
-        }
-        Self {
-            value: Value::Record(description),
-            implementation: Some(Rc::new(implementation)),
-        }
-    }
-
-    pub fn value(&self) -> &Value {
-        &self.value
-    }
-
-    /// The native code a foreign function's definition runs.
-    pub fn implementation(&self) -> Option<&ForeignFunction> {
-        self.implementation.as_deref()
-    }
-}
-
-/// Two definitions are equal when their values are and they run the same
-/// native code, if any.
-impl PartialEq for Definition {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-            && match (&self.implementation, &other.implementation) {
-                (None, None) => true,
-                (Some(left), Some(right)) => Rc::ptr_eq(left, right),
-                _ => false,
-            }
-    }
-}
-
-/// Where an evaluation finds definitions. A host that reuses results can rely
-/// on every changing read being a `resolve`, except where `untracked` says
+/// Where an evaluation finds definitions, and the native code foreign
+/// functions run. A host that reuses results can rely on every changing read
+/// being a `resolve` or an `implementation`, except where `untracked` says
 /// otherwise.
 pub trait Host {
     /// `cell`'s definition.
-    fn resolve(&self, cell: CellId) -> Option<Definition>;
+    fn resolve(&self, cell: CellId) -> Option<Value>;
+    /// The native code a foreign function implemented under `cell` runs.
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction>;
     /// A foreign call not declared tracked ran, so the result may depend on
     /// reads the host didn't see.
     fn untracked(&self) {}
@@ -299,14 +241,10 @@ pub fn apply(
 }
 
 #[cfg(test)]
-struct TestHost<F>(F);
-
+#[path = "tests/support.rs"]
+mod test_support;
 #[cfg(test)]
-impl<F: Fn(CellId) -> Option<Definition>> Host for TestHost<F> {
-    fn resolve(&self, cell: CellId) -> Option<Definition> {
-        (self.0)(cell)
-    }
-}
+use test_support::{TestDefinition, TestHost};
 
 #[cfg(test)]
 #[path = "tests/lib.rs"]

@@ -86,9 +86,30 @@ impl ForeignFunction {
         self
     }
 
+    /// The parameters it declares, if any.
+    pub fn declared_parameters(&self) -> Option<&[CellId]> {
+        self.parameters.as_deref()
+    }
+
     pub(crate) fn as_primitive(mut self, primitive: primitive::Primitive) -> Self {
         self.primitive = Some(Rc::new(primitive));
         self
+    }
+}
+
+/// Two functions are equal when they run the same native code.
+impl PartialEq for ForeignFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.tracked == other.tracked
+            && match (&self.implementation, &other.implementation) {
+                (ForeignImplementation::Direct(left), ForeignImplementation::Direct(right)) => {
+                    Rc::ptr_eq(left, right)
+                }
+                (ForeignImplementation::Staged(left), ForeignImplementation::Staged(right)) => {
+                    Rc::ptr_eq(left, right)
+                }
+                _ => false,
+            }
     }
 }
 
@@ -205,4 +226,11 @@ pub fn foreign_function(cell: CellId) -> Value {
         vocabulary::kind::FOREIGN_FUNCTION,
         [(vocabulary::IMPLEMENTATION, Value::from(cell))],
     )
+}
+
+/// The cell foreign function `value` is implemented under.
+pub fn implementation_cell(value: &Value) -> Option<CellId> {
+    let fields = value.as_record()?;
+    (isa::of(fields)? == vocabulary::kind::FOREIGN_FUNCTION).then_some(())?;
+    fields.get(&vocabulary::IMPLEMENTATION)?.as_cell()
 }

@@ -207,7 +207,7 @@ impl<'a> Context<'a> {
             Some(value) => Ok(unbox(value.clone())),
             None => match self.host.resolve(cell) {
                 None => Ok(missing_cell(cell)),
-                Some(definition) => {
+                Some(value) => {
                     while self.cell_states.len() <= index.0 {
                         self.cell_states.push(CellState::Unknown);
                     }
@@ -220,7 +220,7 @@ impl<'a> Context<'a> {
                         }
                         CellState::Unknown => {
                             let expression = self.lower_source(
-                                definition.value(),
+                                &value,
                                 SourceOrigin::Cell {
                                     cell,
                                     path: Vec::new(),

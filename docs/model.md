@@ -29,14 +29,18 @@ definition first, otherwise the first loaded library definition. Names, structur
 display, and cell evaluation use that value. Definitions are neither merged nor
 implicitly composed. Duplicate indicators and inspection UI are deferred.
 
-Each library has one definition per cell (`grap::Definition`): a value and,
-for a native definition, the Rust implementation the value describes. Reads and
-calls use the same lookup. A native definition's value says what it is,
-`{isa: foreign function, implementation: <its own cell>, name, params}`: a
-function the host implements under that cell. It's data, so a reference evaluates to it
-as to any definition, and calling it, or its cell, invokes the implementation.
-An absent or non-callable result does
-not try another source. A library's own value lives in that same table under
+Each library has one value per cell, and the Rust code of the foreign
+functions it implements, each under its own cell. Reads and calls use the same
+lookup. A foreign function's value says what it is, `{isa: foreign function,
+implementation: <its own cell>, name, params}`, the library writing it from the
+function's name and the parameters its code declares. It's data, so a
+reference evaluates to it as to any definition. Only a call reaches code
+(`grap::Host::implementation`): calling a cell whose definition is a foreign
+function implemented under it runs the code there, and calling a foreign
+function value calls its implementation's cell. A document that defines that
+cell otherwise overrides the code too, since the call reads the definition
+first; one implemented nowhere isn't callable. An absent or non-callable result
+does not try another source. A library's own value lives in that same table under
 its identity, not in a separate metadata store: `{isa: loaded library, name,
 cells}`, the name it gives itself and the cells it defines, ordered by their
 names. Composing the loaded libraries writes it, so it lists what each library
@@ -360,8 +364,7 @@ library (what it offers anywhere, what it reads the query as, or what a document
 can start as), the hole's path, read-only path and cell lookups, lazy enumeration
 of defined cells, the document's names for cells, and the loaded libraries'
 provider. Cell lookup exposes the selected definition's
-value, source, and whether it has a native implementation, without evaluating
-it. The path names a missing value or the record receiving a new label, from
+value and source, without evaluating it. The path names a missing value or the record receiving a new label, from
 where the hole's location starts, and path lookups read from there too. A hole
 in a cell's definition reads that definition as its own context, however the
 cell was reached, so Grap offers only the bindings visible within it. A
@@ -383,9 +386,9 @@ order, preserving an explicitly empty vocabulary. Grap's parameter reader takes
 an inline or stored lambda's declared parameters when asked, for a call's field
 order, its slots for missing arguments, and `call_completion`'s initial pending
 parameter. It follows cell aliases and declines cycles and computed callables. A
-native function's description lists the arguments its implementation requires
-under `params`; the reader takes that list as is and never interprets a native
-description as a lambda. Filtering names and excluding existing record labels
+foreign function's value lists the arguments its implementation requires
+under `params`; the reader takes that list as is and never interprets a foreign
+function as a lambda. Filtering names and excluding existing record labels
 remain picker responsibilities.
 
 Asked for its offers anywhere with a nonempty query, Grap offers calls to named

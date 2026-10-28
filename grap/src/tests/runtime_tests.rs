@@ -94,7 +94,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let tracer = Rc::new(Tracer::default());
     let receiver = host(vec![(
         sink,
-        Definition::foreign(
+        TestDefinition::foreign(
             sink,
             gid::Record::default(),
             ForeignFunction::new({
@@ -178,7 +178,7 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     let tracer = Rc::new(Tracer::default());
     let receiver = host(vec![(
         sink,
-        Definition::foreign(
+        TestDefinition::foreign(
             sink,
             gid::Record::default(),
             ForeignFunction::new({
@@ -340,7 +340,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
     let value = unboxed(source);
     let receiver = host(vec![(
         interpret,
-        Definition::foreign(
+        TestDefinition::foreign(
             interpret,
             gid::Record::default(),
             ForeignFunction::new(move |context, _, environment| {
@@ -441,7 +441,7 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
     assert_eq!(value.as_text(), Some("three"));
     let receiver = host(vec![(
         interpret,
-        Definition::foreign(
+        TestDefinition::foreign(
             interpret,
             gid::Record::default(),
             ForeignFunction::new(move |context, _, environment| {
@@ -541,7 +541,7 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
     }
 }
 
-fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
+fn host(definitions: Vec<(CellId, TestDefinition)>) -> impl Host {
     TestHost(move |cell| {
         definitions
             .iter()
@@ -554,10 +554,10 @@ fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
 fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks() {
     let (identity, argument, data) = (new_cell_id(), new_cell_id(), new_cell_id());
     let receiver = host(vec![
-        (data, Definition::from(f64::value(9.0))),
+        (data, TestDefinition::from(f64::value(9.0))),
         (
             identity,
-            Definition::foreign(
+            TestDefinition::foreign(
                 identity,
                 gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
@@ -619,7 +619,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
     let (identity, argument) = (new_cell_id(), new_cell_id());
     let receiver = host(vec![(
         identity,
-        Definition::foreign(
+        TestDefinition::foreign(
             identity,
             gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
@@ -679,7 +679,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
     let (identity, argument) = (new_cell_id(), new_cell_id());
     let receiver = host(vec![(
         identity,
-        Definition::foreign(
+        TestDefinition::foreign(
             identity,
             gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
@@ -745,7 +745,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
     let closure = {
         let creator = host(vec![(
             factory,
-            Definition::from(lambda(
+            TestDefinition::from(lambda(
                 [captured],
                 lambda([], call(sink.into(), [(captured, captured.into())])),
             )),
@@ -779,7 +779,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
         let observer = tracer.clone();
         let receiver = host(vec![(
             sink,
-            Definition::foreign(
+            TestDefinition::foreign(
                 sink,
                 gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
@@ -959,9 +959,9 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let creator = TestHost(move |cell| {
         if cell == first || cell == second {
-            Some(Definition::from(Value::from(enclosing)))
+            Some(TestDefinition::from(Value::from(enclosing)))
         } else if cell == enclosing {
-            Some(Definition::from(isa::record(
+            Some(TestDefinition::from(isa::record(
                 vocabulary::kind::VALUE_WRAPPER,
                 [(vocabulary::VALUE, lambda([], call(sink.into(), [])))],
             )))
@@ -1042,7 +1042,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
     let (identity, argument) = (new_cell_id(), new_cell_id());
     let receiver = host(vec![(
         identity,
-        Definition::foreign(
+        TestDefinition::foreign(
             identity,
             gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
@@ -1085,7 +1085,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
         let creator = host(vec![
             (
                 capture,
-                Definition::foreign(
+                TestDefinition::foreign(
                     capture,
                     gid::Record::default(),
                     ForeignFunction::new(move |context, call, environment| {
@@ -1096,7 +1096,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
             ),
             (
                 target,
-                Definition::foreign(
+                TestDefinition::foreign(
                     target,
                     gid::Record::default(),
                     ForeignFunction::new(move |_, _, _| {
@@ -1116,7 +1116,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
     assert!(weak.upgrade().is_none());
     let receiver = host(vec![(
         target,
-        Definition::foreign(
+        TestDefinition::foreign(
             target,
             gid::Record::default(),
             ForeignFunction::new(|_, _, _| Ok(RuntimeValue::f64(2.0))),
@@ -1141,7 +1141,7 @@ fn retained_callables_use_the_receiving_scoped_capability() {
     let host = host(vec![
         (
             capture,
-            Definition::foreign(
+            TestDefinition::foreign(
                 capture,
                 gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
@@ -1152,7 +1152,7 @@ fn retained_callables_use_the_receiving_scoped_capability() {
         ),
         (
             target,
-            Definition::foreign(
+            TestDefinition::foreign(
                 target,
                 gid::Record::default(),
                 ForeignFunction::from_value(|_, _, _| Ok(absent::value(new_cell_id()))),
@@ -1239,7 +1239,7 @@ fn every_entry_point_binds_in_its_context_index_table() {
     let seen = shared.clone();
     let receiver = host(vec![(
         probe,
-        Definition::foreign(
+        TestDefinition::foreign(
             probe,
             gid::Record::default(),
             ForeignFunction::new(move |context, _, environment| {

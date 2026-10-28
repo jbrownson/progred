@@ -1,10 +1,10 @@
 //! Whole-evaluation memo boundaries. Each execution owns a fresh interpreter,
 //! so prepared calls cannot bypass an enclosing computation's observations.
-//! The evaluation's host records each definition it resolves, and gives up
+//! The evaluation's host records each cell it resolves, and gives up
 //! reuse when Grap reports an untracked call or an effect the memo doesn't own.
 
 use gid::{CellId, Value};
-use grap::{Definition, Evaluation, Host, absent};
+use grap::{Evaluation, ForeignFunction, Host, absent};
 use incremental::{Read, Source};
 use std::cell::RefCell;
 
@@ -26,8 +26,13 @@ pub fn failure(error: incremental::Error) -> Value {
     })
 }
 
+/// What the host says of a cell: its definition, and the code the foreign
+/// function implemented under it runs.
 #[derive(Clone, PartialEq)]
-pub struct Resolved(pub Option<Definition>);
+pub struct Resolved {
+    pub value: Option<Value>,
+    pub implementation: Option<ForeignFunction>,
+}
 
 pub type Definitions<S> = Source<S, CellId, Resolved>;
 
@@ -38,8 +43,15 @@ struct ObservingHost<'a, S> {
 }
 
 impl<S: 'static> Host for ObservingHost<'_, S> {
-    fn resolve(&self, cell: CellId) -> Option<Definition> {
-        self.definitions.read(cell, &mut self.read.borrow_mut()).0
+    fn resolve(&self, cell: CellId) -> Option<Value> {
+        self.definitions
+            .read(cell, &mut self.read.borrow_mut())
+            .value
+    }
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
+        self.definitions
+            .read(cell, &mut self.read.borrow_mut())
+            .implementation
     }
     fn untracked(&self) {
         self.read.borrow_mut().untracked();

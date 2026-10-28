@@ -8,10 +8,10 @@ fn selected_libraries_supply_only_their_own_definitions() {
         stack.libraries.iter().map(|(id, _)| id).collect::<Vec<_>>(),
         ids
     );
-    assert!(stack.libraries.resolve(f64::vocabulary::F64).is_some());
-    assert!(stack.libraries.resolve(f32::vocabulary::F32).is_none());
+    assert!(crate::test_support::first_value(&stack.libraries, f64::vocabulary::F64).is_some());
+    assert!(crate::test_support::first_value(&stack.libraries, f32::vocabulary::F32).is_none());
     for id in [fidget::ID, toolpath::ID, grap_library::ID] {
-        assert!(stack.libraries.resolve(id).is_none());
+        assert!(crate::test_support::first_value(&stack.libraries, id).is_none());
     }
 }
 
@@ -156,8 +156,9 @@ fn a_call_draws_as_its_function_provides_else_as_a_call() {
 fn each_library_s_own_cell_holds_the_library() {
     use crate::library::vocabulary::{CELLS, kind::LIBRARY};
     let stack = load();
-    let value = stack.libraries.resolve(presentation::ID).unwrap();
-    let fields = value.value().as_record().unwrap();
+    let fields = crate::test_support::first_value(&stack.libraries, presentation::ID)
+        .and_then(gid::Value::as_record)
+        .unwrap();
     assert_eq!(::grap::isa::of(fields), Some(LIBRARY));
     assert_eq!(
         fields.get(&name::vocabulary::NAME).and_then(text::read),

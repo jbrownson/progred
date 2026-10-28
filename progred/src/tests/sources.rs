@@ -38,7 +38,6 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
     .resolve(function)
     .unwrap();
     assert_eq!(native.library, Some(library));
-    assert!(native.native);
     assert_eq!(native.value, &grap::foreign_function(function));
     let answer = Value::from(b"document".to_vec());
     for (definition, expected) in [
@@ -61,7 +60,6 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
         };
         let resolved = sources.resolve(function).unwrap();
         assert_eq!(resolved.library, None);
-        assert!(!resolved.native);
         assert_eq!(Some(resolved.value), doc.cells.value(function));
         for result in [
             grap::evaluate_value(&grap::call(function.into(), []), &sources, 100),

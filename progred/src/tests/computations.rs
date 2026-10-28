@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects() {
-    use grap::{Definition, ForeignFunction};
+    use grap::ForeignFunction;
     use std::cell::Cell;
 
     for mode in ["tracked", "effectful", "untracked"] {
@@ -28,10 +28,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
             implementation.tracked()
         };
         let mut definitions = crate::library::Definitions::default();
-        definitions.insert(
-            function,
-            Definition::foreign(function, gid::Record::default(), implementation),
-        );
+        definitions.insert_foreign(function, implementation);
         let mut libraries = Libraries::default();
         libraries.insert(library, definitions);
         let computations = Computations::default();
@@ -84,7 +81,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
 
 #[test]
 fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() {
-    use grap::{Definition, ForeignFunction};
+    use grap::ForeignFunction;
     use std::cell::Cell;
     let (function, input, unrelated, library) = (
         gid::new_cell_id(),
@@ -94,21 +91,17 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     );
     let runs = Rc::new(Cell::new(0));
     let mut definitions = crate::library::Definitions::default();
-    definitions.insert(
+    definitions.insert_foreign(
         function,
-        Definition::foreign(
-            function,
-            gid::Record::default(),
-            ForeignFunction::from_value({
-                let runs = runs.clone();
-                move |context, call, environment| {
-                    runs.set(runs.get() + 1);
-                    let argument = call.field(input).unwrap();
-                    context.eval_to_value(argument, environment)
-                }
-            })
-            .tracked(),
-        ),
+        ForeignFunction::from_value({
+            let runs = runs.clone();
+            move |context, call, environment| {
+                runs.set(runs.get() + 1);
+                let argument = call.field(input).unwrap();
+                context.eval_to_value(argument, environment)
+            }
+        })
+        .tracked(),
     );
     let mut libraries = Libraries::default();
     libraries.insert(library, definitions);

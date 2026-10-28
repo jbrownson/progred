@@ -3,7 +3,7 @@
 //! [`crate::libraries`] are contributions like any other.
 
 use crate::display::{Completion, CompletionProvider, CompletionRequest, Partial};
-use ::grap::{Definition, ForeignFunctions};
+use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::Cells;
 use std::rc::Rc;
 
@@ -23,62 +23,98 @@ pub mod vocabulary {
     }
 }
 
+/// What a library defines: each cell's value, and the native code the
+/// foreign functions implemented under its cells run.
 #[derive(Clone, Default)]
 pub struct Definitions {
-    entries: Rc<Vec<(gid::CellId, Definition)>>,
+    values: Rc<Vec<(gid::CellId, gid::Value)>>,
+    implementations: Rc<ForeignFunctions>,
 }
 
 impl Definitions {
-    pub fn from_parts(cells: Cells, foreign: ForeignFunctions) -> Self {
-        let mut entries: Vec<_> = cells
+    /// `cells`, with each of `functions` a foreign function implemented
+    /// under its cell.
+    pub fn from_parts(cells: Cells, functions: ForeignFunctions) -> Self {
+        let mut values: Vec<_> = cells
             .iter()
-            .map(|(cell, value)| (*cell, Definition::from(value.clone())))
+            .map(|(cell, value)| (*cell, value.clone()))
             .collect();
-        entries.sort_unstable_by_key(|(cell, _)| *cell);
+        values.sort_unstable_by_key(|(cell, _)| *cell);
         let mut definitions = Self {
-            entries: Rc::new(entries),
+            values: Rc::new(values),
+            implementations: Rc::default(),
         };
-        for (cell, function) in foreign.iter() {
-            definitions.insert(
-                cell,
-                Definition::foreign(
-                    cell,
-                    definitions
-                        .value(cell)
-                        .and_then(gid::Value::as_record)
-                        .cloned()
-                        .unwrap_or_default(),
-                    function.clone(),
-                ),
-            );
+        for (cell, function) in functions.iter() {
+            definitions.insert_foreign(cell, function.clone());
         }
         definitions
     }
 
-    pub fn get(&self, cell: gid::CellId) -> Option<&Definition> {
-        self.entries
+    pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
+        self.values
             .binary_search_by_key(&cell, |(cell, _)| *cell)
             .ok()
-            .map(|index| &self.entries[index].1)
+            .map(|index| &self.values[index].1)
     }
 
-    pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
-        self.get(cell).map(Definition::value)
+    /// The code the foreign function implemented under `cell` runs.
+    pub fn implementation(&self, cell: gid::CellId) -> Option<&ForeignFunction> {
+        self.implementations.get(cell)
     }
 
-    pub fn insert(&mut self, cell: gid::CellId, definition: Definition) {
-        let entries = Rc::make_mut(&mut self.entries);
-        match entries.binary_search_by_key(&cell, |(cell, _)| *cell) {
-            Ok(index) => entries[index].1 = definition,
-            Err(index) => entries.insert(index, (cell, definition)),
+    #[cfg(test)]
+    pub fn implementations(&self) -> &ForeignFunctions {
+        &self.implementations
+    }
+
+    pub fn insert(&mut self, cell: gid::CellId, value: gid::Value) {
+        let values = Rc::make_mut(&mut self.values);
+        match values.binary_search_by_key(&cell, |(cell, _)| *cell) {
+            Ok(index) => values[index].1 = value,
+            Err(index) => values.insert(index, (cell, value)),
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definition)> {
-        self.entries
-            .iter()
-            .map(|(cell, definition)| (*cell, definition))
+    /// Defines `cell` as a foreign function implemented under it, running
+    /// `function`, keeping what its definition already says of it, such as
+    /// its name.
+    pub fn insert_foreign(&mut self, cell: gid::CellId, function: ForeignFunction) {
+        self.insert(cell, foreign_record(cell, self.value(cell), &function));
+        let implementations = Rc::make_mut(&mut self.implementations);
+        *implementations = std::mem::take(implementations).register(cell, function);
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &gid::Value)> {
+        self.values.iter().map(|(cell, value)| (*cell, value))
+    }
+}
+
+/// `cell`'s definition as a foreign function implemented under it, running
+/// `function`: `description`'s fields, saying so, with the parameters
+/// `function` declares unless they list their own.
+pub fn foreign_record(
+    cell: gid::CellId,
+    description: Option<&gid::Value>,
+    function: &ForeignFunction,
+) -> gid::Value {
+    let mut fields = description
+        .and_then(gid::Value::as_record)
+        .cloned()
+        .unwrap_or_default();
+    fields.set(
+        ::grap::isa::ISA,
+        gid::Value::from(::grap::vocabulary::kind::FOREIGN_FUNCTION),
+    );
+    fields.set(::grap::vocabulary::IMPLEMENTATION, gid::Value::from(cell));
+    if let Some(parameters) = function.declared_parameters()
+        && fields.get(&::grap::vocabulary::PARAMS).is_none()
+    {
+        fields.set(
+            ::grap::vocabulary::PARAMS,
+            gid::Value::list(parameters.iter().map(|&parameter| parameter.into())),
+        );
+    }
+    gid::Value::Record(fields)
 }
 
 pub struct Library<World, Hover> {
@@ -123,7 +159,7 @@ impl<World, Hover> Library<World, Hover> {
         values: impl IntoIterator<Item = (gid::CellId, gid::Value)>,
     ) -> Self {
         for (cell, value) in values {
-            self.definitions.insert(cell, Definition::from(value));
+            self.definitions.insert(cell, value);
         }
         self
     }
@@ -213,20 +249,20 @@ impl Libraries {
     pub fn definitions(
         &self,
         cell: gid::CellId,
-    ) -> impl Iterator<Item = (gid::CellId, &Definition)> + '_ {
+    ) -> impl Iterator<Item = (gid::CellId, &gid::Value)> + '_ {
         self.entries
             .iter()
             .filter_map(move |(library, definitions)| {
-                definitions
-                    .get(cell)
-                    .map(|definition| (*library, definition))
+                definitions.value(cell).map(|value| (*library, value))
             })
     }
 
-    pub fn resolve(&self, cell: gid::CellId) -> Option<::grap::Definition> {
-        self.definitions(cell)
-            .next()
-            .map(|(_, definition)| definition.clone())
+    /// The code the first loaded library with a foreign function implemented
+    /// under `cell` runs for it.
+    pub fn implementation(&self, cell: gid::CellId) -> Option<&ForeignFunction> {
+        self.entries
+            .iter()
+            .find_map(|(_, definitions)| definitions.implementation(cell))
     }
 
     pub fn cell_ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
@@ -237,8 +273,14 @@ impl Libraries {
 }
 
 impl ::grap::Host for Libraries {
-    fn resolve(&self, cell: gid::CellId) -> Option<::grap::Definition> {
-        self.resolve(cell)
+    fn resolve(&self, cell: gid::CellId) -> Option<gid::Value> {
+        self.definitions(cell)
+            .next()
+            .map(|(_, value)| value.clone())
+    }
+
+    fn implementation(&self, cell: gid::CellId) -> Option<ForeignFunction> {
+        self.implementation(cell).cloned()
     }
 }
 

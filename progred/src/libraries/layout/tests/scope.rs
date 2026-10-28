@@ -22,8 +22,11 @@ fn site() -> crate::editing::Site {
 
 #[test]
 fn layout_results_and_nested_absent_details_keep_native_callbacks() {
-    let grap = crate::libraries::grap::library::<crate::Editor>();
-    let host = crate::test_support::TestHost(|cell| grap.definitions.get(cell).cloned());
+    let mut host = crate::library::Libraries::default();
+    host.insert(
+        crate::libraries::grap::ID,
+        crate::libraries::grap::library::<crate::Editor>().definitions,
+    );
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
         Some(::grap::SourceOrigin::Root(vec![Step::Key(
@@ -95,15 +98,15 @@ fn text(value: &str) -> Value {
 }
 
 fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
-    let libraries = [
-        crate::libraries::grap::library::<crate::Editor>(),
-        super::super::library::<crate::Editor>(),
-    ];
-    let host = crate::test_support::TestHost(|cell| {
-        libraries
-            .iter()
-            .find_map(|library| library.definitions.get(cell).cloned())
-    });
+    let mut host = crate::library::Libraries::default();
+    host.insert(
+        crate::libraries::grap::ID,
+        crate::libraries::grap::library::<crate::Editor>().definitions,
+    );
+    host.insert(
+        super::super::ID,
+        super::super::library::<crate::Editor>().definitions,
+    );
     run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&::grap::RuntimeValue::from(program), &host, scope, fuel)
     })

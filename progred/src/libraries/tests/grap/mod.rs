@@ -24,16 +24,15 @@ fn every_built_in_declares_its_parameters() {
                 .unwrap_or_else(|| short_id(library));
             definitions
                 .iter()
-                .filter(|(_, definition)| {
-                    definition.implementation().is_some()
-                        && !definition
-                            .value()
+                .filter(|(cell, value)| {
+                    definitions.implementation(*cell).is_some()
+                        && !value
                             .as_record()
                             .and_then(|fields| fields.get(&PARAMS))
                             .is_some()
                 })
-                .map(move |(cell, definition)| {
-                    let name = name::read(definition.value())
+                .map(move |(cell, value)| {
+                    let name = name::read(value)
                         .map(str::to_owned)
                         .unwrap_or_else(|| short_id(cell));
                     format!("{library}: {name}")
@@ -83,7 +82,6 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
                 .map(|index| ResolvedCell {
                     library: definitions[index].0,
                     value: &definitions[index].1,
-                    native: false,
                 })
         };
         let enumerate = || order.clone();
@@ -224,7 +222,6 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
         fn resolve(&self, _: CellId) -> Option<ResolvedCell<'_>> {
             Some(ResolvedCell {
                 value: &self.0,
-                native: false,
                 library: None,
             })
         }
@@ -390,7 +387,6 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
         Some(ResolvedCell {
             library: Some(ID),
             value: if cell == alias { &reference } else { &lambda },
-            native: false,
         })
     };
     assert_eq!(
@@ -402,20 +398,23 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
         function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
             library: None,
             value: &reference,
-            native: false,
         })),
         None
     );
-    let declared = Value::record([(PARAMS, Value::list([parameter.into()]))]);
+    let foreign = |fields: Vec<(CellId, Value)>| {
+        ::grap::isa::record(::grap::vocabulary::kind::FOREIGN_FUNCTION, fields)
+    };
     for (description, expected) in [
-        (&Value::record([]), None),
-        (&declared, Some(vec![parameter])),
+        (&foreign(vec![]), None),
+        (
+            &foreign(vec![(PARAMS, Value::list([parameter.into()]))]),
+            Some(vec![parameter]),
+        ),
     ] {
         assert_eq!(
             function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
                 library: Some(ID),
                 value: description,
-                native: true,
             })),
             expected
         );
@@ -667,7 +666,6 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
 
     struct DefinitionEnv {
         definition: Value,
-        native: bool,
     }
 
     impl Env for DefinitionEnv {
@@ -719,13 +717,11 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
             (cell == FUNCTION_CELL).then_some(ResolvedCell {
                 library: None,
                 value: &self.definition,
-                native: self.native,
             })
         }
     }
 
     let env = DefinitionEnv {
-        native: false,
         definition: ::grap::lambda(
             [FIRST_PARAMETER, SECOND_PARAMETER],
             Value::from(FIRST_PARAMETER),
@@ -776,11 +772,13 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
         [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, unknown]
     );
     let declared = DefinitionEnv {
-        native: true,
-        definition: Value::record([(
-            PARAMS,
-            Value::list([FIRST_PARAMETER.into(), SECOND_PARAMETER.into()]),
-        )]),
+        definition: ::grap::isa::record(
+            ::grap::vocabulary::kind::FOREIGN_FUNCTION,
+            [(
+                PARAMS,
+                Value::list([FIRST_PARAMETER.into(), SECOND_PARAMETER.into()]),
+            )],
+        ),
     };
     assert_eq!(
         argument_order(
@@ -795,8 +793,7 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
         [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
     );
     let undeclared = DefinitionEnv {
-        native: true,
-        definition: Value::record([]),
+        definition: ::grap::isa::record(::grap::vocabulary::kind::FOREIGN_FUNCTION, []),
     };
     assert_eq!(
         argument_order(

@@ -347,17 +347,13 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
                 Ok(Value::record([]))
             }
         });
-        definitions.insert(
+        definitions.insert_foreign(
             B,
-            ::grap::Definition::foreign(
-                B,
-                gid::Record::default(),
-                if tracked {
-                    implementation.tracked()
-                } else {
-                    implementation
-                },
-            ),
+            if tracked {
+                implementation.tracked()
+            } else {
+                implementation
+            },
         );
         let mut libraries = crate::stack::load().libraries;
         libraries.insert(C, definitions);

@@ -74,12 +74,50 @@ pub(crate) fn test_document() -> Rc<crate::workspace::View> {
     DOCUMENT.with(Rc::clone)
 }
 
-/// A Grap host resolving each cell through its function.
+/// A test cell's definition and, for a foreign function, the code it runs.
+#[derive(Clone)]
+pub(crate) struct TestDefinition {
+    pub(crate) value: Value,
+    pub(crate) implementation: Option<grap::ForeignFunction>,
+}
+
+impl From<Value> for TestDefinition {
+    fn from(value: Value) -> Self {
+        Self {
+            value,
+            implementation: None,
+        }
+    }
+}
+
+impl TestDefinition {
+    /// `cell` as a foreign function implemented under it, running `function`.
+    pub(crate) fn foreign(cell: CellId, function: grap::ForeignFunction) -> Self {
+        Self {
+            value: crate::library::foreign_record(cell, None, &function),
+            implementation: Some(function),
+        }
+    }
+}
+
+/// What `libraries` define `cell` as.
+pub(crate) fn defined_in(libraries: &Libraries, cell: CellId) -> Option<TestDefinition> {
+    Some(TestDefinition {
+        value: first_value(libraries, cell)?.clone(),
+        implementation: libraries.implementation(cell).cloned(),
+    })
+}
+
+/// A Grap host defining each cell as its function says.
 pub(crate) struct TestHost<F>(pub F);
 
-impl<F: Fn(CellId) -> Option<grap::Definition>> grap::Host for TestHost<F> {
-    fn resolve(&self, cell: CellId) -> Option<grap::Definition> {
-        (self.0)(cell)
+impl<F: Fn(CellId) -> Option<TestDefinition>> grap::Host for TestHost<F> {
+    fn resolve(&self, cell: CellId) -> Option<Value> {
+        (self.0)(cell).map(|definition| definition.value)
+    }
+
+    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction> {
+        (self.0)(cell)?.implementation
     }
 }
 
@@ -88,18 +126,15 @@ pub(crate) fn test_host<'a>(
     resolve: impl Fn(CellId) -> Option<Value> + 'a,
     foreign: &'a grap::ForeignFunctions,
 ) -> impl grap::Host + 'a {
-    TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
-        (value, Some(function)) => Some(grap::Definition::foreign(
-            cell,
-            value
-                .as_ref()
-                .and_then(Value::as_record)
-                .cloned()
-                .unwrap_or_default(),
-            function.clone(),
-        )),
-        (Some(value), None) => Some(grap::Definition::from(value)),
-        (None, None) => None,
+    TestHost(move |cell| {
+        let value = resolve(cell);
+        match foreign.get(cell) {
+            Some(function) => Some(TestDefinition {
+                value: crate::library::foreign_record(cell, value.as_ref(), function),
+                implementation: Some(function.clone()),
+            }),
+            None => value.map(TestDefinition::from),
+        }
     })
 }
 
@@ -133,13 +168,7 @@ pub(crate) fn test_apply(
 pub(crate) fn foreign_functions<World, Hover>(
     library: &crate::library::Library<World, Hover>,
 ) -> grap::ForeignFunctions {
-    library.definitions.iter().fold(
-        grap::ForeignFunctions::default(),
-        |functions, (cell, definition)| match definition.implementation() {
-            Some(implementation) => functions.register(cell, implementation.clone()),
-            None => functions,
-        },
-    )
+    library.definitions.implementations().clone()
 }
 
 /// What `expression` evaluates to with only `library`'s functions defined.
@@ -152,10 +181,7 @@ pub(crate) fn evaluate_with(
 
 /// The value of the first loaded library's definition of `cell`.
 pub(crate) fn first_value(libraries: &Libraries, cell: CellId) -> Option<&Value> {
-    libraries
-        .definitions(cell)
-        .next()
-        .map(|(_, definition)| definition.value())
+    libraries.definitions(cell).next().map(|(_, value)| value)
 }
 
 /// A request for `kind` offers matching `query` in `scope`, at the root of
@@ -263,10 +289,7 @@ pub(crate) fn library(
     functions: grap::ForeignFunctions,
 ) -> crate::libraries::Library<crate::Editor> {
     let mut definitions = crate::library::Definitions::from_parts(cells, functions);
-    definitions.insert(
-        id,
-        grap::Definition::from(crate::libraries::name::record(name, [])),
-    );
+    definitions.insert(id, crate::libraries::name::record(name, []));
     crate::library::Library::new(definitions)
 }
 

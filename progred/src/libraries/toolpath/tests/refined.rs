@@ -93,20 +93,16 @@ impl Fixture {
         let counter = new_cell_id();
         let runs = Rc::new(Cell::new(0));
         let mut definitions = Definitions::default();
-        definitions.insert(
+        definitions.insert_foreign(
             counter,
-            ::grap::Definition::foreign(
-                counter,
-                gid::Record::default(),
-                ::grap::ForeignFunction::from_value({
-                    let runs = runs.clone();
-                    move |_, _, _| {
-                        runs.set(runs.get() + 1);
-                        Ok(Value::record([]))
-                    }
-                })
-                .tracked(),
-            ),
+            ::grap::ForeignFunction::from_value({
+                let runs = runs.clone();
+                move |_, _, _| {
+                    runs.set(runs.get() + 1);
+                    Ok(Value::record([]))
+                }
+            })
+            .tracked(),
         );
         libraries.insert(new_cell_id(), definitions);
         computations.begin(Rc::new(Document::default()), libraries);

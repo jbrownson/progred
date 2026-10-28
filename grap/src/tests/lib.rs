@@ -7,7 +7,7 @@ fn definitions_from_parts<'a>(
     foreign: &'a ForeignFunctions,
 ) -> impl Host + 'a {
     TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
-        (value, Some(function)) => Some(Definition::foreign(
+        (value, Some(function)) => Some(TestDefinition::foreign(
             cell,
             value
                 .as_ref()
@@ -16,7 +16,7 @@ fn definitions_from_parts<'a>(
                 .unwrap_or_default(),
             function.clone(),
         )),
-        (Some(value), None) => Some(Definition::from(value)),
+        (Some(value), None) => Some(TestDefinition::from(value)),
         (None, None) => None,
     })
 }
@@ -54,7 +54,7 @@ fn a_direct_cell_call_returns_its_definitions_decline() {
         &expression,
         &TestHost(|cell| {
             assert_eq!(cell, function);
-            Some(Definition::foreign(
+            Some(TestDefinition::foreign(
                 cell,
                 gid::Record::default(),
                 ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
@@ -73,7 +73,7 @@ fn an_ordinary_absent_keeps_its_details() {
     let evaluation = super::evaluate_value(
         &call(Value::from(function), []),
         &TestHost(|cell| match cell {
-            cell if cell == function => Some(Definition::from(Value::from(missing))),
+            cell if cell == function => Some(TestDefinition::from(Value::from(missing))),
             cell if cell == missing => None,
             _ => unreachable!(),
         }),
@@ -93,7 +93,7 @@ fn host_apply_returns_the_definitions_decline() {
         &Value::from(function),
         [],
         &TestHost(|_| {
-            Some(Definition::foreign(
+            Some(TestDefinition::foreign(
                 function,
                 gid::Record::default(),
                 ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
@@ -548,13 +548,83 @@ fn a_foreign_call_outside_a_shadowing_scope_still_uses_the_registry() {
     );
 }
 
+/// A host whose definitions and native code are separate tables, as a
+/// document's over a library's are.
+struct Split {
+    values: Vec<(CellId, Value)>,
+    code: ForeignFunctions,
+}
+
+impl Host for Split {
+    fn resolve(&self, cell: CellId) -> Option<Value> {
+        self.values
+            .iter()
+            .find(|(key, _)| *key == cell)
+            .map(|(_, value)| value.clone())
+    }
+
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
+        self.code.get(cell).cloned()
+    }
+}
+
+#[test]
+fn a_call_runs_native_code_only_where_its_definition_names_it() {
+    let (native, copy, overridden, unimplemented) =
+        (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
+    let host = Split {
+        values: vec![
+            (native, foreign_function(native)),
+            (copy, foreign_function(native)),
+            (overridden, lambda([], blob("defined"))),
+            (unimplemented, foreign_function(unimplemented)),
+        ],
+        code: ForeignFunctions::default()
+            .register(
+                native,
+                ForeignFunction::from_value(|_, _, _| Ok(blob("native"))),
+            )
+            .register(
+                overridden,
+                ForeignFunction::from_value(|_, _, _| {
+                    panic!("a definition that isn't a foreign function overrides its cell's code")
+                }),
+            ),
+    };
+    for (function, expected) in [
+        (native, blob("native")),
+        // Another cell's copy of the record calls the code it names.
+        (copy, blob("native")),
+        (overridden, blob("defined")),
+        (
+            unimplemented,
+            absent::with_detail(
+                absent::NOT_CALLABLE,
+                absent::VALUE,
+                foreign_function(unimplemented),
+            ),
+        ),
+    ] {
+        for result in [
+            super::evaluate_value(&call(function.into(), []), &host, 100),
+            super::apply_value(&function.into(), [], &host, None, 100),
+        ] {
+            assert!(result.completed);
+            assert_eq!(result.result, expected);
+        }
+    }
+}
+
 #[test]
 fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
-    struct DataHost(CellId, Option<Definition>);
+    struct DataHost(CellId, Option<TestDefinition>);
     impl Host for DataHost {
-        fn resolve(&self, cell: CellId) -> Option<Definition> {
+        fn resolve(&self, cell: CellId) -> Option<Value> {
             assert_eq!(cell, self.0);
-            self.1.clone()
+            self.1.as_ref().map(|definition| definition.value().clone())
+        }
+        fn implementation(&self, _: CellId) -> Option<ForeignFunction> {
+            panic!("reading a cell must not look up native code")
         }
     }
     let cell = new_cell_id();
@@ -563,8 +633,8 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
         panic!("reading data must not invoke a scoped capability")
     };
     let overlay = ForeignOverlay::from_value(&functions, &invoke);
-    let first = Definition::from(blob("document"));
-    let second = Definition::foreign(
+    let first = TestDefinition::from(blob("document"));
+    let second = TestDefinition::foreign(
         cell,
         [(cell, blob("library"))].into_iter().collect(),
         ForeignFunction::from_value(|_, _, _| {
@@ -1393,7 +1463,7 @@ fn a_value_definitions_origin_is_its_cell() {
         &RuntimeValue::from(Value::from(cell)),
         &TestHost(|queried| {
             assert_eq!(queried, cell);
-            Some(Definition::from(call(Value::from(foreign), [])))
+            Some(TestDefinition::from(call(Value::from(foreign), [])))
         }),
         &overlay,
         20,

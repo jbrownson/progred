@@ -11,14 +11,14 @@ use gid::{CellId, Document, Step, Value};
 #[derive(Clone, Copy)]
 enum Contribution<'a> {
     Document(&'a Value),
-    Library(CellId, &'a grap::Definition),
+    Library(CellId, &'a Value),
 }
 
 impl<'a> Contribution<'a> {
     fn value(self) -> &'a Value {
         match self {
             Self::Document(value) => value,
-            Self::Library(_, definition) => definition.value(),
+            Self::Library(_, value) => value,
         }
     }
 }
@@ -116,7 +116,7 @@ impl<'a> Sources<'a> {
                 self.libraries
                     .definitions(cell)
                     .next()
-                    .map(|(library, definition)| Contribution::Library(library, definition))
+                    .map(|(library, value)| Contribution::Library(library, value))
             })
     }
 
@@ -129,10 +129,6 @@ impl<'a> Sources<'a> {
     pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
         self.definition(cell).map(|contribution| ResolvedCell {
             value: contribution.value(),
-            native: matches!(
-                contribution,
-                Contribution::Library(_, definition) if definition.implementation().is_some()
-            ),
             library: match contribution {
                 Contribution::Document(_) => None,
                 Contribution::Library(library, _) => Some(library),
@@ -199,12 +195,13 @@ impl<'a> Sources<'a> {
 }
 
 impl grap::Host for Sources<'_> {
-    fn resolve(&self, cell: CellId) -> Option<grap::Definition> {
-        self.definition(cell)
-            .map(|contribution| match contribution {
-                Contribution::Document(value) => grap::Definition::from(value.clone()),
-                Contribution::Library(_, definition) => definition.clone(),
-            })
+    fn resolve(&self, cell: CellId) -> Option<Value> {
+        self.value(cell).cloned()
+    }
+
+    /// Only the libraries have native code.
+    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction> {
+        self.libraries.implementation(cell).cloned()
     }
 }
 

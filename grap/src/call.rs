@@ -4,6 +4,7 @@ use crate::environment::{CellIndex, CellIndices, Environment, binding_index};
 use crate::eval::{missing_cell, unbox};
 use crate::foreign::{
     ForeignFunction, ForeignFunctions, ForeignImplementation, OverlayCall, Prepare, Stage,
+    implementation_cell,
 };
 use crate::lower::{OriginId, runtime_call};
 use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
@@ -45,7 +46,7 @@ enum PreparedCallTargetKind {
     /// A primitive with this call site's operands, run directly.
     Primitive(primitive::Primitive, primitive::Operands),
     Value(Expression),
-    Missing,
+    Absent(RuntimeValue),
 }
 
 #[derive(Clone)]
@@ -103,19 +104,18 @@ impl<'a> Context<'a> {
             Some(target) => target,
             None => {
                 let kind = match self.host.resolve(cell) {
-                    Some(definition) => match definition.implementation() {
-                        Some(implementation) => match &implementation.primitive {
+                    Some(value) => match self.own_implementation(cell, &value) {
+                        Some(Ok(implementation)) => match &implementation.primitive {
                             Some(primitive) => PreparedCallTargetKind::Primitive(
                                 **primitive,
                                 primitive.operands(call),
                             ),
-                            None => PreparedCallTargetKind::Foreign(implementation.clone()),
+                            None => PreparedCallTargetKind::Foreign(implementation),
                         },
-                        None => PreparedCallTargetKind::Value(
-                            self.lowered_cell(cell, definition.value()),
-                        ),
+                        Some(Err(absent)) => PreparedCallTargetKind::Absent(absent),
+                        None => PreparedCallTargetKind::Value(self.lowered_cell(cell, &value)),
                     },
-                    None => PreparedCallTargetKind::Missing,
+                    None => PreparedCallTargetKind::Absent(missing_cell(cell)),
                 };
                 let target = Rc::new(PreparedCallTarget {
                     kind,
@@ -154,7 +154,23 @@ impl<'a> Context<'a> {
             PreparedCallTargetKind::Primitive(primitive, operands) => {
                 primitive.run(context, call, operands, environment)
             }
-            PreparedCallTargetKind::Missing => Ok(missing_cell(cell)),
+            PreparedCallTargetKind::Absent(absent) => Ok(absent.clone()),
+        })
+    }
+
+    /// What a call of `cell` runs when its definition, `value`, is a foreign
+    /// function implemented under `cell` itself: the host's code there, or
+    /// without any, why it can't be called. Its callers have already asked
+    /// the scopes and the overlay for `cell`.
+    fn own_implementation(
+        &self,
+        cell: CellId,
+        value: &Value,
+    ) -> Option<Result<ForeignFunction, RuntimeValue>> {
+        (implementation_cell(value)? == cell).then(|| {
+            self.host
+                .implementation(cell)
+                .ok_or_else(|| not_callable(&RuntimeValue::from(value.clone())))
         })
     }
 
@@ -422,19 +438,20 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         self.checked_call(|context| {
-            let Some(definition) = context.host.resolve(cell) else {
+            let Some(value) = context.host.resolve(cell) else {
                 return Ok(missing_cell(cell));
             };
-            match definition.implementation() {
-                Some(implementation) => context.apply_foreign(
-                    &ResolvedForeign::Function(implementation.clone()),
+            match context.own_implementation(cell, &value) {
+                Some(Ok(implementation)) => context.apply_foreign(
+                    &ResolvedForeign::Function(implementation),
                     callable,
                     arguments,
                     environment,
                 ),
+                Some(Err(absent)) => Ok(absent),
                 None => {
                     // Lowered once per evaluation, as a call of the cell is.
-                    let expression = context.lowered_cell(cell, definition.value());
+                    let expression = context.lowered_cell(cell, &value);
                     let callable = context.eval_definition(cell, expression, environment)?;
                     if callable.absent_reason().is_some() {
                         Ok(callable)

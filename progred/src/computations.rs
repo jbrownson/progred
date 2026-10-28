@@ -56,13 +56,14 @@ impl Computations {
             libraries: Libraries::default(),
         });
         let definitions = Source::new(snapshot.clone(), |snapshot: &Snapshot, cell| {
-            memo::Resolved(Host::resolve(
-                &Sources {
-                    doc: &snapshot.doc,
-                    libraries: &snapshot.libraries,
-                },
-                *cell,
-            ))
+            let sources = Sources {
+                doc: &snapshot.doc,
+                libraries: &snapshot.libraries,
+            };
+            memo::Resolved {
+                value: Host::resolve(&sources, *cell),
+                implementation: Host::implementation(&sources, *cell),
+            }
         });
         Self {
             pointer_pressed: runtime.input(false),
