@@ -97,7 +97,7 @@ fn a_returned_halt_shaped_value_is_still_a_completed_result() {
     let absent = absent::value(absent::FUEL_EXHAUSTED);
     let evaluation = evaluate_value(&absent, &TestHost(|_| None), 10);
     assert_eq!(evaluation.result, absent);
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
 }
 
 /// A decline after a write is an ordinary result: the host decides what a
@@ -129,7 +129,7 @@ fn absent_and_declined_returns_keep_their_effects() {
         );
         assert_eq!(evaluation.result, result);
         assert_eq!(state, written);
-        assert!(evaluation.completed);
+        assert_eq!(evaluation.halt, None);
     }
 }
 
@@ -183,7 +183,7 @@ fn halts_stop_without_rolling_back_temporary_state() {
         );
         assert_eq!(evaluation.result, absent::value(absent::FUEL_EXHAUSTED));
         assert_eq!(evaluation.remaining_fuel, 0);
-        assert!(!evaluation.completed);
+        assert!(evaluation.halt.is_some());
         assert_eq!(state, Value::from(vec![42]));
     }
 }
@@ -209,6 +209,6 @@ fn a_non_callable_definition_returns_absent() {
         absent::reason(&evaluation.result),
         Some(absent::NOT_CALLABLE)
     );
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
     assert_eq!(state, Value::from(vec![42]));
 }

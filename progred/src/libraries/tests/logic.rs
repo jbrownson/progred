@@ -69,7 +69,7 @@ fn require_accepts_true_rejects_false_and_carries_absents() {
             [(vocabulary::CONDITION, condition)],
         );
         let result = crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, expected);
     }
     let missing = crate::test_support::test_evaluate(

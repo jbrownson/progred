@@ -113,7 +113,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
         ::grap::evaluate_runtime_scoped(&expression, &receiver, scope, 1000)
     });
     assert!(
-        result.completed && result.result.absent_reason().is_none(),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -179,7 +179,7 @@ fn scopes_and_failures_keep_runtime_payloads() {
             let result = run(&mut path, |scope| {
                 ::grap::evaluate_runtime_scoped(&expression, &host, scope, 1000)
             });
-            assert!(result.completed && result.result.same_result(&payload));
+            assert!(result.halt.is_none() && result.result.same_result(&payload));
         }
     }
     // Absents returned by a mapper or nested sequence keep their details too.
@@ -211,7 +211,7 @@ fn scopes_and_failures_keep_runtime_payloads() {
         let result = run(&mut path, |scope| {
             ::grap::evaluate_runtime_scoped(&expression, &host, scope, 1000)
         });
-        assert!(result.completed && result.result.same_result(&failure));
+        assert!(result.halt.is_none() && result.result.same_result(&failure));
         assert!(path.commands().is_empty());
     }
 }
@@ -237,7 +237,7 @@ fn preview_constructor_preserves_its_runtime_program() {
         None,
         100,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result.kind(), Some(kind::PATHS_PREVIEW));
     assert!(result.result.field(PROGRAM).unwrap().same_result(&program));
     // The three 3D constructors must keep the same executable leaves as the
@@ -269,7 +269,7 @@ fn preview_constructor_preserves_its_runtime_program() {
             1000,
         );
         assert!(
-            result.completed && result.result.absent_reason().is_none(),
+            result.result.absent_reason().is_none(),
             "{:?}",
             result.result
         );
@@ -358,7 +358,7 @@ fn runtime_mapping_profile() {
         let result = run(&mut path, |scope| {
             ::grap::evaluate_runtime_scoped(program, &host, scope, 100_000)
         });
-        assert!(result.completed && result.result.absent_reason().is_none());
+        assert!(result.result.absent_reason().is_none());
         path
     };
     let expected = record(&programs[0]);

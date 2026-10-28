@@ -19,7 +19,7 @@ fn nested_tools_are_scoped_recorded_and_replayable() {
         line(30.0),
     ]);
     let (result, path) = evaluate(&expression, 1000);
-    assert!(result.completed && !::grap::absent::is_absent(&result.result));
+    assert!(!::grap::absent::is_absent(&result.result));
     let tools: Vec<_> = path.tool_segments().map(|(_, _, _, tool)| tool).collect();
     assert_eq!(tools, [Some(&ball), Some(&square), Some(&ball), None]);
     assert_eq!(path.length(), 4.0);
@@ -59,7 +59,7 @@ fn tool_boundaries_require_a_new_start() {
         ]),
     ] {
         let (result, path) = evaluate(&expression, 1000);
-        assert!(result.completed && ::grap::absent::is_absent(&result.result));
+        assert!(result.halt.is_none() && ::grap::absent::is_absent(&result.result));
         assert_eq!(path.segments().count(), 1);
     }
 }
@@ -75,7 +75,7 @@ fn invalid_or_absent_tools_do_not_run_the_body() {
             ],
         );
         let (result, path) = evaluate(&expression, 1000);
-        assert!(result.completed && ::grap::absent::is_absent(&result.result));
+        assert!(result.halt.is_none() && ::grap::absent::is_absent(&result.result));
         assert!(path.entries.is_empty());
     }
 }
@@ -118,7 +118,7 @@ fn scopes_restore_after_recovered_absents_and_evaluator_halts() {
         1000,
     );
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -128,7 +128,7 @@ fn scopes_restore_after_recovered_absents_and_evaluator_halts() {
         &tool_scope(&ball, sequence((0..100).map(|i| line(i as f64)).collect())),
         100,
     );
-    assert!(!result.completed);
+    assert!(result.halt.is_some());
     path.start_at([100.0; 3], Axis::Z).unwrap();
     path.line_to([101.0; 3]).unwrap();
     assert_eq!(path.tool_segments().last().unwrap().3, None);
@@ -141,7 +141,7 @@ fn scopes_restore_after_recovered_absents_and_evaluator_halts() {
 fn point_mapping_preserves_tool_scopes() {
     let tool = cutter::Tool::square(0.25, 0.4).unwrap();
     let (result, path) = evaluate(&tool_scope(&tool, line(0.0)), 1000);
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     let mut mapped = MapPoints {
         sink: Recording::default(),
         map: |p: Point3| Ok(p.map(|v| v + 3.0)),
@@ -223,7 +223,7 @@ fn axis_mapping_composes_inside_out_and_is_independent_of_translation() {
     ]);
     let (result, path) = evaluate(&expression, 1000);
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );

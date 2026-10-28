@@ -80,7 +80,7 @@ impl<P> Driver<P> {
             &self.editor().sources(),
             crate::sources::DEFAULT_FUEL,
         );
-        assert!(evaluation.completed);
+        assert_eq!(evaluation.halt, None);
         evaluation.result
     }
 

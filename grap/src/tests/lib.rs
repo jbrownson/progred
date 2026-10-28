@@ -141,7 +141,7 @@ fn value_wrappers_evaluate_only_their_expression_in_the_calling_environment() {
         20,
     );
     assert_eq!(evaluation.result, blob("local"));
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
 }
 
 #[test]
@@ -238,10 +238,10 @@ fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
     );
     let evaluation = evaluate(&wrapper, |_| None, &foreign, 10);
     assert_eq!(evaluation.result, absent);
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
     let exhausted = evaluate(&wrapper, |_| None, &foreign, 2);
     assert_eq!(exhausted.result, absent::value(absent::FUEL_EXHAUSTED));
-    assert!(!exhausted.completed);
+    assert!(exhausted.halt.is_some());
 
     let cell = new_cell_id();
     let wrapper = isa::record(
@@ -609,7 +609,7 @@ fn a_call_runs_native_code_only_where_its_definition_names_it() {
             super::evaluate_value(&call(function.into(), []), &host, 100),
             super::apply_value(&function.into(), [], &host, None, 100),
         ] {
-            assert!(result.completed);
+            assert_eq!(result.halt, None);
             assert_eq!(result.result, expected);
         }
     }
@@ -658,7 +658,7 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
             20,
         )
         .into_value();
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, expected);
     }
 }
@@ -1338,7 +1338,7 @@ fn captured_calls_share_ancestry_and_source_locations() {
         &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
         100,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     let captured = captured.borrow();
     assert_eq!(captured.len(), 2);
     assert_eq!(
@@ -1394,7 +1394,7 @@ fn generated_prepared_calls_keep_their_source_callers() {
         &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
         100,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(
         captured
             .borrow()

@@ -19,7 +19,7 @@ fn evaluate(
         grap::Evaluation {
             result: result.result.into(),
             remaining_fuel: result.remaining_fuel,
-            completed: result.completed,
+            halt: result.halt,
         }
     })
 }
@@ -89,7 +89,7 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
                 100,
             )
             .into_value();
-            assert!(evaluation.completed);
+            assert_eq!(evaluation.halt, None);
             assert_eq!(evaluation.result, Value::record([]));
             assert_eq!(
                 read(),

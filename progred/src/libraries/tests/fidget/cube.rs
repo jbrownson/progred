@@ -52,7 +52,7 @@ fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
     let libraries = core_libraries();
     let evaluated =
         grap::evaluate_value(&grap::call(id.into(), []), &src(&doc, &libraries), 10_000);
-    assert!(evaluated.completed);
+    assert_eq!(evaluated.halt, None);
     assert!(
         !::grap::absent::is_absent(&evaluated.result),
         "{:?}",

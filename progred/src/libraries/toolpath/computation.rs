@@ -18,13 +18,13 @@ pub(super) struct Recorded {
 impl Recorded {
     pub(super) fn same_result(&self, other: &Self) -> bool {
         self.path == other.path
-            && self.evaluation.completed == other.evaluation.completed
+            && self.evaluation.halt == other.evaluation.halt
             && self.evaluation.remaining_fuel == other.evaluation.remaining_fuel
             && self.evaluation.result.same_result(&other.evaluation.result)
     }
 
     pub fn path(&self) -> Outcome<&Recording> {
-        if self.evaluation.completed && self.evaluation.result.absent_reason().is_none() {
+        if self.evaluation.result.absent_reason().is_none() {
             Ok(&self.path)
         } else {
             Err(self.evaluation.result.to_value())
@@ -97,7 +97,7 @@ fn record_program(
         let start = ::grap::Evaluation {
             result: RuntimeValue::record([]),
             remaining_fuel: fuel,
-            completed: true,
+            halt: None,
         };
         let (Ok(evaluation) | Err(evaluation)) = record_parts(program, host, start, output);
         evaluation
@@ -119,7 +119,7 @@ fn record_parts(
         None => {
             let mut part = Recording::default();
             let evaluation = record(program, host, evaluation.remaining_fuel, &mut part);
-            if evaluation.completed && evaluation.result.absent_reason().is_none() {
+            if evaluation.result.absent_reason().is_none() {
                 output.append_part(part);
                 Ok(evaluation)
             } else {

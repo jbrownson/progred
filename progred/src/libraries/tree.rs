@@ -303,7 +303,7 @@ fn outcome(
     evaluation: ::grap::Evaluation,
     built: Option<Result<Built, RuntimeValue>>,
 ) -> Result<Built, RuntimeValue> {
-    if evaluation.completed {
+    if evaluation.halt.is_none() {
         built.unwrap_or(Err(evaluation.result))
     } else {
         Err(evaluation.result)

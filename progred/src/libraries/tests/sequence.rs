@@ -10,7 +10,7 @@ fn range(count: f64) -> Value {
 fn ranges_are_lazy_and_collection_is_explicit() {
     let functions = functions();
     let huge = crate::test_support::test_evaluate(&range(1e12), |_| None, &functions, 30);
-    assert!(huge.completed);
+    assert_eq!(huge.halt, None);
     let fields = huge.result.as_record().unwrap();
     assert!(fields.get(&::grap::vocabulary::LAMBDA).is_some());
     let saved = crate::test_support::test_evaluate(&range(3.0), |_| None, &functions, 30).result;
@@ -31,7 +31,7 @@ fn ranges_are_lazy_and_collection_is_explicit() {
             &functions,
             1000,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(
             result.result,
             Value::list((0..count).map(|n| f64::value(n as f64)))
@@ -49,7 +49,7 @@ fn calling_again_repeats_and_only_the_successor_advances() {
     let first = crate::test_support::test_evaluate(&range(2.0), |_| None, &functions, 100).result;
     let pull = |sequence: &Value| {
         let result = crate::test_support::test_apply(sequence, [], |_| None, &functions, 100);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         result.result
     };
     let first_item = pull(&first);
@@ -100,7 +100,7 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
             &functions,
             1000,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, Value::list([value]));
     }
 }
@@ -156,7 +156,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
         &functions,
         1000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result, failure);
     assert_eq!(
         *log.borrow(),
@@ -231,7 +231,7 @@ fn steps_end_without_next_and_failures_malformed_steps_and_fuel_are_not_completi
             &functions,
             100,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, expected);
     }
     let result = crate::test_support::test_evaluate(
@@ -246,7 +246,7 @@ fn steps_end_without_next_and_failures_malformed_steps_and_fuel_are_not_completi
         &functions(),
         100,
     );
-    assert!(!result.completed);
+    assert!(result.halt.is_some());
     assert_eq!(
         ::grap::absent::reason(&result.result),
         Some(::grap::absent::FUEL_EXHAUSTED)

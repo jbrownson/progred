@@ -75,8 +75,9 @@ pub trait Host {
 pub struct Evaluation<T = RuntimeValue> {
     pub result: T,
     pub remaining_fuel: usize,
-    /// False only when evaluation halted, not when it returned an absent value.
-    pub completed: bool,
+    /// Why it stopped before finishing, if it did; its result is then that
+    /// halt's absent. Returning an absent value isn't halting.
+    pub halt: Option<Halt>,
 }
 
 impl Evaluation {
@@ -84,7 +85,7 @@ impl Evaluation {
         Evaluation {
             result: self.result.into_value(),
             remaining_fuel: self.remaining_fuel,
-            completed: self.completed,
+            halt: self.halt,
         }
     }
 }

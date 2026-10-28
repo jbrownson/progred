@@ -65,7 +65,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
             grap::evaluate_value(&grap::call(function.into(), []), &sources, 100),
             grap::apply_value(&function.into(), [], &sources, None, 100),
         ] {
-            assert!(result.completed);
+            assert_eq!(result.halt, None);
             assert_eq!(result.result, expected);
         }
     }

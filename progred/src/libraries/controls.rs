@@ -157,7 +157,7 @@ fn apply_change(
         Some(&ForeignOverlay::from_value(&[UPDATE], &update)),
         crate::sources::DEFAULT_FUEL,
     );
-    if result.completed
+    if result.halt.is_none()
         && !result.result.declines()
         && let Some(value) = staged.into_inner()
     {
@@ -444,7 +444,7 @@ fn controls_output<W: Host>(
         )),
         crate::sources::DEFAULT_FUEL,
     );
-    if !evaluation.completed || evaluation.result.absent_reason().is_some() {
+    if evaluation.result.absent_reason().is_some() {
         Err(evaluation.result)
     } else {
         Ok((widgets.into_inner(), evaluation.result))

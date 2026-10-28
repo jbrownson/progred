@@ -82,7 +82,7 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
                 path: path.clone(),
                 evaluation: ::grap::Evaluation {
                     result: RuntimeValue::record([]),
-                    completed: true,
+                    halt: None,
                     remaining_fuel: 100,
                 },
             })
@@ -251,7 +251,7 @@ fn path_appearance_changes_retain_the_stock_mesh() {
                 path: Arc::new(path),
                 evaluation: ::grap::Evaluation {
                     result: RuntimeValue::record([]),
-                    completed: true,
+                    halt: None,
                     remaining_fuel: 100,
                 },
             })

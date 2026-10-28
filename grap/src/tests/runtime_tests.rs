@@ -113,7 +113,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
         &Observed::new(&receiver, &*tracer),
         100,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(7.0));
     assert_eq!(
         traces.borrow()[0].origins().cloned().collect::<Vec<_>>(),
@@ -215,10 +215,10 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
                 fuel,
             );
             let b = evaluate_runtime_at(&runtime, origin.clone(), &observed, fuel);
-            assert_eq!(a.completed, b.completed);
+            assert_eq!(a.halt, b.halt);
             assert_eq!(a.remaining_fuel, b.remaining_fuel);
             assert!(a.result.same_result(&b.result));
-            if a.completed {
+            if a.halt.is_none() {
                 let traces = traces.borrow();
                 let origins = |index: usize| {
                     traces[index]
@@ -349,7 +349,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
         ),
     )]);
     let result = evaluate(&call(interpret.into(), []), &receiver, 100);
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(9.0));
 }
 
@@ -450,7 +450,7 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
         ),
     )]);
     let result = evaluate(&call(interpret.into(), []), &receiver, 100);
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(9.0));
 }
 
@@ -523,7 +523,7 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
         let expression = runtime_call([(vocabulary::FUNCTION, closure)]);
         let result =
             evaluate_runtime_scoped(&expression, &Observed::new(&empty, &tracer), &overlay, 100);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
             source
@@ -755,7 +755,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
             &creator,
             100,
         );
-        assert!(evaluation.completed);
+        assert_eq!(evaluation.halt, None);
         evaluation.result
     };
     let RuntimeValueKind::Closure(retained) = &closure.0 else {
@@ -799,7 +799,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
             None,
             100,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result.as_f64(), Some(42.0 + offset));
         let traces = traces.borrow();
         let origins: Vec<_> = traces[0].origins().cloned().collect();
@@ -935,7 +935,7 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
             Some(&overlay),
             100,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
             trace
@@ -1018,7 +1018,7 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
                 Some(&overlay),
                 100,
             );
-            assert!(result.completed);
+            assert_eq!(result.halt, None);
             assert_eq!(result.result.as_f64(), Some(7.0));
             assert_eq!(
                 trace
@@ -1063,7 +1063,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
         None,
         100,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     let RuntimeValueKind::Closure(after) = &result.result.0 else {
         panic!("expected a closure")
     };
@@ -1181,7 +1181,7 @@ fn retained_callables_use_the_receiving_scoped_capability() {
         Some(&ForeignOverlay::new(&[target], &capability)),
         100,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(2.0));
     assert!(
         apply(&callable, [], &host, None, 100)
@@ -1197,8 +1197,8 @@ fn runtime_results_distinguish_a_returned_absent_from_a_halt() {
     let absence = absent::value(absent::FUEL_EXHAUSTED);
     let returned = evaluate(&absence, &host, 10);
     let halted = evaluate(&absence, &host, 0);
-    assert!(returned.completed);
-    assert!(!halted.completed);
+    assert_eq!(returned.halt, None);
+    assert!(halted.halt.is_some());
     assert_eq!(returned.result.into_value(), halted.result.into_value());
 }
 
@@ -1226,7 +1226,7 @@ fn every_call_path_binds_the_callee_and_charges_the_same_steps() {
         apply_expression(&closure, seven(), &receiver, None, 100),
     ];
     for result in &results {
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert!(result.result.same_result(&closure));
         assert_eq!(result.remaining_fuel, results[0].remaining_fuel);
     }

@@ -159,7 +159,7 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
         let expression = do_call([effect("before"), failure.clone(), effect("never")]);
         log.borrow_mut().clear();
         let result = run(&expression);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, failure);
         assert_eq!(*log.borrow(), [blob("before")]);
 
@@ -175,14 +175,14 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
         );
         log.borrow_mut().clear();
         let result = run(&recovered);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, Value::record([]));
         assert_eq!(*log.borrow(), [blob("before"), blob("recovered")]);
     }
     // A pure decline is still an absent, even without any preceding effect.
     log.borrow_mut().clear();
     let result = run(&do_call([::grap::absent::decline(), effect("never")]));
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result, ::grap::absent::decline());
     assert!(log.borrow().is_empty());
 }
@@ -214,7 +214,7 @@ fn all_retains_absents_and_effects_and_continues_in_order() {
         );
         log.borrow_mut().clear();
         let result = crate::test_support::test_evaluate(&expression, |_| None, &functions, 100);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, Value::list(values.clone()));
         assert_eq!(*log.borrow(), values);
     }
@@ -239,7 +239,7 @@ fn all_keeps_its_expressions_positions() {
 fn all_handles_empty_and_malformed_lists_but_does_not_swallow_halts() {
     assert_eq!(evaluate(&all_call([])).result, Value::list([]));
     let missing = evaluate(&::grap::call(vocabulary::ALL.into(), []));
-    assert!(missing.completed);
+    assert_eq!(missing.halt, None);
     assert!(::grap::absent::reason(&missing.result).is_some());
     let invalid = ::grap::call(
         vocabulary::ALL.into(),
@@ -250,7 +250,7 @@ fn all_handles_empty_and_malformed_lists_but_does_not_swallow_halts() {
         ::grap::absent::value(vocabulary::INVALID_EXPRESSIONS)
     );
     let exhausted = evaluate_with_fuel(&all_call((0..100).map(|_| Value::record([]))), 5);
-    assert!(!exhausted.completed);
+    assert!(exhausted.halt.is_some());
     assert_eq!(
         ::grap::absent::reason(&exhausted.result),
         Some(::grap::absent::FUEL_EXHAUSTED)

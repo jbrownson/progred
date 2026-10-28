@@ -1063,7 +1063,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         Some(&ForeignOverlay::from_value(&[probe], &emit)),
         1000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result, items);
     let decorate = captured.into_inner().expect("a stored list has a source");
     let sources: Vec<_> = positions

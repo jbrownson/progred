@@ -37,7 +37,7 @@ impl<'a> Context<'a> {
     ) -> Evaluation {
         let outcome = run(&mut self);
         Evaluation {
-            completed: outcome.is_ok(),
+            halt: outcome.as_ref().err().copied(),
             result: outcome.unwrap_or_else(Halt::into_absent),
             remaining_fuel: self.remaining_fuel,
         }

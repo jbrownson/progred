@@ -201,7 +201,7 @@ fn normally_returned_absents_are_cacheable_including_halt_reasons() {
             runtime.input(100),
         );
         let first = runtime.read(&query).unwrap();
-        assert!(first.completed);
+        assert_eq!(first.halt, None);
         assert_eq!(first.result, result);
         assert!(Rc::ptr_eq(&first, &runtime.read(&query).unwrap()));
         assert_eq!(runs.get(), 1);
@@ -222,7 +222,7 @@ fn halts_are_not_reused_even_when_the_returned_value_is_equal() {
             }))
         }
     });
-    assert!(!runtime.read(&query).unwrap().completed);
+    assert!(runtime.read(&query).unwrap().halt.is_some());
     runtime.read(&query).unwrap();
     assert_eq!(runs.get(), 2);
 }

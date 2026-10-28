@@ -146,7 +146,7 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
             1000,
         )
         .into_value();
-        assert!(result.completed && !::grap::absent::is_absent(&result.result));
+        assert!(!::grap::absent::is_absent(&result.result));
     });
     let count = sink.borrow();
     assert_eq!((count.groups, count.depth, count.leaves), (2, 0, 2));

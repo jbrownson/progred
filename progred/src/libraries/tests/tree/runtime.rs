@@ -7,7 +7,7 @@ fn retained(body: Value, source: CellId, host: &dyn ::grap::Host) -> RuntimeValu
         host,
         1000,
     );
-    assert!(result.completed && result.result.absent_reason().is_none());
+    assert!(result.result.absent_reason().is_none());
     result.result
 }
 
@@ -83,7 +83,7 @@ fn collection_and_mapping_retain_callbacks_and_positions() {
         None,
         1000,
     );
-    assert!(collected.completed && collected.result.same_result(&built.items));
+    assert!(collected.halt.is_none() && collected.result.same_result(&built.items));
 }
 
 #[test]

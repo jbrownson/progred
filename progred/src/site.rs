@@ -218,7 +218,7 @@ fn evaluate_with(
         let overlay = grap::ForeignOverlay::from_value(&EVENT_FUNCTIONS, &call);
         apply(&overlay)
     };
-    (evaluation.completed && !evaluation.result.declines()).then(|| staged.into_inner())
+    (evaluation.halt.is_none() && !evaluation.result.declines()).then(|| staged.into_inner())
 }
 
 fn event_foreign(

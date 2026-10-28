@@ -80,7 +80,7 @@ fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
     ));
     drop(context);
     let evaluated = crate::apply_value(children[0], [], &host, None, 100);
-    assert!(evaluated.completed);
+    assert_eq!(evaluated.halt, None);
     assert_eq!(&evaluated.result, children[2]);
 }
 

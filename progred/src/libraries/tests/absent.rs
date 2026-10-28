@@ -33,7 +33,7 @@ fn default_preserves_present_values_without_type_validation() {
             &functions(),
             100,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(result.result, value);
     }
 }
@@ -91,7 +91,7 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
             &functions,
             100,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert_eq!(reads.get(), 1);
         assert_eq!(defaults.get(), usize::from(missing));
         assert_eq!(
@@ -117,7 +117,7 @@ fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
         &functions(),
         100,
     );
-    assert!(returned.completed);
+    assert_eq!(returned.halt, None);
     assert_eq!(returned.result, replacement);
 
     let recurse = new_cell_id();
@@ -137,7 +137,7 @@ fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
         &functions,
         30,
     );
-    assert!(!result.completed);
+    assert!(result.halt.is_some());
     assert_eq!(
         ::grap::absent::reason(&result.result),
         Some(::grap::absent::FUEL_EXHAUSTED)

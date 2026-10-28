@@ -139,7 +139,7 @@ pub(super) fn display<W: Host>(
             let evaluation = run(&mut lines, |scope| {
                 ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
             });
-            if !evaluation.completed || evaluation.result.absent_reason().is_some() {
+            if evaluation.result.absent_reason().is_some() {
                 presentation::result_layout(&evaluation.result).measure(context, build)
             } else if let Some(path) = fitted(lines.sink, size) {
                 let scale = context.viewing().scale();

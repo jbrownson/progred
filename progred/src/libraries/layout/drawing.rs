@@ -112,7 +112,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
             &overlay,
             fuel,
         );
-        evaluation.completed && !evaluation.result.declines()
+        evaluation.halt.is_none() && !evaluation.result.declines()
     })
 }
 

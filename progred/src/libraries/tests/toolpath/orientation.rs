@@ -104,7 +104,7 @@ fn example_program(name: &str) -> Recording {
         ::grap::apply_value(&names[name].into(), [], &sources, Some(scope), 3_000_000)
     });
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -145,7 +145,7 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
                 500_000,
             )
         });
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         if angle.is_finite() {
             assert!(!::grap::absent::is_absent(&result.result));
             let Command::StartAt(_, axis) = path.commands()[0] else {
@@ -197,7 +197,7 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
                 3_000_000,
             )
         });
-        assert!(result.completed && !::grap::absent::is_absent(&result.result));
+        assert!(!::grap::absent::is_absent(&result.result));
         let mut axis = Axis::Z;
         paths.push(
             indent_commands(&path)

@@ -47,7 +47,7 @@ impl Inspect for Recording {
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
     let result = ::grap::evaluate_value(&call(names["cube"], []), sources, 10_000);
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -150,7 +150,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         )
         .into_value();
         assert!(
-            parameters.completed && !::grap::absent::is_absent(&parameters.result),
+            !::grap::absent::is_absent(&parameters.result),
             "{:?}",
             parameters.result
         );
@@ -172,7 +172,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
             None,
             10_000,
         );
-        assert!(preview.completed, "{:?}", preview.result);
+        assert!(preview.halt.is_none(), "{:?}", preview.result);
         let fields = preview.result.as_record().unwrap().clone();
         assert_eq!(
             ::grap::isa::of(&fields),
@@ -272,7 +272,7 @@ fn apply_groups(
         fuel,
     )
     .into_value();
-    if !generated.completed || ::grap::absent::is_absent(&generated.result) {
+    if ::grap::absent::is_absent(&generated.result) {
         return generated;
     }
     ::grap::apply_value(
@@ -332,14 +332,14 @@ fn streaming_and_recording_are_interchangeable_consumers() {
     let mut direct = Count::default();
     let result = diagonals(&mut direct, 21.0, 0.03, 100_000);
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 21.0, 0.03, 100_000);
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -354,7 +354,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 3.0, 0.1, 100_000);
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -466,7 +466,7 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
     ]);
     let (result, recording) = evaluate(&expression, 1000);
     assert!(
-        result.completed && !::grap::absent::is_absent(&result.result),
+        !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -509,7 +509,7 @@ fn invalid_commands_stop_do_before_later_emissions() {
             &sequence(vec![expression, point_call(START_AT, [0.0; 3])]),
             1000,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         assert!(::grap::absent::is_absent(&result.result));
         assert!(recording.commands().is_empty());
     }
@@ -566,7 +566,7 @@ fn handled_mapping_failure(mapping: CellId) {
         ]),
         1000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result, Value::record([]));
     assert_eq!(
         recording.commands(),
@@ -581,7 +581,7 @@ fn handled_mapping_failure(mapping: CellId) {
         &sequence(vec![point_call(START_AT, [0.0; 3]), failed_map]),
         1000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result, failure);
     assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], Axis::Z)]);
 }
@@ -590,7 +590,7 @@ fn handled_mapping_failure(mapping: CellId) {
 fn generation_is_fueled_and_requires_a_scoped_sink() {
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 1_000_000.0, 0.0001, 100);
-    assert!(!result.completed);
+    assert!(result.halt.is_some());
     assert!(recording.commands().len() <= 100);
     let stack = crate::stack::load();
     let unscoped = ::grap::evaluate_value(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
@@ -612,7 +612,7 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
         let mut recording = Recording::default();
         let result = diagonals(&mut recording, rows, spacing, 1000);
         assert!(
-            result.completed && ::grap::absent::is_absent(&result.result),
+            result.halt.is_none() && ::grap::absent::is_absent(&result.result),
             "{:?}",
             result.result
         );
@@ -620,11 +620,11 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
     }
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 0.0, 0.1, 1000);
-    assert!(result.completed && !::grap::absent::is_absent(&result.result));
+    assert!(!::grap::absent::is_absent(&result.result));
     assert!(recording.commands().is_empty());
 
     let result = diagonals(&mut recording, 1.0, f64::from_bits(1), 1000);
-    assert!(!result.completed);
+    assert!(result.halt.is_some());
 }
 
 #[test]
@@ -678,7 +678,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
         )
     });
     assert!(
-        a.completed && b.completed,
+        a.halt.is_none() && b.halt.is_none(),
         "contact {:?}, centers {:?}",
         a.result,
         b.result
@@ -753,7 +753,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
         )
     });
     assert!(
-        evaluation.completed && !::grap::absent::is_absent(&evaluation.result),
+        !::grap::absent::is_absent(&evaluation.result),
         "{:?}",
         evaluation.result
     );
@@ -793,7 +793,7 @@ fn example_ball_path() -> (Recording, f64) {
             500_000,
         )
     });
-    assert!(result.completed && !::grap::absent::is_absent(&result.result));
+    assert!(!::grap::absent::is_absent(&result.result));
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     (recording, radius)
 }
@@ -951,7 +951,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
             500_000,
         )
     });
-    assert!(evaluation.completed && !::grap::absent::is_absent(&evaluation.result));
+    assert!(!::grap::absent::is_absent(&evaluation.result));
     let paths = tubes.scene();
     assert_eq!(paths.len(), 42);
     for (index, object) in paths.into_iter().enumerate() {

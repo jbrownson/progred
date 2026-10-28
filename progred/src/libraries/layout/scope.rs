@@ -89,7 +89,7 @@ pub fn run<W: Host>(
         };
     let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
     let mut children = output.into_inner();
-    let layout = if !evaluation.completed || evaluation.result.absent_reason().is_some() {
+    let layout = if evaluation.result.absent_reason().is_some() {
         None
     } else if children.len() > 1 {
         evaluation.result = ::grap::absent::value(INVALID_PROGRAM).into();

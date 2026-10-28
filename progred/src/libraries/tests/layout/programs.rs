@@ -173,7 +173,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
         None,
         100_000,
     );
-    assert!(prepared.completed);
+    assert_eq!(prepared.halt, None);
     let function = prepared.result.field(l::PROGRAM).unwrap();
     for fuel in [crate::sources::DEFAULT_FUEL, 100_000] {
         let (evaluation, layout) = layout::scope::run::<crate::Editor>(
@@ -181,14 +181,14 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
             |scope| grap::apply(&function, [], &sources, Some(scope), fuel),
         );
         if fuel == crate::sources::DEFAULT_FUEL {
-            assert!(!evaluation.completed);
+            assert!(evaluation.halt.is_some());
             assert_eq!(
                 grap::absent::reason(&evaluation.result.to_value()),
                 Some(grap::absent::FUEL_EXHAUSTED)
             );
             assert!(layout.is_none());
         } else {
-            assert!(evaluation.completed);
+            assert_eq!(evaluation.halt, None);
             assert!(layout.is_some());
         }
     }

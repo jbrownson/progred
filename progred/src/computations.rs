@@ -184,7 +184,7 @@ impl Computations {
                                     .found()
                                     .map(|trace| trace.origins().cloned().collect()),
                                 remaining_fuel: evaluation.remaining_fuel,
-                                completed: evaluation.completed,
+                                halt: evaluation.halt,
                             }
                         })
                         .result)
@@ -242,9 +242,7 @@ impl Computations {
 }
 
 fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
-    a.completed == b.completed
-        && a.remaining_fuel == b.remaining_fuel
-        && a.result.same_result(&b.result)
+    a.halt == b.halt && a.remaining_fuel == b.remaining_fuel && a.result.same_result(&b.result)
 }
 
 #[cfg(test)]

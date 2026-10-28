@@ -136,7 +136,7 @@ impl crate::display::Env for EvaluatesTo {
     ) -> ::grap::Evaluation {
         ::grap::Evaluation {
             result: self.0.clone().into(),
-            completed: true,
+            halt: None,
             remaining_fuel: 0,
         }
     }

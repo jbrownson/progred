@@ -46,7 +46,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&returned, &host, scope, 100)
     });
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
     assert!(evaluation.result.same_result(&callback));
     assert!(layout.is_none());
 
@@ -78,7 +78,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&program, &host, scope, 1000)
     });
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
     assert!(evaluation.result.same_result(&failure));
     assert!(
         evaluation
@@ -143,7 +143,7 @@ fn scoped_layout_calls_compose_through_grap_functions_and_nested_bodies() {
         ],
     );
     let (result, layout) = evaluate(&program, 10000);
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert_eq!(result.result.to_value(), Value::record([]));
     let Recorded::Row { gap, children, .. } = layout.unwrap().record() else {
         panic!("row")
@@ -164,7 +164,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
     let document = vec![gid::Step::Key(gid::new_cell_id())];
     let encoded = crate::libraries::editor::path::value(&steps);
     let (result, layout) = evaluate(&call(DESCEND_PATH, [(STEPS, quote(encoded.clone()))]), 1000);
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert!(
         matches!(inspect(&layout.unwrap()), ProjectionCall::Descend { steps: actual, .. } if actual == steps)
     );
@@ -181,7 +181,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
         ),
         1000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert!(
         matches!(inspect(&layout.unwrap()), ProjectionCall::Jump { steps: actual, document: target, .. } if actual == steps && target == crate::location::Location::root(document.as_slice()))
     );
@@ -193,7 +193,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
         ),
         1000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert!(
         matches!(inspect(&layout.unwrap()), ProjectionCall::At { steps: actual, value, .. } if actual == steps && value == supplied)
     );
@@ -214,7 +214,7 @@ fn a_row_given_a_baseline_aligns_tops_as_a_column_does() {
                 .chain([(CHILDREN, sequence([text("left"), text("right")]))]),
         );
         let (result, layout) = evaluate(&program, 10000);
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         let Recorded::Row { alignment, .. } = layout.unwrap().record() else {
             panic!("row")
         };
@@ -254,7 +254,7 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
         assert!(layout.is_none());
     }
     let (result, layout) = evaluate(&sequence([text("one"), text("two")]), 1);
-    assert!(!result.completed);
+    assert!(result.halt.is_some());
     assert!(layout.is_none());
     assert!(evaluate(&text("fresh evaluation"), 10000).1.is_some());
 }
@@ -298,7 +298,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
         )],
     );
     let (evaluation, layout) = evaluate(&failed, 1000);
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
     assert_eq!(evaluation.result.to_value(), failure);
     assert!(layout.is_none());
     let recovered = call(
@@ -322,7 +322,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
         ],
     );
     let (evaluation, layout) = evaluate(&recovered, 1000);
-    assert!(evaluation.completed);
+    assert_eq!(evaluation.halt, None);
     assert_eq!(evaluation.result.to_value(), Value::record([]));
     assert!(
         matches!(layout.unwrap().record(), Recorded::Leaf(Leaf::Text { text, .. }) if text == "recovered")
@@ -378,7 +378,7 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
         ),
         10000,
     );
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert!(layout.is_none());
     assert_eq!(result.result.kind(), Some(kind::LAYOUT_PROGRAM));
     let function = result.result.field(PROGRAM).unwrap();
@@ -392,7 +392,7 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
             10000,
         )
     });
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     assert!(
         matches!(layout.unwrap().record(), Recorded::Leaf(Leaf::Text { text, .. }) if text == "captured")
     );
@@ -418,7 +418,7 @@ fn border_and_drawing_emit_in_a_program_as_their_stored_nodes_decode() {
         )],
     );
     let (result, layout) = evaluate(&program, 10000);
-    assert!(result.completed);
+    assert_eq!(result.halt, None);
     let Recorded::Col { children, .. } = layout.unwrap().record() else {
         panic!("col")
     };

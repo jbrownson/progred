@@ -234,7 +234,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
     ]);
     let mut recording = Recording::default();
     let evaluation = record_program(&tree.clone().into(), &libraries, 10000, &mut recording);
-    assert!(evaluation.completed && evaluation.result.absent_reason().is_none());
+    assert!(evaluation.result.absent_reason().is_none());
     let pose = recording
         .playback_cursor::<InvalidPath>(Cursor::Progress(0.5), Some(1..2), |_, _, _, _, _| Ok(()))
         .unwrap()
@@ -250,7 +250,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
             10000,
         )
     });
-    assert!(evaluation.completed && evaluation.result.absent_reason().is_none());
+    assert!(evaluation.result.absent_reason().is_none());
     assert_eq!(
         recording.segments().collect::<Vec<_>>(),
         direct.segments().collect::<Vec<_>>()
@@ -263,7 +263,11 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
     assert_eq!(result.result.as_value(), &failure);
     assert_eq!(recording.segments().count(), 1);
     let mut recording = Recording::default();
-    assert!(!record_program(&tree.into(), &libraries, 1, &mut recording).completed);
+    assert!(
+        record_program(&tree.into(), &libraries, 1, &mut recording)
+            .halt
+            .is_some()
+    );
 }
 
 #[test]
@@ -325,7 +329,7 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
         let second = computations.runtime.read(&memo).unwrap();
         assert!(!Rc::ptr_eq(&first, &second));
         for (recorded, expected) in [first, second].iter().zip(&payloads) {
-            assert!(recorded.evaluation.completed);
+            assert_eq!(recorded.evaluation.halt, None);
             assert!(recorded.evaluation.result.same_result(expected));
             assert_eq!(recorded.path().is_err(), fail);
         }
@@ -381,7 +385,7 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
     let mut recording = Recording::default();
     let evaluation = record_program(&tree.items, &sources, 3_000_000, &mut recording);
     assert!(
-        evaluation.completed && evaluation.result.absent_reason().is_none(),
+        evaluation.result.absent_reason().is_none(),
         "{:?}",
         evaluation.result
     );
@@ -396,7 +400,7 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
         )
     });
     assert!(
-        evaluation.completed && evaluation.result.absent_reason().is_none(),
+        evaluation.result.absent_reason().is_none(),
         "{:?}",
         evaluation.result
     );

@@ -71,10 +71,10 @@ fn check_step_results(operation: gid::CellId, results: impl IntoIterator<Item = 
         );
         let evaluation =
             crate::test_support::test_evaluate(&expression, |_| None, &functions(), 100);
-        assert!(evaluation.completed);
+        assert_eq!(evaluation.halt, None);
         assert_eq!(evaluation.result, expected);
         let exhausted = crate::test_support::test_evaluate(&expression, |_| None, &functions(), 1);
-        assert!(!exhausted.completed);
+        assert!(exhausted.halt.is_some());
         assert_eq!(
             ::grap::absent::reason(&exhausted.result),
             Some(::grap::absent::FUEL_EXHAUSTED)

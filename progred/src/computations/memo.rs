@@ -93,7 +93,7 @@ fn observed<S: 'static, T>(
         read: RefCell::new(read),
         recorded_effects,
     });
-    if !result.completed {
+    if result.halt.is_some() {
         read.untracked();
     }
     result

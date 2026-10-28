@@ -373,7 +373,7 @@ fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
             &stack.libraries,
             1000,
         );
-        assert!(result.completed);
+        assert_eq!(result.halt, None);
         if valid {
             let fields = result.result.as_record().unwrap();
             assert_eq!(::grap::isa::of(fields), Some(kind::PATHS_MESH_PREVIEW));

@@ -56,7 +56,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
             );
             let stack = crate::stack::load();
             let result = grap::evaluate_value(&expression, &stack.libraries, 1000);
-            assert!(result.completed && !::grap::absent::is_absent(&result.result));
+            assert!(!::grap::absent::is_absent(&result.result));
             let doc = Document {
                 root: Some(result.result),
                 cells: Cells::new(),
