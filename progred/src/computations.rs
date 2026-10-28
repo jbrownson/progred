@@ -171,23 +171,18 @@ impl Computations {
                     move |read| {
                         let question = question.read(read);
                         let (evaluated, call, value) = &*question;
-                        Ok(memo::run(&definitions, read, |host| {
-                            let answering = grap::Answering::new(call.clone(), value.clone());
-                            let evaluation = grap::evaluate_runtime_at(
+                        let answering = grap::Answering::new(call.clone(), value.clone());
+                        memo::run(&definitions, read, |host| {
+                            grap::evaluate_runtime_at(
                                 &evaluated.expression,
                                 evaluated.origin.clone(),
                                 &grap::Observed::new(host, &answering),
                                 evaluated.fuel,
-                            );
-                            grap::Evaluation {
-                                result: answering
-                                    .found()
-                                    .map(|trace| trace.origins().cloned().collect()),
-                                remaining_fuel: evaluation.remaining_fuel,
-                                halt: evaluation.halt,
-                            }
-                        })
-                        .result)
+                            )
+                        });
+                        Ok(answering
+                            .found()
+                            .map(|trace| trace.origins().cloned().collect()))
                     }
                 },
                 PartialEq::eq,

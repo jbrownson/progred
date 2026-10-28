@@ -2,7 +2,7 @@ use super::*;
 use gid::new_cell_id;
 use grap::{
     Context, Environment, Expression, ForeignFunction, ForeignOverlay, RuntimeValue, call,
-    evaluate_runtime_scoped, evaluate_value,
+    evaluate_runtime_scoped,
 };
 use incremental::{Input, Memo, Runtime};
 use std::cell::Cell;
@@ -49,8 +49,9 @@ fn evaluate(
         let expression = expression.read(read);
         let fuel = *fuel.read(read);
         Ok(run(&definitions, read, |host| {
-            evaluate_value(&expression, host, fuel)
-        }))
+            grap::evaluate(&expression, host, fuel)
+        })
+        .into_value())
     })
 }
 
@@ -170,14 +171,13 @@ fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
                         &overlay,
                         100,
                     )
-                    .into_value()
                 };
                 let evaluation = if recorded {
                     with_recorded_effects(&source, read, eval)
                 } else {
                     run(&source, read, eval)
                 };
-                Ok((evaluation, output.into_inner()))
+                Ok((evaluation.into_value(), output.into_inner()))
             }
         });
         assert_eq!(runtime.read(&query).unwrap().1, vec![7]);
@@ -218,8 +218,9 @@ fn halts_are_not_reused_even_when_the_returned_value_is_equal() {
         move |read| {
             runs.set(runs.get() + 1);
             Ok(run(&source, read, |host| {
-                evaluate_value(&Value::record([]), host, 0)
-            }))
+                grap::evaluate(&Value::record([]), host, 0)
+            })
+            .into_value())
         }
     });
     assert!(runtime.read(&query).unwrap().halt.is_some());

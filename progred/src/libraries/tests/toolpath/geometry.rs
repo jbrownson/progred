@@ -80,11 +80,11 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
             let result =
                 crate::computations::memo::with_recorded_effects(&definitions, read, |host| {
                     run(&mut recording, |scope| {
-                        ::grap::apply_value(&program, [], host, Some(scope), 500_000)
+                        ::grap::apply_expression(&(&program).into(), [], host, Some(scope), 500_000)
                     })
                 });
             assert!(
-                !::grap::absent::is_absent(&result.result),
+                result.result.absent_reason().is_none(),
                 "{:?}",
                 result.result
             );

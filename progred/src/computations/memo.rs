@@ -64,30 +64,30 @@ impl<S: 'static> Host for ObservingHost<'_, S> {
     }
 }
 
-pub fn run<S: 'static, T>(
+pub fn run<S: 'static>(
     definitions: &Definitions<S>,
     read: &mut Read,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
-) -> Evaluation<T> {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
+) -> Evaluation {
     observed(definitions, read, false, evaluate)
 }
 
 /// The caller owns and returns all effects as part of the memo result. This
 /// permits local recording, never unrecorded writes into an enclosing sink.
-pub fn with_recorded_effects<S: 'static, T>(
+pub fn with_recorded_effects<S: 'static>(
     definitions: &Definitions<S>,
     read: &mut Read,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
-) -> Evaluation<T> {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
+) -> Evaluation {
     observed(definitions, read, true, evaluate)
 }
 
-fn observed<S: 'static, T>(
+fn observed<S: 'static>(
     definitions: &Definitions<S>,
     read: &mut Read,
     recorded_effects: bool,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
-) -> Evaluation<T> {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
+) -> Evaluation {
     let result = evaluate(&ObservingHost {
         definitions,
         read: RefCell::new(read),
