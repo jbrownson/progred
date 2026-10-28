@@ -52,11 +52,11 @@ pub mod vocabulary;
 
 /// Where an evaluation finds definitions, and the native code foreign
 /// functions run. A host that reuses results can rely on every changing read
-/// being a `resolve` or an `implementation`, except where `untracked` says
+/// being a `definition` or an `implementation`, except where `untracked` says
 /// otherwise.
 pub trait Host {
     /// `cell`'s definition.
-    fn resolve(&self, cell: CellId) -> Option<Value>;
+    fn definition(&self, cell: CellId) -> Option<Value>;
     /// The native code a foreign function implemented under `cell` runs.
     fn implementation(&self, cell: CellId) -> Option<ForeignFunction>;
     /// A foreign call not declared tracked ran, so the result may depend on

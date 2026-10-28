@@ -272,8 +272,11 @@ impl Libraries {
     }
 }
 
+/// Tests evaluate against libraries alone; the editor always reads through
+/// [`crate::sources::Sources`].
+#[cfg(test)]
 impl ::grap::Host for Libraries {
-    fn resolve(&self, cell: gid::CellId) -> Option<gid::Value> {
+    fn definition(&self, cell: gid::CellId) -> Option<gid::Value> {
         self.definitions(cell)
             .next()
             .map(|(_, value)| value.clone())

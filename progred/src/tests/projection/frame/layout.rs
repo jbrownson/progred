@@ -81,7 +81,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
     let result = gid::new_cell_id();
     struct Empty;
     impl ::grap::Host for Empty {
-        fn resolve(&self, _: CellId) -> Option<Value> {
+        fn definition(&self, _: CellId) -> Option<Value> {
             None
         }
         fn implementation(&self, _: CellId) -> Option<::grap::ForeignFunction> {

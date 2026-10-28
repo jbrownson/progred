@@ -51,7 +51,7 @@ impl TestDefinition {
 pub(crate) struct TestHost<F>(pub(crate) F);
 
 impl<F: Fn(CellId) -> Option<TestDefinition>> Host for TestHost<F> {
-    fn resolve(&self, cell: CellId) -> Option<Value> {
+    fn definition(&self, cell: CellId) -> Option<Value> {
         (self.0)(cell).map(|definition| definition.value)
     }
 

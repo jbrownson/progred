@@ -556,7 +556,7 @@ struct Split {
 }
 
 impl Host for Split {
-    fn resolve(&self, cell: CellId) -> Option<Value> {
+    fn definition(&self, cell: CellId) -> Option<Value> {
         self.values
             .iter()
             .find(|(key, _)| *key == cell)
@@ -619,7 +619,7 @@ fn a_call_runs_native_code_only_where_its_definition_names_it() {
 fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
     struct DataHost(CellId, Option<TestDefinition>);
     impl Host for DataHost {
-        fn resolve(&self, cell: CellId) -> Option<Value> {
+        fn definition(&self, cell: CellId) -> Option<Value> {
             assert_eq!(cell, self.0);
             self.1.as_ref().map(|definition| definition.value().clone())
         }

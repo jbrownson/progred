@@ -29,8 +29,8 @@ impl<'a> Observed<'a> {
 }
 
 impl Host for Observed<'_> {
-    fn resolve(&self, cell: CellId) -> Option<Value> {
-        self.host.resolve(cell)
+    fn definition(&self, cell: CellId) -> Option<Value> {
+        self.host.definition(cell)
     }
 
     fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {

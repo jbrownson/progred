@@ -103,7 +103,7 @@ impl<'a> Context<'a> {
         let target = match cached {
             Some(target) => target,
             None => {
-                let kind = match self.host.resolve(cell) {
+                let kind = match self.host.definition(cell) {
                     Some(value) => match self.own_implementation(cell, &value) {
                         Some(Ok(implementation)) => match &implementation.primitive {
                             Some(primitive) => PreparedCallTargetKind::Primitive(
@@ -438,7 +438,7 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         self.checked_call(|context| {
-            let Some(value) = context.host.resolve(cell) else {
+            let Some(value) = context.host.definition(cell) else {
                 return Ok(missing_cell(cell));
             };
             match context.own_implementation(cell, &value) {

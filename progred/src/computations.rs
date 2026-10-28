@@ -61,8 +61,8 @@ impl Computations {
                 libraries: &snapshot.libraries,
             };
             memo::Resolved {
-                value: Host::resolve(&sources, *cell),
-                implementation: Host::implementation(&sources, *cell),
+                value: sources.definition(*cell),
+                implementation: sources.implementation(*cell),
             }
         });
         Self {

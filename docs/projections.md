@@ -775,7 +775,7 @@ bind-once semantics and separate `value` field identity; they do not own or
 discover wrappers. As with calls, wrappers inside inert data or returned by a
 function remain data until explicitly evaluated.
 
-Cell evaluation checks lexical bindings first, then asks `grap::Host::resolve`
+Cell evaluation checks lexical bindings first, then asks `grap::Host::definition`
 for one definition: the document's value, otherwise the first loaded library
 definition.
 Duplicate definitions are tolerated, not merged, composed, or overloaded. Names

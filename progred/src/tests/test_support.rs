@@ -112,7 +112,7 @@ pub(crate) fn defined_in(libraries: &Libraries, cell: CellId) -> Option<TestDefi
 pub(crate) struct TestHost<F>(pub F);
 
 impl<F: Fn(CellId) -> Option<TestDefinition>> grap::Host for TestHost<F> {
-    fn resolve(&self, cell: CellId) -> Option<Value> {
+    fn definition(&self, cell: CellId) -> Option<Value> {
         (self.0)(cell).map(|definition| definition.value)
     }
 

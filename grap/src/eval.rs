@@ -205,7 +205,7 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         match environment.get_at(&self.indices, cell, index) {
             Some(value) => Ok(unbox(value.clone())),
-            None => match self.host.resolve(cell) {
+            None => match self.host.definition(cell) {
                 None => Ok(missing_cell(cell)),
                 Some(value) => {
                     while self.cell_states.len() <= index.0 {

@@ -43,7 +43,7 @@ struct ObservingHost<'a, S> {
 }
 
 impl<S: 'static> Host for ObservingHost<'_, S> {
-    fn resolve(&self, cell: CellId) -> Option<Value> {
+    fn definition(&self, cell: CellId) -> Option<Value> {
         self.definitions
             .read(cell, &mut self.read.borrow_mut())
             .value

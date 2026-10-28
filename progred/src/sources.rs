@@ -107,7 +107,7 @@ impl crate::display::Env for Sources<'_> {
 impl<'a> Sources<'a> {
     /// The definition lookup selects: the document's, else the first
     /// library's in load order.
-    fn definition(&self, cell: CellId) -> Option<Contribution<'a>> {
+    fn contribution(&self, cell: CellId) -> Option<Contribution<'a>> {
         self.doc
             .cells
             .value(cell)
@@ -122,12 +122,12 @@ impl<'a> Sources<'a> {
 
     /// The value of the definition lookup selects.
     pub fn value(&self, cell: CellId) -> Option<&'a Value> {
-        self.definition(cell).map(Contribution::value)
+        self.contribution(cell).map(Contribution::value)
     }
 
     /// The definition lookup selects.
     pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
-        self.definition(cell).map(|contribution| ResolvedCell {
+        self.contribution(cell).map(|contribution| ResolvedCell {
             value: contribution.value(),
             library: match contribution {
                 Contribution::Document(_) => None,
@@ -190,12 +190,12 @@ impl<'a> Sources<'a> {
     /// The library is authoritative only when it supplies the value
     /// and the document does not. A bare cell remains writable.
     pub fn external(&self, cell: CellId) -> bool {
-        matches!(self.definition(cell), Some(Contribution::Library(..)))
+        matches!(self.contribution(cell), Some(Contribution::Library(..)))
     }
 }
 
 impl grap::Host for Sources<'_> {
-    fn resolve(&self, cell: CellId) -> Option<Value> {
+    fn definition(&self, cell: CellId) -> Option<Value> {
         self.value(cell).cloned()
     }
 
