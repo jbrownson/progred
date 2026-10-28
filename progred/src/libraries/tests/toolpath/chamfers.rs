@@ -213,11 +213,11 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
                 ([1.0, 2.0, 3.0], [3.0, 5.0, 9.0]),
                 ([3.0, 5.0, 9.0], [1.0, 2.0, 3.0]),
             ] {
-                let result = ::grap::apply_value(
-                    configured.as_value(),
+                let result = ::grap::apply_expression(
+                    &::grap::RuntimeValue::from(configured.as_value()),
                     [
-                        (names["start"], point_value(start)),
-                        (names["end"], point_value(end)),
+                        (names["start"], point_value(start).into()),
+                        (names["end"], point_value(end).into()),
                     ],
                     &sources,
                     None,
@@ -278,11 +278,11 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
     assert!(configured.result.absent_reason().is_none());
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_value(
-            configured.result.as_value(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(configured.result.as_value()),
             [
-                (names["start"], point_value([1.0, 2.0, 3.0])),
-                (names["end"], point_value([1.0, 2.0, 3.0])),
+                (names["start"], point_value([1.0, 2.0, 3.0]).into()),
+                (names["end"], point_value([1.0, 2.0, 3.0]).into()),
             ],
             &sources,
             Some(scope),

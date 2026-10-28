@@ -153,19 +153,20 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
             "{:?}",
             parameters.result
         );
-        let preview = ::grap::apply_value(
-            fields.get(&ui::VIEW).unwrap(),
+        let preview = ::grap::apply_expression(
+            &::grap::RuntimeValue::from(fields.get(&ui::VIEW).unwrap()),
             [
                 (
                     presentation::vocabulary::VALUE,
                     fields
                         .get(&presentation::vocabulary::VALUE)
                         .unwrap()
-                        .clone(),
+                        .clone()
+                        .into(),
                 ),
-                (l::WIDTH, f64::value(400.0)),
-                (l::HEIGHT, f64::value(400.0)),
-                (ui::PARAMETERS, parameters.result.to_value()),
+                (l::WIDTH, f64::value(400.0).into()),
+                (l::HEIGHT, f64::value(400.0).into()),
+                (ui::PARAMETERS, parameters.result.to_value().into()),
             ],
             &sources,
             None,
@@ -272,9 +273,9 @@ fn apply_groups(
     if generated.result.absent_reason().is_some() {
         return generated;
     }
-    ::grap::apply_value(
-        &SEQUENCE.into(),
-        [(PROGRAM, generated.result.into_value())],
+    ::grap::apply_expression(
+        &::grap::RuntimeValue::from(gid::Value::from(SEQUENCE)),
+        [(PROGRAM, generated.result.into_value().into())],
         host,
         Some(scope),
         generated.remaining_fuel,
@@ -294,14 +295,14 @@ fn diagonals(
         libraries: &stack.libraries,
     };
     run(sink, |scope| {
-        ::grap::apply_value(
-            &names["diagonals"].into(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(names["diagonals"])),
             [
-                (names["rows"], f64::value(rows)),
-                (names["spacing"], f64::value(spacing)),
-                (names["feed_direction"], f64::value(1.0)),
-                (names["row_direction"], f64::value(1.0)),
-                (TOOL_AXIS, point_value(Axis::Z.vector())),
+                (names["rows"], f64::value(rows).into()),
+                (names["spacing"], f64::value(spacing).into()),
+                (names["feed_direction"], f64::value(1.0).into()),
+                (names["row_direction"], f64::value(1.0).into()),
+                (TOOL_AXIS, point_value(Axis::Z.vector()).into()),
             ],
             &sources,
             Some(scope),
@@ -670,8 +671,8 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
     });
     let mut centers = Recording::default();
     let b = run(&mut centers, |scope| {
-        ::grap::apply_value(
-            &names["ball_path"].into(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
             [],
             &sources,
             Some(scope),
@@ -787,8 +788,8 @@ fn example_ball_path() -> (Recording, f64) {
     };
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_value(
-            &names["ball_path"].into(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
             [],
             &sources,
             Some(scope),

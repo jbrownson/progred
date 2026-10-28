@@ -73,7 +73,13 @@ fn run(
             &overlay,
             fuel,
         ),
-        Invocation::Applied => apply_value(&function, [], &definitions, Some(&overlay), fuel),
+        Invocation::Applied => apply_expression(
+            &crate::RuntimeValue::from(&function),
+            [],
+            &definitions,
+            Some(&overlay),
+            fuel,
+        ),
         Invocation::Prepared => evaluate_runtime_scoped(
             &RuntimeValue::from(call(invoke.into(), [(operations.value, function)])),
             &definitions,

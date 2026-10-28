@@ -154,9 +154,9 @@ pub(crate) fn test_apply(
     foreign: &grap::ForeignFunctions,
     fuel: usize,
 ) -> grap::Evaluation {
-    grap::apply_value(
-        function,
-        arguments,
+    grap::apply_expression(
+        &::grap::RuntimeValue::from(function),
+        arguments.into_iter().map(|(k, v)| (k, v.into())),
         &test_host(resolve, foreign),
         None,
         fuel,

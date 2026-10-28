@@ -172,9 +172,15 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
         Value::from(b"left".to_vec())
     );
     assert_eq!(
-        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20)
-            .result
-            .to_value(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(SHARED_FUNCTION)),
+            [],
+            &libraries,
+            None,
+            20
+        )
+        .result
+        .to_value(),
         Value::from(b"left".to_vec())
     );
 }
@@ -318,9 +324,15 @@ fn unnamed_native_definitions_say_only_what_they_are() {
         [::grap::foreign_function(SHARED_FUNCTION)]
     );
     assert_eq!(
-        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20)
-            .result
-            .to_value(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(SHARED_FUNCTION)),
+            [],
+            &libraries,
+            None,
+            20
+        )
+        .result
+        .to_value(),
         Value::from(b"left".to_vec())
     );
 }

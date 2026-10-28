@@ -63,7 +63,13 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
         assert_eq!(Some(resolved.value), doc.cells.value(function));
         for result in [
             grap::evaluate(&grap::call(function.into(), []), &sources, 100),
-            grap::apply_value(&function.into(), [], &sources, None, 100),
+            grap::apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(function)),
+                [],
+                &sources,
+                None,
+                100,
+            ),
         ] {
             assert_eq!(result.halt, None);
             assert_eq!(result.result.to_value(), expected);
@@ -110,7 +116,13 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
                 };
             let overlay = grap::ForeignOverlay::from_value(&functions, &observe);
             let evaluation = if host_apply {
-                grap::apply_value(&Value::from(function), [], &sources, Some(&overlay), 100)
+                grap::apply_expression(
+                    &::grap::RuntimeValue::from(&Value::from(function)),
+                    [],
+                    &sources,
+                    Some(&overlay),
+                    100,
+                )
             } else {
                 grap::evaluate_runtime_scoped(
                     &grap::RuntimeValue::from(grap::call(Value::from(function), [])),

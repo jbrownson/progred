@@ -37,9 +37,9 @@ fn apply(
     foreign: &ForeignFunctions,
     fuel: usize,
 ) -> Evaluation {
-    super::apply_value(
-        function,
-        arguments,
+    super::apply_expression(
+        &crate::RuntimeValue::from(function),
+        arguments.into_iter().map(|(k, v)| (k, v.into())),
         &definitions_from_parts(resolve, foreign),
         None,
         fuel,
@@ -89,8 +89,8 @@ fn an_ordinary_absent_keeps_its_details() {
 #[test]
 fn host_apply_returns_the_definitions_decline() {
     let function = new_cell_id();
-    let evaluation = super::apply_value(
-        &Value::from(function),
+    let evaluation = super::apply_expression(
+        &crate::RuntimeValue::from(&Value::from(function)),
         [],
         &TestHost(|_| {
             Some(TestDefinition::foreign(
@@ -630,7 +630,13 @@ fn a_call_runs_native_code_only_where_its_definition_names_it() {
     ] {
         for result in [
             super::evaluate(&call(function.into(), []), &host, 100),
-            super::apply_value(&function.into(), [], &host, None, 100),
+            super::apply_expression(
+                &crate::RuntimeValue::from(gid::Value::from(function)),
+                [],
+                &host,
+                None,
+                100,
+            ),
         ] {
             assert_eq!(result.halt, None);
             assert_eq!(result.result.to_value(), expected);
@@ -1282,8 +1288,8 @@ fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
     };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let applied = super::apply_value(
-        &Value::from(outer),
+    let applied = super::apply_expression(
+        &crate::RuntimeValue::from(&Value::from(outer)),
         [],
         &definitions_from_parts(|_| None, &foreign),
         Some(&overlay),
@@ -1311,8 +1317,8 @@ fn a_scoped_foreign_layer_borrows_state_and_remains_reentrant() {
         };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let applied = super::apply_value(
-        &Value::from(outer),
+    let applied = super::apply_expression(
+        &crate::RuntimeValue::from(&Value::from(outer)),
         [],
         &definitions_from_parts(|_| None, &foreign),
         Some(&overlay),

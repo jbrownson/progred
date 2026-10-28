@@ -100,7 +100,13 @@ fn example_program(name: &str) -> Recording {
     };
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_value(&names[name].into(), [], &sources, Some(scope), 3_000_000)
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(names[name])),
+            [],
+            &sources,
+            Some(scope),
+            3_000_000,
+        )
     });
     assert!(
         result.result.absent_reason().is_none(),
@@ -136,8 +142,8 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_value(
-                &names["ball_path"].into(),
+            ::grap::apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
                 [],
                 &sources,
                 Some(scope),
@@ -188,8 +194,8 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_value(
-                &names["preview_operations"].into(),
+            ::grap::apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names["preview_operations"])),
                 [],
                 &sources,
                 Some(scope),

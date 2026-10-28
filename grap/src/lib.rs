@@ -169,28 +169,6 @@ pub fn apply_expression(
     context(host, overlay, fuel).conclude(|context| context.apply_expression(function, arguments))
 }
 
-/// Apply a callable to already-evaluated argument VALUES. This is the
-/// host boundary: a code-shaped value (a stored lambda or call
-/// record) binds as data, where `call` + [`evaluate`] would evaluate
-/// it as an expression. A foreign target still receives the
-/// arguments as call fields and evaluates them itself; every value
-/// but a code-shaped one self-quotes through that. An `overlay` lends
-/// foreign functions for this synchronous evaluation only.
-pub fn apply_value(
-    function: &Value,
-    arguments: impl IntoIterator<Item = (CellId, Value)>,
-    host: &dyn Host,
-    overlay: Option<&ForeignOverlay<'_>>,
-    fuel: usize,
-) -> Evaluation {
-    context(host, overlay, fuel).conclude(|context| {
-        context.apply_expression(
-            &function.into(),
-            arguments.into_iter().map(|(k, v)| (k, v.into())),
-        )
-    })
-}
-
 /// Interpret runtime-held syntax without serializing its embedded
 /// callables. Syntax held as GID data has input paths as its source
 /// origins, as through [`evaluate`]; generated syntax has none. `overlay`

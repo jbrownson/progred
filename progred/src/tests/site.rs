@@ -15,7 +15,13 @@ fn evaluate(
     fuel: usize,
 ) -> Option<PendingChanges> {
     evaluate_with(path, annotation, selection, |overlay| {
-        let result = grap::apply_value(function, arguments, sources, Some(overlay), fuel);
+        let result = grap::apply_expression(
+            &::grap::RuntimeValue::from(function),
+            arguments.into_iter().map(|(k, v)| (k, v.into())),
+            sources,
+            Some(overlay),
+            fuel,
+        );
         grap::Evaluation {
             result: result.result.into(),
             remaining_fuel: result.remaining_fuel,

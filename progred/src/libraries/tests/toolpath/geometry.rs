@@ -47,8 +47,8 @@ pub(super) fn set_parameter(doc: &mut Document, names: &Binders, name: &str, num
 fn path(sources: &Sources<'_>, names: &Binders) -> Recording {
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_value(
-            &names["ball_path"].into(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
             [],
             sources,
             Some(scope),
@@ -146,19 +146,19 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         let geometry = cube_geometry(&sources, &names);
         let geometry = geometry.as_record().unwrap();
-        let solid = ::grap::apply_value(
-            geometry.get(&names["field"]).unwrap(),
+        let solid = ::grap::apply_expression(
+            &::grap::RuntimeValue::from(geometry.get(&names["field"]).unwrap()),
             [],
             &sources,
             None,
             10_000,
         );
         assert!(solid.result.absent_reason().is_none());
-        let preview = ::grap::apply_value(
-            &Value::from(fidget::vocabulary::PREVIEW_MESH),
+        let preview = ::grap::apply_expression(
+            &::grap::RuntimeValue::from(&Value::from(fidget::vocabulary::PREVIEW_MESH)),
             [(
                 crate::libraries::presentation::vocabulary::VALUE,
-                solid.result.into_value(),
+                solid.result.into_value().into(),
             )],
             &sources,
             None,
@@ -175,9 +175,13 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         for u in [0.1, 0.25, 0.5, 0.7, 0.9] {
             for v in [0.1, 0.3, 0.5, 0.75, 0.9] {
-                let contact = ::grap::apply_value(
-                    geometry.get(&names["face"]).unwrap(),
-                    [X, Y, Z].into_iter().zip([u, v, 0.0].map(f64::value)),
+                let contact = ::grap::apply_expression(
+                    &::grap::RuntimeValue::from(geometry.get(&names["face"]).unwrap()),
+                    [X, Y, Z]
+                        .into_iter()
+                        .zip([u, v, 0.0].map(f64::value))
+                        .into_iter()
+                        .map(|(k, v)| (k, v.into())),
                     &sources,
                     None,
                     10_000,
@@ -187,9 +191,13 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     sample(contact).abs() < 2e-6,
                     "{size}, {chamfer}, {depth}: {contact:?}"
                 );
-                let normal = ::grap::apply_value(
-                    geometry.get(&names["normal"]).unwrap(),
-                    [X, Y, Z].into_iter().zip(contact.map(f64::value)),
+                let normal = ::grap::apply_expression(
+                    &::grap::RuntimeValue::from(geometry.get(&names["normal"]).unwrap()),
+                    [X, Y, Z]
+                        .into_iter()
+                        .zip(contact.map(f64::value))
+                        .into_iter()
+                        .map(|(k, v)| (k, v.into())),
                     &sources,
                     None,
                     10_000,
@@ -208,15 +216,15 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                         "{gradient:?} vs {normal:?}"
                     );
                 }
-                let center = ::grap::apply_value(
-                    &Value::from(names["ball_center"]),
+                let center = ::grap::apply_expression(
+                    &::grap::RuntimeValue::from(&Value::from(names["ball_center"])),
                     [
-                        (X, f64::value(contact[0])),
-                        (Y, f64::value(contact[1])),
-                        (Z, f64::value(contact[2])),
+                        (X, f64::value(contact[0]).into()),
+                        (Y, f64::value(contact[1]).into()),
+                        (Z, f64::value(contact[2]).into()),
                         (
                             names["normal"],
-                            geometry.get(&names["normal"]).unwrap().clone(),
+                            geometry.get(&names["normal"]).unwrap().clone().into(),
                         ),
                     ],
                     &sources,

@@ -643,9 +643,9 @@ fn runtime_built_callable_records_match_their_gid_forms() {
         ),
     ]);
     for function in [foreign, closure] {
-        let expected = apply_value(
-            &function.to_value(),
-            [(argument, f64::value(8.0))],
+        let expected = apply_expression(
+            &crate::RuntimeValue::from(&function.to_value()),
+            [(argument, f64::value(8.0).into())],
             &receiver,
             None,
             100,

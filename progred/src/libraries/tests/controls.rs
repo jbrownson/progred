@@ -1058,8 +1058,8 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         captured.replace(stored_item_links(expression.clone()));
         context.eval_to_value(expression, environment)
     };
-    let result = ::grap::apply_value(
-        &owner.into(),
+    let result = ::grap::apply_expression(
+        &::grap::RuntimeValue::from(gid::Value::from(owner)),
         [],
         &libraries,
         Some(&ForeignOverlay::from_value(&[probe], &emit)),
@@ -1204,8 +1204,8 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
         context.eval_to_value(expression, environment)
     };
     assert_eq!(
-        ::grap::apply_value(
-            &owner.into(),
+        ::grap::apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(owner)),
             [],
             &libraries,
             Some(&ForeignOverlay::from_value(&[probe], &emit)),

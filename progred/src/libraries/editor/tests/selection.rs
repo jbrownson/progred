@@ -116,11 +116,11 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
         ],
         &interpret,
     );
-    let result = ::grap::apply_value(
-        &grap_at(
+    let result = ::grap::apply_expression(
+        &::grap::RuntimeValue::from(&grap_at(
             std::slice::from_ref(&child),
             crate::selection::payload::empty_pending(),
-        ),
+        )),
         [],
         &crate::test_support::TestHost(|cell| {
             functions
