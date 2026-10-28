@@ -84,7 +84,7 @@ pub struct Context<'a> {
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
     remaining_fuel: usize,
-    depth: usize,
+    remaining_depth: usize,
     compiled: ByNode<Thunk>,
     observer: Option<&'a dyn Observer>,
     /// Each cell's definition, by index, lowered once this evaluation.
@@ -124,7 +124,7 @@ fn context<'a>(
         overlay,
         foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
-        depth: 0,
+        remaining_depth: MAX_DEPTH,
         compiled: Default::default(),
         observer: host.observer(),
         definitions: Vec::new(),

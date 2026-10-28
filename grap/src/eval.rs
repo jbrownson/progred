@@ -145,7 +145,7 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        if self.depth == MAX_DEPTH {
+        if self.remaining_depth == 0 {
             return Err(Halt::DepthExhausted);
         }
         let compiled = match self.compiled.get(&expression) {
@@ -156,9 +156,9 @@ impl<'a> Context<'a> {
                 compiled
             }
         };
-        self.depth += 1;
+        self.remaining_depth -= 1;
         let result = compiled(self, environment);
-        self.depth -= 1;
+        self.remaining_depth += 1;
         result
     }
 
