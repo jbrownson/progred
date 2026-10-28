@@ -243,11 +243,21 @@ impl<W: Host> Fields<W> {
         self,
         input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     ) -> Option<Layout<W>> {
-        let keys = self.keys(input, |_| false)?;
-        Some(authoring(record_braces(
+        let labels = input.value?.record_keys()?;
+        Some(self.record_of(input, labels))
+    }
+
+    /// [`Fields::record`] for a record already read as one, with `labels`.
+    pub(crate) fn record_of(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        labels: Vec<CellId>,
+    ) -> Layout<W> {
+        let keys = self.keys(labels, input, |_| false);
+        authoring(record_braces(
             keys.into_iter().map(|key| self.field(input, key)),
             pending_field(input),
-        )))
+        ))
     }
 
     /// A form drawn from the `queried` fields, the others following it
@@ -309,20 +319,21 @@ impl<W: Host> Fields<W> {
         input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
         drawn: impl Fn(CellId) -> bool,
     ) -> Option<Layout<W>> {
-        let keys = self.keys(input, drawn)?;
+        let keys = self.keys(input.value?.record_keys()?, input, drawn);
         let pending = pending_field(input);
         (self.shown_empty || !keys.is_empty() || pending.is_some())
             .then(|| record_braces(keys.into_iter().map(|key| self.field(input, key)), pending))
     }
 
-    /// The keys to draw but those `drawn` covers: the record's, its slots,
-    /// and one being added, in order.
+    /// The keys to draw but those `drawn` covers: the record's `labels`, its
+    /// slots, and one being added, in order.
     fn keys(
         &self,
+        labels: Vec<CellId>,
         input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
         drawn: impl Fn(CellId) -> bool,
-    ) -> Option<Vec<CellId>> {
-        let mut keys = input.value?.record_keys()?;
+    ) -> Vec<CellId> {
+        let mut keys = labels;
         let adding = match &input.pending {
             Some(Pending::Child(Step::Key(key))) => Some(*key),
             _ => None,
@@ -344,7 +355,7 @@ impl<W: Host> Fields<W> {
                 .cmp(&lead(right))
                 .then_with(|| field_order(input.env, left, right))
         });
-        Some(keys)
+        keys
     }
 
     fn field(

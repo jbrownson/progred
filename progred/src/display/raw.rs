@@ -44,9 +44,9 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
                 foldable(Delim::Bracket, None, |_| false, open)
             }
         }
-        ::grap::Shape::Record(keys) => {
-            let empty = keys.is_empty();
-            let open = crate::display::structure::Fields::default().record(input)?;
+        ::grap::Shape::Record(labels) => {
+            let empty = labels.is_empty();
+            let open = crate::display::structure::Fields::default().record_of(input, labels);
             if empty {
                 open
             } else {
