@@ -32,7 +32,7 @@ pub fn failure(error: incremental::Error) -> Value {
 #[derive(Clone, PartialEq)]
 pub struct Resolved {
     pub value: Option<Value>,
-    pub implementation: Option<ForeignFunction>,
+    pub implementation: Option<ForeignFunction<'static>>,
 }
 
 pub type Definitions<S> = Source<S, CellId, Resolved>;
@@ -49,7 +49,7 @@ impl<S: 'static> Host for ObservingHost<'_, S> {
             .read(cell, &mut self.read.borrow_mut())
             .value
     }
-    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction<'static>> {
         self.definitions
             .read(cell, &mut self.read.borrow_mut())
             .implementation

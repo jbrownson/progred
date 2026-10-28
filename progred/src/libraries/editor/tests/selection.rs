@@ -109,27 +109,29 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
     };
     let functions =
         crate::test_support::foreign_functions(&crate::libraries::list::library::<crate::Editor>());
-    let overlay = ::grap::ForeignOverlay::from_value(
+    let overlay = ::grap::ForeignFunctions::shared(
         &[
             crate::libraries::editor::site::vocabulary::PATH,
             vocabulary::SET,
         ],
         &interpret,
     );
-    let result = ::grap::apply_expression(
-        &::grap::RuntimeValue::from(&grap_at(
-            std::slice::from_ref(&child),
-            crate::selection::payload::empty_pending(),
-        )),
-        [],
+    let result = ::grap::Evaluator::new(
         &crate::test_support::TestHost(|cell| {
             functions
                 .get(cell)
                 .cloned()
                 .map(|function| crate::test_support::TestDefinition::foreign(cell, function))
         }),
-        Some(&overlay),
         100,
+    )
+    .functions(overlay)
+    .apply_expression(
+        &::grap::RuntimeValue::from(&grap_at(
+            std::slice::from_ref(&child),
+            crate::selection::payload::empty_pending(),
+        )),
+        [],
     );
     assert_eq!(result.result.to_value(), Value::record([]));
     assert_eq!(

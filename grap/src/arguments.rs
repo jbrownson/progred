@@ -63,7 +63,7 @@ pub trait Signature<const N: usize>: Sized {
     ) -> Result<Result<Self, RuntimeValue>, Halt>;
 }
 
-impl ForeignFunction {
+impl ForeignFunction<'_> {
     /// A function of the arguments under `labels`, which it declares as its
     /// parameters, parsed as `S`: `body` runs only when they all parse, and
     /// otherwise the call is "invalid arguments". A call site finds its

@@ -118,7 +118,7 @@ impl Computations {
             (expression.clone(), origin, fuel),
             |a, b| a.0.same_result(&b.0) && a.1 == b.1 && a.2 == b.2,
             |(expression, origin, fuel), host| {
-                grap::evaluate_runtime_at(expression, origin.clone(), host, *fuel)
+                grap::Evaluator::new(host, *fuel).evaluate_runtime(expression, origin.clone())
             },
         )
     }
@@ -135,12 +135,9 @@ impl Computations {
             (function.clone(), arguments.to_vec(), fuel),
             PartialEq::eq,
             |(function, arguments, fuel), host| {
-                grap::apply_expression(
+                grap::Evaluator::new(host, *fuel).apply_expression(
                     &function.into(),
                     arguments.iter().map(|(k, v)| (*k, v.into())),
-                    host,
-                    None,
-                    *fuel,
                 )
             },
         )
@@ -173,12 +170,9 @@ impl Computations {
                         let (evaluated, call, value) = &*question;
                         let answering = grap::Answering::new(call.clone(), value.clone());
                         memo::run(&definitions, read, |host| {
-                            grap::evaluate_runtime_at(
-                                &evaluated.expression,
-                                evaluated.origin.clone(),
-                                &grap::Observed::new(host, &answering),
-                                evaluated.fuel,
-                            )
+                            grap::Evaluator::new(host, evaluated.fuel)
+                                .observer(&answering)
+                                .evaluate_runtime(&evaluated.expression, evaluated.origin.clone())
                         });
                         Ok(answering
                             .found()

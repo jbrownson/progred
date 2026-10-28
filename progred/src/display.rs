@@ -378,12 +378,13 @@ pub trait Env {
         None
     }
 
-    /// Borrow capabilities for this application only. Their output remains host-owned.
+    /// Apply with `functions` for this application only. Their output remains
+    /// host-owned.
     fn apply_runtime_scoped(
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
+        functions: grap::ForeignFunctions<'_>,
     ) -> grap::Evaluation;
 
     /// Reuse an application with explicit data arguments, under the same

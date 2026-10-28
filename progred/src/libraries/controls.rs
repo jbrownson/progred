@@ -3,8 +3,7 @@ use super::{Library, absent, f64, layout, name, presentation, tree};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self, widget};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
-    RuntimeValue,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
 use gid::{CellId, Value};
 use kurbo::{Point, Rect};
@@ -146,17 +145,16 @@ fn apply_change(
             Value::record([])
         }))
     };
-    let result = ::grap::apply(
-        handler,
-        [
-            (VALUE, value.into()),
-            (STATE, state.into()),
-            (UPDATE, update_function().into()),
-        ],
-        &session.sources(),
-        Some(&ForeignOverlay::from_value(&[UPDATE], &update)),
-        crate::sources::DEFAULT_FUEL,
-    );
+    let result = ::grap::Evaluator::new(&session.sources(), crate::sources::DEFAULT_FUEL)
+        .functions(ForeignFunctions::shared(&[UPDATE], &update))
+        .apply(
+            handler,
+            [
+                (VALUE, value.into()),
+                (STATE, state.into()),
+                (UPDATE, update_function().into()),
+            ],
+        );
     if result.halt.is_none()
         && !result.result.declines()
         && let Some(value) = staged.into_inner()
@@ -360,18 +358,17 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
             Err(error) => presentation::result_layout(&error).measure(context, build),
             Ok((widgets, parameters)) => {
                 let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
-                let result = ::grap::apply(
-                    &view,
-                    [
-                        (VALUE, source.clone()),
-                        (PARAMETERS, parameters),
-                        (WIDTH, ::grap::RuntimeValue::f64(width)),
-                        (HEIGHT, ::grap::RuntimeValue::f64(height)),
-                    ],
-                    context.viewing().host(),
-                    None,
-                    crate::sources::DEFAULT_FUEL,
-                );
+                let result =
+                    ::grap::Evaluator::new(context.viewing().host(), crate::sources::DEFAULT_FUEL)
+                        .apply(
+                            &view,
+                            [
+                                (VALUE, source.clone()),
+                                (PARAMETERS, parameters),
+                                (WIDTH, ::grap::RuntimeValue::f64(width)),
+                                (HEIGHT, ::grap::RuntimeValue::f64(height)),
+                            ],
+                        );
                 let content = presentation::result_layout(&result.result).measure(context, build);
                 if controls.is_empty() {
                     content
@@ -428,22 +425,21 @@ fn controls_output<W: Host>(
             TREE_PROGRAM_CURSOR => {
                 tree_program_cursor(context, call, environment, state, width, frame, &widgets)
             }
-            _ => unreachable!("the overlay calls only the controls"),
+            _ => unreachable!("only the controls are installed"),
         }
     };
-    let evaluation = ::grap::apply(
-        controls,
-        [
-            (STATE, current_state(state).into()),
-            (UPDATE, update_function().into()),
-        ],
-        frame.viewing().host(),
-        Some(&ForeignOverlay::new(
+    let evaluation = ::grap::Evaluator::new(frame.viewing().host(), crate::sources::DEFAULT_FUEL)
+        .functions(ForeignFunctions::shared(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
             &emit,
-        )),
-        crate::sources::DEFAULT_FUEL,
-    );
+        ))
+        .apply(
+            controls,
+            [
+                (STATE, current_state(state).into()),
+                (UPDATE, update_function().into()),
+            ],
+        );
     if evaluation.result.absent_reason().is_some() {
         Err(evaluation.result)
     } else {

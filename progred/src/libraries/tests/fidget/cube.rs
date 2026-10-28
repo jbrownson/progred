@@ -50,7 +50,8 @@ fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
     }
     doc.cells.set_value(id, definition);
     let libraries = core_libraries();
-    let evaluated = grap::evaluate(&grap::call(id.into(), []), &src(&doc, &libraries), 10_000);
+    let evaluated =
+        grap::Evaluator::new(&src(&doc, &libraries), 10_000).evaluate(&grap::call(id.into(), []));
     assert_eq!(evaluated.halt, None);
     assert!(
         evaluated.result.absent_reason().is_none(),

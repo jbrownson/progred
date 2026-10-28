@@ -27,19 +27,16 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         (SQUARE_MILL, Tool::square(0.125, 0.22).unwrap()),
         (BULL_MILL, Tool::bull(0.125, 0.01, 0.22).unwrap()),
     ] {
-        let value = ::grap::evaluate(
-            &::grap::call(
+        let value = ::grap::Evaluator::new(&stack.libraries, 1000)
+            .evaluate(&::grap::call(
                 function.into(),
                 [
                     (super::super::TOOL_DIAMETER, f64::value(0.125)),
                     (super::super::TOOL_LENGTH, f64::value(0.22)),
                     (CORNER_RADIUS, f64::value(0.01)),
                 ],
-            ),
-            &stack.libraries,
-            1000,
-        )
-        .result;
+            ))
+            .result;
         assert_eq!(value.to_value(), tool.value());
         assert_eq!(
             value.as_value().as_record().unwrap().len(),
@@ -54,18 +51,15 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         );
         assert!(Tool::read(&Value::Record(fields)).is_some());
     }
-    let value = ::grap::evaluate(
-        &::grap::call(
+    let value = ::grap::Evaluator::new(&stack.libraries, 1000)
+        .evaluate(&::grap::call(
             SQUARE_MILL.into(),
             [
                 (super::super::TOOL_DIAMETER, f64::value(-0.125)),
                 (super::super::TOOL_LENGTH, f64::value(0.22)),
             ],
-        ),
-        &stack.libraries,
-        1000,
-    )
-    .result;
+        ))
+        .result;
     assert!(::grap::absent::is_absent(value.as_value()));
 }
 
@@ -376,14 +370,16 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
     };
     assert!(
         Tool::read(
-            ::grap::evaluate(&Value::from(names["ball_tool"]), &sources, 1000)
+            ::grap::Evaluator::new(&sources, 1000)
+                .evaluate(&Value::from(names["ball_tool"]))
                 .result
                 .as_value()
         )
         .is_some()
     );
     let square = Tool::read(
-        ::grap::evaluate(&Value::from(names["square_tool"]), &sources, 1000)
+        ::grap::Evaluator::new(&sources, 1000)
+            .evaluate(&Value::from(names["square_tool"]))
             .result
             .as_value(),
     )

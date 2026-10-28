@@ -1,5 +1,7 @@
 use super::*;
+use crate::Host;
 use crate::{ForeignFunction, TestDefinition, call, lambda, vocabulary};
+use gid::CellId;
 use gid::new_cell_id;
 
 /// A host where `fail` answers an absent for `reason`, and nothing else is
@@ -27,7 +29,9 @@ fn answering_finds_the_calls_the_answer_was_made_under() {
         gid::Step::Key(vocabulary::BODY),
     ]);
     let answering = Answering::new(inner.clone(), crate::absent::value(reason));
-    let result = crate::evaluate(&expression, &Observed::new(&host, &answering), 100);
+    let result = crate::Evaluator::new(&host, 100)
+        .observer(&answering)
+        .evaluate(&expression);
     assert_eq!(result.result.to_value(), crate::absent::value(reason));
     assert_eq!(
         answering
@@ -55,7 +59,9 @@ fn answering_finds_nothing_a_call_there_did_not_answer() {
             crate::absent::value(reason),
         ),
     ] {
-        crate::evaluate(&expression, &Observed::new(&host, &answering), 100);
+        crate::Evaluator::new(&host, 100)
+            .observer(&answering)
+            .evaluate(&expression);
         assert!(answering.found().is_none());
     }
 }

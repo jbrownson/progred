@@ -12,18 +12,15 @@ fn preview() -> fidget::VolumePreview {
         doc: &doc,
         libraries: &stack.libraries,
     };
-    let value = ::grap::evaluate(
-        &::grap::call(
+    let value = ::grap::Evaluator::new(&sources, 1000)
+        .evaluate(&::grap::call(
             fidget::vocabulary::PREVIEW_MESH.into(),
             [(
                 presentation::vocabulary::VALUE,
                 crate::libraries::f32::value(1.0),
             )],
-        ),
-        &sources,
-        1000,
-    )
-    .result;
+        ))
+        .result;
     fidget::mesh::read(value.as_value()).unwrap().0
 }
 

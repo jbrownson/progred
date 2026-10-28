@@ -3,7 +3,7 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::editor::path;
-use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
+use ::grap::{Context, Evaluation, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;
 
@@ -66,7 +66,7 @@ impl From<Halt> for BuildError {
 /// value result alone. A halt or final absent drops the entire output.
 pub fn run<W: Host>(
     site: impl Fn() -> crate::editing::Site,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
+    evaluate: impl FnOnce(ForeignFunctions<'_>) -> Evaluation,
 ) -> (Evaluation, Option<Layout<W>>) {
     let output = RefCell::new(Vec::new());
     let unit = RuntimeValue::record([]);
@@ -87,7 +87,7 @@ pub fn run<W: Host>(
                 Err(BuildError::Halt(halt)) => Err(halt),
             }
         };
-    let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
+    let mut evaluation = evaluate(ForeignFunctions::shared(FUNCTIONS, &emit));
     let mut children = output.into_inner();
     let layout = if evaluation.result.absent_reason().is_some() {
         None
@@ -106,7 +106,7 @@ pub(super) fn display<W: Host>(
     let function = input.value?.field(PROGRAM)?;
     let (evaluation, layout) = run(
         || input.site(),
-        |scope| input.env.apply_runtime_scoped(&function, &[], Some(scope)),
+        |scope| input.env.apply_runtime_scoped(&function, &[], scope),
     );
     Some(layout.unwrap_or_else(|| {
         crate::libraries::presentation::result_layout(

@@ -59,7 +59,7 @@ fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
             &self,
             _: &RuntimeValue,
             _: &[(CellId, RuntimeValue)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
+            _: ::grap::ForeignFunctions<'_>,
         ) -> ::grap::Evaluation {
             panic!("the viewport applies its function as an expression")
         }
@@ -109,7 +109,7 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
             &self,
             _: &RuntimeValue,
             _: &[(CellId, RuntimeValue)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
+            _: ::grap::ForeignFunctions<'_>,
         ) -> ::grap::Evaluation {
             unreachable!()
         }
@@ -179,7 +179,7 @@ fn viewport_preparation_receives_only_data_before_dimensions_are_supplied() {
             &self,
             _: &RuntimeValue,
             _: &[(CellId, RuntimeValue)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
+            _: ::grap::ForeignFunctions<'_>,
         ) -> ::grap::Evaluation {
             unreachable!()
         }
@@ -251,7 +251,7 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
             &self,
             _: &RuntimeValue,
             _: &[(CellId, RuntimeValue)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
+            _: ::grap::ForeignFunctions<'_>,
         ) -> ::grap::Evaluation {
             panic!("unexpected application")
         }
@@ -260,13 +260,12 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
         }
     }
     let host = crate::test_support::TestHost(|_| None);
-    let callback = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-        Some(::grap::SourceOrigin::Root(vec![Step::Key(LEFT_VALUE)])),
-        &host,
-        100,
-    )
-    .result;
+    let callback = ::grap::Evaluator::new(&host, 100)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
+            Some(::grap::SourceOrigin::Root(vec![Step::Key(LEFT_VALUE)])),
+        )
+        .result;
     let declaration = ::grap::RuntimeValue::record([
         (
             ::grap::isa::ISA,

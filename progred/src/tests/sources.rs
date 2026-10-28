@@ -62,14 +62,9 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
         assert_eq!(resolved.library, None);
         assert_eq!(Some(resolved.value), doc.cells.value(function));
         for result in [
-            grap::evaluate(&grap::call(function.into(), []), &sources, 100),
-            grap::apply_expression(
-                &::grap::RuntimeValue::from(gid::Value::from(function)),
-                [],
-                &sources,
-                None,
-                100,
-            ),
+            grap::Evaluator::new(&sources, 100).evaluate(&grap::call(function.into(), [])),
+            grap::Evaluator::new(&sources, 100)
+                .apply_expression(&::grap::RuntimeValue::from(gid::Value::from(function)), []),
         ] {
             assert_eq!(result.halt, None);
             assert_eq!(result.result.to_value(), expected);
@@ -114,22 +109,15 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
                     origins.borrow_mut().push(call.source_origin().unwrap());
                     Ok(call.field(result).unwrap().value().clone())
                 };
-            let overlay = grap::ForeignOverlay::from_value(&functions, &observe);
+            let overlay = grap::ForeignFunctions::shared(&functions, &observe);
             let evaluation = if host_apply {
-                grap::apply_expression(
-                    &::grap::RuntimeValue::from(&Value::from(function)),
-                    [],
-                    &sources,
-                    Some(&overlay),
-                    100,
-                )
+                grap::Evaluator::new(&sources, 100)
+                    .functions(overlay)
+                    .apply_expression(&::grap::RuntimeValue::from(&Value::from(function)), [])
             } else {
-                grap::evaluate_runtime_scoped(
-                    &grap::RuntimeValue::from(grap::call(Value::from(function), [])),
-                    &sources,
-                    &overlay,
-                    100,
-                )
+                grap::Evaluator::new(&sources, 100)
+                    .functions(overlay)
+                    .evaluate(&grap::call(Value::from(function), []))
             };
             assert_eq!(evaluation.result.to_value(), ::grap::absent::decline());
             assert_eq!(
@@ -259,7 +247,8 @@ fn lookup_and_follows_take_the_first_library_in_load_order() {
             Some(first),
         );
         assert_eq!(
-            grap::evaluate(&cell.into(), &sources, 100)
+            grap::Evaluator::new(&sources, 100)
+                .evaluate(&cell.into())
                 .result
                 .to_value(),
             crate::libraries::text::value(first),

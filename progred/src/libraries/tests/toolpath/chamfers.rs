@@ -19,7 +19,7 @@ fn program(sources: &Sources<'_>, names: &Binders, name: &str) -> Recording {
 }
 
 fn square_tool(sources: &Sources<'_>, names: &Binders) -> Tool {
-    let result = ::grap::evaluate(&names["square_tool"].into(), sources, 1000);
+    let result = ::grap::Evaluator::new(sources, 1000).evaluate(&names["square_tool"].into());
     assert_eq!(result.halt, None);
     Tool::read(result.result.as_value()).unwrap()
 }
@@ -98,7 +98,10 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
             ],
         ),
     );
-    let curve = ::grap::evaluate(&curve, &sources, 1000).result.into_value();
+    let curve = ::grap::Evaluator::new(&sources, 1000)
+        .evaluate(&curve)
+        .result
+        .into_value();
     let strip = Value::record([
         (names["curve"], curve),
         (names["length"], f64::value(4.0)),
@@ -133,7 +136,7 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
         ),
     ] {
         // Configuration is pure and can be evaluated without any path output.
-        let configured = ::grap::evaluate(&recipe, &sources, 1000);
+        let configured = ::grap::Evaluator::new(&sources, 1000).evaluate(&recipe);
         assert!(configured.result.absent_reason().is_none());
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
@@ -183,18 +186,14 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
         ),
     );
     let extend = |stroke, before, after| {
-        let result = ::grap::evaluate(
-            &call(
-                names["extend_stroke"],
-                [
-                    (names["stroke"], stroke),
-                    (names["start_extension"], f64::value(before)),
-                    (names["end_extension"], f64::value(after)),
-                ],
-            ),
-            &sources,
-            1000,
-        );
+        let result = ::grap::Evaluator::new(&sources, 1000).evaluate(&call(
+            names["extend_stroke"],
+            [
+                (names["stroke"], stroke),
+                (names["start_extension"], f64::value(before)),
+                (names["end_extension"], f64::value(after)),
+            ],
+        ));
         assert!(result.result.absent_reason().is_none());
         result.result
     };
@@ -213,15 +212,12 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
                 ([1.0, 2.0, 3.0], [3.0, 5.0, 9.0]),
                 ([3.0, 5.0, 9.0], [1.0, 2.0, 3.0]),
             ] {
-                let result = ::grap::apply_expression(
+                let result = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
                     &::grap::RuntimeValue::from(configured.as_value()),
                     [
                         (names["start"], point_value(start).into()),
                         (names["end"], point_value(end).into()),
                     ],
-                    &sources,
-                    None,
-                    10_000,
                 );
                 assert!(
                     result.result.absent_reason().is_none(),
@@ -250,44 +246,39 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
         doc: &doc,
         libraries: &libraries,
     };
-    let configured = ::grap::evaluate(
-        &call(
-            names["extend_stroke"],
-            [
-                (names["start_extension"], f64::value(0.1)),
-                (names["end_extension"], f64::value(0.1)),
-                (
-                    names["stroke"],
-                    ::grap::lambda(
-                        [names["start"], names["end"]],
-                        call(
-                            names["line"],
-                            [
-                                (names["start"], names["start"].into()),
-                                (names["end"], names["end"].into()),
-                                (TOOL_AXIS, point_value([0.0, 0.0, 1.0])),
-                            ],
-                        ),
+    let configured = ::grap::Evaluator::new(&sources, 1000).evaluate(&call(
+        names["extend_stroke"],
+        [
+            (names["start_extension"], f64::value(0.1)),
+            (names["end_extension"], f64::value(0.1)),
+            (
+                names["stroke"],
+                ::grap::lambda(
+                    [names["start"], names["end"]],
+                    call(
+                        names["line"],
+                        [
+                            (names["start"], names["start"].into()),
+                            (names["end"], names["end"].into()),
+                            (TOOL_AXIS, point_value([0.0, 0.0, 1.0])),
+                        ],
                     ),
                 ),
-            ],
-        ),
-        &sources,
-        1000,
-    );
+            ),
+        ],
+    ));
     assert!(configured.result.absent_reason().is_none());
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(configured.result.as_value()),
-            [
-                (names["start"], point_value([1.0, 2.0, 3.0]).into()),
-                (names["end"], point_value([1.0, 2.0, 3.0]).into()),
-            ],
-            &sources,
-            Some(scope),
-            10_000,
-        )
+        ::grap::Evaluator::new(&sources, 10_000)
+            .functions(scope)
+            .apply_expression(
+                &::grap::RuntimeValue::from(configured.result.as_value()),
+                [
+                    (names["start"], point_value([1.0, 2.0, 3.0]).into()),
+                    (names["end"], point_value([1.0, 2.0, 3.0]).into()),
+                ],
+            )
     });
     assert!(result.halt.is_none() && result.result.absent_reason().is_some());
     assert!(path.commands().is_empty());
@@ -324,15 +315,12 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_runtime_scoped(
-            &::grap::RuntimeValue::from(call(
+        ::grap::Evaluator::new(&sources, 10_000)
+            .functions(scope)
+            .evaluate(&call(
                 SEQUENCE,
                 [(PROGRAM, collect_groups(expression.clone()))],
-            )),
-            &sources,
-            scope,
-            10_000,
-        )
+            ))
     });
     assert!(result.result.absent_reason().is_none());
     assert_eq!(
@@ -368,15 +356,12 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_runtime_scoped(
-            &::grap::RuntimeValue::from(call(
+        ::grap::Evaluator::new(&sources, 10_000)
+            .functions(scope)
+            .evaluate(&call(
                 SEQUENCE,
                 [(PROGRAM, collect_groups(expression.clone()))],
-            )),
-            &sources,
-            scope,
-            10_000,
-        )
+            ))
     });
     assert!(result.result.absent_reason().is_none());
     let actual: Vec<_> = path

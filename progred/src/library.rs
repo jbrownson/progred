@@ -28,13 +28,13 @@ pub mod vocabulary {
 #[derive(Clone, Default)]
 pub struct Definitions {
     values: Rc<Vec<(gid::CellId, gid::Value)>>,
-    implementations: Rc<ForeignFunctions>,
+    implementations: Rc<ForeignFunctions<'static>>,
 }
 
 impl Definitions {
     /// `cells`, with each of `functions` a foreign function implemented
     /// under its cell.
-    pub fn from_parts(cells: Cells, functions: ForeignFunctions) -> Self {
+    pub fn from_parts(cells: Cells, functions: ForeignFunctions<'static>) -> Self {
         let mut values: Vec<_> = cells
             .iter()
             .map(|(cell, value)| (*cell, value.clone()))
@@ -58,12 +58,12 @@ impl Definitions {
     }
 
     /// The code the foreign function implemented under `cell` runs.
-    pub fn implementation(&self, cell: gid::CellId) -> Option<&ForeignFunction> {
+    pub fn implementation(&self, cell: gid::CellId) -> Option<&ForeignFunction<'static>> {
         self.implementations.get(cell)
     }
 
     #[cfg(test)]
-    pub fn implementations(&self) -> &ForeignFunctions {
+    pub fn implementations(&self) -> &ForeignFunctions<'static> {
         &self.implementations
     }
 
@@ -78,7 +78,7 @@ impl Definitions {
     /// Defines `cell` as a foreign function implemented under it, running
     /// `function`, keeping what its definition already says of it, such as
     /// its name.
-    pub fn insert_foreign(&mut self, cell: gid::CellId, function: ForeignFunction) {
+    pub fn insert_foreign(&mut self, cell: gid::CellId, function: ForeignFunction<'static>) {
         self.insert(cell, foreign_record(cell, self.value(cell), &function));
         let implementations = Rc::make_mut(&mut self.implementations);
         *implementations = std::mem::take(implementations).register(cell, function);
@@ -254,7 +254,7 @@ impl Libraries {
 
     /// The code the first loaded library with a foreign function implemented
     /// under `cell` runs for it.
-    pub fn implementation(&self, cell: gid::CellId) -> Option<&ForeignFunction> {
+    pub fn implementation(&self, cell: gid::CellId) -> Option<&ForeignFunction<'static>> {
         self.entries
             .iter()
             .find_map(|(_, definitions)| definitions.implementation(cell))
@@ -275,7 +275,7 @@ impl ::grap::Host for Libraries {
         self.first_definition(cell).map(|(_, value)| value.clone())
     }
 
-    fn implementation(&self, cell: gid::CellId) -> Option<ForeignFunction> {
+    fn implementation(&self, cell: gid::CellId) -> Option<ForeignFunction<'static>> {
         self.implementation(cell).cloned()
     }
 }

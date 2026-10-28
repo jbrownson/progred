@@ -347,32 +347,28 @@ fn tool_normals_follow_curves_but_do_not_round_caps() {
 fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
     let stack = crate::stack::load();
     for (depth, valid) in [(5, true), (0, false), (9, false)] {
-        let result = ::grap::evaluate(
-            &::grap::call(
-                PREVIEW_MESH.into(),
-                [
-                    (PROGRAM, ::grap::lambda([], Value::record([]))),
-                    (LINE_RADIUS, f64::value(0.01)),
-                    (
-                        presentation::vocabulary::VALUE,
-                        crate::libraries::f32::value(1.0),
-                    ),
-                    (
-                        fidget::vocabulary::MESH_DEPTH,
-                        crate::libraries::u64::value(depth),
-                    ),
-                    (
-                        fidget::vocabulary::COLOR,
-                        Value::record([(
-                            crate::libraries::color::vocabulary::RGB,
-                            vec![255, 128, 0].into(),
-                        )]),
-                    ),
-                ],
-            ),
-            &stack.libraries,
-            1000,
-        );
+        let result = ::grap::Evaluator::new(&stack.libraries, 1000).evaluate(&::grap::call(
+            PREVIEW_MESH.into(),
+            [
+                (PROGRAM, ::grap::lambda([], Value::record([]))),
+                (LINE_RADIUS, f64::value(0.01)),
+                (
+                    presentation::vocabulary::VALUE,
+                    crate::libraries::f32::value(1.0),
+                ),
+                (
+                    fidget::vocabulary::MESH_DEPTH,
+                    crate::libraries::u64::value(depth),
+                ),
+                (
+                    fidget::vocabulary::COLOR,
+                    Value::record([(
+                        crate::libraries::color::vocabulary::RGB,
+                        vec![255, 128, 0].into(),
+                    )]),
+                ),
+            ],
+        ));
         assert_eq!(result.halt, None);
         if valid {
             let fields = result.result.as_value().as_record().unwrap();

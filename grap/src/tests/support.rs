@@ -5,7 +5,7 @@ use gid::{CellId, Record, Value};
 #[derive(Clone)]
 pub(crate) struct TestDefinition {
     value: Value,
-    implementation: Option<ForeignFunction>,
+    implementation: Option<ForeignFunction<'static>>,
 }
 
 impl From<Value> for TestDefinition {
@@ -24,7 +24,7 @@ impl TestDefinition {
     pub(crate) fn foreign(
         cell: CellId,
         mut description: Record,
-        implementation: ForeignFunction,
+        implementation: ForeignFunction<'static>,
     ) -> Self {
         description.set(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
         description.set(vocabulary::IMPLEMENTATION, Value::from(cell));
@@ -55,7 +55,7 @@ impl<F: Fn(CellId) -> Option<TestDefinition>> Host for TestHost<F> {
         (self.0)(cell).map(|definition| definition.value)
     }
 
-    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction<'static>> {
         (self.0)(cell)?.implementation
     }
 }

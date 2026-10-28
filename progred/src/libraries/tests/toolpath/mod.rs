@@ -45,7 +45,7 @@ impl Inspect for Recording {
 }
 
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
-    let result = ::grap::evaluate(&call(names["cube"], []), sources, 10_000);
+    let result = ::grap::Evaluator::new(sources, 10_000).evaluate(&call(names["cube"], []));
     assert!(
         result.result.absent_reason().is_none(),
         "{:?}",
@@ -139,21 +139,21 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                 Ok(cursor.clone())
             }
         };
-        let parameters = ::grap::evaluate_runtime_scoped(
-            &::grap::RuntimeValue::from(::grap::call(
+        let parameters = ::grap::Evaluator::new(&sources, 300_000)
+            .functions(::grap::ForeignFunctions::shared(
+                &[ui::RADIO, ui::TREE_PROGRAM_CURSOR],
+                &emit,
+            ))
+            .evaluate(&::grap::call(
                 fields.get(&ui::CONTROLS).unwrap().clone(),
                 [],
-            )),
-            &sources,
-            &::grap::ForeignOverlay::from_value(&[ui::RADIO, ui::TREE_PROGRAM_CURSOR], &emit),
-            300_000,
-        );
+            ));
         assert!(
             parameters.result.absent_reason().is_none(),
             "{:?}",
             parameters.result
         );
-        let preview = ::grap::apply_expression(
+        let preview = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
             &::grap::RuntimeValue::from(fields.get(&ui::VIEW).unwrap()),
             [
                 (
@@ -168,9 +168,6 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                 (l::HEIGHT, f64::value(400.0).into()),
                 (ui::PARAMETERS, parameters.result.to_value().into()),
             ],
-            &sources,
-            None,
-            10_000,
         );
         assert!(preview.halt.is_none(), "{:?}", preview.result);
         let fields = preview.result.as_value().as_record().unwrap().clone();
@@ -237,12 +234,9 @@ fn evaluate(expression: &Value, fuel: usize) -> (Evaluation, Recording) {
     let stack = crate::stack::load();
     let mut recording = Recording::default();
     let evaluation = run(&mut recording, |scope| {
-        ::grap::evaluate_runtime_scoped(
-            &::grap::RuntimeValue::from(expression),
-            &stack.libraries,
-            scope,
-            fuel,
-        )
+        ::grap::Evaluator::new(&stack.libraries, fuel)
+            .functions(scope)
+            .evaluate(&expression)
     });
     (evaluation, recording)
 }
@@ -261,25 +255,21 @@ fn apply_groups(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
     host: &dyn ::grap::Host,
-    scope: &::grap::ForeignOverlay<'_>,
+    scope: ::grap::ForeignFunctions<'_>,
     fuel: usize,
 ) -> Evaluation {
-    let generated = ::grap::evaluate_runtime_scoped(
-        &::grap::RuntimeValue::from(collect_groups(::grap::call(function.clone(), arguments))),
-        host,
-        scope,
-        fuel,
-    );
+    let generated = ::grap::Evaluator::new(host, fuel)
+        .functions(scope.clone())
+        .evaluate(&collect_groups(::grap::call(function.clone(), arguments)));
     if generated.result.absent_reason().is_some() {
         return generated;
     }
-    ::grap::apply_expression(
-        &::grap::RuntimeValue::from(gid::Value::from(SEQUENCE)),
-        [(PROGRAM, generated.result.into_value().into())],
-        host,
-        Some(scope),
-        generated.remaining_fuel,
-    )
+    ::grap::Evaluator::new(host, generated.remaining_fuel)
+        .functions(scope)
+        .apply_expression(
+            &::grap::RuntimeValue::from(gid::Value::from(SEQUENCE)),
+            [(PROGRAM, generated.result.into_value().into())],
+        )
 }
 
 fn diagonals(
@@ -295,19 +285,18 @@ fn diagonals(
         libraries: &stack.libraries,
     };
     run(sink, |scope| {
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(names["diagonals"])),
-            [
-                (names["rows"], f64::value(rows).into()),
-                (names["spacing"], f64::value(spacing).into()),
-                (names["feed_direction"], f64::value(1.0).into()),
-                (names["row_direction"], f64::value(1.0).into()),
-                (TOOL_AXIS, point_value(Axis::Z.vector()).into()),
-            ],
-            &sources,
-            Some(scope),
-            fuel,
-        )
+        ::grap::Evaluator::new(&sources, fuel)
+            .functions(scope)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names["diagonals"])),
+                [
+                    (names["rows"], f64::value(rows).into()),
+                    (names["spacing"], f64::value(spacing).into()),
+                    (names["feed_direction"], f64::value(1.0).into()),
+                    (names["row_direction"], f64::value(1.0).into()),
+                    (TOOL_AXIS, point_value(Axis::Z.vector()).into()),
+                ],
+            )
     })
 }
 
@@ -591,7 +580,8 @@ fn generation_is_fueled_and_requires_a_scoped_sink() {
     assert!(result.halt.is_some());
     assert!(recording.commands().len() <= 100);
     let stack = crate::stack::load();
-    let unscoped = ::grap::evaluate(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
+    let unscoped =
+        ::grap::Evaluator::new(&stack.libraries, 100).evaluate(&point_call(START_AT, [0.0; 3]));
     assert_eq!(
         unscoped.result.to_value(),
         ::grap::absent::value(OUTPUT_REQUIRED)
@@ -644,8 +634,8 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate(
-                        &::grap::lambda(
+                    ::grap::Evaluator::new(&sources, 100)
+                        .evaluate(&::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
                                 [X, Y, Z],
@@ -654,12 +644,9 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
                                     [X, Y, Z].map(|id| (id, Value::from(id))),
                                 ),
                             ),
-                        ),
-                        &sources,
-                        100,
-                    )
-                    .result
-                    .to_value(),
+                        ))
+                        .result
+                        .to_value(),
                 ),
                 (names["orientation"], names["top"].into()),
                 (names["setup_up"], point_value(Axis::Z.vector())),
@@ -671,13 +658,12 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
     });
     let mut centers = Recording::default();
     let b = run(&mut centers, |scope| {
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
-            [],
-            &sources,
-            Some(scope),
-            500_000,
-        )
+        ::grap::Evaluator::new(&sources, 500_000)
+            .functions(scope)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
+                [],
+            )
     });
     assert!(
         a.halt.is_none() && b.halt.is_none(),
@@ -730,8 +716,8 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate(
-                        &::grap::lambda(
+                    ::grap::Evaluator::new(&sources, 100)
+                        .evaluate(&::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
                                 [X, Y, Z],
@@ -740,12 +726,9 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
                                     [X, Y, Z].map(|id| (id, Value::from(id))),
                                 ),
                             ),
-                        ),
-                        &sources,
-                        100,
-                    )
-                    .result
-                    .to_value(),
+                        ))
+                        .result
+                        .to_value(),
                 ),
                 (names["orientation"], names["top"].into()),
                 (names["setup_up"], point_value(Axis::Z.vector())),
@@ -788,13 +771,12 @@ fn example_ball_path() -> (Recording, f64) {
     };
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
-            [],
-            &sources,
-            Some(scope),
-            500_000,
-        )
+        ::grap::Evaluator::new(&sources, 500_000)
+            .functions(scope)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
+                [],
+            )
     });
     assert!(result.result.absent_reason().is_none());
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
@@ -930,8 +912,8 @@ fn example_tubes_compile_without_gpu_memory_operations() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate(
-                        &::grap::lambda(
+                    ::grap::Evaluator::new(&sources, 100)
+                        .evaluate(&::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
                                 [X, Y, Z],
@@ -940,12 +922,9 @@ fn example_tubes_compile_without_gpu_memory_operations() {
                                     [X, Y, Z].map(|id| (id, Value::from(id))),
                                 ),
                             ),
-                        ),
-                        &sources,
-                        100,
-                    )
-                    .result
-                    .to_value(),
+                        ))
+                        .result
+                        .to_value(),
                 ),
                 (names["orientation"], names["top"].into()),
                 (names["setup_up"], point_value(Axis::Z.vector())),

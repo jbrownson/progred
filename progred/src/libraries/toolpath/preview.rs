@@ -137,7 +137,9 @@ pub(super) fn display<W: Host>(
         Some(Layout::program(Rc::new(move |context, build| {
             let mut lines = projected();
             let evaluation = run(&mut lines, |scope| {
-                ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
+                ::grap::Evaluator::new(context.viewing().host(), fuel)
+                    .functions(scope)
+                    .apply_expression(&program, [])
             });
             if evaluation.result.absent_reason().is_some() {
                 presentation::result_layout(&evaluation.result).measure(context, build)

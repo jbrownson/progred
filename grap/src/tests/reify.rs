@@ -52,7 +52,7 @@ fn records_and_existing_gid_data_preserve_sharing_and_positions() {
 fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
     let captured = gid::new_cell_id();
     let host = crate::TestHost(|_: CellId| None);
-    let mut context = crate::context(&host, None, 100);
+    let mut context = crate::Evaluator::new(&host, 100).context();
     let data = RuntimeValue::list([RuntimeValue::f64(42.0)]);
     let environment = Environment::with_indices(context.indices.clone())
         .extended_runtime([(captured, data.clone())]);
@@ -79,13 +79,8 @@ fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
         children[2]
     ));
     drop(context);
-    let evaluated = crate::apply_expression(
-        &crate::RuntimeValue::from(children[0]),
-        [],
-        &host,
-        None,
-        100,
-    );
+    let evaluated = crate::Evaluator::new(&host, 100)
+        .apply_expression(&crate::RuntimeValue::from(children[0]), []);
     assert_eq!(evaluated.halt, None);
     assert_eq!(evaluated.result.as_value(), children[2]);
 }
@@ -94,7 +89,7 @@ fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
 fn different_closure_environments_preserve_shared_outer_containers() {
     let (list, record, local) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
     let host = crate::TestHost(|_: CellId| None);
-    let mut context = crate::context(&host, None, 100);
+    let mut context = crate::Evaluator::new(&host, 100).context();
     let outer = Environment::with_indices(context.indices.clone()).extended_runtime([
         (list, RuntimeValue::list([RuntimeValue::f64(42.0)])),
         (

@@ -737,7 +737,7 @@ fn evaluate_foreign(
     }
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
         ForeignFunction::new(evaluate_foreign)

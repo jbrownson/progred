@@ -52,12 +52,9 @@ fn mesh_function_returns_an_ordinary_declaration() {
         libraries: &stack.libraries,
     };
     let call = |arguments| {
-        ::grap::evaluate(
-            &::grap::call(vocabulary::PREVIEW_MESH.into(), arguments),
-            &sources,
-            10_000,
-        )
-        .result
+        ::grap::Evaluator::new(&sources, 10_000)
+            .evaluate(&::grap::call(vocabulary::PREVIEW_MESH.into(), arguments))
+            .result
     };
     let result = call(vec![(presentation::vocabulary::VALUE, f32::value(1.0))]);
     let fields = of_kind(result.as_value(), vocabulary::kind::MESH_PREVIEW).unwrap();

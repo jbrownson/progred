@@ -356,7 +356,7 @@ fn volume_preview_function(
 
 /// Fidget's previews, which a pane's viewport or a document's evaluation
 /// calls to draw a field.
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             vocabulary::PREVIEW,

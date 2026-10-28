@@ -143,7 +143,7 @@ pub fn named_library<'a, W: Host>(
     id: CellId,
     name: &'a str,
     names: impl IntoIterator<Item = (CellId, &'a str)>,
-    functions: ForeignFunctions,
+    functions: ForeignFunctions<'static>,
 ) -> Library<W> {
     library_named(
         id,
@@ -161,7 +161,7 @@ pub fn library_named<W: Host>(
     id: CellId,
     name: &str,
     names: impl IntoIterator<Item = (CellId, Value)>,
-    functions: ForeignFunctions,
+    functions: ForeignFunctions<'static>,
 ) -> Library<W> {
     let mut cells = Cells::new();
     for (cell, name) in std::iter::once((id, text::value(name))).chain(names) {

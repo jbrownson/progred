@@ -221,14 +221,14 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
             doc.root
                 .as_ref()
                 .map(|root| {
-                    ::grap::evaluate(
-                        root,
+                    ::grap::Evaluator::new(
                         &Sources {
                             doc: &doc,
                             libraries,
                         },
                         crate::sources::DEFAULT_FUEL,
                     )
+                    .evaluate(root)
                     .result
                     .into_value()
                 })

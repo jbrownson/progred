@@ -677,8 +677,8 @@ interface.
 The layout library's `layout program` function takes a raw `expression` and
 returns `{isa: layout program, program: closure}`. The closure is an ordinary
 Grap closure with its lexical environment, not an opaque native value. The
-library's projection for that kind runs the closure with a borrowed
-`ForeignOverlay` capturing a Rust layout output buffer; a record of the kind
+library's projection for that kind runs the closure with foreign functions
+borrowing a Rust layout output buffer; a record of the kind
 can carry the data its program descends into beside it. It adds no evaluator
 types or syntax.
 
@@ -809,8 +809,8 @@ implementation; an ordinary value is evaluated as the callable.
 Every result is definitive, including the `declined` absent. A non-callable value
 returns a not-callable absent with the offending value; it does not search other
 sources for an implementation. An absent callable is its own reason, so a call
-of one answers it unchanged, as an absent argument passes on. Scoped capability functions can override this
-lookup. Higher-level operations own any deliberate dispatch or composition.
+of one answers it unchanged, as an absent argument passes on. An evaluation's
+own foreign functions can override this lookup. Higher-level operations own any deliberate dispatch or composition.
 Projection environments expose one borrowed resolution containing the selected
 definition's value and source. Call projections and completion providers can
 inspect it without evaluating the callable, and tell a foreign function from a
@@ -1030,9 +1030,9 @@ value, with `Evaluation.halt` saying why execution did not finish.
 Returning that same value normally still counts as completed execution.
 Drawing-source origins are separate from failures.
 
-The evaluator keeps no call stack of its own. A host can offer an observer
-(`grap::Observer`), told of each call an evaluation enters and leaves, and
-`grap::Observed` attaches one to any host. A drawing's record step attaches a
+The evaluator keeps no call stack of its own. An evaluation can be given an
+observer (`grap::Observer`), told of each call it enters and leaves. A drawing's
+record step gives it a
 `grap::Tracer`, which keeps the calls a fill is drawn under and captures the
 source-bearing ones as a call trace, sharing prefixes between captures. An
 evaluation nobody observes pays one branch per call.

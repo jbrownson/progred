@@ -4,8 +4,7 @@
 use crate::display::Host;
 use crate::libraries::{Library, absent, f64, layout, name, presentation};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
-    RuntimeValue,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
 use gid::{CellId, Value};
 use std::{cell::RefCell, rc::Rc};
@@ -385,7 +384,7 @@ fn operation(
 /// sink and discard it on failure; the preview does this for each frame.
 pub fn run<T>(
     sink: &mut dyn Sink<Error = InvalidPath>,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> T,
+    evaluate: impl FnOnce(ForeignFunctions<'_>) -> T,
 ) -> T {
     let output = Output {
         sink: RefCell::new(sink),
@@ -396,7 +395,7 @@ pub fn run<T>(
         |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
             runtime_result(operation(function, context, call, environment, &output))
         };
-    evaluate(&ForeignOverlay::new(EMITTERS, &emit).cacheable())
+    evaluate(ForeignFunctions::shared(EMITTERS, &emit).cacheable())
 }
 
 /// What the 3D path previews require; their other arguments have defaults.
@@ -407,7 +406,7 @@ const PATH_PREVIEW_PARAMETERS: [CellId; 4] = [
     crate::libraries::fidget::vocabulary::COLOR,
 ];
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(START_AT, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))
         .register(LINE_TO, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))

@@ -78,7 +78,7 @@ pub(crate) fn test_document() -> Rc<crate::workspace::View> {
 #[derive(Clone)]
 pub(crate) struct TestDefinition {
     pub(crate) value: Value,
-    pub(crate) implementation: Option<grap::ForeignFunction>,
+    pub(crate) implementation: Option<grap::ForeignFunction<'static>>,
 }
 
 impl From<Value> for TestDefinition {
@@ -92,7 +92,7 @@ impl From<Value> for TestDefinition {
 
 impl TestDefinition {
     /// `cell` as a foreign function implemented under it, running `function`.
-    pub(crate) fn foreign(cell: CellId, function: grap::ForeignFunction) -> Self {
+    pub(crate) fn foreign(cell: CellId, function: grap::ForeignFunction<'static>) -> Self {
         Self {
             value: crate::library::foreign_record(cell, None, &function),
             implementation: Some(function),
@@ -116,7 +116,7 @@ impl<F: Fn(CellId) -> Option<TestDefinition>> grap::Host for TestHost<F> {
         (self.0)(cell).map(|definition| definition.value)
     }
 
-    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction> {
+    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction<'static>> {
         (self.0)(cell)?.implementation
     }
 }
@@ -124,7 +124,7 @@ impl<F: Fn(CellId) -> Option<TestDefinition>> grap::Host for TestHost<F> {
 /// A host whose document defines `resolve`'s values and `foreign`'s functions.
 pub(crate) fn test_host<'a>(
     resolve: impl Fn(CellId) -> Option<Value> + 'a,
-    foreign: &'a grap::ForeignFunctions,
+    foreign: &'a grap::ForeignFunctions<'static>,
 ) -> impl grap::Host + 'a {
     TestHost(move |cell| {
         let value = resolve(cell);
@@ -141,25 +141,22 @@ pub(crate) fn test_host<'a>(
 pub(crate) fn test_evaluate(
     expression: &Value,
     resolve: impl Fn(CellId) -> Option<Value>,
-    foreign: &grap::ForeignFunctions,
+    foreign: &grap::ForeignFunctions<'static>,
     fuel: usize,
 ) -> grap::Evaluation {
-    grap::evaluate(expression, &test_host(resolve, foreign), fuel)
+    grap::Evaluator::new(&test_host(resolve, foreign), fuel).evaluate(expression)
 }
 
 pub(crate) fn test_apply(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
     resolve: impl Fn(CellId) -> Option<Value>,
-    foreign: &grap::ForeignFunctions,
+    foreign: &grap::ForeignFunctions<'static>,
     fuel: usize,
 ) -> grap::Evaluation {
-    grap::apply_expression(
+    grap::Evaluator::new(&test_host(resolve, foreign), fuel).apply_expression(
         &::grap::RuntimeValue::from(function),
         arguments.into_iter().map(|(k, v)| (k, v.into())),
-        &test_host(resolve, foreign),
-        None,
-        fuel,
     )
 }
 
@@ -167,7 +164,7 @@ pub(crate) fn test_apply(
 /// other definitions.
 pub(crate) fn foreign_functions<World, Hover>(
     library: &crate::library::Library<World, Hover>,
-) -> grap::ForeignFunctions {
+) -> grap::ForeignFunctions<'static> {
     library.definitions.implementations().clone()
 }
 
@@ -288,7 +285,7 @@ pub(crate) fn library(
     id: CellId,
     name: &str,
     cells: Cells,
-    functions: grap::ForeignFunctions,
+    functions: grap::ForeignFunctions<'static>,
 ) -> crate::libraries::Library<crate::Editor> {
     let mut definitions = crate::library::Definitions::from_parts(cells, functions);
     definitions.insert(id, crate::libraries::name::record(name, []));

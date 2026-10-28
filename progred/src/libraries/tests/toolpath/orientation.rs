@@ -20,8 +20,9 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
     for vector in [[3.0, 0.0, 4.0], [0.0; 3], [f64::NAN, 0.0, 1.0]] {
         let mut recording = Recording::default();
         let result = run(&mut recording, |scope| {
-            ::grap::evaluate_runtime_scoped(
-                &::grap::RuntimeValue::from(call(
+            ::grap::Evaluator::new(&sources, 1000)
+                .functions(scope)
+                .evaluate(&call(
                     START_AT,
                     [
                         (X, f64::value(0.0)),
@@ -29,11 +30,7 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
                         (Z, f64::value(0.0)),
                         (TOOL_AXIS, point_value(vector)),
                     ],
-                )),
-                &sources,
-                scope,
-                1000,
-            )
+                ))
         });
         if vector[0] == 3.0 {
             assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], axis)]);
@@ -100,13 +97,12 @@ fn example_program(name: &str) -> Recording {
     };
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(names[name])),
-            [],
-            &sources,
-            Some(scope),
-            3_000_000,
-        )
+        ::grap::Evaluator::new(&sources, 3_000_000)
+            .functions(scope)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names[name])),
+                [],
+            )
     });
     assert!(
         result.result.absent_reason().is_none(),
@@ -142,13 +138,12 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_expression(
-                &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
-                [],
-                &sources,
-                Some(scope),
-                500_000,
-            )
+            ::grap::Evaluator::new(&sources, 500_000)
+                .functions(scope)
+                .apply_expression(
+                    &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
+                    [],
+                )
         });
         assert_eq!(result.halt, None);
         if angle.is_finite() {
@@ -194,13 +189,12 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_expression(
-                &::grap::RuntimeValue::from(gid::Value::from(names["preview_operations"])),
-                [],
-                &sources,
-                Some(scope),
-                3_000_000,
-            )
+            ::grap::Evaluator::new(&sources, 3_000_000)
+                .functions(scope)
+                .apply_expression(
+                    &::grap::RuntimeValue::from(gid::Value::from(names["preview_operations"])),
+                    [],
+                )
         });
         assert!(result.result.absent_reason().is_none());
         let mut axis = Axis::Z;

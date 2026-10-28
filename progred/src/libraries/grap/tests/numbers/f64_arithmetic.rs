@@ -34,7 +34,7 @@ use crate::display::test_support::{NoEval, ProjectionCall, inspect, unshared};
 use crate::libraries::test_widgets::projection_input;
 use gid::{Step, Value, new_cell_id};
 
-fn functions() -> ::grap::ForeignFunctions {
+fn functions() -> ::grap::ForeignFunctions<'static> {
     crate::test_support::foreign_functions(&crate::libraries::grap::library::<crate::Editor>())
 }
 

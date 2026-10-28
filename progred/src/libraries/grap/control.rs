@@ -72,7 +72,7 @@ pub fn unquote(expression: Value) -> Value {
     )
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             vocabulary::MATCH,
@@ -825,7 +825,7 @@ fn expression_list_display<W: Host>(
 /// provide for calls of them and its unquote kind for unquotes.
 pub(super) fn contribution<W: Host>() -> (
     Vec<(CellId, &'static str)>,
-    ForeignFunctions,
+    ForeignFunctions<'static>,
     Vec<(CellId, Partial<W>)>,
 ) {
     let names = vec![

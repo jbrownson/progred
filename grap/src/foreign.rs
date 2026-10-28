@@ -1,5 +1,5 @@
-//! Foreign functions: Rust implementations under cells, the tables that hold
-//! them, and overlays a caller scopes over an evaluation.
+//! Foreign functions: Rust implementations under cells, and the tables that
+//! hold them.
 
 use crate::environment::Environment;
 use crate::runtime::RuntimeValue;
@@ -12,15 +12,21 @@ pub type Stage = Rc<dyn Fn(&mut Context, &Environment) -> Result<RuntimeValue, H
 
 pub(crate) type Prepare = Rc<dyn Fn(&Expression) -> Stage>;
 
+type Direct<'a> =
+    Rc<dyn Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt> + 'a>;
+
 #[derive(Clone)]
-pub(crate) enum ForeignImplementation {
-    Direct(Rc<dyn Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt>>),
+pub(crate) enum ForeignImplementation<'a> {
+    Direct(Direct<'a>),
     Staged(Prepare),
 }
 
+/// Native code a call runs. It may borrow what lives as long as `'a`, such as
+/// state that's valid only for one evaluation; a library's functions are
+/// `'static`.
 #[derive(Clone)]
-pub struct ForeignFunction {
-    pub(crate) implementation: ForeignImplementation,
+pub struct ForeignFunction<'a> {
+    pub(crate) implementation: ForeignImplementation<'a>,
     pub(crate) cacheable: bool,
     pub(crate) parameters: Option<Rc<[CellId]>>,
     /// The operation this function runs, when the evaluator can run it
@@ -28,9 +34,9 @@ pub struct ForeignFunction {
     pub(crate) primitive: Option<Rc<primitive::Primitive>>,
 }
 
-impl ForeignFunction {
+impl<'a> ForeignFunction<'a> {
     pub fn from_value(
-        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<Value, Halt> + 'static,
+        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<Value, Halt> + 'a,
     ) -> Self {
         Self {
             cacheable: false,
@@ -45,7 +51,7 @@ impl ForeignFunction {
     }
 
     pub fn new(
-        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt> + 'static,
+        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt> + 'a,
     ) -> Self {
         Self {
             cacheable: false,
@@ -99,7 +105,7 @@ impl ForeignFunction {
 }
 
 /// Two functions are equal when they run the same native code.
-impl PartialEq for ForeignFunction {
+impl PartialEq for ForeignFunction<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.cacheable == other.cacheable
             && match (&self.implementation, &other.implementation) {
@@ -115,12 +121,12 @@ impl PartialEq for ForeignFunction {
 }
 
 #[derive(Clone, Default)]
-pub struct ForeignFunctions {
-    functions: Vec<(CellId, ForeignFunction)>,
+pub struct ForeignFunctions<'a> {
+    functions: Vec<(CellId, ForeignFunction<'a>)>,
 }
 
-impl ForeignFunctions {
-    pub fn register(mut self, function: CellId, definition: ForeignFunction) -> Self {
+impl<'a> ForeignFunctions<'a> {
+    pub fn register(mut self, function: CellId, definition: ForeignFunction<'a>) -> Self {
         match self
             .functions
             .binary_search_by_key(&function, |(cell, _)| *cell)
@@ -131,14 +137,44 @@ impl ForeignFunctions {
         self
     }
 
-    pub fn get(&self, function: CellId) -> Option<&ForeignFunction> {
+    /// `call` under each of `cells`, told which one a call named: one
+    /// function sharing what it borrows across several cells.
+    pub fn shared<R: Into<RuntimeValue>>(
+        cells: &[CellId],
+        call: impl Fn(CellId, &mut Context, &Expression, &Environment) -> Result<R, Halt> + 'a,
+    ) -> Self {
+        let call = Rc::new(call);
+        cells.iter().fold(Self::default(), |functions, &cell| {
+            let call = call.clone();
+            functions.register(
+                cell,
+                ForeignFunction::new(move |context, expression, environment| {
+                    call(cell, context, expression, environment).map(Into::into)
+                }),
+            )
+        })
+    }
+
+    /// Every function here made [`ForeignFunction::cacheable`].
+    pub fn cacheable(mut self) -> Self {
+        for (_, function) in &mut self.functions {
+            function.cacheable = true;
+        }
+        self
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.functions.is_empty()
+    }
+
+    pub fn get(&self, function: CellId) -> Option<&ForeignFunction<'a>> {
         self.functions
             .binary_search_by_key(&function, |(cell, _)| *cell)
             .ok()
             .map(|index| &self.functions[index].1)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (CellId, &ForeignFunction)> {
+    pub fn iter(&self) -> impl Iterator<Item = (CellId, &ForeignFunction<'a>)> {
         self.functions
             .iter()
             .map(|(cell, function)| (*cell, function))
@@ -155,69 +191,6 @@ impl ForeignFunctions {
 
     pub fn merge_all(tables: impl IntoIterator<Item = Self>) -> Self {
         tables.into_iter().fold(Self::default(), Self::merge)
-    }
-}
-
-type OverlayFn<'a, T> = dyn for<'context> Fn(CellId, &mut Context<'context>, &Expression, &Environment) -> Result<T, Halt>
-    + 'a;
-
-#[derive(Clone, Copy)]
-pub(crate) enum OverlayCall<'a> {
-    Runtime(&'a OverlayFn<'a, RuntimeValue>),
-    Value(&'a OverlayFn<'a, Value>),
-}
-
-/// A synchronous, borrowed layer of foreign functions. It lets a host
-/// expose state that is valid only for one evaluation without putting
-/// that state in `'static` closures.
-pub struct ForeignOverlay<'a> {
-    functions: &'a [CellId],
-    pub(crate) call: OverlayCall<'a>,
-    pub(crate) cacheable: bool,
-}
-
-impl<'a> ForeignOverlay<'a> {
-    pub fn new(
-        functions: &'a [CellId],
-        call: &'a (
-                impl for<'context> Fn(
-            CellId,
-            &mut Context<'context>,
-            &Expression,
-            &Environment,
-        ) -> Result<RuntimeValue, Halt>
-                + 'a
-            ),
-    ) -> Self {
-        Self {
-            functions,
-            call: OverlayCall::Runtime(call),
-            cacheable: false,
-        }
-    }
-
-    pub fn from_value(
-        functions: &'a [CellId],
-        call: &'a (
-                impl Fn(CellId, &mut Context<'_>, &Expression, &Environment) -> Result<Value, Halt> + 'a
-            ),
-    ) -> Self {
-        Self {
-            functions,
-            call: OverlayCall::Value(call),
-            cacheable: false,
-        }
-    }
-
-    /// The same contract as ForeignFunction::cacheable. This does not make
-    /// emitted effects cacheable: their owner must record the output.
-    pub fn cacheable(mut self) -> Self {
-        self.cacheable = true;
-        self
-    }
-
-    pub(crate) fn handles(&self, function: CellId) -> bool {
-        self.functions.contains(&function)
     }
 }
 

@@ -86,7 +86,7 @@ pub mod u64 {
 /// provide for calls of them, and the numbers' own projection.
 pub(super) fn contribution<W: Host>() -> (
     Vec<(CellId, Value)>,
-    ForeignFunctions,
+    ForeignFunctions<'static>,
     Vec<(CellId, Partial<W>)>,
     Partial<W>,
 ) {
@@ -284,7 +284,7 @@ enum Operation<N> {
 /// forms.
 struct Parts {
     names: Vec<(CellId, Value)>,
-    functions: ForeignFunctions,
+    functions: ForeignFunctions<'static>,
     /// The calls that read infix, and how tightly each binds.
     infix: Vec<(CellId, Precedence)>,
     /// The infix operators by spelling, for typing after a number.
@@ -348,7 +348,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
     }
 
     /// `operation` as the primitive Grap runs.
-    fn operation(self, operation: Operation<N>) -> ForeignFunction {
+    fn operation(self, operation: Operation<N>) -> ForeignFunction<'static> {
         let binary = |operation| Primitive::Binary {
             operation: N::binary(operation),
             left: vocabulary::LEFT,
@@ -373,7 +373,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
 fn conversion<From: Parse + 'static, N: 'static>(
     runtime: fn(N) -> RuntimeValue,
     convert: fn(From) -> N,
-) -> ForeignFunction {
+) -> ForeignFunction<'static> {
     ForeignFunction::with_arguments([vocabulary::OPERAND], move |_, (number,): (From,)| {
         runtime(convert(number))
     })

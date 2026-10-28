@@ -91,13 +91,10 @@ fn library_definitions_and_projections_compose_in_order() {
         ]
     );
     assert_eq!(
-        ::grap::evaluate(
-            &::grap::call(Value::from(SHARED_FUNCTION), []),
-            &libraries,
-            10,
-        )
-        .result
-        .to_value(),
+        ::grap::Evaluator::new(&libraries, 10)
+            .evaluate(&::grap::call(Value::from(SHARED_FUNCTION), []))
+            .result
+            .to_value(),
         Value::from(b"left".to_vec())
     );
     let value = Value::record([]);
@@ -160,27 +157,27 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     );
     // The function's value is its definition, which says what it is.
     assert_eq!(
-        ::grap::evaluate(&SHARED_FUNCTION.into(), &libraries, 20)
+        ::grap::Evaluator::new(&libraries, 20)
+            .evaluate(&SHARED_FUNCTION.into())
             .result
             .to_value(),
         defined
     );
     assert_eq!(
-        ::grap::evaluate(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20)
+        ::grap::Evaluator::new(&libraries, 20)
+            .evaluate(&::grap::call(SHARED_FUNCTION.into(), []))
             .result
             .to_value(),
         Value::from(b"left".to_vec())
     );
     assert_eq!(
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(SHARED_FUNCTION)),
-            [],
-            &libraries,
-            None,
-            20
-        )
-        .result
-        .to_value(),
+        ::grap::Evaluator::new(&libraries, 20)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(SHARED_FUNCTION)),
+                []
+            )
+            .result
+            .to_value(),
         Value::from(b"left".to_vec())
     );
 }
@@ -298,7 +295,8 @@ fn library_descriptions_are_ordinary_cells() {
         Some(&description)
     );
     assert_eq!(
-        ::grap::evaluate(&LEFT_LIBRARY.into(), &libraries, 20)
+        ::grap::Evaluator::new(&libraries, 20)
+            .evaluate(&LEFT_LIBRARY.into())
             .result
             .to_value(),
         description
@@ -324,15 +322,13 @@ fn unnamed_native_definitions_say_only_what_they_are() {
         [::grap::foreign_function(SHARED_FUNCTION)]
     );
     assert_eq!(
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(SHARED_FUNCTION)),
-            [],
-            &libraries,
-            None,
-            20
-        )
-        .result
-        .to_value(),
+        ::grap::Evaluator::new(&libraries, 20)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(SHARED_FUNCTION)),
+                []
+            )
+            .result
+            .to_value(),
         Value::from(b"left".to_vec())
     );
 }

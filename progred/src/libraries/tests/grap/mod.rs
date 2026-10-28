@@ -205,7 +205,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             &self,
             _: &::grap::RuntimeValue,
             _: &[(CellId, ::grap::RuntimeValue)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
+            _: ::grap::ForeignFunctions<'_>,
         ) -> ::grap::Evaluation {
             panic!("declarations do not evaluate");
         }
@@ -699,7 +699,7 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
             &self,
             _: &::grap::RuntimeValue,
             _: &[(CellId, ::grap::RuntimeValue)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
+            _: ::grap::ForeignFunctions<'_>,
         ) -> ::grap::Evaluation {
             panic!("unexpected projection application")
         }

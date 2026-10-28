@@ -18,12 +18,9 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
     let host = crate::test_support::TestHost(move |cell| {
         (cell == sink).then(|| crate::test_support::TestDefinition::foreign(sink, function.clone()))
     });
-    grap::evaluate_runtime_at(
-        &grap::call(sink.into(), []).into(),
-        Some(origin),
-        &grap::Observed::new(&host, &*tracer),
-        10,
-    );
+    grap::Evaluator::new(&host, 10)
+        .observer(&*tracer)
+        .evaluate_runtime(&grap::call(sink.into(), []).into(), Some(origin));
     SourceCalls::new(trace.take().expect("the call has its origin"), None)
 }
 

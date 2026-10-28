@@ -65,27 +65,17 @@ fn run(
                     .map(RuntimeValue::into_value)
             }
         };
-    let overlay = ForeignOverlay::from_value(&functions, &foreign);
+    let overlay = ForeignFunctions::shared(&functions, &foreign);
     let result = match invocation {
-        Invocation::Expression => evaluate_runtime_scoped(
-            &RuntimeValue::from(call(function, [])),
-            &definitions,
-            &overlay,
-            fuel,
-        ),
-        Invocation::Applied => apply_expression(
-            &crate::RuntimeValue::from(&function),
-            [],
-            &definitions,
-            Some(&overlay),
-            fuel,
-        ),
-        Invocation::Prepared => evaluate_runtime_scoped(
-            &RuntimeValue::from(call(invoke.into(), [(operations.value, function)])),
-            &definitions,
-            &overlay,
-            fuel,
-        ),
+        Invocation::Expression => Evaluator::new(&definitions, fuel)
+            .functions(overlay)
+            .evaluate(&call(function, [])),
+        Invocation::Applied => Evaluator::new(&definitions, fuel)
+            .functions(overlay)
+            .apply_expression(&crate::RuntimeValue::from(&function), []),
+        Invocation::Prepared => Evaluator::new(&definitions, fuel)
+            .functions(overlay)
+            .evaluate(&call(invoke.into(), [(operations.value, function)])),
     };
     (result, effects.into_inner())
 }
@@ -99,7 +89,7 @@ const INVOCATIONS: [Invocation; 3] = [
 #[test]
 fn a_returned_halt_shaped_value_is_still_a_completed_result() {
     let absent = absent::value(absent::FUEL_EXHAUSTED);
-    let evaluation = crate::evaluate(&absent, &TestHost(|_| None), 10);
+    let evaluation = crate::Evaluator::new(&TestHost(|_| None), 10).evaluate(&absent);
     assert_eq!(evaluation.result.to_value(), absent);
     assert_eq!(evaluation.halt, None);
 }

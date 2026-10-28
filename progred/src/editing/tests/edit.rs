@@ -12,12 +12,9 @@ fn jump(source: &[gid::Step]) -> Path {
 impl Edit<'_> {
     /// Runs the Grap handler `function` evaluates to at `path`.
     fn grap(&mut self, path: Path, function: Value, event: Value) -> bool {
-        let function = grap::evaluate(
-            &function,
-            &self.session.sources(),
-            crate::sources::DEFAULT_FUEL,
-        )
-        .result;
+        let function = grap::Evaluator::new(&self.session.sources(), crate::sources::DEFAULT_FUEL)
+            .evaluate(&function)
+            .result;
         self.grap_runtime(&crate::test_document(), path, function, event)
     }
 }

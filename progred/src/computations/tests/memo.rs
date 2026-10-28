@@ -1,9 +1,6 @@
 use super::*;
 use gid::new_cell_id;
-use grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignOverlay, RuntimeValue, call,
-    evaluate_runtime_scoped,
-};
+use grap::{Context, Environment, Evaluator, Expression, ForeignFunction, ForeignFunctions, call};
 use incremental::{Input, Memo, Runtime};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -50,7 +47,7 @@ fn evaluate(
             let expression = expression.read(read);
             let fuel = *fuel.read(read);
             Ok(run(&definitions, read, |host| {
-                grap::evaluate(&expression, host, fuel)
+                grap::Evaluator::new(host, fuel).evaluate(&expression)
             }))
         },
         crate::computations::same_evaluation,
@@ -178,14 +175,11 @@ fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
                         Ok(Value::record([]))
                     };
                     let cells = [cell];
-                    let overlay = ForeignOverlay::from_value(&cells, &emit).cacheable();
+                    let overlay = ForeignFunctions::shared(&cells, &emit).cacheable();
                     let eval = |host: &dyn Host| {
-                        evaluate_runtime_scoped(
-                            &RuntimeValue::from(call(cell.into(), [])),
-                            host,
-                            &overlay,
-                            100,
-                        )
+                        Evaluator::new(host, 100)
+                            .functions(overlay)
+                            .evaluate(&call(cell.into(), []))
                     };
                     let evaluation = if recorded {
                         with_recorded_effects(&source, read, eval)
@@ -238,7 +232,7 @@ fn halts_are_not_reused_even_when_the_returned_value_is_equal() {
             move |read| {
                 runs.set(runs.get() + 1);
                 Ok(run(&source, read, |host| {
-                    grap::evaluate(&Value::record([]), host, 0)
+                    grap::Evaluator::new(host, 0).evaluate(&Value::record([]))
                 }))
             }
         },

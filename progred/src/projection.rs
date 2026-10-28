@@ -267,14 +267,9 @@ impl crate::display::Env for Occurrence<'_> {
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
     ) -> grap::RuntimeValue {
-        grap::apply_expression(
-            function,
-            arguments.iter().cloned(),
-            &self.cx.sources,
-            None,
-            crate::sources::DEFAULT_FUEL,
-        )
-        .result
+        grap::Evaluator::new(&self.cx.sources, crate::sources::DEFAULT_FUEL)
+            .apply_expression(function, arguments.iter().cloned())
+            .result
     }
     fn evaluate_runtime(
         &self,
@@ -282,7 +277,9 @@ impl crate::display::Env for Occurrence<'_> {
         fuel: usize,
         steps: &[gid::Step],
     ) -> grap::RuntimeValue {
-        grap::evaluate_runtime_at(expression, self.origin(steps), &self.cx.sources, fuel).result
+        grap::Evaluator::new(&self.cx.sources, fuel)
+            .evaluate_runtime(expression, self.origin(steps))
+            .result
     }
     fn evaluate_runtime_memo(
         &self,
@@ -318,11 +315,11 @@ impl crate::display::Env for Occurrence<'_> {
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
+        functions: grap::ForeignFunctions<'_>,
     ) -> grap::Evaluation {
         self.cx
             .sources
-            .apply_runtime_scoped(function, arguments, scope)
+            .apply_runtime_scoped(function, arguments, functions)
     }
     fn apply_runtime_memo(
         &self,

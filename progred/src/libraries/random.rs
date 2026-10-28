@@ -34,7 +34,7 @@ fn evaluated(
         .transpose()
 }
 
-fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
+fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         vocabulary::BETWEEN,
         ForeignFunction::with_arguments(
@@ -54,7 +54,7 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
     )
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             vocabulary::BETWEEN,

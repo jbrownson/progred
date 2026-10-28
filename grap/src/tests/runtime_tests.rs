@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::RuntimeValueKind;
 use crate::unboxed::{Native, Unboxed};
 use gid::new_cell_id;
 use std::cell::RefCell;
@@ -31,7 +32,7 @@ fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
     let first = new_cell_id();
     let second = new_cell_id();
     let syntax = lambda([second, first], Value::record([]));
-    let closure = evaluate(&syntax, &host(vec![]), 100).result;
+    let closure = Evaluator::new(&host(vec![]), 100).evaluate(&syntax).result;
     let generated = RuntimeValue::record([
         (isa::ISA, Value::from(vocabulary::kind::LAMBDA).into()),
         (
@@ -83,13 +84,12 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let sink = new_cell_id();
     let creation = new_cell_id();
     let invocation = new_cell_id();
-    let closure = evaluate_runtime_at(
-        &RuntimeValue::from(lambda([], call(sink.into(), []))),
-        Some(SourceOrigin::Root(vec![gid::Step::Key(creation)])),
-        &host(vec![]),
-        100,
-    )
-    .result;
+    let closure = Evaluator::new(&host(vec![]), 100)
+        .evaluate_runtime(
+            &RuntimeValue::from(lambda([], call(sink.into(), []))),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(creation)])),
+        )
+        .result;
     let traces = Rc::new(RefCell::new(Vec::new()));
     let tracer = Rc::new(Tracer::default());
     let receiver = host(vec![(
@@ -107,12 +107,12 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
         ),
     )]);
     let expression = runtime_call([(vocabulary::FUNCTION, closure.clone())]);
-    let result = evaluate_runtime_at(
-        &expression,
-        Some(SourceOrigin::Root(vec![gid::Step::Key(invocation)])),
-        &Observed::new(&receiver, &*tracer),
-        100,
-    );
+    let result = Evaluator::new(&receiver, 100)
+        .observer(&*tracer)
+        .evaluate_runtime(
+            &expression,
+            Some(SourceOrigin::Root(vec![gid::Step::Key(invocation)])),
+        );
     assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(7.0));
     assert_eq!(
@@ -134,7 +134,8 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
         (vocabulary::VALUE, closure.clone()),
     ]);
     assert!(
-        evaluate_runtime_at(&wrapper, None, &receiver, 100)
+        Evaluator::new(&receiver, 100)
+            .evaluate_runtime(&wrapper, None)
             .result
             .same_result(&closure)
     );
@@ -153,7 +154,7 @@ fn runtime_syntax_origins_descend_through_generated_lists_and_lambdas() {
         ])]),
     )]);
     let receiver = host(vec![]);
-    let mut context = context(&receiver, None, 100);
+    let mut context = crate::Evaluator::new(&receiver, 100).context();
     let origin = SourceOrigin::Root(vec![gid::Step::Key(root)]);
     let lowered = context.lower_runtime_code_at(&syntax, Some(OriginId::start(origin)));
     let list = lowered.field(field).unwrap();
@@ -207,14 +208,12 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     ] {
         for fuel in [0, 1, 100] {
             traces.borrow_mut().clear();
-            let observed = Observed::new(&receiver, &*tracer);
-            let a = evaluate_runtime_at(
-                &RuntimeValue::from(&stored),
-                origin.clone(),
-                &observed,
-                fuel,
-            );
-            let b = evaluate_runtime_at(&runtime, origin.clone(), &observed, fuel);
+            let a = Evaluator::new(&receiver, fuel)
+                .observer(&*tracer)
+                .evaluate_runtime(&RuntimeValue::from(&stored), origin.clone());
+            let b = Evaluator::new(&receiver, fuel)
+                .observer(&*tracer)
+                .evaluate_runtime(&runtime, origin.clone());
             assert_eq!(a.halt, b.halt);
             assert_eq!(a.remaining_fuel, b.remaining_fuel);
             assert!(a.result.same_result(&b.result));
@@ -234,7 +233,9 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
 #[test]
 fn runtime_record_keys_and_membership_match_all_gid_shapes() {
     let metadata = new_cell_id();
-    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    let closure = Evaluator::new(&host(vec![]), 100)
+        .evaluate(&lambda([], f64::value(7.0)))
+        .result;
     let decorated_number = gid::Record::from_iter([
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (metadata, Value::from(vec![9])),
@@ -292,7 +293,9 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
 
 #[test]
 fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
-    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    let closure = Evaluator::new(&host(vec![]), 100)
+        .evaluate(&lambda([], f64::value(7.0)))
+        .result;
     let generated = RuntimeValue::list([closure.clone(), RuntimeValue::f64(2.0)]);
     let positions = generated.list_positions().unwrap();
     assert_eq!(
@@ -348,7 +351,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
             }),
         ),
     )]);
-    let result = evaluate(&call(interpret.into(), []), &receiver, 100);
+    let result = Evaluator::new(&receiver, 100).evaluate(&call(interpret.into(), []));
     assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(9.0));
 }
@@ -356,7 +359,9 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
 #[test]
 fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
     let metadata = new_cell_id();
-    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    let closure = Evaluator::new(&host(vec![]), 100)
+        .evaluate(&lambda([], f64::value(7.0)))
+        .result;
     for bytes in [
         3.5_f64.to_le_bytes().to_vec(),
         vec![],
@@ -399,7 +404,9 @@ fn text_unboxes_on_entry_and_keeps_its_source_record() {
         decorated.clone(),
         call(echo, [(parameter, decorated.clone())]),
     ] {
-        let result = evaluate(&expression, &host(vec![]), 100).result;
+        let result = Evaluator::new(&host(vec![]), 100)
+            .evaluate(&expression)
+            .result;
         assert!(matches!(&result.0, RuntimeValueKind::Unboxed(_)));
         assert_eq!(result.as_text(), Some("hello"));
         assert_eq!(
@@ -410,7 +417,7 @@ fn text_unboxes_on_entry_and_keeps_its_source_record() {
     }
     // Bytes that aren't UTF-8 stay data.
     let invalid = Value::record([(crate::text::UTF8, Value::from(vec![0xff]))]);
-    let result = evaluate(&invalid, &host(vec![]), 100).result;
+    let result = Evaluator::new(&host(vec![]), 100).evaluate(&invalid).result;
     assert!(matches!(&result.0, RuntimeValueKind::Data(_)));
     assert_eq!(result.as_text(), None);
     // Text made natively answers as its record.
@@ -449,7 +456,7 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
             }),
         ),
     )]);
-    let result = evaluate(&call(interpret.into(), []), &receiver, 100);
+    let result = Evaluator::new(&receiver, 100).evaluate(&call(interpret.into(), []));
     assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(9.0));
 }
@@ -457,7 +464,9 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
 #[test]
 fn runtime_text_inspection_matches_gid_without_materializing_containers() {
     let metadata = new_cell_id();
-    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    let closure = Evaluator::new(&host(vec![]), 100)
+        .evaluate(&lambda([], f64::value(7.0)))
+        .result;
     for bytes in [b"hello".to_vec(), vec![], vec![0xff]] {
         let blob = RuntimeValue::from(Value::from(bytes.clone()));
         let text = RuntimeValue::record([(crate::text::UTF8, blob), (metadata, closure.clone())]);
@@ -496,13 +505,12 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
     let second = new_cell_id();
     let empty = host(vec![]);
     let make = |field| {
-        evaluate_runtime_at(
-            &RuntimeValue::from(lambda([], call(sink.into(), []))),
-            Some(SourceOrigin::Root(vec![gid::Step::Key(field)])),
-            &empty,
-            100,
-        )
-        .result
+        Evaluator::new(&empty, 100)
+            .evaluate_runtime(
+                &RuntimeValue::from(lambda([], call(sink.into(), []))),
+                Some(SourceOrigin::Root(vec![gid::Step::Key(field)])),
+            )
+            .result
     };
     let a = make(first);
     let b = make(second);
@@ -519,10 +527,12 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
             Ok(RuntimeValue::f64(7.0))
         };
         let ids = [sink];
-        let overlay = ForeignOverlay::new(&ids, &capture);
+        let overlay = ForeignFunctions::shared(&ids, &capture);
         let expression = runtime_call([(vocabulary::FUNCTION, closure)]);
-        let result =
-            evaluate_runtime_scoped(&expression, &Observed::new(&empty, &tracer), &overlay, 100);
+        let result = Evaluator::new(&empty, 100)
+            .functions(overlay.clone())
+            .observer(&tracer)
+            .evaluate_runtime(&expression, None);
         assert_eq!(result.halt, None);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
@@ -567,35 +577,24 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
         ),
     ]);
     let source_argument = RuntimeValue::from(Value::from(data));
-    let result = apply_expression(
+    let result = Evaluator::new(&receiver, 100).apply_expression(
         &Value::from(identity).into(),
         [(argument, source_argument.clone())],
-        &receiver,
-        None,
-        100,
     );
     assert_eq!(result.result.as_f64(), Some(9.0));
-    let result = apply(
-        &Value::from(identity).into(),
-        [(argument, source_argument)],
-        &receiver,
-        None,
-        100,
-    );
+    let result = Evaluator::new(&receiver, 100)
+        .apply(&Value::from(identity).into(), [(argument, source_argument)]);
     assert_eq!(
         result.result.as_cell(),
         Some(data),
         "already-evaluated arguments remain data"
     );
 
-    let closure = evaluate(&lambda([], f64::value(7.0)), &receiver, 100).result;
-    let result = apply_expression(
-        &Value::from(identity).into(),
-        [(argument, closure.clone())],
-        &receiver,
-        None,
-        100,
-    );
+    let closure = Evaluator::new(&receiver, 100)
+        .evaluate(&lambda([], f64::value(7.0)))
+        .result;
+    let result = Evaluator::new(&receiver, 100)
+        .apply_expression(&Value::from(identity).into(), [(argument, closure.clone())]);
     assert!(
         result.result.same_result(&closure),
         "the host adapter must retain native closure code"
@@ -643,30 +642,23 @@ fn runtime_built_callable_records_match_their_gid_forms() {
         ),
     ]);
     for function in [foreign, closure] {
-        let expected = apply_expression(
+        let expected = Evaluator::new(&receiver, 100).apply_expression(
             &crate::RuntimeValue::from(&function.to_value()),
             [(argument, f64::value(8.0).into())],
-            &receiver,
-            None,
-            100,
         );
         assert_eq!(expected.result.to_value(), f64::value(8.0));
-        let actual = apply(
-            &function,
-            [(argument, RuntimeValue::f64(8.0))],
-            &receiver,
-            None,
-            100,
-        );
+        let actual =
+            Evaluator::new(&receiver, 100).apply(&function, [(argument, RuntimeValue::f64(8.0))]);
         assert_eq!(actual.result.to_value(), expected.result.to_value());
         let expression = runtime_call([
             (vocabulary::FUNCTION, function),
             (argument, RuntimeValue::f64(8.0)),
         ]);
-        let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
-        let overlay = ForeignOverlay::new(&[], &noop);
+        let overlay = ForeignFunctions::default();
         assert_eq!(
-            evaluate_runtime_scoped(&expression, &receiver, &overlay, 100)
+            Evaluator::new(&receiver, 100)
+                .functions(overlay.clone())
+                .evaluate_runtime(&expression, None)
                 .result
                 .to_value(),
             expected.result.to_value()
@@ -703,8 +695,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
             Value::record([(argument, f64::value(8.0))]),
         ),
     ]);
-    let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
-    let overlay = ForeignOverlay::new(&[], &noop);
+    let overlay = ForeignFunctions::default();
     for record in [closure] {
         let unboxed = unboxed(record.clone());
         assert_eq!(unboxed.as_f64(), Some(3.0));
@@ -712,13 +703,15 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
         for function in [RuntimeValue::from(Value::Record(record)), unboxed] {
             let arguments = || [(argument, RuntimeValue::f64(8.0))];
             assert_eq!(
-                apply(&function, arguments(), &receiver, None, 100)
+                Evaluator::new(&receiver, 100)
+                    .apply(&function, arguments())
                     .result
                     .as_f64(),
                 Some(8.0)
             );
             assert_eq!(
-                apply_expression(&function, arguments(), &receiver, None, 100)
+                Evaluator::new(&receiver, 100)
+                    .apply_expression(&function, arguments())
                     .result
                     .as_f64(),
                 Some(8.0)
@@ -729,7 +722,9 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
                     .chain(arguments()),
             );
             assert_eq!(
-                evaluate_runtime_scoped(&expression, &receiver, &overlay, 100)
+                Evaluator::new(&receiver, 100)
+                    .functions(overlay.clone())
+                    .evaluate_runtime(&expression, None)
                     .result
                     .as_f64(),
                 Some(8.0)
@@ -750,11 +745,8 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
                 lambda([], call(sink.into(), [(captured, captured.into())])),
             )),
         )]);
-        let evaluation = evaluate(
-            &call(factory.into(), [(captured, f64::value(42.0))]),
-            &creator,
-            100,
-        );
+        let evaluation = Evaluator::new(&creator, 100)
+            .evaluate(&call(factory.into(), [(captured, f64::value(42.0))]));
         assert_eq!(evaluation.halt, None);
         evaluation.result
     };
@@ -762,12 +754,9 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
         panic!("expected a closure")
     };
     let code = Rc::downgrade(&retained.body.0);
-    let driver = evaluate(
-        &lambda([callback, captured], call(callback.into(), [])),
-        &host(vec![]),
-        100,
-    )
-    .result;
+    let driver = Evaluator::new(&host(vec![]), 100)
+        .evaluate(&lambda([callback, captured], call(callback.into(), [])))
+        .result;
 
     for (offset, callback_value) in [
         (1.0, closure.clone()),
@@ -789,15 +778,12 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
                 }),
             ),
         )]);
-        let result = apply(
+        let result = Evaluator::new(&receiver, 100).observer(&*tracer).apply(
             &driver,
             [
                 (callback, callback_value),
                 (captured, RuntimeValue::f64(999.0)),
             ],
-            &Observed::new(&receiver, &*tracer),
-            None,
-            100,
         );
         assert_eq!(result.halt, None);
         assert_eq!(result.result.as_f64(), Some(42.0 + offset));
@@ -841,13 +827,12 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         }),
         None,
     ] {
-        let native = evaluate_runtime_at(
-            &RuntimeValue::from(lambda([], call(sink.into(), []))),
-            origin.clone(),
-            &empty,
-            100,
-        )
-        .result;
+        let native = Evaluator::new(&empty, 100)
+            .evaluate_runtime(
+                &RuntimeValue::from(lambda([], call(sink.into(), []))),
+                origin.clone(),
+            )
+            .result;
         let expected = source::origin(match &native.0 {
             RuntimeValueKind::Closure(closure) => &closure.body,
             _ => panic!("expected a closure"),
@@ -860,11 +845,13 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
             Ok(RuntimeValue::f64(7.0))
         };
         let ids = [sink];
-        let overlay = ForeignOverlay::new(&ids, &capture);
-        let observed = Observed::new(&empty, &tracer);
+        let overlay = ForeignFunctions::shared(&ids, &capture);
         for _ in 0..3 {
             // The origin's cell is deliberately undefined in the receiving host.
-            let mut context = context(&observed, Some(&overlay), 100);
+            let mut context = Evaluator::new(&empty, 100)
+                .functions(overlay.clone())
+                .observer(&tracer)
+                .context();
             let closure = RuntimeValue::new(RuntimeValueKind::Closure(
                 context.runtime_closure(&encoded.clone().into()).unwrap(),
             ));
@@ -905,20 +892,19 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
     let (sink, caller, callback) = (new_cell_id(), new_cell_id(), new_cell_id());
     let empty = host(vec![]);
     let generated = {
-        let mut context = context(&empty, None, 100);
+        let mut context = crate::Evaluator::new(&empty, 100).context();
         context.closure_value([], call(sink.into(), []), &Environment::default())
     };
     let serialized = generated.to_value();
     let fields = serialized.as_record().unwrap();
     assert_eq!(fields.get(&source::vocabulary::BODY_ORIGIN), None);
     let malformed = Value::Record(fields.with(source::vocabulary::BODY_ORIGIN, f64::value(3.0)));
-    let driver = evaluate_runtime_at(
-        &RuntimeValue::from(lambda([callback], call(callback.into(), []))),
-        Some(SourceOrigin::Root(vec![gid::Step::Key(caller)])),
-        &empty,
-        100,
-    )
-    .result;
+    let driver = Evaluator::new(&empty, 100)
+        .evaluate_runtime(
+            &RuntimeValue::from(lambda([callback], call(callback.into(), []))),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(caller)])),
+        )
+        .result;
     let trace = RefCell::new(None);
     let tracer = Tracer::default();
     let capture = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
@@ -926,15 +912,12 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
         Ok(RuntimeValue::f64(7.0))
     };
     let ids = [sink];
-    let overlay = ForeignOverlay::new(&ids, &capture);
+    let overlay = ForeignFunctions::shared(&ids, &capture);
     for value in [generated, serialized.into(), malformed.into()] {
-        let result = apply(
-            &driver,
-            [(callback, value)],
-            &Observed::new(&empty, &tracer),
-            Some(&overlay),
-            100,
-        );
+        let result = Evaluator::new(&empty, 100)
+            .functions(overlay.clone())
+            .observer(&tracer)
+            .apply(&driver, [(callback, value)]);
         assert_eq!(result.halt, None);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
@@ -969,8 +952,14 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
             None
         }
     });
-    let a = evaluate(&first.into(), &creator, 100).result.to_value();
-    let b = evaluate(&second.into(), &creator, 100).result.to_value();
+    let a = Evaluator::new(&creator, 100)
+        .evaluate(&first.into())
+        .result
+        .to_value();
+    let b = Evaluator::new(&creator, 100)
+        .evaluate(&second.into())
+        .result
+        .to_value();
     assert_eq!(a, b);
     let fields = a.as_record().unwrap();
     assert_eq!(
@@ -989,14 +978,13 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
 fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() {
     let (sink, location, binding) = (new_cell_id(), new_cell_id(), new_cell_id());
     let empty = host(vec![]);
-    let inner = evaluate_runtime_at(
-        &RuntimeValue::from(lambda([], call(sink.into(), []))),
-        Some(SourceOrigin::Root(vec![gid::Step::Key(location)])),
-        &empty,
-        100,
-    )
-    .result;
-    let mut context = context(&empty, None, 100);
+    let inner = Evaluator::new(&empty, 100)
+        .evaluate_runtime(
+            &RuntimeValue::from(lambda([], call(sink.into(), []))),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(location)])),
+        )
+        .result;
+    let mut context = crate::Evaluator::new(&empty, 100).context();
     let environment = Environment::default().extended_runtime([(binding, inner.clone())]);
     let captured = context.closure_value([], call(binding.into(), []), &environment);
     let inline = context.lower_runtime_code(&runtime_call([(vocabulary::FUNCTION, inner)]));
@@ -1008,16 +996,13 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
         Ok(RuntimeValue::f64(7.0))
     };
     let ids = [sink];
-    let overlay = ForeignOverlay::new(&ids, &capture);
+    let overlay = ForeignFunctions::shared(&ids, &capture);
     for closure in [captured, embedded] {
         for value in [closure.clone(), closure.to_value().into()] {
-            let result = apply(
-                &value,
-                [],
-                &Observed::new(&empty, &tracer),
-                Some(&overlay),
-                100,
-            );
+            let result = Evaluator::new(&empty, 100)
+                .functions(overlay.clone())
+                .observer(&tracer)
+                .apply(&value, []);
             assert_eq!(result.halt, None);
             assert_eq!(result.result.as_f64(), Some(7.0));
             assert_eq!(
@@ -1052,16 +1037,15 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
             }),
         ),
     )]);
-    let original = evaluate(&lambda([], f64::value(7.0)), &receiver, 100).result;
+    let original = Evaluator::new(&receiver, 100)
+        .evaluate(&lambda([], f64::value(7.0)))
+        .result;
     let RuntimeValueKind::Closure(before) = &original.0 else {
         panic!("expected a closure")
     };
-    let result = apply(
+    let result = Evaluator::new(&receiver, 100).apply(
         &Value::from(identity).into(),
         [(argument, original.clone())],
-        &receiver,
-        None,
-        100,
     );
     assert_eq!(result.halt, None);
     let RuntimeValueKind::Closure(after) = &result.result.0 else {
@@ -1069,7 +1053,8 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
     };
     assert_eq!(before.body, after.body);
     assert_eq!(
-        apply(&result.result, [], &receiver, None, 100)
+        Evaluator::new(&receiver, 100)
+            .apply(&result.result, [])
             .result
             .as_f64(),
         Some(7.0)
@@ -1106,12 +1091,9 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
                 ),
             ),
         ]);
-        evaluate(
-            &call(capture.into(), [(argument, target.into())]),
-            &creator,
-            100,
-        )
-        .result
+        Evaluator::new(&creator, 100)
+            .evaluate(&call(capture.into(), [(argument, target.into())]))
+            .result
     };
     assert!(weak.upgrade().is_none());
     let receiver = host(vec![(
@@ -1123,11 +1105,15 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
         ),
     )]);
     assert_eq!(
-        apply(&callable, [], &receiver, None, 100).result.as_f64(),
+        Evaluator::new(&receiver, 100)
+            .apply(&callable, [])
+            .result
+            .as_f64(),
         Some(2.0)
     );
     assert!(
-        apply(&callable, [], &host(vec![]), None, 100)
+        Evaluator::new(&host(vec![]), 100)
+            .apply(&callable, [])
             .result
             .absent_reason()
             .is_some()
@@ -1163,28 +1149,22 @@ fn retained_callables_use_the_receiving_scoped_capability() {
         let original = RuntimeValue::f64(1.0);
         let capability =
             |_, _: &mut Context<'_>, _: &Expression, _: &Environment| Ok(original.clone());
-        evaluate_runtime_scoped(
-            &RuntimeValue::from(call(capture.into(), [(argument, target.into())])),
-            &host,
-            &ForeignOverlay::new(&[target], &capability),
-            100,
-        )
-        .result
+        Evaluator::new(&host, 100)
+            .functions(ForeignFunctions::shared(&[target], &capability))
+            .evaluate(&call(capture.into(), [(argument, target.into())]))
+            .result
     };
     let replacement = RuntimeValue::f64(2.0);
     let capability =
         |_, _: &mut Context<'_>, _: &Expression, _: &Environment| Ok(replacement.clone());
-    let result = apply(
-        &callable,
-        [],
-        &host,
-        Some(&ForeignOverlay::new(&[target], &capability)),
-        100,
-    );
+    let result = Evaluator::new(&host, 100)
+        .functions(ForeignFunctions::shared(&[target], &capability))
+        .apply(&callable, []);
     assert_eq!(result.halt, None);
     assert_eq!(result.result.as_f64(), Some(2.0));
     assert!(
-        apply(&callable, [], &host, None, 100)
+        Evaluator::new(&host, 100)
+            .apply(&callable, [])
             .result
             .absent_reason()
             .is_some()
@@ -1195,8 +1175,8 @@ fn retained_callables_use_the_receiving_scoped_capability() {
 fn runtime_results_distinguish_a_returned_absent_from_a_halt() {
     let host = host(vec![]);
     let absence = absent::value(absent::FUEL_EXHAUSTED);
-    let returned = evaluate(&absence, &host, 10);
-    let halted = evaluate(&absence, &host, 0);
+    let returned = Evaluator::new(&host, 10).evaluate(&absence);
+    let halted = Evaluator::new(&host, 0).evaluate(&absence);
     assert_eq!(returned.halt, None);
     assert!(halted.halt.is_some());
     assert_eq!(returned.result.into_value(), halted.result.into_value());
@@ -1206,24 +1186,23 @@ fn runtime_results_distinguish_a_returned_absent_from_a_halt() {
 fn every_call_path_binds_the_callee_and_charges_the_same_steps() {
     let argument = new_cell_id();
     let receiver = host(vec![]);
-    let closure = evaluate(
-        &lambda(
+    let closure = Evaluator::new(&receiver, 100)
+        .evaluate(&lambda(
             [vocabulary::FUNCTION, argument],
             vocabulary::FUNCTION.into(),
-        ),
-        &receiver,
-        100,
-    )
-    .result;
+        ))
+        .result;
     let seven = || [(argument, RuntimeValue::f64(7.0))];
     let expression = runtime_call([
         (vocabulary::FUNCTION, closure.clone()),
         (argument, RuntimeValue::f64(7.0)),
     ]);
     let results = [
-        evaluate_runtime_at(&expression, None, &receiver, 100),
-        context(&receiver, None, 100).conclude(|context| context.apply(&closure, seven())),
-        apply_expression(&closure, seven(), &receiver, None, 100),
+        Evaluator::new(&receiver, 100).evaluate_runtime(&expression, None),
+        crate::Evaluator::new(&receiver, 100)
+            .context()
+            .conclude(|context| context.apply(&closure, seven())),
+        Evaluator::new(&receiver, 100).apply_expression(&closure, seven()),
     ];
     for result in &results {
         assert_eq!(result.halt, None);
@@ -1261,13 +1240,15 @@ fn every_entry_point_binds_in_its_context_index_table() {
     let unused = |_: CellId, _: &mut Context<'_>, _: &Expression, _: &Environment| {
         Ok(RuntimeValue::f64(0.0))
     };
-    let overlay = ForeignOverlay::new(&none, &unused);
+    let overlay = ForeignFunctions::shared(&none, &unused);
     let results = [
-        evaluate(&call(probe.into(), []), &receiver, 100),
-        evaluate_runtime_at(&lambda_call, None, &receiver, 100),
-        evaluate_runtime_scoped(&lambda_call, &receiver, &overlay, 100),
-        apply(&Value::from(probe).into(), [], &receiver, None, 100),
-        apply_expression(&Value::from(probe).into(), [], &receiver, None, 100),
+        Evaluator::new(&receiver, 100).evaluate(&call(probe.into(), [])),
+        Evaluator::new(&receiver, 100).evaluate_runtime(&lambda_call, None),
+        Evaluator::new(&receiver, 100)
+            .functions(overlay.clone())
+            .evaluate_runtime(&lambda_call, None),
+        Evaluator::new(&receiver, 100).apply(&Value::from(probe).into(), []),
+        Evaluator::new(&receiver, 100).apply_expression(&Value::from(probe).into(), []),
     ];
     for result in &results {
         assert_eq!(result.result.as_f64(), Some(1.0));

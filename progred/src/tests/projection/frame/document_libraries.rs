@@ -140,16 +140,15 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         .resolve_path(&[key("fraction_sum")])
         .cloned()
         .unwrap();
-    let sum = ::grap::evaluate(
-        total
-            .as_record()
-            .unwrap()
-            .get(&::grap::vocabulary::EXPRESSION)
-            .unwrap(),
-        &world.sources(),
-        crate::sources::DEFAULT_FUEL,
-    )
-    .result;
+    let sum = ::grap::Evaluator::new(&world.sources(), crate::sources::DEFAULT_FUEL)
+        .evaluate(
+            total
+                .as_record()
+                .unwrap()
+                .get(&::grap::vocabulary::EXPRESSION)
+                .unwrap(),
+        )
+        .result;
     assert_eq!(
         [key("over"), key("under")].map(|part| {
             let Step::Key(part) = part else {

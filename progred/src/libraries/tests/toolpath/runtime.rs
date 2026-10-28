@@ -43,16 +43,18 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             crate::test_support::defined_in(&libraries, cell)
         }
     });
-    let host = ::grap::Observed::new(&unobserved, &*tracer);
     let make = |body, marker, value| {
-        let maker = ::grap::evaluate_runtime_at(
-            &::grap::RuntimeValue::from(::grap::lambda([captured], ::grap::lambda([], body))),
-            Some(SourceOrigin::Root(vec![gid::Step::Key(marker)])),
-            &host,
-            1000,
-        )
-        .result;
-        ::grap::apply(&maker, [(captured, value)], &host, None, 1000).result
+        let maker = ::grap::Evaluator::new(&unobserved, 1000)
+            .observer(&*tracer)
+            .evaluate_runtime(
+                &::grap::RuntimeValue::from(::grap::lambda([captured], ::grap::lambda([], body))),
+                Some(SourceOrigin::Root(vec![gid::Step::Key(marker)])),
+            )
+            .result;
+        ::grap::Evaluator::new(&unobserved, 1000)
+            .observer(&*tracer)
+            .apply(&maker, [(captured, value)])
+            .result
     };
     let mapper_origin = gid::new_cell_id();
     let mapper = make(
@@ -87,7 +89,6 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             (unobserved.0)(cell)
         }
     });
-    let receiver = ::grap::Observed::new(&unobserved_receiver, &*tracer);
     let sequence = runtime_call(
         SEQUENCE,
         [(
@@ -110,7 +111,10 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_runtime_scoped(&expression, &receiver, scope, 1000)
+        ::grap::Evaluator::new(&unobserved_receiver, 1000)
+            .functions(scope)
+            .observer(&*tracer)
+            .evaluate_runtime(&expression, None)
     });
     assert!(
         result.result.absent_reason().is_none(),
@@ -154,13 +158,12 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
 #[test]
 fn scopes_and_failures_keep_runtime_payloads() {
     let host = crate::stack::load().libraries;
-    let callback = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-        Some(SourceOrigin::Root(vec![gid::Step::Key(gid::new_cell_id())])),
-        &host,
-        100,
-    )
-    .result;
+    let callback = ::grap::Evaluator::new(&host, 100)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(gid::new_cell_id())])),
+        )
+        .result;
     let reason = gid::new_cell_id();
     let detail = gid::new_cell_id();
     let failure = ::grap::absent::runtime(reason, [(detail, callback.clone())]);
@@ -177,20 +180,24 @@ fn scopes_and_failures_keep_runtime_payloads() {
             );
             let mut path = Recording::default();
             let result = run(&mut path, |scope| {
-                ::grap::evaluate_runtime_scoped(&expression, &host, scope, 1000)
+                ::grap::Evaluator::new(&host, 1000)
+                    .functions(scope)
+                    .evaluate_runtime(&expression, None)
             });
             assert!(result.halt.is_none() && result.result.same_result(&payload));
         }
     }
     // Absents returned by a mapper or nested sequence keep their details too.
     let parameter = gid::new_cell_id();
-    let maker = ::grap::evaluate(
-        &::grap::lambda([parameter], ::grap::lambda([], parameter.into())),
-        &host,
-        100,
-    )
-    .result;
-    let failing = ::grap::apply(&maker, [(parameter, failure.clone())], &host, None, 100).result;
+    let maker = ::grap::Evaluator::new(&host, 100)
+        .evaluate(&::grap::lambda(
+            [parameter],
+            ::grap::lambda([], parameter.into()),
+        ))
+        .result;
+    let failing = ::grap::Evaluator::new(&host, 100)
+        .apply(&maker, [(parameter, failure.clone())])
+        .result;
     for expression in [
         runtime_call(
             MAP_POINTS,
@@ -209,7 +216,9 @@ fn scopes_and_failures_keep_runtime_payloads() {
     ] {
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::evaluate_runtime_scoped(&expression, &host, scope, 1000)
+            ::grap::Evaluator::new(&host, 1000)
+                .functions(scope)
+                .evaluate_runtime(&expression, None)
         });
         assert!(result.halt.is_none() && result.result.same_result(&failure));
         assert!(path.commands().is_empty());
@@ -219,23 +228,19 @@ fn scopes_and_failures_keep_runtime_payloads() {
 #[test]
 fn preview_constructor_preserves_its_runtime_program() {
     let host = crate::stack::load().libraries;
-    let program = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda([], point_call(START_AT, [0.0; 3]))),
-        Some(SourceOrigin::Root(vec![gid::Step::Key(gid::new_cell_id())])),
-        &host,
-        100,
-    )
-    .result;
-    let result = ::grap::apply(
+    let program = ::grap::Evaluator::new(&host, 100)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda([], point_call(START_AT, [0.0; 3]))),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(gid::new_cell_id())])),
+        )
+        .result;
+    let result = ::grap::Evaluator::new(&host, 100).apply(
         &Value::from(PREVIEW).into(),
         [
             (presentation::vocabulary::VALUE, program.clone()),
             (layout::vocabulary::WIDTH, RuntimeValue::f64(200.0)),
             (layout::vocabulary::HEIGHT, RuntimeValue::f64(150.0)),
         ],
-        &host,
-        None,
-        100,
     );
     assert_eq!(result.halt, None);
     assert_eq!(result.result.kind(), Some(kind::PATHS_PREVIEW));
@@ -248,7 +253,7 @@ fn preview_constructor_preserves_its_runtime_program() {
         (PREVIEW_REFINED, kind::PATHS_REFINED_PREVIEW),
     ] {
         let programs = RuntimeValue::list([RuntimeValue::list([program.clone()])]);
-        let result = ::grap::apply(
+        let result = ::grap::Evaluator::new(&host, 1000).apply(
             &Value::from(function).into(),
             [
                 (PROGRAM, programs.clone()),
@@ -264,9 +269,6 @@ fn preview_constructor_preserves_its_runtime_program() {
                     crate::libraries::color::tests::value(peniko::Color::WHITE).into(),
                 ),
             ],
-            &host,
-            None,
-            1000,
         );
         assert!(
             result.result.absent_reason().is_none(),
@@ -284,8 +286,8 @@ fn runtime_mapping_profile() {
     use std::time::{Duration, Instant};
     let host = crate::stack::load().libraries;
     let offset = gid::new_cell_id();
-    let maker = ::grap::evaluate(
-        &::grap::lambda(
+    let maker = ::grap::Evaluator::new(&host, 1000)
+        .evaluate(&::grap::lambda(
             [offset],
             ::grap::lambda(
                 [X, Y, Z],
@@ -311,19 +313,11 @@ fn runtime_mapping_profile() {
                     }),
                 ),
             ),
-        ),
-        &host,
-        1000,
-    )
-    .result;
-    let mapper = ::grap::apply(
-        &maker,
-        [(offset, RuntimeValue::f64(0.5))],
-        &host,
-        None,
-        1000,
-    )
-    .result;
+        ))
+        .result;
+    let mapper = ::grap::Evaluator::new(&host, 1000)
+        .apply(&maker, [(offset, RuntimeValue::f64(0.5))])
+        .result;
     let body: RuntimeValue = sequence(
         (0..=256)
             .map(|i| {
@@ -356,7 +350,9 @@ fn runtime_mapping_profile() {
     let record = |program: &RuntimeValue| {
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::evaluate_runtime_scoped(program, &host, scope, 100_000)
+            ::grap::Evaluator::new(&host, 100_000)
+                .functions(scope)
+                .evaluate_runtime(program, None)
         });
         assert!(result.result.absent_reason().is_none());
         path

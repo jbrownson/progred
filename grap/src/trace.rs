@@ -4,8 +4,7 @@
 //! [`CallTrace`] whenever it's asked, and an [`Answering`] watches for the
 //! call that answered a particular value.
 
-use crate::{ByNode, Expression, ForeignFunction, Host, RuntimeValue, SourceOrigin};
-use gid::{CellId, Value};
+use crate::{ByNode, Expression, RuntimeValue, SourceOrigin};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -14,40 +13,6 @@ use std::rc::Rc;
 pub trait Observer {
     fn entered(&self, call: &Expression);
     fn left(&self, answer: Option<&RuntimeValue>);
-}
-
-/// `host`, its evaluations watched by `observer`.
-pub struct Observed<'a> {
-    host: &'a dyn Host,
-    observer: &'a dyn Observer,
-}
-
-impl<'a> Observed<'a> {
-    pub fn new(host: &'a dyn Host, observer: &'a dyn Observer) -> Self {
-        Self { host, observer }
-    }
-}
-
-impl Host for Observed<'_> {
-    fn definition(&self, cell: CellId) -> Option<Value> {
-        self.host.definition(cell)
-    }
-
-    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
-        self.host.implementation(cell)
-    }
-
-    fn uncacheable(&self) {
-        self.host.uncacheable()
-    }
-
-    fn effect(&self) {
-        self.host.effect()
-    }
-
-    fn observer(&self) -> Option<&dyn Observer> {
-        Some(self.observer)
-    }
 }
 
 /// Captured source-bearing calls, innermost first. Nodes share caller ancestry

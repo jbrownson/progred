@@ -16,15 +16,14 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         doc: &world.model.doc,
         libraries: &world.stack.libraries,
     };
-    let closure = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
-        Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(
-            gid::new_cell_id(),
-        )])),
-        &sources,
-        100,
-    )
-    .result;
+    let closure = ::grap::Evaluator::new(&sources, 100)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
+            Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(
+                gid::new_cell_id(),
+            )])),
+        )
+        .result;
     let expression = ::grap::RuntimeValue::record([
         (
             ::grap::isa::ISA,
@@ -84,11 +83,13 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
         fn definition(&self, _: CellId) -> Option<Value> {
             None
         }
-        fn implementation(&self, _: CellId) -> Option<::grap::ForeignFunction> {
+        fn implementation(&self, _: CellId) -> Option<::grap::ForeignFunction<'static>> {
             None
         }
     }
-    let closure = ::grap::evaluate(&::grap::lambda([], Value::record([])), &Empty, 100).result;
+    let closure = ::grap::Evaluator::new(&Empty, 100)
+        .evaluate(&::grap::lambda([], Value::record([])))
+        .result;
     let list = ::grap::RuntimeValue::list([closure.clone()]);
     let position = list.list_positions().unwrap()[0].clone();
     let value = ::grap::RuntimeValue::record([(field, list)]);

@@ -38,14 +38,9 @@ impl crate::display::Env for Sources<'_> {
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
     ) -> grap::RuntimeValue {
-        grap::apply_expression(
-            function,
-            arguments.iter().cloned(),
-            self,
-            None,
-            crate::sources::DEFAULT_FUEL,
-        )
-        .result
+        grap::Evaluator::new(self, crate::sources::DEFAULT_FUEL)
+            .apply_expression(function, arguments.iter().cloned())
+            .result
     }
     fn evaluate_runtime(
         &self,
@@ -53,13 +48,9 @@ impl crate::display::Env for Sources<'_> {
         fuel: usize,
         _steps: &[Step],
     ) -> grap::RuntimeValue {
-        grap::evaluate_runtime_at(
-            expression,
-            Some(grap::SourceOrigin::Input(vec![])),
-            self,
-            fuel,
-        )
-        .result
+        grap::Evaluator::new(self, fuel)
+            .evaluate_runtime(expression, Some(grap::SourceOrigin::Input(vec![])))
+            .result
     }
     fn evaluate_runtime_memo(
         &self,
@@ -73,15 +64,11 @@ impl crate::display::Env for Sources<'_> {
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
+        functions: grap::ForeignFunctions<'_>,
     ) -> grap::Evaluation {
-        grap::apply(
-            function,
-            arguments.iter().cloned(),
-            self,
-            scope,
-            crate::sources::DEFAULT_FUEL,
-        )
+        grap::Evaluator::new(self, crate::sources::DEFAULT_FUEL)
+            .functions(functions)
+            .apply(function, arguments.iter().cloned())
     }
     fn apply_runtime_memo(
         &self,
@@ -89,14 +76,12 @@ impl crate::display::Env for Sources<'_> {
         arguments: &[(CellId, Value)],
         fuel: usize,
     ) -> grap::RuntimeValue {
-        grap::apply_expression(
-            &function.into(),
-            arguments.iter().map(|(k, v)| (*k, v.into())),
-            self,
-            None,
-            fuel,
-        )
-        .result
+        grap::Evaluator::new(self, fuel)
+            .apply_expression(
+                &function.into(),
+                arguments.iter().map(|(k, v)| (*k, v.into())),
+            )
+            .result
     }
 
     fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
@@ -199,7 +184,7 @@ impl grap::Host for Sources<'_> {
     }
 
     /// Only the libraries have native code.
-    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction> {
+    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction<'static>> {
         self.libraries.implementation(cell).cloned()
     }
 }

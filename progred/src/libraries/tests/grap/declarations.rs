@@ -107,7 +107,8 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
     let editor = driver.editor();
     assert_eq!(editor.model.doc.root.as_ref(), Some(&expression));
     assert_eq!(editor.model.doc.cells.value(cell), Some(&f64::value(34.0)));
-    let evaluation = grap::evaluate(&expression, &editor.sources(), crate::sources::DEFAULT_FUEL);
+    let evaluation =
+        grap::Evaluator::new(&editor.sources(), crate::sources::DEFAULT_FUEL).evaluate(&expression);
     assert_eq!(evaluation.halt, None);
     assert_eq!(f64::read(evaluation.result.as_value()), Some(68.0));
 }

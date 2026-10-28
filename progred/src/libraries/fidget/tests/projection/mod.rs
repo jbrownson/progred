@@ -44,7 +44,7 @@ impl Env for Names {
         &self,
         _: &::grap::RuntimeValue,
         _: &[(CellId, ::grap::RuntimeValue)],
-        _: Option<&::grap::ForeignOverlay<'_>>,
+        _: ::grap::ForeignFunctions<'_>,
     ) -> ::grap::Evaluation {
         panic!("source projection must not evaluate")
     }

@@ -150,7 +150,7 @@ impl Parse for Png {
     }
 }
 
-fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
+fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction<'static> {
     ForeignFunction::with_arguments([vocabulary::IMAGE], move |_, (image,): (Png,)| {
         size(image.bytes()).map_or_else(
             || ::grap::absent::value(vocabulary::INVALID_PNG),
@@ -160,7 +160,7 @@ fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
     .cacheable()
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(vocabulary::WIDTH, dimension(|(width, _)| width))
         .register(vocabulary::HEIGHT, dimension(|(_, height)| height))

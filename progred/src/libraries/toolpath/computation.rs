@@ -137,7 +137,9 @@ fn record(
     output: &mut Recording,
 ) -> ::grap::Evaluation {
     run(output, |scope| {
-        ::grap::apply_expression(program, [], host, Some(scope), fuel)
+        ::grap::Evaluator::new(host, fuel)
+            .functions(scope)
+            .apply_expression(program, [])
     })
 }
 

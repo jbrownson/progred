@@ -55,7 +55,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
                 ],
             );
             let stack = crate::stack::load();
-            let result = grap::evaluate(&expression, &stack.libraries, 1000);
+            let result = grap::Evaluator::new(&stack.libraries, 1000).evaluate(&expression);
             assert!(result.result.absent_reason().is_none());
             let doc = Document {
                 root: Some(result.result.to_value()),

@@ -69,7 +69,7 @@ Those UI computations are not memoized here. Expressions, arguments/environments
 and fuel belong in explicit node inputs.
 
 Foreign functions are uncacheable by default and prevent reuse. `cacheable()`
-opts a function or scoped overlay into an author contract: captured state is immutable
+opts a function or a table of them into an author contract: captured state is immutable
 or evaluation-local, every changing read goes through evaluation, and
 observable writes use `Context::effect`. This is not discovery of arbitrary
 Rust closure reads.

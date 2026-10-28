@@ -98,7 +98,7 @@ impl crate::display::Env for NoEval {
         &self,
         _: &RuntimeValue,
         _: &[(CellId, RuntimeValue)],
-        _: Option<&::grap::ForeignOverlay<'_>>,
+        _: ::grap::ForeignFunctions<'_>,
     ) -> ::grap::Evaluation {
         panic!("unexpected application")
     }
@@ -132,7 +132,7 @@ impl crate::display::Env for EvaluatesTo {
         &self,
         _: &RuntimeValue,
         _: &[(CellId, RuntimeValue)],
-        _: Option<&::grap::ForeignOverlay<'_>>,
+        _: ::grap::ForeignFunctions<'_>,
     ) -> ::grap::Evaluation {
         ::grap::Evaluation {
             result: self.0.clone().into(),

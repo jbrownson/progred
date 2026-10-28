@@ -255,7 +255,7 @@ pub(crate) fn functions(functions: ForeignFunctions) -> ForeignFunctions {
 fn mill(
     parameters: impl IntoIterator<Item = CellId>,
     tool: fn(&mut Context, &Expression, &Environment) -> Result<Option<Tool>, Error>,
-) -> ForeignFunction {
+) -> ForeignFunction<'static> {
     ForeignFunction::from_value(move |context, call, environment| {
         result(
             tool(context, call, environment)

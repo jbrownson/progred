@@ -127,7 +127,7 @@ pub(super) fn invalid_request(message: String) -> Value {
     )
 }
 
-fn functions(session: &Rc<RefCell<Session>>) -> ForeignFunctions {
+fn functions(session: &Rc<RefCell<Session>>) -> ForeignFunctions<'static> {
     use vocabulary::*;
     ForeignFunctions::default()
         .register(SCREENSHOT, screenshot(session.clone()))
@@ -203,7 +203,7 @@ fn action<const N: usize>(
     session: &Rc<RefCell<Session>>,
     required: [CellId; N],
     read: impl Fn(&mut Arguments) -> Result<Action, Stop> + 'static,
-) -> ForeignFunction {
+) -> ForeignFunction<'static> {
     let session = session.clone();
     ForeignFunction::from_value(move |context, call, environment| {
         match read(&mut Arguments {
@@ -221,7 +221,7 @@ fn action<const N: usize>(
     .parameters(required)
 }
 
-fn screenshot(session: Rc<RefCell<Session>>) -> ForeignFunction {
+fn screenshot(session: Rc<RefCell<Session>>) -> ForeignFunction<'static> {
     ForeignFunction::from_value(move |_, _, _| {
         Ok(session.borrow_mut().screenshot().map_or_else(
             |message| {

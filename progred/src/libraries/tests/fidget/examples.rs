@@ -64,7 +64,7 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
                 ]),
             ),
         ]);
-        let result = ::grap::evaluate(&call, &sources, crate::sources::DEFAULT_FUEL);
+        let result = ::grap::Evaluator::new(&sources, crate::sources::DEFAULT_FUEL).evaluate(&call);
         assert!(result.halt.is_none(), "{name}");
 
         let (standalone, _) = crate::gid_text::parse(fixture).unwrap();

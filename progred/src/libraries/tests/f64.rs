@@ -6,7 +6,7 @@ use crate::display::test_support::NoEval;
 use crate::libraries::test_widgets::projection_input;
 use gid::{Value, new_cell_id};
 
-fn functions() -> ::grap::ForeignFunctions {
+fn functions() -> ::grap::ForeignFunctions<'static> {
     crate::test_support::foreign_functions(&library::<crate::Editor>())
 }
 
@@ -16,7 +16,9 @@ fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
     let extra = new_cell_id();
     let functions = functions();
     let host = crate::test_support::test_host(|_| None, &functions);
-    let callback = ::grap::evaluate(&::grap::lambda([], value(1.0)), &host, 100).result;
+    let callback = ::grap::Evaluator::new(&host, 100)
+        .evaluate(&::grap::lambda([], value(1.0)))
+        .result;
     for (field, bytes, project) in [
         (
             vocabulary::F64,

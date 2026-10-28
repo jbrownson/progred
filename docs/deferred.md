@@ -1081,8 +1081,8 @@ The full design has more to settle:
   record. The host would answer a library function's cell with it, so
   `Host::implementation` goes, and calling a saved record resolves its
   implementation cell to it, as calling a saved closure parses it. A call
-  still asks the scopes and the overlay for that cell before running the
-  code it holds. It's for tidiness, not speed: on 2026-10-28 no canary called
+  still asks the evaluation's own functions for that cell before running
+  the code it holds. It's for tidiness, not speed: on 2026-10-28 no canary called
   a foreign function held as a value outside a scope, and direct calls
   already cache their target per call site (IoP picture: about 175,000 calls
   a frame from 108 preparations), so it would save only the second host

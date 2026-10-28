@@ -20,12 +20,16 @@ pub(super) fn program<W: Host>(
     stored: Option<Vec<Step>>,
     program: grap::RuntimeValue,
 ) -> crate::display::host::Layout<W> {
-    crate::display::widget::recorded::recorded(extent, stored, record(program, fuel))
+    // A stored program's calls have origins below where it's stored.
+    let origin = stored
+        .is_some()
+        .then(|| grap::SourceOrigin::Input(Vec::new()));
+    crate::display::widget::recorded::recorded(extent, stored, record(program, origin, fuel))
 }
 
 /// Runs `program` with the drawing functions installed, filling into the
 /// recorder, each fill with the calls it was drawn under.
-fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
+fn record(program: grap::RuntimeValue, origin: Option<grap::SourceOrigin>, fuel: usize) -> Record {
     Rc::new(move |host, recorder: &mut Recorder| {
         let recorder = RefCell::new(recorder);
         let tracer = grap::Tracer::default();
@@ -102,16 +106,13 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                         _ => invalid_drawing(call),
                     })
                 }
-                _ => unreachable!("the overlay only advertises drawing functions"),
+                _ => unreachable!("only the drawing functions are installed"),
             }
         };
-        let overlay = grap::ForeignOverlay::from_value(&functions, &draw);
-        let evaluation = grap::evaluate_runtime_scoped(
-            &program,
-            &grap::Observed::new(host, &tracer),
-            &overlay,
-            fuel,
-        );
+        let evaluation = grap::Evaluator::new(host, fuel)
+            .functions(grap::ForeignFunctions::shared(&functions, &draw))
+            .observer(&tracer)
+            .evaluate_runtime(&program, origin.clone());
         evaluation.halt.is_none() && !evaluation.result.declines()
     })
 }

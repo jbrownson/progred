@@ -65,14 +65,13 @@ pub fn grap(
 ) -> impl Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool {
     let function = function.into();
     handler(move |sources, path, annotation, selection| {
-        evaluate_with(path, annotation, selection, |overlay| {
-            grap::apply_expression(
-                &function,
-                arguments.clone().into_iter().map(|(k, v)| (k, v.into())),
-                sources,
-                Some(overlay),
-                crate::sources::DEFAULT_FUEL,
-            )
+        evaluate_with(path, annotation, selection, |functions| {
+            grap::Evaluator::new(sources, crate::sources::DEFAULT_FUEL)
+                .functions(functions)
+                .apply_expression(
+                    &function,
+                    arguments.clone().into_iter().map(|(k, v)| (k, v.into())),
+                )
         })
     })
 }
@@ -200,7 +199,7 @@ fn evaluate_with(
     path: &[Step],
     annotation: Option<Value>,
     selection: Option<(Path, Value)>,
-    apply: impl FnOnce(&grap::ForeignOverlay<'_>) -> grap::Evaluation,
+    apply: impl FnOnce(grap::ForeignFunctions<'_>) -> grap::Evaluation,
 ) -> Option<PendingChanges> {
     let staged = RefCell::new(PendingChanges {
         annotation,
@@ -215,8 +214,7 @@ fn evaluate_with(
                     environment: &grap::Environment| {
             event_foreign(function, context, call, environment, path, &staged)
         };
-        let overlay = grap::ForeignOverlay::from_value(&EVENT_FUNCTIONS, &call);
-        apply(&overlay)
+        apply(grap::ForeignFunctions::shared(&EVENT_FUNCTIONS, &call))
     };
     (evaluation.halt.is_none() && !evaluation.result.declines()).then(|| staged.into_inner())
 }

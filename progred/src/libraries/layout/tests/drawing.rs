@@ -64,6 +64,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
                 grap::call(function.into(), []),
             ])
             .into(),
+            Some(grap::SourceOrigin::Input(Vec::new())),
             200,
         ),
         &Sources {
@@ -118,7 +119,11 @@ fn recorded_hits_keep_the_executing_library_definition() {
             libraries: &libraries,
         };
         let drawing = Drawing::of(
-            &record(grap::call(Value::from(function), []).into(), 100),
+            &record(
+                grap::call(Value::from(function), []).into(),
+                Some(grap::SourceOrigin::Input(Vec::new())),
+                100,
+            ),
             &sources,
             Some(SourceTrace::Root(Rc::from([]))),
             &style::editor(style::Theme::Light.palette(), 1.0),

@@ -47,13 +47,12 @@ pub(super) fn set_parameter(doc: &mut Document, names: &Binders, name: &str, num
 fn path(sources: &Sources<'_>, names: &Binders) -> Recording {
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
-            [],
-            sources,
-            Some(scope),
-            500_000,
-        )
+        ::grap::Evaluator::new(sources, 500_000)
+            .functions(scope)
+            .apply_expression(
+                &::grap::RuntimeValue::from(gid::Value::from(names["ball_path"])),
+                [],
+            )
     });
     assert!(
         result.result.absent_reason().is_none(),
@@ -80,7 +79,9 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
             let result =
                 crate::computations::memo::with_recorded_effects(&definitions, read, |host| {
                     run(&mut recording, |scope| {
-                        ::grap::apply_expression(&(&program).into(), [], host, Some(scope), 500_000)
+                        ::grap::Evaluator::new(host, 500_000)
+                            .functions(scope)
+                            .apply_expression(&(&program).into(), [])
                     })
                 });
             assert!(
@@ -146,23 +147,17 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         let geometry = cube_geometry(&sources, &names);
         let geometry = geometry.as_record().unwrap();
-        let solid = ::grap::apply_expression(
+        let solid = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
             &::grap::RuntimeValue::from(geometry.get(&names["field"]).unwrap()),
             [],
-            &sources,
-            None,
-            10_000,
         );
         assert!(solid.result.absent_reason().is_none());
-        let preview = ::grap::apply_expression(
+        let preview = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
             &::grap::RuntimeValue::from(&Value::from(fidget::vocabulary::PREVIEW_MESH)),
             [(
                 crate::libraries::presentation::vocabulary::VALUE,
                 solid.result.into_value().into(),
             )],
-            &sources,
-            None,
-            10_000,
         );
         let model = fidget::mesh::read(preview.result.as_value()).unwrap().0;
         let shape = VmShape::from(model.objects[0].tree.clone());
@@ -175,32 +170,26 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         for u in [0.1, 0.25, 0.5, 0.7, 0.9] {
             for v in [0.1, 0.3, 0.5, 0.75, 0.9] {
-                let contact = ::grap::apply_expression(
+                let contact = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
                     &::grap::RuntimeValue::from(geometry.get(&names["face"]).unwrap()),
                     [X, Y, Z]
                         .into_iter()
                         .zip([u, v, 0.0].map(f64::value))
                         .into_iter()
                         .map(|(k, v)| (k, v.into())),
-                    &sources,
-                    None,
-                    10_000,
                 );
                 let contact = read_point(contact.result.as_value()).unwrap();
                 assert!(
                     sample(contact).abs() < 2e-6,
                     "{size}, {chamfer}, {depth}: {contact:?}"
                 );
-                let normal = ::grap::apply_expression(
+                let normal = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
                     &::grap::RuntimeValue::from(geometry.get(&names["normal"]).unwrap()),
                     [X, Y, Z]
                         .into_iter()
                         .zip(contact.map(f64::value))
                         .into_iter()
                         .map(|(k, v)| (k, v.into())),
-                    &sources,
-                    None,
-                    10_000,
                 );
                 let normal = read_point(normal.result.as_value()).unwrap();
                 let gradient: [f64; 3] = std::array::from_fn(|axis| {
@@ -216,7 +205,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                         "{gradient:?} vs {normal:?}"
                     );
                 }
-                let center = ::grap::apply_expression(
+                let center = ::grap::Evaluator::new(&sources, 10_000).apply_expression(
                     &::grap::RuntimeValue::from(&Value::from(names["ball_center"])),
                     [
                         (X, f64::value(contact[0]).into()),
@@ -227,9 +216,6 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                             geometry.get(&names["normal"]).unwrap().clone().into(),
                         ),
                     ],
-                    &sources,
-                    None,
-                    10_000,
                 );
                 let center = read_point(center.result.as_value()).unwrap();
                 let length = normal[0].hypot(normal[1]).hypot(normal[2]);

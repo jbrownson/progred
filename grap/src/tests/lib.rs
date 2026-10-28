@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 
 fn definitions_from_parts<'a>(
     resolve: impl Fn(CellId) -> Option<Value> + 'a,
-    foreign: &'a ForeignFunctions,
+    foreign: &'a ForeignFunctions<'static>,
 ) -> impl Host + 'a {
     TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
         (value, Some(function)) => Some(TestDefinition::foreign(
@@ -24,25 +24,22 @@ fn definitions_from_parts<'a>(
 fn evaluate(
     expression: &Value,
     resolve: impl Fn(CellId) -> Option<Value>,
-    foreign: &ForeignFunctions,
+    foreign: &ForeignFunctions<'static>,
     fuel: usize,
 ) -> Evaluation {
-    super::evaluate(expression, &definitions_from_parts(resolve, foreign), fuel)
+    Evaluator::new(&definitions_from_parts(resolve, foreign), fuel).evaluate(expression)
 }
 
 fn apply(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
     resolve: impl Fn(CellId) -> Option<Value>,
-    foreign: &ForeignFunctions,
+    foreign: &ForeignFunctions<'static>,
     fuel: usize,
 ) -> Evaluation {
-    super::apply_expression(
+    Evaluator::new(&definitions_from_parts(resolve, foreign), fuel).apply_expression(
         &crate::RuntimeValue::from(function),
         arguments.into_iter().map(|(k, v)| (k, v.into())),
-        &definitions_from_parts(resolve, foreign),
-        None,
-        fuel,
     )
 }
 
@@ -50,8 +47,7 @@ fn apply(
 fn a_direct_cell_call_returns_its_definitions_decline() {
     let function = new_cell_id();
     let expression = call(Value::from(function), []);
-    let evaluation = super::evaluate(
-        &expression,
+    let evaluation = Evaluator::new(
         &TestHost(|cell| {
             assert_eq!(cell, function);
             Some(TestDefinition::foreign(
@@ -61,7 +57,8 @@ fn a_direct_cell_call_returns_its_definitions_decline() {
             ))
         }),
         20,
-    );
+    )
+    .evaluate(&expression);
 
     assert_eq!(evaluation.result.to_value(), absent::decline());
 }
@@ -70,15 +67,15 @@ fn a_direct_cell_call_returns_its_definitions_decline() {
 fn an_ordinary_absent_keeps_its_details() {
     let function = new_cell_id();
     let missing = new_cell_id();
-    let evaluation = super::evaluate(
-        &call(Value::from(function), []),
+    let evaluation = Evaluator::new(
         &TestHost(|cell| match cell {
             cell if cell == function => Some(TestDefinition::from(Value::from(missing))),
             cell if cell == missing => None,
             _ => unreachable!(),
         }),
         20,
-    );
+    )
+    .evaluate(&call(Value::from(function), []));
 
     assert_eq!(
         evaluation.result.to_value(),
@@ -89,9 +86,7 @@ fn an_ordinary_absent_keeps_its_details() {
 #[test]
 fn host_apply_returns_the_definitions_decline() {
     let function = new_cell_id();
-    let evaluation = super::apply_expression(
-        &crate::RuntimeValue::from(&Value::from(function)),
-        [],
+    let evaluation = Evaluator::new(
         &TestHost(|_| {
             Some(TestDefinition::foreign(
                 function,
@@ -99,9 +94,9 @@ fn host_apply_returns_the_definitions_decline() {
                 ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
             ))
         }),
-        None,
         20,
-    );
+    )
+    .apply_expression(&crate::RuntimeValue::from(&Value::from(function)), []);
 
     assert_eq!(evaluation.result.to_value(), absent::decline());
 }
@@ -273,15 +268,15 @@ fn value_wrappers_preserve_the_inner_expression_source() {
         vocabulary::kind::VALUE_WRAPPER,
         [(vocabulary::VALUE, call(function.into(), []))],
     );
-    let evaluation = super::evaluate_runtime_scoped(
-        &RuntimeValue::from(Value::from(cell)),
+    let evaluation = Evaluator::new(
         &definitions_from_parts(
             |queried| (queried == cell).then(|| wrapper.clone()),
             &ForeignFunctions::default(),
         ),
-        &ForeignOverlay::from_value(&functions, &scoped),
         20,
-    );
+    )
+    .functions(ForeignFunctions::shared(&functions, &scoped))
+    .evaluate(&Value::from(cell));
     assert_eq!(evaluation.result.to_value(), blob("result"));
     assert_eq!(
         origin.into_inner(),
@@ -575,7 +570,7 @@ fn a_foreign_call_outside_a_shadowing_scope_still_uses_the_registry() {
 /// document's over a library's are.
 struct Split {
     values: Vec<(CellId, Value)>,
-    code: ForeignFunctions,
+    code: ForeignFunctions<'static>,
 }
 
 impl Host for Split {
@@ -586,7 +581,7 @@ impl Host for Split {
             .map(|(_, value)| value.clone())
     }
 
-    fn implementation(&self, cell: CellId) -> Option<ForeignFunction> {
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction<'static>> {
         self.code.get(cell).cloned()
     }
 }
@@ -629,14 +624,9 @@ fn a_call_runs_native_code_only_where_its_definition_names_it() {
         ),
     ] {
         for result in [
-            super::evaluate(&call(function.into(), []), &host, 100),
-            super::apply_expression(
-                &crate::RuntimeValue::from(gid::Value::from(function)),
-                [],
-                &host,
-                None,
-                100,
-            ),
+            Evaluator::new(&host, 100).evaluate(&call(function.into(), [])),
+            Evaluator::new(&host, 100)
+                .apply_expression(&crate::RuntimeValue::from(gid::Value::from(function)), []),
         ] {
             assert_eq!(result.halt, None);
             assert_eq!(result.result.to_value(), expected);
@@ -652,16 +642,16 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
             assert_eq!(cell, self.0);
             self.1.as_ref().map(|definition| definition.value().clone())
         }
-        fn implementation(&self, _: CellId) -> Option<ForeignFunction> {
+        fn implementation(&self, _: CellId) -> Option<ForeignFunction<'static>> {
             panic!("reading a cell must not look up native code")
         }
     }
     let cell = new_cell_id();
     let functions = [cell];
-    let invoke = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
+    let invoke = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| -> Result<Value, Halt> {
         panic!("reading data must not invoke a scoped capability")
     };
-    let overlay = ForeignOverlay::from_value(&functions, &invoke);
+    let overlay = ForeignFunctions::shared(&functions, &invoke);
     let first = TestDefinition::from(blob("document"));
     let second = TestDefinition::foreign(
         cell,
@@ -680,12 +670,9 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
         (Some(first.clone()), first.value().clone()),
         (Some(second.clone()), second.value().clone()),
     ] {
-        let result = super::evaluate_runtime_scoped(
-            &RuntimeValue::from(Value::from(cell)),
-            &DataHost(cell, values),
-            &overlay,
-            20,
-        );
+        let result = Evaluator::new(&DataHost(cell, values), 20)
+            .functions(overlay.clone())
+            .evaluate(&Value::from(cell));
         assert_eq!(result.halt, None);
         assert_eq!(result.result.to_value(), expected);
     }
@@ -1309,15 +1296,11 @@ fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
             Ok(blob(if walked { "walked" } else { "opaque" }))
         }
     };
-    let overlay = ForeignOverlay::from_value(&functions, &scoped);
+    let overlay = ForeignFunctions::shared(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let applied = super::apply_expression(
-        &crate::RuntimeValue::from(&Value::from(outer)),
-        [],
-        &definitions_from_parts(|_| None, &foreign),
-        Some(&overlay),
-        20,
-    );
+    let applied = Evaluator::new(&definitions_from_parts(|_| None, &foreign), 20)
+        .functions(overlay.clone())
+        .apply_expression(&crate::RuntimeValue::from(&Value::from(outer)), []);
     assert_eq!(applied.result.to_value(), blob("walked"));
 }
 
@@ -1338,15 +1321,11 @@ fn a_scoped_foreign_layer_borrows_state_and_remains_reentrant() {
                 Ok(blob("scoped"))
             }
         };
-    let overlay = ForeignOverlay::from_value(&functions, &scoped);
+    let overlay = ForeignFunctions::shared(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let applied = super::apply_expression(
-        &crate::RuntimeValue::from(&Value::from(outer)),
-        [],
-        &definitions_from_parts(|_| None, &foreign),
-        Some(&overlay),
-        20,
-    );
+    let applied = Evaluator::new(&definitions_from_parts(|_| None, &foreign), 20)
+        .functions(overlay.clone())
+        .apply_expression(&crate::RuntimeValue::from(&Value::from(outer)), []);
     assert_eq!(applied.result.to_value(), blob("scoped"));
     assert_eq!(calls.get(), 2);
 }
@@ -1360,14 +1339,11 @@ fn a_scoped_foreign_layer_can_evaluate_a_source_call() {
         calls.set(calls.get() + 1);
         Ok(blob("drawn"))
     };
-    let overlay = ForeignOverlay::from_value(&functions, &scoped);
+    let overlay = ForeignFunctions::shared(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let evaluation = super::evaluate_runtime_scoped(
-        &RuntimeValue::from(call(Value::from(function), [])),
-        &definitions_from_parts(|_| None, &foreign),
-        &overlay,
-        10,
-    );
+    let evaluation = Evaluator::new(&definitions_from_parts(|_| None, &foreign), 10)
+        .functions(overlay.clone())
+        .evaluate(&call(Value::from(function), []));
     assert_eq!(evaluation.result.to_value(), blob("drawn"));
     assert_eq!(calls.get(), 1);
 }
@@ -1401,11 +1377,9 @@ fn captured_calls_share_ancestry_and_source_locations() {
             }),
         );
     let expression = call(repeat.into(), [(body, call(leaf.into(), []))]);
-    let result = super::evaluate(
-        &expression,
-        &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
-        100,
-    );
+    let result = Evaluator::new(&definitions_from_parts(|_| None, &functions), 100)
+        .observer(&*tracer)
+        .evaluate(&expression);
     assert_eq!(result.halt, None);
     let captured = captured.borrow();
     assert_eq!(captured.len(), 2);
@@ -1457,11 +1431,9 @@ fn generated_prepared_calls_keep_their_source_callers() {
         invoke.into(),
         [(function, lambda([], call(leaf.into(), [])))],
     );
-    let result = super::evaluate(
-        &expression,
-        &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
-        100,
-    );
+    let result = Evaluator::new(&definitions_from_parts(|_| None, &functions), 100)
+        .observer(&*tracer)
+        .evaluate(&expression);
     assert_eq!(result.halt, None);
     assert_eq!(
         captured
@@ -1491,19 +1463,19 @@ fn a_foreign_call_retains_its_cell_relative_source_origin() {
         *source.borrow_mut() = call.source_origin();
         Ok(blob("drawn"))
     };
-    let overlay = ForeignOverlay::from_value(&functions, &scoped);
+    let overlay = ForeignFunctions::shared(&functions, &scoped);
     let stored = lambda([], call(Value::from(foreign), []));
     let foreign_functions = ForeignFunctions::default();
 
-    let evaluation = super::evaluate_runtime_scoped(
-        &RuntimeValue::from(call(Value::from(function), [])),
+    let evaluation = Evaluator::new(
         &definitions_from_parts(
             |cell| (cell == function).then(|| stored.clone()),
             &foreign_functions,
         ),
-        &overlay,
         20,
-    );
+    )
+    .functions(overlay.clone())
+    .evaluate(&call(Value::from(function), []));
 
     assert_eq!(evaluation.result.to_value(), blob("drawn"));
     assert_eq!(
@@ -1525,16 +1497,15 @@ fn a_value_definitions_origin_is_its_cell() {
         *origin.borrow_mut() = call.source_origin();
         Ok(blob("drawn"))
     };
-    let overlay = ForeignOverlay::from_value(&functions, &scoped);
-    let evaluation = super::evaluate_runtime_scoped(
-        &RuntimeValue::from(Value::from(cell)),
+    let evaluation = Evaluator::new(
         &TestHost(|queried| {
             assert_eq!(queried, cell);
             Some(TestDefinition::from(call(Value::from(foreign), [])))
         }),
-        &overlay,
         20,
-    );
+    )
+    .functions(ForeignFunctions::shared(&functions, &scoped))
+    .evaluate(&Value::from(cell));
     assert_eq!(evaluation.result.to_value(), blob("drawn"));
     assert_eq!(
         origin.into_inner(),

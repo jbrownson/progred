@@ -109,7 +109,7 @@ pub(crate) type Operands = Rc<[Argument]>;
 
 impl Primitive {
     /// The foreign function a library registers for this operation.
-    pub fn function(self) -> ForeignFunction {
+    pub fn function(self) -> ForeignFunction<'static> {
         ForeignFunction::staged(move |call| {
             let operands = self.operands(call);
             let call = call.clone();

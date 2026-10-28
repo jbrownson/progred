@@ -27,15 +27,14 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
         crate::libraries::grap::ID,
         crate::libraries::grap::library::<crate::Editor>().definitions,
     );
-    let callback = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
-        Some(::grap::SourceOrigin::Root(vec![Step::Key(
-            gid::new_cell_id(),
-        )])),
-        &host,
-        100,
-    )
-    .result;
+    let callback = ::grap::Evaluator::new(&host, 100)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
+            Some(::grap::SourceOrigin::Root(vec![Step::Key(
+                gid::new_cell_id(),
+            )])),
+        )
+        .result;
     let returned = RuntimeValue::record([
         (
             ::grap::isa::ISA,
@@ -44,7 +43,9 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
         (::grap::vocabulary::VALUE, callback.clone()),
     ]);
     let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
-        ::grap::evaluate_runtime_scoped(&returned, &host, scope, 100)
+        ::grap::Evaluator::new(&host, 100)
+            .functions(scope)
+            .evaluate_runtime(&returned, None)
     });
     assert_eq!(evaluation.halt, None);
     assert!(evaluation.result.same_result(&callback));
@@ -76,7 +77,9 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
         ),
     ]);
     let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
-        ::grap::evaluate_runtime_scoped(&program, &host, scope, 1000)
+        ::grap::Evaluator::new(&host, 1000)
+            .functions(scope)
+            .evaluate_runtime(&program, None)
     });
     assert_eq!(evaluation.halt, None);
     assert!(evaluation.result.same_result(&failure));
@@ -108,7 +111,9 @@ fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
         super::super::library::<crate::Editor>().definitions,
     );
     run::<crate::Editor>(site, |scope| {
-        ::grap::evaluate_runtime_scoped(&::grap::RuntimeValue::from(program), &host, scope, fuel)
+        ::grap::Evaluator::new(&host, fuel)
+            .functions(scope)
+            .evaluate(&program)
     })
 }
 
@@ -348,13 +353,8 @@ fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
     assert!(layout.is_none());
     let (result, layout) = evaluate(&::grap::lambda([], text("later")), 10000);
     assert!(layout.is_none());
-    let unscoped = ::grap::apply(
-        &result.result,
-        [],
-        &crate::test_support::TestHost(|_| None),
-        None,
-        10000,
-    );
+    let unscoped = ::grap::Evaluator::new(&crate::test_support::TestHost(|_| None), 10000)
+        .apply(&result.result, []);
     assert!(unscoped.result.absent_reason().is_some());
 }
 
@@ -384,13 +384,9 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
     let function = result.result.field(PROGRAM).unwrap();
     assert!(function.contains_field(::grap::vocabulary::LAMBDA));
     let (result, layout) = run::<crate::Editor>(site, |scope| {
-        ::grap::apply(
-            &function,
-            [],
-            &crate::test_support::TestHost(|_| None),
-            Some(scope),
-            10000,
-        )
+        ::grap::Evaluator::new(&crate::test_support::TestHost(|_| None), 10000)
+            .functions(scope)
+            .apply(&function, [])
     });
     assert_eq!(result.halt, None);
     assert!(

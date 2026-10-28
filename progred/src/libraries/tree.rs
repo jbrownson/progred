@@ -85,7 +85,7 @@ fn children<S: Sink>(
     }
 }
 
-fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
+fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions<'static> {
     let output = Rc::new(Output {
         sink,
         maps: RefCell::default(),
@@ -278,12 +278,9 @@ fn evaluate(
         (::grap::vocabulary::FUNCTION, Value::from(COLLECT).into()),
         (PROGRAM, program.clone()),
     ]);
-    let evaluation = ::grap::evaluate_runtime_scoped(
-        &expression,
-        host,
-        &::grap::ForeignOverlay::new(&[COLLECT], &emit).cacheable(),
-        fuel,
-    );
+    let evaluation = ::grap::Evaluator::new(host, fuel)
+        .functions(::grap::ForeignFunctions::shared(&[COLLECT], &emit).cacheable())
+        .evaluate_runtime(&expression, None);
     (evaluation, built.into_inner())
 }
 

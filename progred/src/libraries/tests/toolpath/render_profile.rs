@@ -24,13 +24,9 @@ fn record_example() -> (Recording, ::grap::Evaluation) {
     };
     let mut recording = Recording::default();
     let eval = run(&mut recording, |scope| {
-        ::grap::apply_expression(
-            &Value::from(names["preview_operations"]).into(),
-            [],
-            &sources,
-            Some(scope),
-            3_000_000,
-        )
+        ::grap::Evaluator::new(&sources, 3_000_000)
+            .functions(scope)
+            .apply_expression(&Value::from(names["preview_operations"]).into(), [])
     });
     assert!(eval.result.absent_reason().is_none(), "{:?}", eval.result);
     (recording, eval)

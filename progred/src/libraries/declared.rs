@@ -80,7 +80,7 @@ fn projection<W: Host>() -> Partial<W> {
                         input.env.apply_runtime_scoped(
                             &projection,
                             &[(vocabulary::VALUE, value.clone())],
-                            Some(scope),
+                            scope,
                         )
                     },
                 );

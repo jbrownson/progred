@@ -12,12 +12,9 @@ fn controls_output(
     width: f64,
     frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
 ) -> Result<(Vec<Widget<crate::Editor>>, Value), Value> {
-    let callable = ::grap::evaluate(
-        controls,
-        frame.viewing().host(),
-        crate::sources::DEFAULT_FUEL,
-    )
-    .result;
+    let callable = ::grap::Evaluator::new(frame.viewing().host(), crate::sources::DEFAULT_FUEL)
+        .evaluate(controls)
+        .result;
     super::controls_output(&callable, state, width, frame)
         .map(|(widgets, value)| (widgets, value.into_value()))
         .map_err(RuntimeValue::into_value)
@@ -29,8 +26,9 @@ fn apply_change(
     handler: &Value,
     value: Value,
 ) {
-    let callable =
-        ::grap::evaluate(handler, &editor.sources(), crate::sources::DEFAULT_FUEL).result;
+    let callable = ::grap::Evaluator::new(&editor.sources(), crate::sources::DEFAULT_FUEL)
+        .evaluate(handler)
+        .result;
     super::apply_change(&mut editor.session(), site, &callable, value)
 }
 
@@ -181,8 +179,9 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
             };
             crate::projection::test_support::at_root(&cx, text, project, None, |context| {
                 let start = std::time::Instant::now();
-                let controls =
-                    ::grap::evaluate(controls, &sources, crate::sources::DEFAULT_FUEL).result;
+                let controls = ::grap::Evaluator::new(&sources, crate::sources::DEFAULT_FUEL)
+                    .evaluate(controls)
+                    .result;
                 let (widgets, parameters) =
                     super::controls_output(&controls, None, width, context).unwrap();
                 eprintln!("CAM controls width {width}: {:?}", start.elapsed());
@@ -323,7 +322,9 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
         )],
     );
     let libraries = crate::stack::load().libraries;
-    let expected = ::grap::evaluate(&collect, &libraries, 1000).result;
+    let expected = ::grap::Evaluator::new(&libraries, 1000)
+        .evaluate(&collect)
+        .result;
     let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
@@ -381,61 +382,60 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
 fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization() {
     use tree::vocabulary as t;
     let libraries = crate::stack::load().libraries;
-    let callback = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-        Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(A)])),
-        &libraries,
-        1000,
-    )
-    .result;
-    let maker = ::grap::evaluate_runtime_at(
-        &::grap::RuntimeValue::from(::grap::lambda(
-            [VALUE],
-            ::grap::lambda(
-                [],
-                ::grap::call(
-                    t::GROUP.into(),
-                    [(
-                        layout::vocabulary::CHILDREN,
-                        Value::list([::grap::call(t::LEAF.into(), [(VALUE, VALUE.into())])]),
-                    )],
+    let callback = ::grap::Evaluator::new(&libraries, 1000)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
+            Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(A)])),
+        )
+        .result;
+    let maker = ::grap::Evaluator::new(&libraries, 1000)
+        .evaluate_runtime(
+            &::grap::RuntimeValue::from(::grap::lambda(
+                [VALUE],
+                ::grap::lambda(
+                    [],
+                    ::grap::call(
+                        t::GROUP.into(),
+                        [(
+                            layout::vocabulary::CHILDREN,
+                            Value::list([::grap::call(t::LEAF.into(), [(VALUE, VALUE.into())])]),
+                        )],
+                    ),
                 ),
-            ),
-        )),
-        Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(B)])),
-        &libraries,
-        1000,
-    )
-    .result;
-    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &libraries, None, 1000).result;
-    let controls = ::grap::evaluate_runtime_at(
-        &RuntimeValue::record([
-            (
-                ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
-            ),
-            (::grap::vocabulary::PARAMS, RuntimeValue::list([])),
-            (
-                ::grap::vocabulary::BODY,
-                RuntimeValue::record([
-                    (
-                        ::grap::isa::ISA,
-                        gid::Value::from(::grap::vocabulary::kind::CALL).into(),
-                    ),
-                    (
-                        ::grap::vocabulary::FUNCTION,
-                        Value::from(TREE_PROGRAM_CURSOR).into(),
-                    ),
-                    (KEY, quote(A.into()).into()),
-                    (t::PROGRAM, program),
-                ]),
-            ),
-        ]),
-        None,
-        &libraries,
-        1000,
-    )
-    .result;
+            )),
+            Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(B)])),
+        )
+        .result;
+    let program = ::grap::Evaluator::new(&libraries, 1000)
+        .apply(&maker, [(VALUE, callback.clone())])
+        .result;
+    let controls = ::grap::Evaluator::new(&libraries, 1000)
+        .evaluate_runtime(
+            &RuntimeValue::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
+                ),
+                (::grap::vocabulary::PARAMS, RuntimeValue::list([])),
+                (
+                    ::grap::vocabulary::BODY,
+                    RuntimeValue::record([
+                        (
+                            ::grap::isa::ISA,
+                            gid::Value::from(::grap::vocabulary::kind::CALL).into(),
+                        ),
+                        (
+                            ::grap::vocabulary::FUNCTION,
+                            Value::from(TREE_PROGRAM_CURSOR).into(),
+                        ),
+                        (KEY, quote(A.into()).into()),
+                        (t::PROGRAM, program),
+                    ]),
+                ),
+            ]),
+            None,
+        )
+        .result;
     let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
@@ -769,7 +769,8 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
             (HEIGHT, f64::value(300.0)),
         ],
     );
-    let declaration = ::grap::evaluate(&call, &libraries, 10_000)
+    let declaration = ::grap::Evaluator::new(&libraries, 10_000)
+        .evaluate(&call)
         .result
         .into_value();
     let empty = gid::Document::default();
@@ -1058,13 +1059,9 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         captured.replace(stored_item_links(expression.clone()));
         context.eval_to_value(expression, environment)
     };
-    let result = ::grap::apply_expression(
-        &::grap::RuntimeValue::from(gid::Value::from(owner)),
-        [],
-        &libraries,
-        Some(&ForeignOverlay::from_value(&[probe], &emit)),
-        1000,
-    );
+    let result = ::grap::Evaluator::new(&libraries, 1000)
+        .functions(ForeignFunctions::shared(&[probe], &emit))
+        .apply_expression(&::grap::RuntimeValue::from(gid::Value::from(owner)), []);
     assert_eq!(result.halt, None);
     assert_eq!(result.result.to_value(), items);
     let decorate = captured.into_inner().expect("a stored list has a source");
@@ -1204,15 +1201,11 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
         context.eval_to_value(expression, environment)
     };
     assert_eq!(
-        ::grap::apply_expression(
-            &::grap::RuntimeValue::from(gid::Value::from(owner)),
-            [],
-            &libraries,
-            Some(&ForeignOverlay::from_value(&[probe], &emit)),
-            1000
-        )
-        .result
-        .to_value(),
+        ::grap::Evaluator::new(&libraries, 1000)
+            .functions(ForeignFunctions::shared(&[probe], &emit))
+            .apply_expression(&::grap::RuntimeValue::from(gid::Value::from(owner)), [])
+            .result
+            .to_value(),
         items
     );
 }

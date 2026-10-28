@@ -9,7 +9,7 @@ use ::grap;
 use ::grap::ForeignFunctions;
 use gid::{CellId, Value, new_cell_id};
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::merge_all([
         crate::test_support::foreign_functions(&crate::libraries::grap::library::<crate::Editor>()),
         crate::test_support::foreign_functions(&list::library::<crate::Editor>()),

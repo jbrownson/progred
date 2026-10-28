@@ -257,13 +257,13 @@ fn on_red<W: Host>(content: Layout<W>) -> Layout<W> {
 pub fn outside_scope(
     reason: CellId,
     parameters: impl IntoIterator<Item = CellId>,
-) -> ForeignFunction {
+) -> ForeignFunction<'static> {
     ForeignFunction::from_value(move |_, _, _| Ok(::grap::absent::value(reason)))
         .parameters(parameters)
         .cacheable()
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         vocabulary::OR_DEFAULT,
         ForeignFunction::new(|context, call, environment| {

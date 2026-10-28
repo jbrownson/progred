@@ -75,11 +75,9 @@ impl<P> Driver<P> {
             .as_record()
             .and_then(|fields| fields.get(&key))
             .unwrap_or_else(|| panic!("nothing to compute at {path:?}"));
-        let evaluation = ::grap::evaluate(
-            expression,
-            &self.editor().sources(),
-            crate::sources::DEFAULT_FUEL,
-        );
+        let evaluation =
+            ::grap::Evaluator::new(&self.editor().sources(), crate::sources::DEFAULT_FUEL)
+                .evaluate(expression);
         assert_eq!(evaluation.halt, None);
         evaluation.result.to_value()
     }

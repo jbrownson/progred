@@ -92,7 +92,7 @@ fn out_of_bounds() -> RuntimeValue {
     ::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into()
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             vocabulary::PREPEND,

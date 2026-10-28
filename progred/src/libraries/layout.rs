@@ -5,7 +5,7 @@
 //! under its tag, strings ride the text convention and numbers the f64
 //! convention. Interaction either attaches
 //! host-provided editor intents or a Grap handler to generic event
-//! data. Event dispatch supplies a capability overlay closed over the
+//! data. Event dispatch supplies foreign functions closed over the
 //! projection site. Traversal uses the path step convention.
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.

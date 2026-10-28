@@ -3,8 +3,7 @@
 use crate::environment::{CellIndex, CellIndices, Environment, binding_index};
 use crate::eval::{missing_cell, unbox};
 use crate::foreign::{
-    ForeignFunction, ForeignFunctions, ForeignImplementation, OverlayCall, Prepare, Stage,
-    implementation_cell,
+    ForeignFunction, ForeignFunctions, ForeignImplementation, Prepare, Stage, implementation_cell,
 };
 use crate::lower::{OriginId, runtime_call};
 use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
@@ -42,17 +41,11 @@ pub(crate) struct PreparedCallTarget {
 }
 
 enum PreparedCallTargetKind {
-    Foreign(ForeignFunction),
+    Foreign(ForeignFunction<'static>),
     /// A primitive with this call site's operands, run directly.
     Primitive(primitive::Primitive, primitive::Operands),
     Value(Expression),
     Absent(RuntimeValue),
-}
-
-#[derive(Clone)]
-pub(crate) enum ResolvedForeign {
-    Function(ForeignFunction),
-    Overlay(CellId),
 }
 
 impl<'a> Context<'a> {
@@ -129,12 +122,9 @@ impl<'a> Context<'a> {
             }
         };
         match &target.kind {
-            PreparedCallTargetKind::Foreign(function) => self.call_foreign_staged(
-                &ResolvedForeign::Function(function.clone()),
-                call,
-                environment,
-                Some(&target.stages),
-            ),
+            PreparedCallTargetKind::Foreign(function) => {
+                self.call_foreign_staged(function, call, environment, Some(&target.stages))
+            }
             PreparedCallTargetKind::Value(expression) => {
                 let callable = self.eval(expression.clone(), environment)?;
                 if callable.absent_reason().is_some() {
@@ -160,12 +150,12 @@ impl<'a> Context<'a> {
     /// What a call of `cell` runs when its definition, `value`, is a foreign
     /// function implemented under `cell` itself: the host's code there, or
     /// without any, why it can't be called. Its callers have already asked
-    /// the scopes and the overlay for `cell`.
+    /// the evaluation's own functions for `cell`.
     fn own_implementation(
         &self,
         cell: CellId,
         value: &Value,
-    ) -> Option<Result<ForeignFunction, RuntimeValue>> {
+    ) -> Option<Result<ForeignFunction<'static>, RuntimeValue>> {
         (implementation_cell(value)? == cell).then(|| {
             self.host
                 .implementation(cell)
@@ -189,36 +179,31 @@ impl<'a> Context<'a> {
             | RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_) => match self.runtime_closure(&callable) {
                 Some(closure) => Some(self.eval_grap_call(closure, call, environment, plan)),
-                None => callee_cell(&callable).map(|cell| match self.foreign_target_cell(cell) {
-                    Some(foreign) => {
-                        self.call_foreign_staged(&foreign, call, environment, Some(stages))
+                None => callee_cell(&callable).map(|cell| {
+                    match self.foreign_target_cell(cell).cloned() {
+                        Some(foreign) => {
+                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
+                        }
+                        None => self.call_cell(cell, call, environment, None),
                     }
-                    None => self.call_cell(cell, call, environment, None),
                 }),
             },
             RuntimeValueKind::List(_) => None,
         }
     }
 
-    pub(crate) fn foreign_target_cell(&self, cell: CellId) -> Option<ResolvedForeign> {
-        self.scoped_foreign_target(cell).or_else(|| {
-            self.overlay
-                .is_some_and(|overlay| overlay.handles(cell))
-                .then_some(ResolvedForeign::Overlay(cell))
-        })
-    }
-
-    fn scoped_foreign_target(&self, cell: CellId) -> Option<ResolvedForeign> {
-        self.foreign_scopes
+    /// The evaluation's own function for `cell`, if it has one: the last
+    /// pushed that does.
+    pub(crate) fn foreign_target_cell(&self, cell: CellId) -> Option<&ForeignFunction<'a>> {
+        self.functions
             .iter()
             .rev()
-            .find_map(|scope| scope.get(cell))
-            .map(|function| ResolvedForeign::Function(function.clone()))
+            .find_map(|functions| functions.get(cell))
     }
 
     fn call_foreign(
         &mut self,
-        foreign: &ResolvedForeign,
+        foreign: &ForeignFunction,
         call: &Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
@@ -229,7 +214,7 @@ impl<'a> Context<'a> {
     /// fields of a call to `callable`.
     fn apply_foreign(
         &mut self,
-        foreign: &ResolvedForeign,
+        foreign: &ForeignFunction,
         callable: RuntimeValue,
         arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
         environment: &Environment,
@@ -250,51 +235,33 @@ impl<'a> Context<'a> {
 
     fn call_foreign_staged(
         &mut self,
-        foreign: &ResolvedForeign,
+        foreign: &ForeignFunction,
         call: &Expression,
         environment: &Environment,
         stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
     ) -> Result<RuntimeValue, Halt> {
-        let cacheable = match foreign {
-            ResolvedForeign::Function(function) => function.cacheable,
-            ResolvedForeign::Overlay(_) => self.overlay.is_some_and(|overlay| overlay.cacheable),
-        };
-        if !cacheable {
+        if !foreign.cacheable {
             self.host.uncacheable();
         }
-        let value = match foreign {
-            ResolvedForeign::Function(function) => match &function.implementation {
-                ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),
-                ForeignImplementation::Staged(prepare) => {
-                    let cached = stages.and_then(|slot| {
-                        slot.borrow().as_ref().and_then(|(cached_prepare, stage)| {
-                            Rc::ptr_eq(cached_prepare, prepare).then(|| stage.clone())
-                        })
-                    });
-                    let stage = match cached {
-                        Some(stage) => stage,
-                        None => {
-                            let stage = prepare(call);
-                            if let Some(slot) = stages {
-                                *slot.borrow_mut() = Some((prepare.clone(), stage.clone()));
-                            }
-                            stage
+        let value = match &foreign.implementation {
+            ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),
+            ForeignImplementation::Staged(prepare) => {
+                let cached = stages.and_then(|slot| {
+                    slot.borrow().as_ref().and_then(|(cached_prepare, stage)| {
+                        Rc::ptr_eq(cached_prepare, prepare).then(|| stage.clone())
+                    })
+                });
+                let stage = match cached {
+                    Some(stage) => stage,
+                    None => {
+                        let stage = prepare(call);
+                        if let Some(slot) = stages {
+                            *slot.borrow_mut() = Some((prepare.clone(), stage.clone()));
                         }
-                    };
-                    stage(self, environment)
-                }
-            },
-            ResolvedForeign::Overlay(cell) => {
-                let function = self
-                    .overlay
-                    .expect("an overlay target came from the active overlay")
-                    .call;
-                match function {
-                    OverlayCall::Runtime(function) => function(*cell, self, call, environment),
-                    OverlayCall::Value(function) => {
-                        function(*cell, self, call, environment).map(RuntimeValue::from)
+                        stage
                     }
-                }
+                };
+                stage(self, environment)
             }
         }?;
         Ok(unbox(value))
@@ -309,18 +276,16 @@ impl<'a> Context<'a> {
         self.call_prepared(&callable, arguments)
     }
 
-    /// Run synchronously with an additional foreign-function layer.
-    /// Its owned closures may carry state local to this evaluation; it
-    /// takes calls to its functions before the host's definitions, the
-    /// overlay, and the layers it runs within.
+    /// Run with more foreign functions, answering calls to their cells
+    /// before the evaluation's others and the host's while `run` runs.
     pub fn with_foreign_functions<T>(
         &mut self,
-        functions: ForeignFunctions,
+        functions: ForeignFunctions<'a>,
         run: impl FnOnce(&mut Self) -> T,
     ) -> T {
-        self.foreign_scopes.push(functions);
+        self.functions.push(functions);
         let result = run(self);
-        self.foreign_scopes.pop();
+        self.functions.pop();
         result
     }
 
@@ -374,7 +339,7 @@ impl<'a> Context<'a> {
                 match callee_cell(value) {
                     Some(cell) => {
                         let call = runtime_call(value.clone(), arguments);
-                        match self.foreign_target_cell(cell) {
+                        match self.foreign_target_cell(cell).cloned() {
                             Some(foreign) => {
                                 self.call_foreign(&foreign, &call, &callable.environment)
                             }
@@ -436,12 +401,9 @@ impl<'a> Context<'a> {
             return Ok(missing_cell(cell));
         };
         match self.own_implementation(cell, &value) {
-            Some(Ok(implementation)) => self.apply_foreign(
-                &ResolvedForeign::Function(implementation),
-                callable,
-                arguments,
-                environment,
-            ),
+            Some(Ok(implementation)) => {
+                self.apply_foreign(&implementation, callable, arguments, environment)
+            }
             Some(Err(absent)) => Ok(absent),
             None => {
                 // Lowered once per evaluation, as a call of the cell is.
@@ -505,8 +467,8 @@ impl<'a> Context<'a> {
             None => match callable.0 {
                 RuntimeValueKind::Data(_)
                 | RuntimeValueKind::Unboxed(_)
-                | RuntimeValueKind::Record(_) => {
-                    callee_cell(&callable).map(|cell| match self.foreign_target_cell(cell) {
+                | RuntimeValueKind::Record(_) => callee_cell(&callable).map(|cell| {
+                    match self.foreign_target_cell(cell).cloned() {
                         Some(foreign) => self.apply_foreign(
                             &foreign,
                             callable,
@@ -514,8 +476,8 @@ impl<'a> Context<'a> {
                             environment,
                         ),
                         None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
-                    })
-                }
+                    }
+                }),
                 RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
             },
         }

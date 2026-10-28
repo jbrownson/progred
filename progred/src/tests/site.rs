@@ -15,13 +15,12 @@ fn evaluate(
     fuel: usize,
 ) -> Option<PendingChanges> {
     evaluate_with(path, annotation, selection, |overlay| {
-        let result = grap::apply_expression(
-            &::grap::RuntimeValue::from(function),
-            arguments.into_iter().map(|(k, v)| (k, v.into())),
-            sources,
-            Some(overlay),
-            fuel,
-        );
+        let result = grap::Evaluator::new(sources, fuel)
+            .functions(overlay)
+            .apply_expression(
+                &::grap::RuntimeValue::from(function),
+                arguments.into_iter().map(|(k, v)| (k, v.into())),
+            );
         grap::Evaluation {
             result: result.result.into(),
             remaining_fuel: result.remaining_fuel,
@@ -65,15 +64,12 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
             event_foreign(function, context, call, environment, &[], &staged)
         };
         let capabilities = [get, set];
-        let scope = grap::ForeignOverlay::from_value(&capabilities, &foreign);
+        let scope = grap::ForeignFunctions::shared(&capabilities, &foreign);
         let read = || {
-            grap::evaluate_runtime_scoped(
-                &grap::RuntimeValue::from(grap::call(get.into(), [])),
-                &stack.libraries,
-                &scope,
-                100,
-            )
-            .result
+            grap::Evaluator::new(&stack.libraries, 100)
+                .functions(scope.clone())
+                .evaluate(&grap::call(get.into(), []))
+                .result
         };
         assert_eq!(read().to_value(), absent::value(reason));
         for payload in [Value::from(vec![42]), absent::value(gid::new_cell_id())] {
@@ -87,12 +83,9 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
                     (site::vocabulary::VALUE, payload.clone()),
                 ],
             );
-            let evaluation = grap::evaluate_runtime_scoped(
-                &grap::RuntimeValue::from(&expression),
-                &stack.libraries,
-                &scope,
-                100,
-            );
+            let evaluation = grap::Evaluator::new(&stack.libraries, 100)
+                .functions(scope.clone())
+                .evaluate(&expression);
             assert_eq!(evaluation.halt, None);
             assert_eq!(evaluation.result.to_value(), Value::record([]));
             assert_eq!(

@@ -133,7 +133,7 @@ fn consume(
     }
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             RANGE,

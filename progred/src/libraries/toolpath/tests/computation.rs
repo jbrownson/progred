@@ -44,10 +44,10 @@ impl crate::display::Env for ViewportEnv<'_> {
         &self,
         function: &RuntimeValue,
         arguments: &[(gid::CellId, RuntimeValue)],
-        scope: Option<&::grap::ForeignOverlay<'_>>,
+        functions: ::grap::ForeignFunctions<'_>,
     ) -> ::grap::Evaluation {
         self.sources
-            .apply_runtime_scoped(function, arguments, scope)
+            .apply_runtime_scoped(function, arguments, functions)
     }
 
     fn apply_runtime_memo(
@@ -243,12 +243,9 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
     assert_eq!(pose.tip, [5.5, 0.0, 0.0]);
     let mut direct = Recording::default();
     let evaluation = run(&mut direct, |scope| {
-        ::grap::evaluate_runtime_scoped(
-            &::grap::RuntimeValue::from(::grap::call(SEQUENCE.into(), [(PROGRAM, tree.clone())])),
-            &libraries,
-            scope,
-            10000,
-        )
+        ::grap::Evaluator::new(&libraries, 10000)
+            .functions(scope)
+            .evaluate(&::grap::call(SEQUENCE.into(), [(PROGRAM, tree.clone())]))
     });
     assert!(evaluation.result.absent_reason().is_none());
     assert_eq!(
@@ -280,20 +277,16 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
         libraries: &host,
     });
     let callbacks = [X, Y].map(|source| {
-        ::grap::evaluate_runtime_at(
-            &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-            Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(source)])),
-            &host,
-            100,
-        )
-        .result
+        ::grap::Evaluator::new(&host, 100)
+            .evaluate_runtime(
+                &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
+                Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(source)])),
+            )
+            .result
     });
-    let maker = ::grap::evaluate(
-        &::grap::lambda([X], ::grap::lambda([], X.into())),
-        &host,
-        100,
-    )
-    .result;
+    let maker = ::grap::Evaluator::new(&host, 100)
+        .evaluate(&::grap::lambda([X], ::grap::lambda([], X.into())))
+        .result;
     for fail in [false, true] {
         let payloads = callbacks.clone().map(|callback| {
             if fail {
@@ -303,14 +296,9 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
             }
         });
         let programs = payloads.clone().map(|payload| {
-            RuntimeValue::list([RuntimeValue::list([::grap::apply(
-                &maker,
-                [(X, payload)],
-                &host,
-                None,
-                100,
-            )
-            .result])])
+            RuntimeValue::list([RuntimeValue::list([::grap::Evaluator::new(&host, 100)
+                .apply(&maker, [(X, payload)])
+                .result])])
         });
         assert_ne!(programs[0].to_value(), programs[1].to_value());
         let input = computations.runtime.input(programs[0].clone());
@@ -391,13 +379,9 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
     );
     let mut direct = Recording::default();
     let evaluation = run(&mut direct, |scope| {
-        ::grap::apply_expression(
-            &Value::from(names["preview_operations"]).into(),
-            [],
-            &sources,
-            Some(scope),
-            3_000_000,
-        )
+        ::grap::Evaluator::new(&sources, 3_000_000)
+            .functions(scope)
+            .apply_expression(&Value::from(names["preview_operations"]).into(), [])
     });
     assert!(
         evaluation.result.absent_reason().is_none(),

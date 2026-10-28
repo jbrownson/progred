@@ -1,11 +1,9 @@
 use super::*;
 
 fn retained(body: Value, source: CellId, host: &dyn ::grap::Host) -> RuntimeValue {
-    let result = ::grap::evaluate_runtime_at(
+    let result = ::grap::Evaluator::new(host, 1000).evaluate_runtime(
         &::grap::RuntimeValue::from(&body),
         Some(SourceOrigin::Root(vec![gid::Step::Key(source)])),
-        host,
-        1000,
     );
     assert!(result.result.absent_reason().is_none());
     result.result
@@ -35,7 +33,9 @@ fn collection_and_mapping_retain_callbacks_and_positions() {
         B,
         &host,
     );
-    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &host, None, 1000).result;
+    let program = ::grap::Evaluator::new(&host, 1000)
+        .apply(&maker, [(VALUE, callback.clone())])
+        .result;
     let built = build(&program, &host, 1000).unwrap();
     let positions = built.items.list_positions().unwrap();
     assert!(
@@ -76,13 +76,8 @@ fn collection_and_mapping_retain_callbacks_and_positions() {
             .collect::<Vec<_>>()
     );
 
-    let collected = ::grap::apply(
-        &Value::from(COLLECT).into(),
-        [(PROGRAM, program)],
-        &host,
-        None,
-        1000,
-    );
+    let collected = ::grap::Evaluator::new(&host, 1000)
+        .apply(&Value::from(COLLECT).into(), [(PROGRAM, program)]);
     assert!(collected.halt.is_none() && collected.result.same_result(&built.items));
 }
 
@@ -121,9 +116,11 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
                 callback
             }
         });
-        let programs = payloads
-            .clone()
-            .map(|value| ::grap::apply(&maker, [(VALUE, value)], &host, None, 1000).result);
+        let programs = payloads.clone().map(|value| {
+            ::grap::Evaluator::new(&host, 1000)
+                .apply(&maker, [(VALUE, value)])
+                .result
+        });
         assert_ne!(programs[0].to_value(), programs[1].to_value());
         let first = prepared(&computations, &site(), programs[0].clone(), 1000);
         assert!(Rc::ptr_eq(
