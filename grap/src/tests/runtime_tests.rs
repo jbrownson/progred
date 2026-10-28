@@ -1137,17 +1137,28 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
 #[test]
 fn retained_callables_use_the_receiving_scoped_capability() {
     let (capture, target, argument) = (new_cell_id(), new_cell_id(), new_cell_id());
-    let host = host(vec![(
-        capture,
-        Definition::foreign(
+    // Outside a scope, `target` answers an absent.
+    let host = host(vec![
+        (
             capture,
-            gid::Record::default(),
-            ForeignFunction::new(move |context, call, environment| {
-                let expression = call.field(argument).unwrap();
-                Ok(context.prepare_callable(expression, environment)?.value)
-            }),
+            Definition::foreign(
+                capture,
+                gid::Record::default(),
+                ForeignFunction::new(move |context, call, environment| {
+                    let expression = call.field(argument).unwrap();
+                    Ok(context.prepare_callable(expression, environment)?.value)
+                }),
+            ),
         ),
-    )]);
+        (
+            target,
+            Definition::foreign(
+                target,
+                gid::Record::default(),
+                ForeignFunction::from_value(|_, _, _| Ok(absent::value(new_cell_id()))),
+            ),
+        ),
+    ]);
     let callable = {
         let original = RuntimeValue::f64(1.0);
         let capability =

@@ -571,10 +571,13 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
             panic!("reading a native definition must not invoke it")
         }),
     );
-    // A foreign function's value is its definition, or where only a scope
-    // supplies it, a foreign function implemented under its cell.
+    // A foreign function's value is its definition; a scope supplies only
+    // its implementation, so a cell no definition names reads as missing.
     for (values, expected) in [
-        (None, super::foreign_function(cell)),
+        (
+            None,
+            absent::with_detail(absent::MISSING_CELL, absent::CELL, cell.into()),
+        ),
         (Some(first.clone()), first.value().clone()),
         (Some(second.clone()), second.value().clone()),
     ] {

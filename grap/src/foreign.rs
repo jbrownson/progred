@@ -199,8 +199,7 @@ impl<'a> ForeignOverlay<'a> {
     }
 }
 
-/// A foreign function implemented under `cell`, saying nothing more, as one
-/// a scope supplies reads.
+/// A foreign function implemented under `cell`, saying nothing more.
 pub fn foreign_function(cell: CellId) -> Value {
     isa::record(
         vocabulary::kind::FOREIGN_FUNCTION,

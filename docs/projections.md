@@ -790,9 +790,11 @@ defined for a function body can be referenced in several places within it. A
 foreign function's value is its definition, `{isa: foreign function,
 implementation: <cell>, name, params}`, the cell the one the host implements it
 under, which is its own: a reference to one evaluates to that data without
-invoking anything, and a function only a scoped capability supplies reads as
-`{isa: foreign function, implementation: <cell>}`. Calling one reaches the
-implementation under that cell, a scope's first, as a call of the cell does.
+invoking anything. Calling one reaches the implementation under that cell, a
+scope's first, as a call of the cell does. A scope supplies only
+implementations, so a function it lends with no library definition reads as a
+missing cell; each library defines its lent functions, with implementations
+that answer outside the scope.
 The Grap library draws one as a lambda's head: its implementation's name, then
 its parameters.
 

@@ -2,7 +2,6 @@
 //! and cells.
 
 use crate::environment::{CellIndex, Environment};
-use crate::foreign::foreign_function;
 use crate::lower::Form;
 use crate::runtime::{RuntimeValue, RuntimeValueKind};
 use crate::unboxed::{Native, Unboxed};
@@ -207,11 +206,6 @@ impl<'a> Context<'a> {
         match environment.get_at(&self.indices, cell, index) {
             Some(value) => Ok(unbox(value.clone())),
             None => match self.host.resolve(cell) {
-                // A function only a scope supplies is a foreign function
-                // implemented under its cell.
-                None if self.foreign_target_cell(cell).is_some() => {
-                    Ok(RuntimeValue::from(foreign_function(cell)))
-                }
                 None => Ok(missing_cell(cell)),
                 Some(definition) => {
                     while self.cell_states.len() <= index.0 {
