@@ -94,10 +94,10 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
             5e200,
         ),
     ] {
-        let actual = read(&evaluate(binary_call(function, value(a), value(b)))).unwrap();
+        let actual = read(evaluate(binary_call(function, value(a), value(b))).as_value()).unwrap();
         assert!((actual / expected - 1.0).abs() < 1e-14);
         assert_eq!(
-            evaluate(binary_call(function, Value::record([]), value(b))),
+            evaluate(binary_call(function, Value::record([]), value(b))).to_value(),
             invalid_arguments([(
                 crate::libraries::grap::numbers::vocabulary::LEFT,
                 not(
@@ -121,7 +121,8 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
             evaluate(unary_call(
                 crate::libraries::grap::numbers::f64::CEIL,
                 value(input)
-            )),
+            ))
+            .to_value(),
             value(expected)
         );
     }
@@ -130,7 +131,8 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
             evaluate(unary_call(
                 crate::libraries::grap::numbers::f64::IS_FINITE,
                 value(input)
-            )),
+            ))
+            .to_value(),
             ::grap::logic::value(input.is_finite()),
         );
     }
@@ -139,7 +141,7 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         crate::libraries::grap::numbers::f64::IS_FINITE,
     ] {
         assert_eq!(
-            evaluate(unary_call(function, Value::record([]))),
+            evaluate(unary_call(function, Value::record([]))).to_value(),
             invalid_arguments([(
                 crate::libraries::grap::numbers::vocabulary::OPERAND,
                 not(
@@ -148,10 +150,9 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
                 )
             )]),
         );
-        assert!(::grap::absent::is_absent(&evaluate(grap::call(
-            function.into(),
-            []
-        ))));
+        assert!(::grap::absent::is_absent(
+            evaluate(grap::call(function.into(), [])).as_value()
+        ));
     }
 }
 
@@ -168,7 +169,9 @@ fn rust_supplies_arithmetic_to_grap() {
         value(4.0),
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&multiply, |_| None, &functions(), 20).result,
+        crate::test_support::test_evaluate(&multiply, |_| None, &functions(), 20)
+            .result
+            .to_value(),
         value(20.0)
     );
 }
@@ -184,7 +187,9 @@ fn rust_supplies_lerp_to_grap() {
         ],
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20).result,
+        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20)
+            .result
+            .to_value(),
         value(12.5)
     );
 }
@@ -206,7 +211,9 @@ fn runtime_lowering_preserves_an_enriched_value_through_a_binding() {
     );
 
     assert_eq!(
-        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20).result,
+        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20)
+            .result
+            .to_value(),
         enriched
     );
 }
@@ -445,7 +452,9 @@ fn type_absences_are_library_values() {
         Value::from(b"three".to_vec()),
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&left, |_| None, &functions(), 10).result,
+        crate::test_support::test_evaluate(&left, |_| None, &functions(), 10)
+            .result
+            .to_value(),
         invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::LEFT,
             not(
@@ -455,7 +464,9 @@ fn type_absences_are_library_values() {
         )])
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&right, |_| None, &functions(), 10).result,
+        crate::test_support::test_evaluate(&right, |_| None, &functions(), 10)
+            .result
+            .to_value(),
         invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::RIGHT,
             not(
@@ -549,6 +560,6 @@ fn every_operand_that_isnt_a_number_is_carried_as_a_cause() {
             1000,
         )
         .result;
-    assert_eq!(absent::chain_length(&result), absent::CHAIN_LIMIT);
-    assert_eq!(absent::root_causes(&result), [&left]);
+    assert_eq!(absent::chain_length(result.as_value()), absent::CHAIN_LIMIT);
+    assert_eq!(absent::root_causes(result.as_value()), [&left]);
 }

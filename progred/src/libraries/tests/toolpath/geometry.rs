@@ -56,7 +56,7 @@ fn path(sources: &Sources<'_>, names: &Binders) -> Recording {
         )
     });
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -153,18 +153,18 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
             None,
             10_000,
         );
-        assert!(!::grap::absent::is_absent(&solid.result));
+        assert!(solid.result.absent_reason().is_none());
         let preview = ::grap::apply_value(
             &Value::from(fidget::vocabulary::PREVIEW_MESH),
             [(
                 crate::libraries::presentation::vocabulary::VALUE,
-                solid.result,
+                solid.result.into_value(),
             )],
             &sources,
             None,
             10_000,
         );
-        let model = fidget::mesh::read(&preview.result).unwrap().0;
+        let model = fidget::mesh::read(preview.result.as_value()).unwrap().0;
         let shape = VmShape::from(model.objects[0].tree.clone());
         let tape = shape.ez_float_slice_tape();
         let mut evaluator = VmShape::new_float_slice_eval();
@@ -182,7 +182,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     None,
                     10_000,
                 );
-                let contact = read_point(&contact.result).unwrap();
+                let contact = read_point(contact.result.as_value()).unwrap();
                 assert!(
                     sample(contact).abs() < 2e-6,
                     "{size}, {chamfer}, {depth}: {contact:?}"
@@ -194,7 +194,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     None,
                     10_000,
                 );
-                let normal = read_point(&normal.result).unwrap();
+                let normal = read_point(normal.result.as_value()).unwrap();
                 let gradient: [f64; 3] = std::array::from_fn(|axis| {
                     let mut a = contact;
                     let mut b = contact;
@@ -223,7 +223,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     None,
                     10_000,
                 );
-                let center = read_point(&center.result).unwrap();
+                let center = read_point(center.result.as_value()).unwrap();
                 let length = normal[0].hypot(normal[1]).hypot(normal[2]);
                 let radius =
                     f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;

@@ -1050,10 +1050,9 @@ Privileged knowledge of a library convention is an accelerator only, never a
 capability: each such library must remain expressible externally, evaluating
 correctly at reduced speed, and reads to Grap as an ordinary library. An
 enriched source number or text retains its original value so a pass-through
-preserves unrelated fields. Public `evaluate` and `apply` return
-`Evaluation<RuntimeValue>`. `RuntimeValue::into_value` (or
-`Evaluation::into_value`) explicitly materializes GID; the `*_value` entry
-points adapt callers that still need that representation.
+preserves unrelated fields. Every public entry point returns an `Evaluation`
+whose result is a `RuntimeValue`; `RuntimeValue::into_value`, `to_value` or
+`as_value` materializes GID where a caller needs it.
 
 Expressions own shared lowered code and source locations. A returned closure
 keeps its body and lexical environment alive, not its creating evaluator,

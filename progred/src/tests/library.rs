@@ -91,12 +91,13 @@ fn library_definitions_and_projections_compose_in_order() {
         ]
     );
     assert_eq!(
-        ::grap::evaluate_value(
+        ::grap::evaluate(
             &::grap::call(Value::from(SHARED_FUNCTION), []),
             &libraries,
             10,
         )
-        .result,
+        .result
+        .to_value(),
         Value::from(b"left".to_vec())
     );
     let value = Value::record([]);
@@ -159,15 +160,21 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     );
     // The function's value is its definition, which says what it is.
     assert_eq!(
-        ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
+        ::grap::evaluate(&SHARED_FUNCTION.into(), &libraries, 20)
+            .result
+            .to_value(),
         defined
     );
     assert_eq!(
-        ::grap::evaluate_value(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20).result,
+        ::grap::evaluate(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20)
+            .result
+            .to_value(),
         Value::from(b"left".to_vec())
     );
     assert_eq!(
-        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20).result,
+        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20)
+            .result
+            .to_value(),
         Value::from(b"left".to_vec())
     );
 }
@@ -285,7 +292,9 @@ fn library_descriptions_are_ordinary_cells() {
         Some(&description)
     );
     assert_eq!(
-        ::grap::evaluate_value(&LEFT_LIBRARY.into(), &libraries, 20).result,
+        ::grap::evaluate(&LEFT_LIBRARY.into(), &libraries, 20)
+            .result
+            .to_value(),
         description
     );
     assert_eq!(libraries.cell_ids().collect::<Vec<_>>(), [LEFT_LIBRARY]);
@@ -309,7 +318,9 @@ fn unnamed_native_definitions_say_only_what_they_are() {
         [::grap::foreign_function(SHARED_FUNCTION)]
     );
     assert_eq!(
-        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20).result,
+        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20)
+            .result
+            .to_value(),
         Value::from(b"left".to_vec())
     );
 }

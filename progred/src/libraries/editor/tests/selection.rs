@@ -68,7 +68,8 @@ fn the_vocabulary_alone_grants_no_selection_access() {
             &crate::test_support::foreign_functions(&library),
             10,
         )
-        .result,
+        .result
+        .to_value(),
         ::grap::absent::with_detail(
             ::grap::absent::NOT_CALLABLE,
             ::grap::absent::VALUE,
@@ -130,7 +131,7 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
         Some(&overlay),
         100,
     );
-    assert_eq!(result.result, Value::record([]));
+    assert_eq!(result.result.to_value(), Value::record([]));
     assert_eq!(
         writes.into_inner(),
         vec![(

@@ -144,9 +144,8 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
             host,
             &::grap::ForeignOverlay::from_value(&[B], &emit).cacheable(),
             1000,
-        )
-        .into_value();
-        assert!(!::grap::absent::is_absent(&result.result));
+        );
+        assert!(result.result.absent_reason().is_none());
     });
     let count = sink.borrow();
     assert_eq!((count.groups, count.depth, count.leaves), (2, 0, 2));

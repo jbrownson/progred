@@ -25,7 +25,9 @@ fn list_operations_are_value_operations() {
         ],
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&at, |_| None, &functions, 30).result,
+        crate::test_support::test_evaluate(&at, |_| None, &functions, 30)
+            .result
+            .to_value(),
         Value::from(b"b".to_vec())
     );
 }
@@ -47,13 +49,19 @@ fn prepend_and_tail_keep_their_elements_positions() {
         ],
     ));
     assert_eq!(
-        prepended,
+        prepended.to_value(),
         Value::list([0, 1, 2].map(|byte| Value::from(vec![byte])))
     );
-    assert_eq!(crate::test_values::positions(&prepended)[1..], positions);
+    assert_eq!(
+        crate::test_values::positions(prepended.as_value())[1..],
+        positions
+    );
     let tail = evaluate(&call(vocabulary::TAIL, [(vocabulary::LIST, list)]));
-    assert_eq!(tail, Value::list([Value::from(vec![2])]));
-    assert_eq!(crate::test_values::positions(&tail), positions[1..]);
+    assert_eq!(tail.to_value(), Value::list([Value::from(vec![2])]));
+    assert_eq!(
+        crate::test_values::positions(tail.as_value()),
+        positions[1..]
+    );
 }
 
 fn check_step_results(operation: gid::CellId, results: impl IntoIterator<Item = (Value, Value)>) {
@@ -72,11 +80,11 @@ fn check_step_results(operation: gid::CellId, results: impl IntoIterator<Item = 
         let evaluation =
             crate::test_support::test_evaluate(&expression, |_| None, &functions(), 100);
         assert_eq!(evaluation.halt, None);
-        assert_eq!(evaluation.result, expected);
+        assert_eq!(evaluation.result.to_value(), expected);
         let exhausted = crate::test_support::test_evaluate(&expression, |_| None, &functions(), 1);
         assert!(exhausted.halt.is_some());
         assert_eq!(
-            ::grap::absent::reason(&exhausted.result),
+            exhausted.result.absent_reason(),
             Some(::grap::absent::FUEL_EXHAUSTED)
         );
     }
@@ -154,7 +162,9 @@ fn unfold_collects_items_until_a_step_has_no_state() {
         ],
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&unfolded, |_| None, &functions, 30).result,
+        crate::test_support::test_evaluate(&unfolded, |_| None, &functions, 30)
+            .result
+            .to_value(),
         Value::record([
             (
                 vocabulary::LIST,
@@ -194,7 +204,9 @@ fn iterate_drives_a_step_without_collecting_intermediate_values() {
         ],
     );
     assert_eq!(
-        crate::test_support::test_evaluate(&iterated, |_| None, &functions, 30).result,
+        crate::test_support::test_evaluate(&iterated, |_| None, &functions, 30)
+            .result
+            .to_value(),
         Value::from(vec![2]),
     );
     assert_eq!(calls.get(), 4);

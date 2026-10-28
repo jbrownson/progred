@@ -64,7 +64,7 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
                 ]),
             ),
         ]);
-        let result = ::grap::evaluate_value(&call, &sources, crate::sources::DEFAULT_FUEL);
+        let result = ::grap::evaluate(&call, &sources, crate::sources::DEFAULT_FUEL);
         assert!(result.halt.is_none(), "{name}");
 
         let (standalone, _) = crate::gid_text::parse(fixture).unwrap();
@@ -75,7 +75,7 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
             presentation::tests::viewport_output(declaration, &standalone_sources, 256.0, 256.0)
                 .unwrap();
         assert_eq!(
-            result.result,
+            result.result.to_value(),
             unnamed(&expected),
             "{name}: unchanged geometry and color"
         );

@@ -16,13 +16,13 @@ fn evaluated_expression(value: &Value) -> &Value {
         .expect("an evaluation")
 }
 
-fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation<gid::Value> {
+fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
         doc,
         libraries: &stack.libraries,
     };
-    grap::evaluate_value(expression, &sources, crate::sources::DEFAULT_FUEL)
+    grap::evaluate(expression, &sources, crate::sources::DEFAULT_FUEL)
 }
 
 #[test]
@@ -41,13 +41,16 @@ fn the_sample_contains_a_projectable_grap_computation() {
         roof.get(&crate::test_values::label("double pitch"))
             .expect("Grap expression"),
     );
-    assert_eq!(evaluate(&doc, expression).result, f64::value(5.0));
+    assert_eq!(
+        evaluate(&doc, expression).result.to_value(),
+        f64::value(5.0)
+    );
 
     let profile = evaluated_expression(
         roof.get(&crate::test_values::label("profile"))
             .expect("profile call"),
     );
-    assert_eq!(evaluate(&doc, profile).result, f64::value(40.0));
+    assert_eq!(evaluate(&doc, profile).result.to_value(), f64::value(40.0));
 }
 
 /// The case list the demo's quote generator makes for `value`: data, not
@@ -103,19 +106,21 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
                 &doc,
                 evaluated_expression(demo_entry(&doc, &binders, label)),
             )
-            .result,
+            .result
+            .to_value(),
             expected
         );
     }
 
     let inert = evaluated_expression(demo_entry(&doc, &binders, "inert_data"));
-    assert_eq!(evaluate(&doc, inert).result, *inert);
+    assert_eq!(evaluate(&doc, inert).result.to_value(), *inert);
     assert_eq!(
         evaluate(
             &doc,
             evaluated_expression(demo_entry(&doc, &binders, "type_absent")),
         )
-        .result,
+        .result
+        .to_value(),
         crate::test_values::invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::LEFT,
             crate::test_values::not(
@@ -135,7 +140,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         )
         .result;
         assert_eq!(
-            ::grap::absent::root_causes(&result)
+            ::grap::absent::root_causes(result.as_value())
                 .into_iter()
                 .map(::grap::absent::reason)
                 .collect::<Vec<_>>(),
@@ -149,7 +154,8 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             &doc,
             evaluated_expression(demo_entry(&doc, &binders, "add_result")),
         )
-        .result,
+        .result
+        .to_value(),
         f64::value(9.0)
     );
     assert_eq!(
@@ -157,7 +163,8 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             &doc,
             evaluated_expression(demo_entry(&doc, &binders, "graph_function_result")),
         )
-        .result,
+        .result
+        .to_value(),
         f64::value(54.0)
     );
     assert_eq!(
@@ -165,7 +172,8 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             &doc,
             evaluated_expression(demo_entry(&doc, &binders, "circle_result")),
         )
-        .result,
+        .result
+        .to_value(),
         circle(&binders, 54.0)
     );
     assert_eq!(
@@ -173,7 +181,8 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             &doc,
             evaluated_expression(demo_entry(&doc, &binders, "quoted_cases")),
         )
-        .result,
+        .result
+        .to_value(),
         generated_cases(&binders, 5.0)
     );
 }

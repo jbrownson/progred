@@ -67,10 +67,9 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
                 &scope,
                 100,
             )
-            .into_value()
             .result
         };
-        assert_eq!(read(), absent::value(reason));
+        assert_eq!(read().to_value(), absent::value(reason));
         for payload in [Value::from(vec![42]), absent::value(gid::new_cell_id())] {
             let expression = grap::call(
                 set.into(),
@@ -87,12 +86,11 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
                 &stack.libraries,
                 &scope,
                 100,
-            )
-            .into_value();
+            );
             assert_eq!(evaluation.halt, None);
-            assert_eq!(evaluation.result, Value::record([]));
+            assert_eq!(evaluation.result.to_value(), Value::record([]));
             assert_eq!(
-                read(),
+                read().to_value(),
                 if ::grap::absent::is_absent(&payload) {
                     absent::value(reason)
                 } else {

@@ -41,7 +41,7 @@ fn run(
     definitions: impl Fn(CellId) -> Option<TestDefinition>,
     initial: Value,
     fuel: usize,
-) -> (Evaluation<Value>, Value) {
+) -> (Evaluation, Value) {
     let definitions = TestHost(definitions);
     let effects = RefCell::new(initial);
     let invoke = new_cell_id();
@@ -72,16 +72,14 @@ fn run(
             &definitions,
             &overlay,
             fuel,
-        )
-        .into_value(),
+        ),
         Invocation::Applied => apply_value(&function, [], &definitions, Some(&overlay), fuel),
         Invocation::Prepared => evaluate_runtime_scoped(
             &RuntimeValue::from(call(invoke.into(), [(operations.value, function)])),
             &definitions,
             &overlay,
             fuel,
-        )
-        .into_value(),
+        ),
     };
     (result, effects.into_inner())
 }
@@ -95,8 +93,8 @@ const INVOCATIONS: [Invocation; 3] = [
 #[test]
 fn a_returned_halt_shaped_value_is_still_a_completed_result() {
     let absent = absent::value(absent::FUEL_EXHAUSTED);
-    let evaluation = evaluate_value(&absent, &TestHost(|_| None), 10);
-    assert_eq!(evaluation.result, absent);
+    let evaluation = crate::evaluate(&absent, &TestHost(|_| None), 10);
+    assert_eq!(evaluation.result.to_value(), absent);
     assert_eq!(evaluation.halt, None);
 }
 
@@ -127,7 +125,7 @@ fn absent_and_declined_returns_keep_their_effects() {
             Value::record([]),
             100,
         );
-        assert_eq!(evaluation.result, result);
+        assert_eq!(evaluation.result.to_value(), result);
         assert_eq!(state, written);
         assert_eq!(evaluation.halt, None);
     }
@@ -150,7 +148,7 @@ fn a_pure_decline_keeps_its_details() {
         Value::record([]),
         100,
     );
-    assert_eq!(evaluation.result, decline);
+    assert_eq!(evaluation.result.to_value(), decline);
     assert_eq!(state, Value::record([]));
 }
 
@@ -181,7 +179,10 @@ fn halts_stop_without_rolling_back_temporary_state() {
             Value::record([]),
             50,
         );
-        assert_eq!(evaluation.result, absent::value(absent::FUEL_EXHAUSTED));
+        assert_eq!(
+            evaluation.result.to_value(),
+            absent::value(absent::FUEL_EXHAUSTED)
+        );
         assert_eq!(evaluation.remaining_fuel, 0);
         assert!(evaluation.halt.is_some());
         assert_eq!(state, Value::from(vec![42]));
@@ -206,7 +207,7 @@ fn a_non_callable_definition_returns_absent() {
         100,
     );
     assert_eq!(
-        absent::reason(&evaluation.result),
+        evaluation.result.absent_reason(),
         Some(absent::NOT_CALLABLE)
     );
     assert_eq!(evaluation.halt, None);

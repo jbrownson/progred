@@ -26,6 +26,7 @@ fn sample(seed: Option<Value>) -> Value {
         30,
     )
     .result
+    .to_value()
 }
 
 #[test]
@@ -82,14 +83,14 @@ fn successive_samples_advance_the_scoped_stream() {
         || crate::test_support::test_evaluate(&expression, |_| None, &functions, 60).result;
     let result = evaluate();
 
-    assert!(result.as_list().is_some_and(|values| {
+    assert!(result.as_value().as_list().is_some_and(|values| {
         let mut values = values.values();
         matches!(
             (values.next(), values.next(), values.next()),
             (Some(first), Some(second), None) if first != second
         )
     }));
-    assert_eq!(result, evaluate());
+    assert_eq!(result.to_value(), evaluate().to_value());
 }
 
 #[test]
@@ -108,5 +109,8 @@ fn sampling_outside_a_scope_returns_a_stable_absent() {
     )
     .result;
 
-    assert_eq!(result, ::grap::absent::value(vocabulary::OUTSIDE_SCOPE));
+    assert_eq!(
+        result.to_value(),
+        ::grap::absent::value(vocabulary::OUTSIDE_SCOPE)
+    );
 }

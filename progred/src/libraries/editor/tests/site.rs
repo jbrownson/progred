@@ -12,7 +12,8 @@ fn without_an_overlay_they_are_not_callable() {
             &crate::test_support::foreign_functions(&library),
             10,
         )
-        .result,
+        .result
+        .to_value(),
         grap::absent::with_detail(
             grap::absent::NOT_CALLABLE,
             grap::absent::VALUE,

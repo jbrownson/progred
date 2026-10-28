@@ -19,7 +19,7 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
             &functions(),
             10,
         );
-        assert_eq!(evaluated.result, boolean);
+        assert_eq!(evaluated.result.to_value(), boolean);
         let cell = if expected {
             vocabulary::TRUE
         } else {
@@ -70,7 +70,7 @@ fn require_accepts_true_rejects_false_and_carries_absents() {
         );
         let result = crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, expected);
+        assert_eq!(result.result.to_value(), expected);
     }
     let missing = crate::test_support::test_evaluate(
         &::grap::call(vocabulary::REQUIRE.into(), []),
@@ -79,7 +79,7 @@ fn require_accepts_true_rejects_false_and_carries_absents() {
         20,
     );
     assert_eq!(
-        missing.result,
+        missing.result.to_value(),
         crate::test_values::invalid_arguments([(
             vocabulary::CONDITION,
             crate::test_values::missing(vocabulary::CONDITION),

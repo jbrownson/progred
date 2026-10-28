@@ -143,8 +143,8 @@ pub(crate) fn test_evaluate(
     resolve: impl Fn(CellId) -> Option<Value>,
     foreign: &grap::ForeignFunctions,
     fuel: usize,
-) -> grap::Evaluation<Value> {
-    grap::evaluate_value(expression, &test_host(resolve, foreign), fuel)
+) -> grap::Evaluation {
+    grap::evaluate(expression, &test_host(resolve, foreign), fuel)
 }
 
 pub(crate) fn test_apply(
@@ -153,7 +153,7 @@ pub(crate) fn test_apply(
     resolve: impl Fn(CellId) -> Option<Value>,
     foreign: &grap::ForeignFunctions,
     fuel: usize,
-) -> grap::Evaluation<Value> {
+) -> grap::Evaluation {
     grap::apply_value(
         function,
         arguments,
@@ -176,7 +176,9 @@ pub(crate) fn evaluate_with(
     library: &crate::libraries::Library<crate::Editor>,
     expression: &Value,
 ) -> Value {
-    test_evaluate(expression, |_| None, &foreign_functions(library), 20).result
+    test_evaluate(expression, |_| None, &foreign_functions(library), 20)
+        .result
+        .to_value()
 }
 
 /// The value of the first loaded library's definition of `cell`.

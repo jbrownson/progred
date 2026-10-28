@@ -34,7 +34,7 @@ fn default_preserves_present_values_without_type_validation() {
             100,
         );
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, value);
+        assert_eq!(result.result.to_value(), value);
     }
 }
 
@@ -95,7 +95,7 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
         assert_eq!(reads.get(), 1);
         assert_eq!(defaults.get(), usize::from(missing));
         assert_eq!(
-            result.result,
+            result.result.to_value(),
             if missing {
                 crate::libraries::f64::value(0.65)
             } else {
@@ -118,7 +118,7 @@ fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
         100,
     );
     assert_eq!(returned.halt, None);
-    assert_eq!(returned.result, replacement);
+    assert_eq!(returned.result.to_value(), replacement);
 
     let recurse = new_cell_id();
     let fallback = new_cell_id();
@@ -139,7 +139,7 @@ fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
     );
     assert!(result.halt.is_some());
     assert_eq!(
-        ::grap::absent::reason(&result.result),
+        result.result.absent_reason(),
         Some(::grap::absent::FUEL_EXHAUSTED)
     );
 }

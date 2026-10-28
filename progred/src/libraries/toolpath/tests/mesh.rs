@@ -347,7 +347,7 @@ fn tool_normals_follow_curves_but_do_not_round_caps() {
 fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
     let stack = crate::stack::load();
     for (depth, valid) in [(5, true), (0, false), (9, false)] {
-        let result = ::grap::evaluate_value(
+        let result = ::grap::evaluate(
             &::grap::call(
                 PREVIEW_MESH.into(),
                 [
@@ -375,7 +375,7 @@ fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
         );
         assert_eq!(result.halt, None);
         if valid {
-            let fields = result.result.as_record().unwrap();
+            let fields = result.result.as_value().as_record().unwrap();
             assert_eq!(::grap::isa::of(fields), Some(kind::PATHS_MESH_PREVIEW));
             let (model, actual) =
                 fidget::mesh::read(fields.get(&presentation::vocabulary::VALUE).unwrap()).unwrap();
@@ -383,7 +383,7 @@ fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
             assert_eq!(model.objects.len(), 1);
         } else {
             assert_eq!(
-                result.result,
+                result.result.to_value(),
                 ::grap::absent::value(fidget::vocabulary::INVALID_MESH_DEPTH)
             );
         }

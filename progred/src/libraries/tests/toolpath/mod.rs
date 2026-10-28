@@ -45,13 +45,13 @@ impl Inspect for Recording {
 }
 
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
-    let result = ::grap::evaluate_value(&call(names["cube"], []), sources, 10_000);
+    let result = ::grap::evaluate(&call(names["cube"], []), sources, 10_000);
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
-    result.result
+    result.result.to_value()
 }
 
 fn top_face(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
@@ -147,10 +147,9 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
             &sources,
             &::grap::ForeignOverlay::from_value(&[ui::RADIO, ui::TREE_PROGRAM_CURSOR], &emit),
             300_000,
-        )
-        .into_value();
+        );
         assert!(
-            !::grap::absent::is_absent(&parameters.result),
+            parameters.result.absent_reason().is_none(),
             "{:?}",
             parameters.result
         );
@@ -166,14 +165,14 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                 ),
                 (l::WIDTH, f64::value(400.0)),
                 (l::HEIGHT, f64::value(400.0)),
-                (ui::PARAMETERS, parameters.result),
+                (ui::PARAMETERS, parameters.result.to_value()),
             ],
             &sources,
             None,
             10_000,
         );
         assert!(preview.halt.is_none(), "{:?}", preview.result);
-        let fields = preview.result.as_record().unwrap().clone();
+        let fields = preview.result.as_value().as_record().unwrap().clone();
         assert_eq!(
             ::grap::isa::of(&fields),
             Some(kind::PATHS_REFINED_PREVIEW),
@@ -233,7 +232,7 @@ fn point_call(function: CellId, point: Point3) -> Value {
     call(function, [X, Y, Z].into_iter().zip(point.map(f64::value)))
 }
 
-fn evaluate(expression: &Value, fuel: usize) -> (Evaluation<gid::Value>, Recording) {
+fn evaluate(expression: &Value, fuel: usize) -> (Evaluation, Recording) {
     let stack = crate::stack::load();
     let mut recording = Recording::default();
     let evaluation = run(&mut recording, |scope| {
@@ -243,7 +242,6 @@ fn evaluate(expression: &Value, fuel: usize) -> (Evaluation<gid::Value>, Recordi
             scope,
             fuel,
         )
-        .into_value()
     });
     (evaluation, recording)
 }
@@ -264,20 +262,19 @@ fn apply_groups(
     host: &dyn ::grap::Host,
     scope: &::grap::ForeignOverlay<'_>,
     fuel: usize,
-) -> Evaluation<gid::Value> {
+) -> Evaluation {
     let generated = ::grap::evaluate_runtime_scoped(
         &::grap::RuntimeValue::from(collect_groups(::grap::call(function.clone(), arguments))),
         host,
         scope,
         fuel,
-    )
-    .into_value();
-    if ::grap::absent::is_absent(&generated.result) {
+    );
+    if generated.result.absent_reason().is_some() {
         return generated;
     }
     ::grap::apply_value(
         &SEQUENCE.into(),
-        [(PROGRAM, generated.result)],
+        [(PROGRAM, generated.result.into_value())],
         host,
         Some(scope),
         generated.remaining_fuel,
@@ -289,7 +286,7 @@ fn diagonals(
     rows: f64,
     spacing: f64,
     fuel: usize,
-) -> Evaluation<gid::Value> {
+) -> Evaluation {
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
@@ -332,14 +329,14 @@ fn streaming_and_recording_are_interchangeable_consumers() {
     let mut direct = Count::default();
     let result = diagonals(&mut direct, 21.0, 0.03, 100_000);
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 21.0, 0.03, 100_000);
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -354,7 +351,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 3.0, 0.1, 100_000);
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -466,7 +463,7 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
     ]);
     let (result, recording) = evaluate(&expression, 1000);
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -510,7 +507,7 @@ fn invalid_commands_stop_do_before_later_emissions() {
             1000,
         );
         assert_eq!(result.halt, None);
-        assert!(::grap::absent::is_absent(&result.result));
+        assert!(result.result.absent_reason().is_some());
         assert!(recording.commands().is_empty());
     }
 }
@@ -567,7 +564,7 @@ fn handled_mapping_failure(mapping: CellId) {
         1000,
     );
     assert_eq!(result.halt, None);
-    assert_eq!(result.result, Value::record([]));
+    assert_eq!(result.result.to_value(), Value::record([]));
     assert_eq!(
         recording.commands(),
         [
@@ -582,7 +579,7 @@ fn handled_mapping_failure(mapping: CellId) {
         1000,
     );
     assert_eq!(result.halt, None);
-    assert_eq!(result.result, failure);
+    assert_eq!(result.result.to_value(), failure);
     assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], Axis::Z)]);
 }
 
@@ -593,8 +590,11 @@ fn generation_is_fueled_and_requires_a_scoped_sink() {
     assert!(result.halt.is_some());
     assert!(recording.commands().len() <= 100);
     let stack = crate::stack::load();
-    let unscoped = ::grap::evaluate_value(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
-    assert_eq!(unscoped.result, ::grap::absent::value(OUTPUT_REQUIRED));
+    let unscoped = ::grap::evaluate(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
+    assert_eq!(
+        unscoped.result.to_value(),
+        ::grap::absent::value(OUTPUT_REQUIRED)
+    );
 }
 
 #[test]
@@ -612,7 +612,7 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
         let mut recording = Recording::default();
         let result = diagonals(&mut recording, rows, spacing, 1000);
         assert!(
-            result.halt.is_none() && ::grap::absent::is_absent(&result.result),
+            result.halt.is_none() && result.result.absent_reason().is_some(),
             "{:?}",
             result.result
         );
@@ -620,7 +620,7 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
     }
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 0.0, 0.1, 1000);
-    assert!(!::grap::absent::is_absent(&result.result));
+    assert!(result.result.absent_reason().is_none());
     assert!(recording.commands().is_empty());
 
     let result = diagonals(&mut recording, 1.0, f64::from_bits(1), 1000);
@@ -643,7 +643,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate_value(
+                    ::grap::evaluate(
                         &::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
@@ -657,7 +657,8 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
                         &sources,
                         100,
                     )
-                    .result,
+                    .result
+                    .to_value(),
                 ),
                 (names["orientation"], names["top"].into()),
                 (names["setup_up"], point_value(Axis::Z.vector())),
@@ -683,7 +684,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
         a.result,
         b.result
     );
-    assert!(!::grap::absent::is_absent(&b.result), "{:?}", b.result);
+    assert!(b.result.absent_reason().is_none(), "{:?}", b.result);
     assert_eq!(contact.commands().len(), centers.commands().len());
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     let mut axis = Axis::Z;
@@ -728,7 +729,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate_value(
+                    ::grap::evaluate(
                         &::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
@@ -742,7 +743,8 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
                         &sources,
                         100,
                     )
-                    .result,
+                    .result
+                    .to_value(),
                 ),
                 (names["orientation"], names["top"].into()),
                 (names["setup_up"], point_value(Axis::Z.vector())),
@@ -753,7 +755,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
         )
     });
     assert!(
-        !::grap::absent::is_absent(&evaluation.result),
+        evaluation.result.absent_reason().is_none(),
         "{:?}",
         evaluation.result
     );
@@ -793,7 +795,7 @@ fn example_ball_path() -> (Recording, f64) {
             500_000,
         )
     });
-    assert!(!::grap::absent::is_absent(&result.result));
+    assert!(result.result.absent_reason().is_none());
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     (recording, radius)
 }
@@ -927,7 +929,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
                 (names["face"], top_face(&sources, &names)),
                 (
                     names["compensation"],
-                    ::grap::evaluate_value(
+                    ::grap::evaluate(
                         &::grap::lambda(
                             [TOOL_AXIS],
                             ::grap::lambda(
@@ -941,7 +943,8 @@ fn example_tubes_compile_without_gpu_memory_operations() {
                         &sources,
                         100,
                     )
-                    .result,
+                    .result
+                    .to_value(),
                 ),
                 (names["orientation"], names["top"].into()),
                 (names["setup_up"], point_value(Axis::Z.vector())),
@@ -951,7 +954,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
             500_000,
         )
     });
-    assert!(!::grap::absent::is_absent(&evaluation.result));
+    assert!(evaluation.result.absent_reason().is_none());
     let paths = tubes.scene();
     assert_eq!(paths.len(), 42);
     for (index, object) in paths.into_iter().enumerate() {

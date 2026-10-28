@@ -27,7 +27,7 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         (SQUARE_MILL, Tool::square(0.125, 0.22).unwrap()),
         (BULL_MILL, Tool::bull(0.125, 0.01, 0.22).unwrap()),
     ] {
-        let value = ::grap::evaluate_value(
+        let value = ::grap::evaluate(
             &::grap::call(
                 function.into(),
                 [
@@ -40,21 +40,21 @@ fn constructors_return_editable_profiles_not_shape_tags() {
             1000,
         )
         .result;
-        assert_eq!(value, tool.value());
+        assert_eq!(value.to_value(), tool.value());
         assert_eq!(
-            value.as_record().unwrap().len(),
+            value.as_value().as_record().unwrap().len(),
             2,
             "constructors return a tool, geometry only"
         );
-        assert_eq!(Tool::read(&value), Some(tool));
-        let mut fields = value.as_record().unwrap().clone();
+        assert_eq!(Tool::read(value.as_value()), Some(tool));
+        let mut fields = value.as_value().as_record().unwrap().clone();
         fields.set(
             crate::libraries::name::vocabulary::NAME,
             crate::libraries::text::value("user name"),
         );
         assert!(Tool::read(&Value::Record(fields)).is_some());
     }
-    let value = ::grap::evaluate_value(
+    let value = ::grap::evaluate(
         &::grap::call(
             SQUARE_MILL.into(),
             [
@@ -66,7 +66,7 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         1000,
     )
     .result;
-    assert!(::grap::absent::is_absent(&value));
+    assert!(::grap::absent::is_absent(value.as_value()));
 }
 
 #[test]
@@ -376,12 +376,16 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
     };
     assert!(
         Tool::read(
-            &::grap::evaluate_value(&Value::from(names["ball_tool"]), &sources, 1000).result
+            ::grap::evaluate(&Value::from(names["ball_tool"]), &sources, 1000)
+                .result
+                .as_value()
         )
         .is_some()
     );
     let square = Tool::read(
-        &::grap::evaluate_value(&Value::from(names["square_tool"]), &sources, 1000).result,
+        ::grap::evaluate(&Value::from(names["square_tool"]), &sources, 1000)
+            .result
+            .as_value(),
     )
     .unwrap();
     assert_eq!(square.sections().len(), 2);

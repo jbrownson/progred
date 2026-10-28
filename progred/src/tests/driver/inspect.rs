@@ -75,13 +75,13 @@ impl<P> Driver<P> {
             .as_record()
             .and_then(|fields| fields.get(&key))
             .unwrap_or_else(|| panic!("nothing to compute at {path:?}"));
-        let evaluation = ::grap::evaluate_value(
+        let evaluation = ::grap::evaluate(
             expression,
             &self.editor().sources(),
             crate::sources::DEFAULT_FUEL,
         );
         assert_eq!(evaluation.halt, None);
-        evaluation.result
+        evaluation.result.to_value()
     }
 
     /// The window gains or loses focus; whether that changed anything.

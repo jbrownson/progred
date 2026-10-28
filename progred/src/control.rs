@@ -221,7 +221,7 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
             doc.root
                 .as_ref()
                 .map(|root| {
-                    ::grap::evaluate_value(
+                    ::grap::evaluate(
                         root,
                         &Sources {
                             doc: &doc,
@@ -230,6 +230,7 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
                         crate::sources::DEFAULT_FUEL,
                     )
                     .result
+                    .into_value()
                 })
                 .ok_or_else(|| "a request's root is the expression to evaluate".to_owned())
         })

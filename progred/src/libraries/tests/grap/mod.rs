@@ -1069,7 +1069,10 @@ fn the_library_describes_grap_and_owns_evaluate() {
         &crate::test_support::foreign_functions(&library),
         40,
     );
-    assert_eq!(evaluation.result, Value::from(b"evaluated".to_vec()));
+    assert_eq!(
+        evaluation.result.to_value(),
+        Value::from(b"evaluated".to_vec())
+    );
 }
 
 #[test]

@@ -52,7 +52,7 @@ fn mesh_function_returns_an_ordinary_declaration() {
         libraries: &stack.libraries,
     };
     let call = |arguments| {
-        ::grap::evaluate_value(
+        ::grap::evaluate(
             &::grap::call(vocabulary::PREVIEW_MESH.into(), arguments),
             &sources,
             10_000,
@@ -60,7 +60,7 @@ fn mesh_function_returns_an_ordinary_declaration() {
         .result
     };
     let result = call(vec![(presentation::vocabulary::VALUE, f32::value(1.0))]);
-    let fields = of_kind(&result, vocabulary::kind::MESH_PREVIEW).unwrap();
+    let fields = of_kind(result.as_value(), vocabulary::kind::MESH_PREVIEW).unwrap();
     assert_eq!(depth(fields.get(&vocabulary::MESH_DEPTH)), Some(6));
     assert_eq!(volume_preview_fields(fields).unwrap().objects.len(), 1);
     let invalid = call(vec![
@@ -68,7 +68,7 @@ fn mesh_function_returns_an_ordinary_declaration() {
         (vocabulary::MESH_DEPTH, crate::libraries::u64::value(0)),
     ]);
     assert_eq!(
-        invalid,
+        invalid.to_value(),
         ::grap::absent::value(vocabulary::INVALID_MESH_DEPTH)
     );
 }

@@ -20,6 +20,7 @@ fn evaluate(expression: &Value) -> Value {
         200,
     )
     .result
+    .to_value()
 }
 
 fn sample(tree: Tree, x: f32, y: f32, z: f32) -> f32 {

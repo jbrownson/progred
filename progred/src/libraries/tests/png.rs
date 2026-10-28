@@ -100,6 +100,7 @@ fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) 
         100,
     )
     .result
+    .to_value()
 }
 
 #[test]

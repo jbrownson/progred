@@ -323,7 +323,7 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
         )],
     );
     let libraries = crate::stack::load().libraries;
-    let expected = ::grap::evaluate_value(&collect, &libraries, 1000).result;
+    let expected = ::grap::evaluate(&collect, &libraries, 1000).result;
     let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
@@ -333,7 +333,7 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
         let (widgets, result) =
             controls_output(&::grap::lambda([], collect), None, 200.0, context).unwrap();
         assert!(widgets.is_empty());
-        assert_eq!(result, expected);
+        assert_eq!(result, expected.to_value());
         assert_eq!(result, Value::list([f64::value(7.0)]));
     });
 }
@@ -769,7 +769,9 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
             (HEIGHT, f64::value(300.0)),
         ],
     );
-    let declaration = ::grap::evaluate_value(&call, &libraries, 10_000).result;
+    let declaration = ::grap::evaluate(&call, &libraries, 10_000)
+        .result
+        .into_value();
     let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
@@ -1064,7 +1066,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         1000,
     );
     assert_eq!(result.halt, None);
-    assert_eq!(result.result, items);
+    assert_eq!(result.result.to_value(), items);
     let decorate = captured.into_inner().expect("a stored list has a source");
     let sources: Vec<_> = positions
         .iter()
@@ -1077,7 +1079,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
             ]),
         })
         .collect();
-    let selection = tree_range::Selection::new(&result.result, None);
+    let selection = tree_range::Selection::new(result.result.as_value(), None);
     let point = Point::new(50.0, 10.0);
 
     let build = |selected: Option<SourceTrace>, hovered: Option<SourceTrace>| {
@@ -1209,7 +1211,8 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
             Some(&ForeignOverlay::from_value(&[probe], &emit)),
             1000
         )
-        .result,
+        .result
+        .to_value(),
         items
     );
 }

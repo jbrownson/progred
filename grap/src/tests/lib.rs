@@ -26,8 +26,8 @@ fn evaluate(
     resolve: impl Fn(CellId) -> Option<Value>,
     foreign: &ForeignFunctions,
     fuel: usize,
-) -> Evaluation<Value> {
-    super::evaluate_value(expression, &definitions_from_parts(resolve, foreign), fuel)
+) -> Evaluation {
+    super::evaluate(expression, &definitions_from_parts(resolve, foreign), fuel)
 }
 
 fn apply(
@@ -36,7 +36,7 @@ fn apply(
     resolve: impl Fn(CellId) -> Option<Value>,
     foreign: &ForeignFunctions,
     fuel: usize,
-) -> Evaluation<Value> {
+) -> Evaluation {
     super::apply_value(
         function,
         arguments,
@@ -50,7 +50,7 @@ fn apply(
 fn a_direct_cell_call_returns_its_definitions_decline() {
     let function = new_cell_id();
     let expression = call(Value::from(function), []);
-    let evaluation = super::evaluate_value(
+    let evaluation = super::evaluate(
         &expression,
         &TestHost(|cell| {
             assert_eq!(cell, function);
@@ -63,14 +63,14 @@ fn a_direct_cell_call_returns_its_definitions_decline() {
         20,
     );
 
-    assert_eq!(evaluation.result, absent::decline());
+    assert_eq!(evaluation.result.to_value(), absent::decline());
 }
 
 #[test]
 fn an_ordinary_absent_keeps_its_details() {
     let function = new_cell_id();
     let missing = new_cell_id();
-    let evaluation = super::evaluate_value(
+    let evaluation = super::evaluate(
         &call(Value::from(function), []),
         &TestHost(|cell| match cell {
             cell if cell == function => Some(TestDefinition::from(Value::from(missing))),
@@ -81,7 +81,7 @@ fn an_ordinary_absent_keeps_its_details() {
     );
 
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         absent::with_detail(absent::MISSING_CELL, absent::CELL, missing.into()),
     );
 }
@@ -103,7 +103,7 @@ fn host_apply_returns_the_definitions_decline() {
         20,
     );
 
-    assert_eq!(evaluation.result, absent::decline());
+    assert_eq!(evaluation.result.to_value(), absent::decline());
 }
 
 fn blob(text: &str) -> Value {
@@ -121,7 +121,7 @@ fn ordinary_structures_are_inert_data() {
         &ForeignFunctions::default(),
         10,
     );
-    assert_eq!(evaluation.result, value);
+    assert_eq!(evaluation.result.to_value(), value);
 }
 
 #[test]
@@ -140,7 +140,7 @@ fn value_wrappers_evaluate_only_their_expression_in_the_calling_environment() {
         &ForeignFunctions::default(),
         20,
     );
-    assert_eq!(evaluation.result, blob("local"));
+    assert_eq!(evaluation.result.to_value(), blob("local"));
     assert_eq!(evaluation.halt, None);
 }
 
@@ -164,7 +164,7 @@ fn value_wrappers_can_be_anonymous_nested_and_callable() {
         &ForeignFunctions::default(),
         20,
     );
-    assert_eq!(evaluation.result, blob("argument"));
+    assert_eq!(evaluation.result.to_value(), blob("argument"));
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn referencing_a_value_wrapper_again_reruns_its_expression() {
         &foreign,
         40,
     );
-    assert_eq!(evaluation.result, blob("result"));
+    assert_eq!(evaluation.result.to_value(), blob("result"));
     assert_eq!(calls.get(), 2);
 }
 
@@ -218,12 +218,16 @@ fn value_wrappers_do_not_evaluate_inside_data_or_foreign_results() {
         Value::record([(new_cell_id(), wrapper.clone())]),
     ] {
         assert_eq!(
-            evaluate(&data, |_| panic!("inert data"), &foreign, 10).result,
+            evaluate(&data, |_| panic!("inert data"), &foreign, 10)
+                .result
+                .to_value(),
             data,
         );
     }
     assert_eq!(
-        evaluate(&call(foreign_cell.into(), []), |_| None, &foreign, 10).result,
+        evaluate(&call(foreign_cell.into(), []), |_| None, &foreign, 10)
+            .result
+            .to_value(),
         wrapper,
     );
 }
@@ -237,10 +241,13 @@ fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
         [(vocabulary::VALUE, absent.clone())],
     );
     let evaluation = evaluate(&wrapper, |_| None, &foreign, 10);
-    assert_eq!(evaluation.result, absent);
+    assert_eq!(evaluation.result.to_value(), absent);
     assert_eq!(evaluation.halt, None);
     let exhausted = evaluate(&wrapper, |_| None, &foreign, 2);
-    assert_eq!(exhausted.result, absent::value(absent::FUEL_EXHAUSTED));
+    assert_eq!(
+        exhausted.result.to_value(),
+        absent::value(absent::FUEL_EXHAUSTED)
+    );
     assert!(exhausted.halt.is_some());
 
     let cell = new_cell_id();
@@ -249,7 +256,7 @@ fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
         [(vocabulary::VALUE, cell.into())],
     );
     let cycle = evaluate(&cell.into(), |_| Some(wrapper.clone()), &foreign, 20);
-    assert_eq!(absent::reason(&cycle.result), Some(absent::CELL_CYCLE));
+    assert_eq!(cycle.result.absent_reason(), Some(absent::CELL_CYCLE));
 }
 
 #[test]
@@ -274,9 +281,8 @@ fn value_wrappers_preserve_the_inner_expression_source() {
         ),
         &ForeignOverlay::from_value(&functions, &scoped),
         20,
-    )
-    .into_value();
-    assert_eq!(evaluation.result, blob("result"));
+    );
+    assert_eq!(evaluation.result.to_value(), blob("result"));
     assert_eq!(
         origin.into_inner(),
         Some(SourceOrigin::Cell {
@@ -290,10 +296,13 @@ fn value_wrappers_preserve_the_inner_expression_source() {
 fn consuming_the_entire_fuel_allowance_is_exhaustion() {
     let value = blob("one step");
     let exhausted = evaluate(&value, |_| None, &ForeignFunctions::default(), 1);
-    assert_eq!(exhausted.result, absent::value(absent::FUEL_EXHAUSTED));
+    assert_eq!(
+        exhausted.result.to_value(),
+        absent::value(absent::FUEL_EXHAUSTED)
+    );
     assert_eq!(exhausted.remaining_fuel, 0);
     let completed = evaluate(&value, |_| None, &ForeignFunctions::default(), 2);
-    assert_eq!(completed.result, value);
+    assert_eq!(completed.result.to_value(), value);
     assert_eq!(completed.remaining_fuel, 1);
 }
 
@@ -328,7 +337,9 @@ fn a_staged_foreign_prepares_once_per_compiled_call_site() {
     );
 
     assert_eq!(
-        evaluate(&expression, |_| None, &foreign, 20).result,
+        evaluate(&expression, |_| None, &foreign, 20)
+            .result
+            .to_value(),
         blob("staged"),
     );
     assert_eq!(preparations.get(), 1);
@@ -378,7 +389,9 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
     );
 
     assert_eq!(
-        evaluate(&expression, |_| None, &foreign, 30).result,
+        evaluate(&expression, |_| None, &foreign, 30)
+            .result
+            .to_value(),
         Value::list([blob("base"), blob("scoped"), blob("base")]),
     );
     assert_eq!(base_preparations.get(), 1);
@@ -399,7 +412,7 @@ fn cells_evaluate_when_they_are_the_expression() {
         &ForeignFunctions::default(),
         10,
     );
-    assert_eq!(evaluation.result, blob("done"));
+    assert_eq!(evaluation.result.to_value(), blob("done"));
 }
 
 #[test]
@@ -412,7 +425,7 @@ fn a_call_of_an_absent_function_answers_that_absent() {
         10,
     );
     assert_eq!(
-        called.result,
+        called.result.to_value(),
         absent::value(reason),
         "what failed before the call is the reason, not that it isn't callable"
     );
@@ -424,7 +437,9 @@ fn a_record_is_a_call_or_a_lambda_only_when_its_isa_says_so() {
     let resolve = |cell| (cell == function).then(|| crate::lambda([], blob("called")));
     let shaped = Value::record([(vocabulary::FUNCTION, function.into())]);
     assert_eq!(
-        evaluate(&shaped, resolve, &ForeignFunctions::default(), 10).result,
+        evaluate(&shaped, resolve, &ForeignFunctions::default(), 10)
+            .result
+            .to_value(),
         shaped,
         "without an isa, a record with a function is data"
     );
@@ -435,7 +450,8 @@ fn a_record_is_a_call_or_a_lambda_only_when_its_isa_says_so() {
             &ForeignFunctions::default(),
             10
         )
-        .result,
+        .result
+        .to_value(),
         blob("called")
     );
 }
@@ -444,7 +460,9 @@ fn a_record_is_a_call_or_a_lambda_only_when_its_isa_says_so() {
 fn a_call_or_a_lambda_missing_what_its_kind_requires_answers_why() {
     let unfinished = isa::record(vocabulary::kind::CALL, []);
     assert_eq!(
-        evaluate(&unfinished, |_| None, &ForeignFunctions::default(), 10).result,
+        evaluate(&unfinished, |_| None, &ForeignFunctions::default(), 10)
+            .result
+            .to_value(),
         absent::missing_field(vocabulary::FUNCTION)
     );
     let parameter = new_cell_id();
@@ -459,7 +477,8 @@ fn a_call_or_a_lambda_missing_what_its_kind_requires_answers_why() {
             &ForeignFunctions::default(),
             10
         )
-        .result,
+        .result
+        .to_value(),
         absent::missing_field(vocabulary::BODY)
     );
 }
@@ -485,7 +504,7 @@ fn graph_functions_match_parameter_labelled_fields() {
         &ForeignFunctions::default(),
         30,
     );
-    assert_eq!(evaluation.result, blob("x"));
+    assert_eq!(evaluation.result.to_value(), blob("x"));
     assert_eq!(*reads.borrow(), [function_cell, argument]);
 }
 
@@ -502,7 +521,7 @@ fn parameters_shadow_document_cells() {
         &ForeignFunctions::default(),
         20,
     );
-    assert_eq!(evaluation.result, blob("local"));
+    assert_eq!(evaluation.result.to_value(), blob("local"));
 }
 
 #[test]
@@ -517,11 +536,13 @@ fn parameters_shadow_foreign_functions() {
         [(function, blob("bound"))],
     );
     assert_eq!(
-        evaluate(&shadowed, |_| None, &foreign, 30).result,
+        evaluate(&shadowed, |_| None, &foreign, 30)
+            .result
+            .to_value(),
         blob("bound"),
     );
     let unshadowed = evaluate(&call(Value::from(function), []), |_| None, &foreign, 30);
-    assert_eq!(unshadowed.result, blob("foreign"));
+    assert_eq!(unshadowed.result.to_value(), blob("foreign"));
 }
 
 #[test]
@@ -543,7 +564,9 @@ fn a_foreign_call_outside_a_shadowing_scope_still_uses_the_registry() {
         )],
     );
     assert_eq!(
-        evaluate(&expression, |_| Some(blob("ordinary data")), &foreign, 100).result,
+        evaluate(&expression, |_| Some(blob("ordinary data")), &foreign, 100)
+            .result
+            .to_value(),
         blob("foreign")
     );
 }
@@ -606,11 +629,11 @@ fn a_call_runs_native_code_only_where_its_definition_names_it() {
         ),
     ] {
         for result in [
-            super::evaluate_value(&call(function.into(), []), &host, 100),
+            super::evaluate(&call(function.into(), []), &host, 100),
             super::apply_value(&function.into(), [], &host, None, 100),
         ] {
             assert_eq!(result.halt, None);
-            assert_eq!(result.result, expected);
+            assert_eq!(result.result.to_value(), expected);
         }
     }
 }
@@ -656,10 +679,9 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
             &DataHost(cell, values),
             &overlay,
             20,
-        )
-        .into_value();
+        );
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, expected);
+        assert_eq!(result.result.to_value(), expected);
     }
 }
 
@@ -676,7 +698,8 @@ fn anonymous_functions_capture_their_lexical_environment() {
             &ForeignFunctions::default(),
             50,
         )
-        .result,
+        .result
+        .to_value(),
         blob("captured")
     );
 }
@@ -698,15 +721,20 @@ fn rust_functions_control_evaluation_while_graph_functions_are_strict() {
     );
     let graph = lambda([input], Value::from(input));
     assert_eq!(
-        evaluate(&held, |_| None, &foreign, 30,).result,
+        evaluate(&held, |_| None, &foreign, 30,).result.to_value(),
         call_shaped_data
     );
     assert_eq!(
-        evaluate(&call(graph, [(input, held)]), |_| None, &foreign, 30,).result,
+        evaluate(&call(graph, [(input, held)]), |_| None, &foreign, 30,)
+            .result
+            .to_value(),
         call_shaped_data
     );
     let inert = Value::record([(field, call(Value::from(hold), []))]);
-    assert_eq!(evaluate(&inert, |_| None, &foreign, 30).result, inert);
+    assert_eq!(
+        evaluate(&inert, |_| None, &foreign, 30).result.to_value(),
+        inert
+    );
 }
 
 #[test]
@@ -736,7 +764,7 @@ fn a_foreign_function_reads_as_its_definition_which_says_what_it_is() {
         &foreign,
         10,
     );
-    assert_eq!(evaluation.result, defined);
+    assert_eq!(evaluation.result.to_value(), defined);
     // The value it reads as calls it, as its cell does.
     assert_eq!(
         evaluate(
@@ -745,7 +773,8 @@ fn a_foreign_function_reads_as_its_definition_which_says_what_it_is() {
             &foreign,
             10,
         )
-        .result,
+        .result
+        .to_value(),
         blob("passed")
     );
     assert_eq!(
@@ -755,7 +784,8 @@ fn a_foreign_function_reads_as_its_definition_which_says_what_it_is() {
             &foreign,
             10,
         )
-        .result,
+        .result
+        .to_value(),
         super::foreign_function(echo),
         "a foreign function's value is its definition"
     );
@@ -787,7 +817,7 @@ fn foreign_callables_pass_through_grap_bindings_as_values() {
         &foreign,
         40,
     );
-    assert_eq!(evaluation.result, blob("passed"));
+    assert_eq!(evaluation.result.to_value(), blob("passed"));
 }
 
 #[test]
@@ -840,7 +870,7 @@ fn rust_functions_choose_which_raw_operands_to_evaluate() {
         &foreign,
         50,
     );
-    assert_eq!(evaluation.result, blob("selected"));
+    assert_eq!(evaluation.result.to_value(), blob("selected"));
 }
 
 #[test]
@@ -861,6 +891,7 @@ fn rust_functions_can_expose_the_calling_environment_as_graph_data() {
     assert_eq!(
         evaluation
             .result
+            .as_value()
             .as_record()
             .and_then(|environment| environment.get(&parameter)),
         Some(&blob("bound"))
@@ -897,7 +928,7 @@ fn rust_functions_evaluate_raw_operands_in_extended_environments() {
         &foreign,
         30,
     );
-    assert_eq!(evaluation.result, blob("locally bound"));
+    assert_eq!(evaluation.result.to_value(), blob("locally bound"));
 }
 
 #[test]
@@ -916,16 +947,18 @@ fn returned_closures_are_graph_values_with_graph_environments() {
     .result;
     assert_eq!(
         evaluate(
-            &call(closure.clone(), []),
+            &call(closure.clone().to_value(), []),
             |_| None,
             &ForeignFunctions::default(),
             40,
         )
-        .result,
+        .result
+        .to_value(),
         blob("remembered")
     );
     assert_eq!(
         closure
+            .as_value()
             .as_record()
             .and_then(|closure| closure.get(&vocabulary::ENVIRONMENT))
             .and_then(Value::as_record)
@@ -944,7 +977,7 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
         10,
     );
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         absent::with_detail(absent::MISSING_CELL, absent::CELL, missing.into())
     );
 
@@ -957,7 +990,7 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
     );
     let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::default(), 10);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         absent::with_detail(absent::MALFORMED_LAMBDA, absent::VALUE, malformed)
     );
 
@@ -971,7 +1004,7 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
     );
     let evaluation = evaluate(&lambda, |_| None, &ForeignFunctions::default(), 10);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         absent::with_detail(absent::INVALID_PARAMETER, absent::VALUE, invalid)
     );
 }
@@ -983,7 +1016,7 @@ fn incomplete_lambda_shapes_are_inert_data() {
         Value::record([(vocabulary::BODY, blob("body"))]),
     ] {
         let evaluation = evaluate(&incomplete, |_| None, &ForeignFunctions::default(), 10);
-        assert_eq!(evaluation.result, incomplete);
+        assert_eq!(evaluation.result.to_value(), incomplete);
     }
 }
 
@@ -1001,7 +1034,10 @@ fn recursion_and_cell_cycles_are_values() {
         &ForeignFunctions::default(),
         30,
     );
-    assert_eq!(evaluation.result, absent::value(absent::FUEL_EXHAUSTED));
+    assert_eq!(
+        evaluation.result.to_value(),
+        absent::value(absent::FUEL_EXHAUSTED)
+    );
 
     let a = new_cell_id();
     let b = new_cell_id();
@@ -1016,7 +1052,7 @@ fn recursion_and_cell_cycles_are_values() {
         20,
     );
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         absent::with_detail(
             absent::CELL_CYCLE,
             absent::CYCLE,
@@ -1034,7 +1070,7 @@ fn extra_call_fields_do_not_prevent_calling() {
         [(parameter, blob("result")), (extra, blob("still GID data"))],
     );
     let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::default(), 10);
-    assert_eq!(evaluation.result, blob("result"));
+    assert_eq!(evaluation.result.to_value(), blob("result"));
 }
 
 #[test]
@@ -1053,6 +1089,7 @@ fn grap_parameters_may_repeat_and_name_the_function_field() {
     assert!(
         evaluation
             .result
+            .as_value()
             .as_record()
             .and_then(|fields| fields.get(&vocabulary::LAMBDA))
             .is_some()
@@ -1084,7 +1121,8 @@ fn foreign_functions_may_consume_the_function_field() {
             &foreign,
             20,
         )
-        .result,
+        .result
+        .to_value(),
         blob("argument")
     );
 }
@@ -1107,7 +1145,8 @@ fn a_later_table_overrides_a_shared_cell() {
             &left.merge(right),
             10,
         )
-        .result,
+        .result
+        .to_value(),
         blob("right")
     );
 }
@@ -1127,6 +1166,7 @@ fn apply_binds_code_shaped_arguments_as_data() {
             20,
         )
         .result
+        .to_value()
             != code_shaped
     );
     let applied = apply(
@@ -1136,7 +1176,7 @@ fn apply_binds_code_shaped_arguments_as_data() {
         &ForeignFunctions::default(),
         20,
     );
-    assert_eq!(applied.result, code_shaped);
+    assert_eq!(applied.result.to_value(), code_shaped);
 }
 
 #[test]
@@ -1151,7 +1191,7 @@ fn apply_resolves_a_cell_to_its_stored_function() {
         &ForeignFunctions::default(),
         20,
     );
-    assert_eq!(applied.result, blob("argument"));
+    assert_eq!(applied.result.to_value(), blob("argument"));
 }
 
 #[test]
@@ -1171,7 +1211,7 @@ fn apply_reaches_foreign_targets_with_the_arguments_as_fields() {
         &foreign,
         20,
     );
-    assert_eq!(applied.result, blob("passed"));
+    assert_eq!(applied.result.to_value(), blob("passed"));
 }
 
 #[test]
@@ -1213,7 +1253,7 @@ fn prepared_calls_pass_a_foreign_function_as_its_value() {
         &functions,
         20,
     );
-    assert_eq!(evaluation.result, blob("passed"));
+    assert_eq!(evaluation.result.to_value(), blob("passed"));
 }
 
 #[test]
@@ -1249,7 +1289,7 @@ fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
         Some(&overlay),
         20,
     );
-    assert_eq!(applied.result, blob("walked"));
+    assert_eq!(applied.result.to_value(), blob("walked"));
 }
 
 #[test]
@@ -1278,7 +1318,7 @@ fn a_scoped_foreign_layer_borrows_state_and_remains_reentrant() {
         Some(&overlay),
         20,
     );
-    assert_eq!(applied.result, blob("scoped"));
+    assert_eq!(applied.result.to_value(), blob("scoped"));
     assert_eq!(calls.get(), 2);
 }
 
@@ -1298,9 +1338,8 @@ fn a_scoped_foreign_layer_can_evaluate_a_source_call() {
         &definitions_from_parts(|_| None, &foreign),
         &overlay,
         10,
-    )
-    .into_value();
-    assert_eq!(evaluation.result, blob("drawn"));
+    );
+    assert_eq!(evaluation.result.to_value(), blob("drawn"));
     assert_eq!(calls.get(), 1);
 }
 
@@ -1333,7 +1372,7 @@ fn captured_calls_share_ancestry_and_source_locations() {
             }),
         );
     let expression = call(repeat.into(), [(body, call(leaf.into(), []))]);
-    let result = super::evaluate_value(
+    let result = super::evaluate(
         &expression,
         &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
         100,
@@ -1389,7 +1428,7 @@ fn generated_prepared_calls_keep_their_source_callers() {
         invoke.into(),
         [(function, lambda([], call(leaf.into(), [])))],
     );
-    let result = super::evaluate_value(
+    let result = super::evaluate(
         &expression,
         &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
         100,
@@ -1435,10 +1474,9 @@ fn a_foreign_call_retains_its_cell_relative_source_origin() {
         ),
         &overlay,
         20,
-    )
-    .into_value();
+    );
 
-    assert_eq!(evaluation.result, blob("drawn"));
+    assert_eq!(evaluation.result.to_value(), blob("drawn"));
     assert_eq!(
         *source.borrow(),
         Some(SourceOrigin::Cell {
@@ -1467,9 +1505,8 @@ fn a_value_definitions_origin_is_its_cell() {
         }),
         &overlay,
         20,
-    )
-    .into_value();
-    assert_eq!(evaluation.result, blob("drawn"));
+    );
+    assert_eq!(evaluation.result.to_value(), blob("drawn"));
     assert_eq!(
         origin.into_inner(),
         Some(SourceOrigin::Cell { cell, path: vec![] })
@@ -1484,7 +1521,9 @@ fn a_missing_argument_answers_only_where_the_body_uses_it() {
     let call_with_used =
         |body: CellId| call(lambda([used, unused], body.into()), [(used, given.clone())]);
     assert_eq!(
-        evaluate(&call_with_used(used), |_| None, &foreign, 20).result,
+        evaluate(&call_with_used(used), |_| None, &foreign, 20)
+            .result
+            .to_value(),
         given
     );
     assert_eq!(
@@ -1495,12 +1534,15 @@ fn a_missing_argument_answers_only_where_the_body_uses_it() {
             &foreign,
             20
         )
-        .result,
+        .result
+        .to_value(),
         given
     );
     // It names the call it's missing from, here the evaluation's input.
     assert_eq!(
-        evaluate(&call_with_used(unused), |_| None, &foreign, 20).result,
+        evaluate(&call_with_used(unused), |_| None, &foreign, 20)
+            .result
+            .to_value(),
         absent::missing_argument(unused, Some(&crate::SourceOrigin::Input(vec![])))
     );
 }
@@ -1516,7 +1558,7 @@ fn apply_classifies_missing_arguments_and_uncallable_targets() {
         20,
     );
     assert_eq!(
-        missing.result,
+        missing.result.to_value(),
         absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, parameter.into())
     );
 
@@ -1528,7 +1570,7 @@ fn apply_classifies_missing_arguments_and_uncallable_targets() {
         20,
     );
     assert_eq!(
-        uncallable.result,
+        uncallable.result.to_value(),
         absent::with_detail(absent::NOT_CALLABLE, absent::VALUE, blob("not a function"))
     );
 }

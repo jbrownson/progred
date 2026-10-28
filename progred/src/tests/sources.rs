@@ -62,11 +62,11 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
         assert_eq!(resolved.library, None);
         assert_eq!(Some(resolved.value), doc.cells.value(function));
         for result in [
-            grap::evaluate_value(&grap::call(function.into(), []), &sources, 100),
+            grap::evaluate(&grap::call(function.into(), []), &sources, 100),
             grap::apply_value(&function.into(), [], &sources, None, 100),
         ] {
             assert_eq!(result.halt, None);
-            assert_eq!(result.result, expected);
+            assert_eq!(result.result.to_value(), expected);
         }
     }
 }
@@ -118,9 +118,8 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
                     &overlay,
                     100,
                 )
-                .into_value()
             };
-            assert_eq!(evaluation.result, ::grap::absent::decline());
+            assert_eq!(evaluation.result.to_value(), ::grap::absent::decline());
             assert_eq!(
                 origins.into_inner(),
                 [grap::SourceOrigin::Cell {
@@ -248,7 +247,9 @@ fn lookup_and_follows_take_the_first_library_in_load_order() {
             Some(first),
         );
         assert_eq!(
-            grap::evaluate_value(&cell.into(), &sources, 100).result,
+            grap::evaluate(&cell.into(), &sources, 100)
+                .result
+                .to_value(),
             crate::libraries::text::value(first),
         );
         assert_eq!(

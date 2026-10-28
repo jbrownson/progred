@@ -193,15 +193,18 @@ proptest! {
     #[test]
     fn code_evaluates_alike_stored_or_built(value in value()) {
         let host = TestHost(|_| None);
-        let stored = crate::evaluate_value(&value, &host, 1_000);
+        let stored = crate::evaluate(&value, &host, 1_000);
         let built = crate::evaluate_runtime_at(
             &built(&value),
             Some(SourceOrigin::Input(Vec::new())),
             &host,
             1_000,
         )
-        .into_value();
-        prop_assert!(identical(&stored.result, &built.result), "{stored:?} against {built:?}");
-        prop_assert_eq!(stored, built);
+        ;
+        prop_assert!(identical(stored.result.as_value(), built.result.as_value()), "{stored:?} against {built:?}");
+        prop_assert_eq!(
+            (stored.halt, stored.remaining_fuel),
+            (built.halt, built.remaining_fuel)
+        );
     }
 }

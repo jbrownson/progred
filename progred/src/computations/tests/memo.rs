@@ -44,15 +44,17 @@ fn evaluate(
     definitions: Definitions<Table>,
     expression: Input<Value>,
     fuel: Input<usize>,
-) -> Memo<Evaluation<Value>> {
-    runtime.memo(move |read| {
-        let expression = expression.read(read);
-        let fuel = *fuel.read(read);
-        Ok(run(&definitions, read, |host| {
-            grap::evaluate(&expression, host, fuel)
-        })
-        .into_value())
-    })
+) -> Memo<Evaluation> {
+    runtime.memo_by(
+        move |read| {
+            let expression = expression.read(read);
+            let fuel = *fuel.read(read);
+            Ok(run(&definitions, read, |host| {
+                grap::evaluate(&expression, host, fuel)
+            }))
+        },
+        crate::computations::same_evaluation,
+    )
 }
 
 #[test]
@@ -66,12 +68,15 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
     let fuel = runtime.input(100);
     let query = evaluate(&runtime, source, expression, fuel);
     assert_eq!(
-        ::grap::absent::reason(&runtime.read(&query).unwrap().result),
+        ::grap::absent::reason(runtime.read(&query).unwrap().result.as_value()),
         Some(absent::MISSING_CELL)
     );
     let first = counted(cell, &runs, Value::from(vec![1]));
     table.set_by(vec![(cell, first.clone())], |_, _| false);
-    assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![1]));
+    assert_eq!(
+        runtime.read(&query).unwrap().result.to_value(),
+        Value::from(vec![1])
+    );
     table.set_by(
         vec![
             (cell, first),
@@ -85,7 +90,10 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
         vec![(cell, counted(cell, &runs, Value::from(vec![2])))],
         |_, _| false,
     );
-    assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![2]));
+    assert_eq!(
+        runtime.read(&query).unwrap().result.to_value(),
+        Value::from(vec![2])
+    );
     assert_eq!(runs.get(), 2);
 }
 
@@ -111,13 +119,13 @@ fn library_order_document_override_and_removal_are_observed() {
     ] {
         table.set_by(entries, |_, _| false);
         assert_eq!(
-            runtime.read(&query).unwrap().result,
+            runtime.read(&query).unwrap().result.to_value(),
             Value::from(vec![expected])
         );
     }
     table.set_by(vec![], |_, _| false);
     assert_eq!(
-        ::grap::absent::reason(&runtime.read(&query).unwrap().result),
+        ::grap::absent::reason(runtime.read(&query).unwrap().result.as_value()),
         Some(absent::MISSING_CELL)
     );
 }
@@ -141,9 +149,15 @@ fn undeclared_foreign_reads_disable_reuse() {
         runtime.input(call(cell.into(), [])),
         runtime.input(100),
     );
-    assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![1]));
+    assert_eq!(
+        runtime.read(&query).unwrap().result.to_value(),
+        Value::from(vec![1])
+    );
     hidden.set(2);
-    assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![2]));
+    assert_eq!(
+        runtime.read(&query).unwrap().result.to_value(),
+        Value::from(vec![2])
+    );
 }
 
 #[test]
@@ -153,33 +167,38 @@ fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
         let cell = new_cell_id();
         let (_, source) = definitions(&runtime, vec![]);
         let runs = Rc::new(Cell::new(0));
-        let query = runtime.memo({
-            let runs = runs.clone();
-            move |read| {
-                runs.set(runs.get() + 1);
-                let output = RefCell::new(Vec::new());
-                let emit = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
-                    context.effect(|| output.borrow_mut().push(7));
-                    Ok(Value::record([]))
-                };
-                let cells = [cell];
-                let overlay = ForeignOverlay::from_value(&cells, &emit).cacheable();
-                let eval = |host: &dyn Host| {
-                    evaluate_runtime_scoped(
-                        &RuntimeValue::from(call(cell.into(), [])),
-                        host,
-                        &overlay,
-                        100,
-                    )
-                };
-                let evaluation = if recorded {
-                    with_recorded_effects(&source, read, eval)
-                } else {
-                    run(&source, read, eval)
-                };
-                Ok((evaluation.into_value(), output.into_inner()))
-            }
-        });
+        let query = runtime.memo_by(
+            {
+                let runs = runs.clone();
+                move |read| {
+                    runs.set(runs.get() + 1);
+                    let output = RefCell::new(Vec::new());
+                    let emit = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
+                        context.effect(|| output.borrow_mut().push(7));
+                        Ok(Value::record([]))
+                    };
+                    let cells = [cell];
+                    let overlay = ForeignOverlay::from_value(&cells, &emit).cacheable();
+                    let eval = |host: &dyn Host| {
+                        evaluate_runtime_scoped(
+                            &RuntimeValue::from(call(cell.into(), [])),
+                            host,
+                            &overlay,
+                            100,
+                        )
+                    };
+                    let evaluation = if recorded {
+                        with_recorded_effects(&source, read, eval)
+                    } else {
+                        run(&source, read, eval)
+                    };
+                    Ok((evaluation, output.into_inner()))
+                }
+            },
+            |a: &(Evaluation, Vec<i32>), b| {
+                crate::computations::same_evaluation(&a.0, &b.0) && a.1 == b.1
+            },
+        );
         assert_eq!(runtime.read(&query).unwrap().1, vec![7]);
         assert_eq!(runtime.read(&query).unwrap().1, vec![7]);
         assert_eq!(runs.get(), if recorded { 1 } else { 2 });
@@ -202,7 +221,7 @@ fn normally_returned_absents_are_cacheable_including_halt_reasons() {
         );
         let first = runtime.read(&query).unwrap();
         assert_eq!(first.halt, None);
-        assert_eq!(first.result, result);
+        assert_eq!(first.result.to_value(), result);
         assert!(Rc::ptr_eq(&first, &runtime.read(&query).unwrap()));
         assert_eq!(runs.get(), 1);
     }
@@ -213,16 +232,18 @@ fn halts_are_not_reused_even_when_the_returned_value_is_equal() {
     let runtime = Runtime::default();
     let (_, source) = definitions(&runtime, vec![]);
     let runs = Rc::new(Cell::new(0));
-    let query = runtime.memo({
-        let runs = runs.clone();
-        move |read| {
-            runs.set(runs.get() + 1);
-            Ok(run(&source, read, |host| {
-                grap::evaluate(&Value::record([]), host, 0)
-            })
-            .into_value())
-        }
-    });
+    let query = runtime.memo_by(
+        {
+            let runs = runs.clone();
+            move |read| {
+                runs.set(runs.get() + 1);
+                Ok(run(&source, read, |host| {
+                    grap::evaluate(&Value::record([]), host, 0)
+                }))
+            }
+        },
+        crate::computations::same_evaluation,
+    );
     assert!(runtime.read(&query).unwrap().halt.is_some());
     runtime.read(&query).unwrap();
     assert_eq!(runs.get(), 2);

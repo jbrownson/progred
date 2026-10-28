@@ -71,23 +71,13 @@ pub trait Host {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Evaluation<T = RuntimeValue> {
-    pub result: T,
+#[derive(Debug, Clone)]
+pub struct Evaluation {
+    pub result: RuntimeValue,
     pub remaining_fuel: usize,
     /// Why it stopped before finishing, if it did; its result is then that
     /// halt's absent. Returning an absent value isn't halting.
     pub halt: Option<Halt>,
-}
-
-impl Evaluation {
-    pub fn into_value(self) -> Evaluation<Value> {
-        Evaluation {
-            result: self.result.into_value(),
-            remaining_fuel: self.remaining_fuel,
-            halt: self.halt,
-        }
-    }
 }
 
 pub struct Context<'a> {
@@ -192,19 +182,13 @@ pub fn apply_value(
     host: &dyn Host,
     overlay: Option<&ForeignOverlay<'_>>,
     fuel: usize,
-) -> Evaluation<Value> {
-    context(host, overlay, fuel)
-        .conclude(|context| {
-            context.apply_expression(
-                &function.into(),
-                arguments.into_iter().map(|(k, v)| (k, v.into())),
-            )
-        })
-        .into_value()
-}
-
-pub fn evaluate_value(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation<Value> {
-    evaluate(expression, host, fuel).into_value()
+) -> Evaluation {
+    context(host, overlay, fuel).conclude(|context| {
+        context.apply_expression(
+            &function.into(),
+            arguments.into_iter().map(|(k, v)| (k, v.into())),
+        )
+    })
 }
 
 /// Interpret runtime-held syntax without serializing its embedded

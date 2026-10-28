@@ -20,7 +20,7 @@ fn blob(text: &str) -> Value {
     Value::from(text.as_bytes().to_vec())
 }
 
-fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
+fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation {
     crate::test_support::test_evaluate(expression, |_| None, &functions(), fuel)
 }
 
@@ -28,7 +28,7 @@ fn evaluate_resolving(
     expression: &Value,
     resolve: impl Fn(CellId) -> Option<Value>,
     fuel: usize,
-) -> grap::Evaluation<gid::Value> {
+) -> grap::Evaluation {
     crate::test_support::test_evaluate(expression, resolve, &functions(), fuel)
 }
 
@@ -38,7 +38,7 @@ fn a_lambda_call_burns_its_call_function_argument_and_body() {
     let x = new_cell_id();
     let expression = grap::call(grap::lambda([x], Value::from(x)), [(x, blob("bound"))]);
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, blob("bound"));
+    assert_eq!(evaluation.result.to_value(), blob("bound"));
 
     assert_eq!(evaluation.remaining_fuel, 6);
 }
@@ -55,7 +55,7 @@ fn shadowing_a_foreign_function_burns_like_any_binding() {
         [(crate::libraries::grap::numbers::f64::SUM, blob("bound"))],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, blob("bound"));
+    assert_eq!(evaluation.result.to_value(), blob("bound"));
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -73,7 +73,7 @@ fn a_cell_chain_burns_one_per_link() {
         },
         10,
     );
-    assert_eq!(evaluation.result, blob("end"));
+    assert_eq!(evaluation.result.to_value(), blob("end"));
     assert_eq!(evaluation.remaining_fuel, 7);
 }
 
@@ -83,7 +83,7 @@ fn a_missing_cell_burns_once_and_carries_its_identity() {
     let missing = new_cell_id();
     let evaluation = evaluate(&Value::from(missing), 10);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         grap::absent::with_detail(
             grap::absent::MISSING_CELL,
             grap::absent::CELL,
@@ -105,7 +105,7 @@ fn a_do_sequence_burns_only_its_elements() {
         )],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, blob("second"));
+    assert_eq!(evaluation.result.to_value(), blob("second"));
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -130,7 +130,7 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
     );
     let evaluation = evaluate(&expression, 10);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         ::grap::absent::with_detail(
             control::vocabulary::PATTERN_MISMATCH,
             control::vocabulary::PATTERN,
@@ -163,7 +163,10 @@ fn a_quote_burns_only_its_unquotes() {
         )],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, Value::record([(field, blob("spliced"))]));
+    assert_eq!(
+        evaluation.result.to_value(),
+        Value::record([(field, blob("spliced"))])
+    );
     assert_eq!(evaluation.remaining_fuel, 7);
 }
 
@@ -206,7 +209,7 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
         ],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, blob("annotated"));
+    assert_eq!(evaluation.result.to_value(), blob("annotated"));
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -219,7 +222,13 @@ fn callable_record_patterns_are_transparent_to_lowering() {
     // The subject is evaluated at a different location inside `match`,
     // so its body origin differs; this open pattern compares the callable,
     // the lambda as written, not that annotation.
-    let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
+    let contents = evaluated
+        .as_value()
+        .as_record()
+        .unwrap()
+        .get(&field)
+        .unwrap()
+        .clone();
     for pattern in [Value::record([]), Value::record([(field, contents)])] {
         let cases = Value::list([
             Value::record([
@@ -246,7 +255,7 @@ fn callable_record_patterns_are_transparent_to_lowering() {
                 (control::vocabulary::CASES, cases),
             ],
         );
-        assert_eq!(evaluate(&expression, 100).result, blob("record"));
+        assert_eq!(evaluate(&expression, 100).result.to_value(), blob("record"));
     }
 }
 
@@ -304,7 +313,7 @@ fn clause_lists_behind_cells_are_invalid() {
             |cell| (cell == reference).then(|| clauses.clone()),
             20,
         );
-        assert_eq!(referenced.result, grap::absent::value(invalid));
+        assert_eq!(referenced.result.to_value(), grap::absent::value(invalid));
         assert_eq!(referenced.remaining_fuel, 18);
     };
     check(&matches, cases, control::vocabulary::INVALID_CASES);
@@ -330,7 +339,7 @@ fn arithmetic_burns_its_call_function_and_operands() {
         ],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, f64::value(3.0));
+    assert_eq!(evaluation.result.to_value(), f64::value(3.0));
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -352,7 +361,7 @@ fn single_precision_arithmetic_burns_like_f64() {
         ],
     );
     let evaluation = evaluate(&expression, 10);
-    assert_eq!(evaluation.result, f32::value(3.0));
+    assert_eq!(evaluation.result.to_value(), f32::value(3.0));
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
@@ -374,6 +383,6 @@ fn an_iterate_step_burns_like_an_ordinary_call() {
         ],
     );
     let evaluation = evaluate(&expression, 20);
-    assert_eq!(evaluation.result, blob("start"));
+    assert_eq!(evaluation.result.to_value(), blob("start"));
     assert_eq!(evaluation.remaining_fuel, 12);
 }

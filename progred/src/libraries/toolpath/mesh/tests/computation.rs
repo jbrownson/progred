@@ -12,7 +12,7 @@ fn preview() -> fidget::VolumePreview {
         doc: &doc,
         libraries: &stack.libraries,
     };
-    let value = ::grap::evaluate_value(
+    let value = ::grap::evaluate(
         &::grap::call(
             fidget::vocabulary::PREVIEW_MESH.into(),
             [(
@@ -24,7 +24,7 @@ fn preview() -> fidget::VolumePreview {
         1000,
     )
     .result;
-    fidget::mesh::read(&value).unwrap().0
+    fidget::mesh::read(value.as_value()).unwrap().0
 }
 
 /// The path tubes and the surface that `geometry` combines, over `settings`.

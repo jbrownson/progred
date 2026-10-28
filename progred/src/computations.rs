@@ -236,7 +236,8 @@ impl Computations {
     }
 }
 
-fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
+/// Whether two evaluations ended alike: halt, fuel and result.
+pub(crate) fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
     a.halt == b.halt && a.remaining_fuel == b.remaining_fuel && a.result.same_result(&b.result)
 }
 

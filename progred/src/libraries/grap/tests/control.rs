@@ -90,11 +90,11 @@ fn all_call(expressions: impl IntoIterator<Item = Value>) -> Value {
     )
 }
 
-fn evaluate(expression: &Value) -> grap::Evaluation<gid::Value> {
+fn evaluate(expression: &Value) -> grap::Evaluation {
     crate::test_support::test_evaluate(expression, |_| None, &functions(), 100)
 }
 
-fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
+fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation {
     crate::test_support::test_evaluate(expression, |_| None, &functions(), fuel)
 }
 
@@ -127,9 +127,9 @@ fn do_evaluates_in_order_and_returns_the_last_result() {
     let result = crate::test_support::test_evaluate(&expression, |_| None, &functions, 100).result;
 
     assert_eq!(&*calls.borrow(), &[first, second]);
-    assert_eq!(result, blob("second"));
+    assert_eq!(result.to_value(), blob("second"));
     assert_eq!(
-        evaluate(&do_call([])).result,
+        evaluate(&do_call([])).result.to_value(),
         ::grap::absent::value(vocabulary::MISSING_FINAL_EXPRESSION)
     );
 }
@@ -160,7 +160,7 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
         log.borrow_mut().clear();
         let result = run(&expression);
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, failure);
+        assert_eq!(result.result.to_value(), failure);
         assert_eq!(*log.borrow(), [blob("before")]);
 
         let recovered = match_call(
@@ -176,14 +176,14 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
         log.borrow_mut().clear();
         let result = run(&recovered);
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, Value::record([]));
+        assert_eq!(result.result.to_value(), Value::record([]));
         assert_eq!(*log.borrow(), [blob("before"), blob("recovered")]);
     }
     // A pure decline is still an absent, even without any preceding effect.
     log.borrow_mut().clear();
     let result = run(&do_call([::grap::absent::decline(), effect("never")]));
     assert_eq!(result.halt, None);
-    assert_eq!(result.result, ::grap::absent::decline());
+    assert_eq!(result.result.to_value(), ::grap::absent::decline());
     assert!(log.borrow().is_empty());
 }
 
@@ -215,7 +215,7 @@ fn all_retains_absents_and_effects_and_continues_in_order() {
         log.borrow_mut().clear();
         let result = crate::test_support::test_evaluate(&expression, |_| None, &functions, 100);
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, Value::list(values.clone()));
+        assert_eq!(result.result.to_value(), Value::list(values.clone()));
         assert_eq!(*log.borrow(), values);
     }
 }
@@ -228,31 +228,31 @@ fn all_keeps_its_expressions_positions() {
         [(vocabulary::EXPRESSIONS, expressions.clone())],
     ))
     .result;
-    assert_eq!(result, Value::list([blob("a"), blob("b")]));
+    assert_eq!(result.to_value(), Value::list([blob("a"), blob("b")]));
     assert_eq!(
-        crate::test_values::positions(&result),
+        crate::test_values::positions(result.as_value()),
         crate::test_values::positions(&expressions),
     );
 }
 
 #[test]
 fn all_handles_empty_and_malformed_lists_but_does_not_swallow_halts() {
-    assert_eq!(evaluate(&all_call([])).result, Value::list([]));
+    assert_eq!(evaluate(&all_call([])).result.to_value(), Value::list([]));
     let missing = evaluate(&::grap::call(vocabulary::ALL.into(), []));
     assert_eq!(missing.halt, None);
-    assert!(::grap::absent::reason(&missing.result).is_some());
+    assert!(missing.result.absent_reason().is_some());
     let invalid = ::grap::call(
         vocabulary::ALL.into(),
         [(vocabulary::EXPRESSIONS, Value::record([]))],
     );
     assert_eq!(
-        evaluate(&invalid).result,
+        evaluate(&invalid).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_EXPRESSIONS)
     );
     let exhausted = evaluate_with_fuel(&all_call((0..100).map(|_| Value::record([]))), 5);
     assert!(exhausted.halt.is_some());
     assert_eq!(
-        ::grap::absent::reason(&exhausted.result),
+        exhausted.result.absent_reason(),
         Some(::grap::absent::FUEL_EXHAUSTED)
     );
 }
@@ -267,7 +267,7 @@ fn ordinary_bindings_may_contain_absents_without_short_circuiting() {
             [binding_clause(binding(binder), failure.clone())],
             blob("continues"),
         );
-        assert_eq!(evaluate(&expression).result, blob("continues"));
+        assert_eq!(evaluate(&expression).result.to_value(), blob("continues"));
     }
 }
 
@@ -395,7 +395,7 @@ fn quote_returns_recognized_expressions_as_data() {
     let function = new_cell_id();
     let expression = grap::call(Value::from(function), []);
     let evaluation = evaluate(&quote_call(expression.clone()));
-    assert_eq!(evaluation.result, expression);
+    assert_eq!(evaluation.result.to_value(), expression);
 }
 
 #[test]
@@ -410,7 +410,10 @@ fn quote_preserves_value_wrappers_and_splices_inside_them() {
             (grap::vocabulary::VALUE, new_cell_id().into()),
         ],
     );
-    assert_eq!(evaluate(&quote_call(expression.clone())).result, expression);
+    assert_eq!(
+        evaluate(&quote_call(expression.clone())).result.to_value(),
+        expression
+    );
     let template = name::record(
         "named expression",
         [
@@ -432,7 +435,7 @@ fn quote_preserves_value_wrappers_and_splices_inside_them() {
     );
     let result = evaluate(&quote_call(template)).result;
     assert_eq!(
-        result,
+        result.to_value(),
         name::record(
             "named expression",
             [
@@ -444,7 +447,10 @@ fn quote_preserves_value_wrappers_and_splices_inside_them() {
             ]
         ),
     );
-    assert_eq!(evaluate(&result).result, blob("spliced"));
+    assert_eq!(
+        evaluate(result.as_value()).result.to_value(),
+        blob("spliced")
+    );
 }
 
 #[test]
@@ -563,12 +569,12 @@ fn quote_replaces_unquotes_in_its_calling_environment() {
     );
     let evaluation = evaluate(&expression);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         Value::list([blob("kept"), Value::record([(field, blob("spliced"))])])
     );
     // A path into the result still names the element it did in the template.
     assert_eq!(
-        crate::test_values::positions(&evaluation.result),
+        crate::test_values::positions(evaluation.result.as_value()),
         crate::test_values::positions(&template),
     );
 }
@@ -593,13 +599,17 @@ fn quote_splices_inside_a_quoted_lambda_where_the_unquote_is_written() {
         )
     };
     assert_eq!(
-        evaluate(&quote(grap::lambda([inner], unquote(parameter.into())))).result,
+        evaluate(&quote(grap::lambda([inner], unquote(parameter.into()))))
+            .result
+            .to_value(),
         grap::lambda([inner], blob("spliced")),
     );
     // A quote missing its expression says where it's written.
     let unfinished = grap::call(Value::from(vocabulary::QUOTE), []);
     assert_eq!(
-        evaluate(&quote(grap::lambda([inner], unquote(unfinished)))).result,
+        evaluate(&quote(grap::lambda([inner], unquote(unfinished))))
+            .result
+            .to_value(),
         grap::lambda(
             [inner],
             ::grap::absent::missing_argument(
@@ -631,7 +641,7 @@ fn unquote_is_ordinary_data_outside_quote() {
         (vocabulary::UNQUOTE, Value::from(missing)),
     ]);
     let evaluation = evaluate(&expression);
-    assert_eq!(evaluation.result, expression);
+    assert_eq!(evaluation.result.to_value(), expression);
 }
 
 #[test]
@@ -652,7 +662,7 @@ fn quote_does_not_revisit_an_unquoted_result() {
         (vocabulary::UNQUOTE, inner.clone()),
     ]));
     let evaluation = evaluate(&expression);
-    assert_eq!(evaluation.result, inner);
+    assert_eq!(evaluation.result.to_value(), inner);
 }
 
 #[test]
@@ -674,7 +684,7 @@ fn match_evaluates_the_first_matching_case_with_open_record_bindings() {
         ],
     );
     let evaluation = evaluate(&expression);
-    assert_eq!(evaluation.result, blob("Ada"));
+    assert_eq!(evaluation.result.to_value(), blob("Ada"));
 }
 
 #[test]
@@ -700,7 +710,7 @@ fn match_evaluates_its_subject_once_across_all_cases() {
     );
     let evaluation = crate::test_support::test_evaluate(&expression, |_| None, &foreign, 100);
     assert_eq!(
-        evaluation.result,
+        evaluation.result.to_value(),
         ::grap::absent::from_causes([
             pattern_mismatch(&blob("first")),
             pattern_mismatch(&blob("second")),
@@ -717,12 +727,12 @@ fn a_match_burns_its_subject_and_arm_but_not_its_cases() {
     let expression = match_call(blob("subject"), [case_arm(blob("subject"), blob("result"))]);
 
     let completed = evaluate_with_fuel(&expression, 5);
-    assert_eq!(completed.result, blob("result"));
+    assert_eq!(completed.result.to_value(), blob("result"));
     assert_eq!(completed.remaining_fuel, 1);
 
     let exhausted = evaluate_with_fuel(&expression, 4);
     assert_eq!(
-        exhausted.result,
+        exhausted.result.to_value(),
         grap::absent::value(grap::absent::FUEL_EXHAUSTED),
     );
     assert_eq!(exhausted.remaining_fuel, 0);
@@ -745,7 +755,7 @@ fn match_patterns_match_exact_lists_and_repeated_binders_must_agree() {
             ),
         ],
     );
-    assert_eq!(evaluate(&expression).result, blob("right"));
+    assert_eq!(evaluate(&expression).result.to_value(), blob("right"));
 
     let too_short = match_call(
         Value::list([blob("only")]),
@@ -755,7 +765,7 @@ fn match_patterns_match_exact_lists_and_repeated_binders_must_agree() {
         )],
     );
     assert_eq!(
-        evaluate(&too_short).result,
+        evaluate(&too_short).result.to_value(),
         pattern_mismatch(&Value::list([binding(element), binding(other),])),
     );
 }
@@ -771,7 +781,7 @@ fn first_pattern_wins_even_when_its_expression_returns_an_absent() {
         ],
     );
     assert_eq!(
-        evaluate(&expression).result,
+        evaluate(&expression).result.to_value(),
         grap::absent::with_detail(
             grap::absent::MISSING_CELL,
             grap::absent::CELL,
@@ -793,7 +803,7 @@ fn let_and_where_evaluate_bindings_sequentially() {
     for function in [vocabulary::LET, vocabulary::WHERE] {
         let expression = bindings_call(function, bindings(), Value::from(second));
         let evaluation = evaluate(&expression);
-        assert_eq!(evaluation.result, blob("bound"));
+        assert_eq!(evaluation.result.to_value(), blob("bound"));
     }
 }
 
@@ -809,12 +819,12 @@ fn a_let_burns_its_values_and_body_but_not_its_bindings() {
     );
 
     let completed = evaluate_with_fuel(&expression, 5);
-    assert_eq!(completed.result, blob("bound"));
+    assert_eq!(completed.result.to_value(), blob("bound"));
     assert_eq!(completed.remaining_fuel, 1);
 
     let exhausted = evaluate_with_fuel(&expression, 4);
     assert_eq!(
-        exhausted.result,
+        exhausted.result.to_value(),
         grap::absent::value(grap::absent::FUEL_EXHAUSTED),
     );
     assert_eq!(exhausted.remaining_fuel, 0);
@@ -832,7 +842,7 @@ fn let_destructures_each_value_and_returns_an_absent_on_mismatch() {
         )],
         Value::from(binder),
     );
-    assert_eq!(evaluate(&matched).result, blob("inside"));
+    assert_eq!(evaluate(&matched).result.to_value(), blob("inside"));
 
     let unmatched = bindings_call(
         vocabulary::LET,
@@ -840,7 +850,7 @@ fn let_destructures_each_value_and_returns_an_absent_on_mismatch() {
         blob("never"),
     );
     assert_eq!(
-        evaluate(&unmatched).result,
+        evaluate(&unmatched).result.to_value(),
         pattern_mismatch(&blob("expected"))
     );
 }
@@ -888,11 +898,14 @@ fn patterns_match_runtime_and_stored_subjects_alike() {
                 |fuel| crate::test_support::test_evaluate(&expression, |_| None, &functions, fuel);
             // Control call (2), subject call (2), body (1).
             let completed = run(6);
-            assert_eq!(completed.result, crate::libraries::f64::value(7.0));
+            assert_eq!(
+                completed.result.to_value(),
+                crate::libraries::f64::value(7.0)
+            );
             assert_eq!(completed.remaining_fuel, 1);
             let exhausted = run(5);
             assert_eq!(
-                exhausted.result,
+                exhausted.result.to_value(),
                 grap::absent::value(grap::absent::FUEL_EXHAUSTED),
             );
             assert_eq!(exhausted.remaining_fuel, 0);
@@ -942,7 +955,7 @@ fn patterns_report_mismatches_and_binder_errors_lazily() {
             );
             let result =
                 crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
-            assert_eq!(result.result, expected);
+            assert_eq!(result.result.to_value(), expected);
             assert_eq!(result.remaining_fuel, 17);
         }
     }
@@ -1129,13 +1142,13 @@ fn malformed_match_data_returns_library_absents() {
         ],
     );
     assert_eq!(
-        evaluate(&invalid_cases).result,
+        evaluate(&invalid_cases).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_CASES)
     );
 
     let invalid_case = match_call(blob("subject"), [blob("not a case")]);
     assert_eq!(
-        evaluate(&invalid_case).result,
+        evaluate(&invalid_case).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_CASE)
     );
 
@@ -1150,7 +1163,7 @@ fn malformed_match_data_returns_library_absents() {
         )],
     );
     assert_eq!(
-        evaluate(&invalid_binder).result,
+        evaluate(&invalid_binder).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_BINDER)
     );
 }
@@ -1165,13 +1178,13 @@ fn malformed_let_data_returns_library_absents() {
         ],
     );
     assert_eq!(
-        evaluate(&invalid_bindings).result,
+        evaluate(&invalid_bindings).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_BINDINGS)
     );
 
     let invalid_binding = bindings_call(vocabulary::LET, [blob("not a binding")], blob("body"));
     assert_eq!(
-        evaluate(&invalid_binding).result,
+        evaluate(&invalid_binding).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_BINDING)
     );
 
@@ -1188,7 +1201,7 @@ fn malformed_let_data_returns_library_absents() {
         blob("body"),
     );
     assert_eq!(
-        evaluate(&ambiguous).result,
+        evaluate(&ambiguous).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_BINDING)
     );
 
@@ -1204,7 +1217,7 @@ fn malformed_let_data_returns_library_absents() {
         blob("body"),
     );
     assert_eq!(
-        evaluate(&invalid_binder).result,
+        evaluate(&invalid_binder).result.to_value(),
         ::grap::absent::value(vocabulary::INVALID_BINDER)
     );
 }

@@ -650,7 +650,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             None,
             100,
         );
-        assert_eq!(expected.result, f64::value(8.0));
+        assert_eq!(expected.result.to_value(), f64::value(8.0));
         let actual = apply(
             &function,
             [(argument, RuntimeValue::f64(8.0))],
@@ -658,7 +658,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             None,
             100,
         );
-        assert_eq!(actual.result.to_value(), expected.result);
+        assert_eq!(actual.result.to_value(), expected.result.to_value());
         let expression = runtime_call([
             (vocabulary::FUNCTION, function),
             (argument, RuntimeValue::f64(8.0)),
@@ -669,7 +669,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             evaluate_runtime_scoped(&expression, &receiver, &overlay, 100)
                 .result
                 .to_value(),
-            expected.result
+            expected.result.to_value()
         );
     }
 }

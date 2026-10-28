@@ -34,12 +34,11 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
                 scope,
                 1000,
             )
-            .into_value()
         });
         if vector[0] == 3.0 {
             assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], axis)]);
         } else {
-            assert!(::grap::absent::is_absent(&result.result));
+            assert!(result.result.absent_reason().is_some());
             assert!(recording.commands().is_empty());
         }
     }
@@ -104,7 +103,7 @@ fn example_program(name: &str) -> Recording {
         ::grap::apply_value(&names[name].into(), [], &sources, Some(scope), 3_000_000)
     });
     assert!(
-        !::grap::absent::is_absent(&result.result),
+        result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -147,7 +146,7 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         });
         assert_eq!(result.halt, None);
         if angle.is_finite() {
-            assert!(!::grap::absent::is_absent(&result.result));
+            assert!(result.result.absent_reason().is_none());
             let Command::StartAt(_, axis) = path.commands()[0] else {
                 panic!("first path")
             };
@@ -166,7 +165,7 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
                 assert!(point.iter().all(|v| v.is_finite()));
             }
         } else {
-            assert!(::grap::absent::is_absent(&result.result));
+            assert!(result.result.absent_reason().is_some());
             assert!(
                 path.commands().is_empty(),
                 "invalid tilt must not emit cutting moves"
@@ -197,7 +196,7 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
                 3_000_000,
             )
         });
-        assert!(!::grap::absent::is_absent(&result.result));
+        assert!(result.result.absent_reason().is_none());
         let mut axis = Axis::Z;
         paths.push(
             indent_commands(&path)

@@ -11,9 +11,11 @@ fn ranges_are_lazy_and_collection_is_explicit() {
     let functions = functions();
     let huge = crate::test_support::test_evaluate(&range(1e12), |_| None, &functions, 30);
     assert_eq!(huge.halt, None);
-    let fields = huge.result.as_record().unwrap();
+    let fields = huge.result.as_value().as_record().unwrap();
     assert!(fields.get(&::grap::vocabulary::LAMBDA).is_some());
-    let saved = crate::test_support::test_evaluate(&range(3.0), |_| None, &functions, 30).result;
+    let saved = crate::test_support::test_evaluate(&range(3.0), |_| None, &functions, 30)
+        .result
+        .into_value();
     let restored = crate::test_support::test_evaluate(
         &call(COLLECT, [(ITEMS, saved)]),
         |_| None,
@@ -21,7 +23,7 @@ fn ranges_are_lazy_and_collection_is_explicit() {
         1000,
     );
     assert_eq!(
-        restored.result,
+        restored.result.to_value(),
         Value::list([0.0, 1.0, 2.0].map(f64::value))
     );
     for count in [0, 1, 5] {
@@ -33,13 +35,13 @@ fn ranges_are_lazy_and_collection_is_explicit() {
         );
         assert_eq!(result.halt, None);
         assert_eq!(
-            result.result,
+            result.result.to_value(),
             Value::list((0..count).map(|n| f64::value(n as f64)))
         );
     }
     for count in [-1.0, 1.5, f64::NAN, f64::INFINITY, 1e20] {
         let result = crate::test_support::test_evaluate(&range(count), |_| None, &functions, 100);
-        assert_eq!(::grap::absent::reason(&result.result), Some(INVALID));
+        assert_eq!(result.result.absent_reason(), Some(INVALID));
     }
 }
 
@@ -52,22 +54,32 @@ fn calling_again_repeats_and_only_the_successor_advances() {
         assert_eq!(result.halt, None);
         result.result
     };
-    let first_item = pull(&first);
-    assert_eq!(first_item, pull(&first));
+    let first_item = pull(first.as_value());
+    assert_eq!(first_item.to_value(), pull(first.as_value()).to_value());
     assert_eq!(
-        first_item.as_record().unwrap().get(&ITEM),
+        first_item.as_value().as_record().unwrap().get(&ITEM),
         Some(&f64::value(0.0))
     );
-    let second = first_item.as_record().unwrap().get(&NEXT).unwrap();
+    let second = first_item
+        .as_value()
+        .as_record()
+        .unwrap()
+        .get(&NEXT)
+        .unwrap();
     let second_item = pull(second);
     assert_eq!(
-        second_item.as_record().unwrap().get(&ITEM),
+        second_item.as_value().as_record().unwrap().get(&ITEM),
         Some(&f64::value(1.0))
     );
-    assert_eq!(first_item, pull(&first));
-    let end = second_item.as_record().unwrap().get(&NEXT).unwrap();
-    assert_eq!(pull(end), Value::record([]));
-    assert_eq!(pull(end), pull(end));
+    assert_eq!(first_item.to_value(), pull(first.as_value()).to_value());
+    let end = second_item
+        .as_value()
+        .as_record()
+        .unwrap()
+        .get(&NEXT)
+        .unwrap();
+    assert_eq!(pull(end).to_value(), Value::record([]));
+    assert_eq!(pull(end).to_value(), pull(end).to_value());
 }
 
 #[test]
@@ -101,7 +113,7 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
             1000,
         );
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, Value::list([value]));
+        assert_eq!(result.result.to_value(), Value::list([value]));
     }
 }
 
@@ -157,7 +169,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
         1000,
     );
     assert_eq!(result.halt, None);
-    assert_eq!(result.result, failure);
+    assert_eq!(result.result.to_value(), failure);
     assert_eq!(
         *log.borrow(),
         [
@@ -195,7 +207,7 @@ fn empty_sequence_does_not_call_action_and_metadata_is_ignored() {
         &functions(),
         100,
     );
-    assert_eq!(result.result, Value::record([]));
+    assert_eq!(result.result.to_value(), Value::record([]));
 }
 
 #[test]
@@ -232,7 +244,7 @@ fn steps_end_without_next_and_failures_malformed_steps_and_fuel_are_not_completi
             100,
         );
         assert_eq!(result.halt, None);
-        assert_eq!(result.result, expected);
+        assert_eq!(result.result.to_value(), expected);
     }
     let result = crate::test_support::test_evaluate(
         &call(
@@ -248,7 +260,7 @@ fn steps_end_without_next_and_failures_malformed_steps_and_fuel_are_not_completi
     );
     assert!(result.halt.is_some());
     assert_eq!(
-        ::grap::absent::reason(&result.result),
+        result.result.absent_reason(),
         Some(::grap::absent::FUEL_EXHAUSTED)
     );
 }

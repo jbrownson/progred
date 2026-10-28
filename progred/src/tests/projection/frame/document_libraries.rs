@@ -140,7 +140,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         .resolve_path(&[key("fraction_sum")])
         .cloned()
         .unwrap();
-    let sum = ::grap::evaluate_value(
+    let sum = ::grap::evaluate(
         total
             .as_record()
             .unwrap()
@@ -155,7 +155,8 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
             let Step::Key(part) = part else {
                 unreachable!()
             };
-            sum.as_record()
+            sum.as_value()
+                .as_record()
                 .and_then(|fields| fields.get(&part))
                 .and_then(crate::libraries::f64::read)
         }),
