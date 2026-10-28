@@ -7,6 +7,7 @@ use gid::{CellId, Value};
 /// identity.
 pub const REASON: CellId = CellId::from_u128(0xc2a01958bce64151beb2b3992017de4c);
 pub const FUEL_EXHAUSTED: CellId = CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
+pub const DEPTH_EXHAUSTED: CellId = CellId::from_u128(0x7b10b3a37a7e4504a2410073a871cfff);
 pub const MISSING_CELL: CellId = CellId::from_u128(0xa5a1b4e3d0df96bd11af00f0780136ff);
 pub const CELL_CYCLE: CellId = CellId::from_u128(0x150e0fc7e38d1670f41283c3d23a9b8d);
 pub const MALFORMED_LAMBDA: CellId = CellId::from_u128(0xfbf5894d7f62b6d0048d17d26851b415);

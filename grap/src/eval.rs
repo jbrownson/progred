@@ -12,6 +12,8 @@ use gid::{CellId, Value};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Halt {
     FuelExhausted,
+    /// Evaluations nested deeper than [`MAX_DEPTH`].
+    DepthExhausted,
 }
 
 impl Halt {
@@ -19,6 +21,7 @@ impl Halt {
     fn into_absent(self) -> RuntimeValue {
         RuntimeValue::from(match self {
             Self::FuelExhausted => absent::value(absent::FUEL_EXHAUSTED),
+            Self::DepthExhausted => absent::value(absent::DEPTH_EXHAUSTED),
         })
     }
 }
@@ -149,6 +152,9 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
+        if self.depth == MAX_DEPTH {
+            return Err(Halt::DepthExhausted);
+        }
         let compiled = match self.compiled.get(&expression) {
             Some(compiled) => compiled.clone(),
             None => {
@@ -157,7 +163,10 @@ impl<'a> Context<'a> {
                 compiled
             }
         };
-        compiled(self, environment)
+        self.depth += 1;
+        let result = compiled(self, environment);
+        self.depth -= 1;
+        result
     }
 
     pub(crate) fn eval_definition(
@@ -249,6 +258,12 @@ impl<'a> Context<'a> {
         result
     }
 }
+
+/// How deeply evaluations may nest. Each level is a native call taking up to
+/// about 3 KB of stack, and Grap runs on stacks as small as the browser's
+/// 1 MB, so a deeper recursion halts rather than overflowing. The deepest
+/// program measured in October 2026 nested 63 levels.
+pub const MAX_DEPTH: usize = 256;
 
 /// `expression`'s f64 when it's already one without evaluating: a number
 /// literal, which lowering made native, or a variable bound to one.

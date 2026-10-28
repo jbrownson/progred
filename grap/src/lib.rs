@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 pub use call::PreparedCallable;
 pub use environment::Environment;
-pub use eval::Halt;
+pub use eval::{Halt, MAX_DEPTH};
 pub use foreign::{
     ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function, implementation_cell,
 };
@@ -85,6 +85,7 @@ pub struct Context<'a> {
     overlay: Option<&'a ForeignOverlay<'a>>,
     foreign_scopes: Vec<ForeignFunctions>,
     remaining_fuel: usize,
+    depth: usize,
     resolving: Vec<CellId>,
     compiled: ByNode<Thunk>,
     observer: Option<&'a dyn Observer>,
@@ -124,6 +125,7 @@ fn context<'a>(
         overlay,
         foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
+        depth: 0,
         resolving: Vec::new(),
         compiled: Default::default(),
         observer: host.observer(),

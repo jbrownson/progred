@@ -780,6 +780,7 @@ pub fn library<W: Host>() -> Library<W> {
             (notebook::vocabulary::kind::NOTEBOOK, "notebook"),
             (notebook::vocabulary::ENTRIES, "entries"),
             (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
+            (::grap::absent::DEPTH_EXHAUSTED, "nesting too deep"),
             (memo::CYCLE, "computation cycle"),
             (memo::INPUTS_CHANGED, "inputs changed during computation"),
             (

@@ -1068,6 +1068,27 @@ fn recursion_and_cell_cycles_are_values() {
 }
 
 #[test]
+fn deep_recursion_halts_instead_of_overflowing_the_stack() {
+    let recurse = new_cell_id();
+    let parameter = new_cell_id();
+    let definition = lambda(
+        [parameter],
+        call(Value::from(recurse), [(parameter, Value::from(parameter))]),
+    );
+    let evaluation = evaluate(
+        &call(Value::from(recurse), [(parameter, blob("again"))]),
+        |cell| (cell == recurse).then(|| definition.clone()),
+        &ForeignFunctions::default(),
+        usize::MAX,
+    );
+    assert_eq!(evaluation.halt, Some(Halt::DepthExhausted));
+    assert_eq!(
+        evaluation.result.to_value(),
+        absent::value(absent::DEPTH_EXHAUSTED)
+    );
+}
+
+#[test]
 fn extra_call_fields_do_not_prevent_calling() {
     let parameter = new_cell_id();
     let extra = new_cell_id();

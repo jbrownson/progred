@@ -986,6 +986,51 @@ through memory rather than registers, which covers most of the evaluator's.
   replaced; staging more than made up for it, leaving the IoP tree canary 1.07%
   below its count before the construct, from 1.92% above.
 
+## Recursion deeper than the native stack
+
+Grap's evaluation nests as native calls, so `grap::MAX_DEPTH` (256) halts a
+recursion before it overflows the stack. Measured in October 2026, as the
+deepest nesting that still halted cleanly:
+
+| Recursion | Build | 1 MB stack | 2 MB stack |
+| --- | --- | --- | --- |
+| Grap function calling itself | native release | 448 | 896 |
+| Chain of cells | native release | 1,064 | 2,128 |
+| Grap function calling itself | browser (wasm, Node) | 920 | |
+| Grap function through `+` | native dev | 428 | 856 |
+| Grap function through `do` | native dev | 344 | 688 |
+
+That's up to about 3 KB of stack per level. The smallest stacks Grap runs on
+are the browser's 1 MB, on the main thread and each worker (wasm-bindgen's
+default). Native computation threads have Rust's 2 MB, and the native main
+thread 8 MB. The deepest test or canary nested 63 levels. Ways to allow
+deeper recursion:
+
+- **Bigger stacks.** Native threads take a size when spawned. The browser's
+  stack in linear memory takes a linker flag on the main thread
+  (`-zstack-size`) and `thread_stack_size` when workers start. The engine's
+  own stack, which holds wasm frames, can't be raised from a page. Under
+  Node the 1 MB linear-memory stack ran out first, so the engine's limit is
+  somewhere above 920 levels.
+- **Smaller frames.** 2.3 KB per level of plain Grap recursion is large.
+  Finding which frames take it, such as with `-Z emit-stack-sizes`, might
+  raise the limit without any other change.
+- **Trampolined tail calls.** A call in tail position would return to a loop
+  instead of nesting, so tail-recursive loops would run in constant stack.
+  Recursion that isn't in tail position, such as walking a tree, still nests,
+  and the observer's enter and leave notices assume a call returns.
+- **Growing the stack on demand**, as the `stacker` crate does: native only,
+  since wasm can't switch stacks.
+- **An explicit-stack evaluator**, keeping its frames on the heap. Each
+  expression compiles to a Rust closure that calls its subexpressions'
+  closures directly, so this replaces that design throughout: compiling,
+  calls, argument parsing and staging, most of `eval.rs`, `call.rs`,
+  `lower.rs` and `arguments.rs` (about 1,800 lines). Every foreign function
+  that evaluates code (17 files in Progred) would either become a state
+  machine resumable between evaluations or keep nesting natively, under a
+  depth limit as now. Direct closure calls are likely faster than a frame
+  loop; unmeasured.
+
 ## A lowered in-memory document
 
 The document in memory could be a lowered form, with `gid::Value` kept only for

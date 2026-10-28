@@ -1023,7 +1023,9 @@ result remains definitive within that match. Absence composition belongs only
 to such explicit ordered-choice operations, not to cell lookup; the evaluator
 accumulates no ambient failure trace.
 
-Fuel exhaustion halts immediately; at the public boundary it is still an absent
+Fuel exhaustion halts immediately, as does nesting deeper than
+`grap::MAX_DEPTH` (256) evaluations, which keeps deep recursion from
+overflowing the native stack; at the public boundary either is still an absent
 value, with `Evaluation.halt` saying why execution did not finish.
 Returning that same value normally still counts as completed execution.
 Drawing-source origins are separate from failures.
