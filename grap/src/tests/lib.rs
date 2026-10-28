@@ -233,7 +233,7 @@ fn value_wrappers_do_not_evaluate_inside_data_or_foreign_results() {
 }
 
 #[test]
-fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
+fn value_wrappers_propagate_absence_and_fuel_exhaustion() {
     let foreign = ForeignFunctions::default();
     let absent = absent::value(absent::MISSING_ARGUMENT);
     let wrapper = isa::record(
@@ -255,8 +255,8 @@ fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
         vocabulary::kind::VALUE_WRAPPER,
         [(vocabulary::VALUE, cell.into())],
     );
-    let cycle = evaluate(&cell.into(), |_| Some(wrapper.clone()), &foreign, 20);
-    assert_eq!(cycle.result.absent_reason(), Some(absent::CELL_CYCLE));
+    let looping = evaluate(&cell.into(), |_| Some(wrapper.clone()), &foreign, 20);
+    assert_eq!(looping.halt, Some(Halt::FuelExhausted));
 }
 
 #[test]
@@ -1027,7 +1027,7 @@ fn incomplete_lambda_shapes_are_inert_data() {
 }
 
 #[test]
-fn recursion_and_cell_cycles_are_values() {
+fn recursion_and_cell_loops_run_out_of_fuel() {
     let recurse = new_cell_id();
     let parameter = new_cell_id();
     let definition = lambda(
@@ -1057,14 +1057,7 @@ fn recursion_and_cell_cycles_are_values() {
         &ForeignFunctions::default(),
         20,
     );
-    assert_eq!(
-        evaluation.result.to_value(),
-        absent::with_detail(
-            absent::CELL_CYCLE,
-            absent::CYCLE,
-            Value::list([a, b, a].map(Value::from))
-        )
-    );
+    assert_eq!(evaluation.halt, Some(Halt::FuelExhausted));
 }
 
 #[test]
@@ -1086,6 +1079,15 @@ fn deep_recursion_halts_instead_of_overflowing_the_stack() {
         evaluation.result.to_value(),
         absent::value(absent::DEPTH_EXHAUSTED)
     );
+
+    let cell = new_cell_id();
+    let looping = evaluate(
+        &Value::from(cell),
+        |_| Some(Value::from(cell)),
+        &ForeignFunctions::default(),
+        usize::MAX,
+    );
+    assert_eq!(looping.halt, Some(Halt::DepthExhausted));
 }
 
 #[test]

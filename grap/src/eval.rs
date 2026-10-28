@@ -26,13 +26,6 @@ impl Halt {
     }
 }
 
-#[derive(Clone)]
-pub(crate) enum CellState {
-    Unknown,
-    Ready(Expression),
-    Evaluating { stack_index: usize },
-}
-
 impl<'a> Context<'a> {
     pub(crate) fn conclude(
         mut self,
@@ -169,27 +162,6 @@ impl<'a> Context<'a> {
         result
     }
 
-    pub(crate) fn eval_definition(
-        &mut self,
-        cell: CellId,
-        expression: Expression,
-        environment: &Environment,
-    ) -> Result<RuntimeValue, Halt> {
-        match self
-            .resolving
-            .iter()
-            .position(|candidate| *candidate == cell)
-        {
-            Some(stack_index) => Ok(cell_cycle(&self.resolving[stack_index..], cell)),
-            None => {
-                self.resolving.push(cell);
-                let result = self.eval(expression, environment);
-                self.resolving.pop();
-                result
-            }
-        }
-    }
-
     /// Fuel is part of Grap's contract, not this implementation's: one
     /// burn per expression evaluation that the plain evaluator and each
     /// function's documented argument consumption would perform. An
@@ -212,50 +184,19 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         match environment.get_at(&self.indices, cell, index) {
             Some(value) => Ok(unbox(value.clone())),
-            None => match self.host.definition(cell) {
-                None => Ok(missing_cell(cell)),
-                Some(value) => {
-                    while self.cell_states.len() <= index.0 {
-                        self.cell_states.push(CellState::Unknown);
-                    }
-                    match self.cell_states[index.0].clone() {
-                        CellState::Ready(expression) => {
-                            self.eval_resolved_cell(index, cell, expression, environment)
-                        }
-                        CellState::Evaluating { stack_index } => {
-                            Ok(cell_cycle(&self.resolving[stack_index..], cell))
-                        }
-                        CellState::Unknown => {
-                            let expression = self.lower_source(
-                                &value,
-                                SourceOrigin::Cell {
-                                    cell,
-                                    path: Vec::new(),
-                                },
-                            );
-                            self.cell_states[index.0] = CellState::Ready(expression.clone());
-                            self.eval_resolved_cell(index, cell, expression, environment)
-                        }
-                    }
-                }
-            },
+            // Its definition, lowered once this evaluation, is evaluated
+            // where it's referenced.
+            None => {
+                let expression = match self.definitions.get(index.0) {
+                    Some(Some(expression)) => expression.clone(),
+                    _ => match self.host.definition(cell) {
+                        Some(value) => self.lowered_cell(cell, &value),
+                        None => return Ok(missing_cell(cell)),
+                    },
+                };
+                self.eval(expression, environment)
+            }
         }
-    }
-
-    fn eval_resolved_cell(
-        &mut self,
-        index: CellIndex,
-        cell: CellId,
-        expression: Expression,
-        environment: &Environment,
-    ) -> Result<RuntimeValue, Halt> {
-        let stack_index = self.resolving.len();
-        self.cell_states[index.0] = CellState::Evaluating { stack_index };
-        self.resolving.push(cell);
-        let result = self.eval(expression.clone(), environment);
-        self.resolving.pop();
-        self.cell_states[index.0] = CellState::Ready(expression);
-        result
     }
 }
 
@@ -292,16 +233,6 @@ pub(crate) fn missing_cell(cell: CellId) -> RuntimeValue {
         absent::MISSING_CELL,
         absent::CELL,
         cell.into(),
-    ))
-}
-
-/// The absence `cell` answers when its own definition reaches it again;
-/// `resolving` holds the cells under resolution from `cell` on.
-fn cell_cycle(resolving: &[CellId], cell: CellId) -> RuntimeValue {
-    RuntimeValue::from(absent::with_detail(
-        absent::CELL_CYCLE,
-        absent::CYCLE,
-        Value::list(resolving.iter().copied().chain([cell]).map(Value::from)),
     ))
 }
 

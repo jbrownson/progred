@@ -136,7 +136,7 @@ impl<'a> Context<'a> {
                 Some(&target.stages),
             ),
             PreparedCallTargetKind::Value(expression) => {
-                let callable = self.eval_definition(cell, expression.clone(), environment)?;
+                let callable = self.eval(expression.clone(), environment)?;
                 if callable.absent_reason().is_some() {
                     Ok(callable)
                 } else {
@@ -446,7 +446,7 @@ impl<'a> Context<'a> {
             None => {
                 // Lowered once per evaluation, as a call of the cell is.
                 let expression = self.lowered_cell(cell, &value);
-                let callable = self.eval_definition(cell, expression, environment)?;
+                let callable = self.eval(expression, environment)?;
                 if callable.absent_reason().is_some() {
                     Ok(callable)
                 } else {

@@ -4,7 +4,6 @@
 //! recursive evaluation.
 
 use crate::environment::CellIndices;
-use crate::eval::CellState;
 use crate::lower::{ByNode, OriginId, Thunk};
 use crate::runtime::RuntimeValueKind;
 use gid::{CellId, Value};
@@ -86,10 +85,10 @@ pub struct Context<'a> {
     foreign_scopes: Vec<ForeignFunctions>,
     remaining_fuel: usize,
     depth: usize,
-    resolving: Vec<CellId>,
     compiled: ByNode<Thunk>,
     observer: Option<&'a dyn Observer>,
-    cell_states: Vec<CellState>,
+    /// Each cell's definition, by index, lowered once this evaluation.
+    definitions: Vec<Option<Expression>>,
     indices: CellIndices,
 }
 
@@ -126,10 +125,9 @@ fn context<'a>(
         foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
         depth: 0,
-        resolving: Vec::new(),
         compiled: Default::default(),
         observer: host.observer(),
-        cell_states: Vec::new(),
+        definitions: Vec::new(),
         indices: CellIndices::default(),
     }
 }

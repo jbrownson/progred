@@ -16,7 +16,6 @@ pub mod vocabulary {
     pub const REASON: CellId = ::grap::absent::REASON;
     pub const CELL: CellId = ::grap::absent::CELL;
     pub const VALUE: CellId = ::grap::absent::VALUE;
-    pub const CYCLE: CellId = ::grap::absent::CYCLE;
     pub const CAUSES: CellId = ::grap::absent::CAUSES;
     pub const NO_ALTERNATIVE: CellId = ::grap::absent::NO_ALTERNATIVE;
     pub const DECLINED: CellId = ::grap::absent::DECLINED;
@@ -295,7 +294,6 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::REASON, "reason"),
             (vocabulary::CELL, "cell"),
             (vocabulary::VALUE, "value"),
-            (vocabulary::CYCLE, "cycle"),
             (vocabulary::CAUSES, "causes"),
             (vocabulary::CALL, "call"),
             (vocabulary::CALLERS, "callers"),

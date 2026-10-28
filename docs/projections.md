@@ -1008,7 +1008,7 @@ Semantic failure is an open GID record of the absent kind:
 
 The projection stack draws one as the absent library provides for its kind.
 The reason cell supplies names and other static metadata. Occurrence fields
-can identify a missing cell, invalid value, or cycle. Code inspects identities,
+can identify a missing cell or invalid value. Code inspects identities,
 not human-readable diagnostic text. Hosts and tests inspect the returned value;
 there is no parallel Rust diagnostics list that can reject a successful result.
 There is no unspecified reason or zero-argument absence constructor. Each

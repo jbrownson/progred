@@ -3,7 +3,7 @@
 
 use crate::call::{CallPlan, PreparedCallTarget, not_callable};
 use crate::environment::{Environment, cell_index};
-use crate::eval::{CellState, unbox};
+use crate::eval::unbox;
 use crate::foreign::{Prepare, Stage};
 use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
 use crate::unboxed::Unboxed;
@@ -446,30 +446,21 @@ impl<'a> Context<'a> {
     /// shared too.
     pub(crate) fn lowered_cell(&mut self, cell: CellId, value: &Value) -> Expression {
         let index = cell_index(&self.indices, cell);
-        while self.cell_states.len() <= index.0 {
-            self.cell_states.push(CellState::Unknown);
+        if self.definitions.len() <= index.0 {
+            self.definitions.resize(index.0 + 1, None);
         }
-        match &self.cell_states[index.0] {
-            CellState::Ready(expression) => expression.clone(),
-            CellState::Evaluating { .. } => self.lower_source(
-                value,
-                SourceOrigin::Cell {
-                    cell,
-                    path: Vec::new(),
-                },
-            ),
-            CellState::Unknown => {
-                let expression = self.lower_source(
-                    value,
-                    SourceOrigin::Cell {
-                        cell,
-                        path: Vec::new(),
-                    },
-                );
-                self.cell_states[index.0] = CellState::Ready(expression.clone());
-                expression
-            }
+        if let Some(expression) = &self.definitions[index.0] {
+            return expression.clone();
         }
+        let expression = self.lower_source(
+            value,
+            SourceOrigin::Cell {
+                cell,
+                path: Vec::new(),
+            },
+        );
+        self.definitions[index.0] = Some(expression.clone());
+        expression
     }
 }
 

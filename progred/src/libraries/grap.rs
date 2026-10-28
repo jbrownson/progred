@@ -789,7 +789,6 @@ pub fn library<W: Host>() -> Library<W> {
             ),
             (memo::CANCELLED, "computation cancelled"),
             (::grap::absent::MISSING_CELL, "missing cell"),
-            (::grap::absent::CELL_CYCLE, "cell cycle"),
             (::grap::absent::MALFORMED_LAMBDA, "malformed lambda"),
             (::grap::absent::INVALID_PARAMETER, "invalid parameter"),
             (::grap::absent::NOT_CALLABLE, "not callable"),
