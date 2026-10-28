@@ -1031,6 +1031,17 @@ The full design has more to settle:
   point back at the template.
 - **Lazy children.** A list's elements need lowering only when a foreign
   function walks them as code, and a record's fields one at a time.
+- **Native functions.** A runtime value holding a foreign function's code,
+  as a closure holds its body, saved as its `{isa: foreign function, …}`
+  record. The host would answer a library function's cell with it, so
+  `Host::implementation` goes, and calling a saved record resolves its
+  implementation cell to it, as calling a saved closure parses it. A call
+  still asks the scopes and the overlay for that cell before running the
+  code it holds. It's for tidiness, not speed: on 2026-10-28 no canary called
+  a foreign function held as a value outside a scope, and direct calls
+  already cache their target per call site (IoP picture: about 175,000 calls
+  a frame from 108 preparations), so it would save only the second host
+  lookup when a call site is prepared, at most about 100 a frame.
 
 ## Decoding PNGs once while visible
 
