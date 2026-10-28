@@ -200,7 +200,7 @@ pub(crate) fn described(libraries: Libraries) -> Libraries {
             )]),
         );
         let mut definitions = definitions.clone();
-        definitions.insert(id, ::grap::Definition::Value(value));
+        definitions.insert(id, ::grap::Definition::from(value));
         described.insert(id, definitions);
     }
     described

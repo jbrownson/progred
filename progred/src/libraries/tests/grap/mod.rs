@@ -25,7 +25,7 @@ fn every_built_in_declares_its_parameters() {
             definitions
                 .iter()
                 .filter(|(_, definition)| {
-                    matches!(definition, ::grap::Definition::Foreign(_))
+                    definition.implementation().is_some()
                         && !definition
                             .value()
                             .as_record()

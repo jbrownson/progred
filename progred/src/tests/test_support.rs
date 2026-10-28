@@ -91,10 +91,14 @@ pub(crate) fn test_host<'a>(
     TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
         (value, Some(function)) => Some(grap::Definition::foreign(
             cell,
-            value.unwrap_or_else(|| Value::record([])),
+            value
+                .as_ref()
+                .and_then(Value::as_record)
+                .cloned()
+                .unwrap_or_default(),
             function.clone(),
         )),
-        (Some(value), None) => Some(grap::Definition::Value(value)),
+        (Some(value), None) => Some(grap::Definition::from(value)),
         (None, None) => None,
     })
 }
@@ -131,11 +135,9 @@ pub(crate) fn foreign_functions<World, Hover>(
 ) -> grap::ForeignFunctions {
     library.definitions.iter().fold(
         grap::ForeignFunctions::default(),
-        |functions, (cell, definition)| match definition {
-            grap::Definition::Value(_) => functions,
-            grap::Definition::Foreign(native) => {
-                functions.register(cell, native.implementation.clone())
-            }
+        |functions, (cell, definition)| match definition.implementation() {
+            Some(implementation) => functions.register(cell, implementation.clone()),
+            None => functions,
         },
     )
 }
@@ -263,7 +265,7 @@ pub(crate) fn library(
     let mut definitions = crate::library::Definitions::from_parts(cells, functions);
     definitions.insert(
         id,
-        grap::Definition::Value(crate::libraries::name::record(name, [])),
+        grap::Definition::from(crate::libraries::name::record(name, [])),
     );
     crate::library::Library::new(definitions)
 }

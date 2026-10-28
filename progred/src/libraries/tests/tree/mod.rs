@@ -351,7 +351,7 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
             B,
             ::grap::Definition::foreign(
                 B,
-                Value::record([]),
+                gid::Record::default(),
                 if tracked {
                     implementation.tracked()
                 } else {

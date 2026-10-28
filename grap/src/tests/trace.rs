@@ -1,6 +1,6 @@
 use super::*;
 use crate::{ForeignFunction, call, lambda, vocabulary};
-use gid::{Value, new_cell_id};
+use gid::new_cell_id;
 
 /// A host where `fail` answers an absent for `reason`, and nothing else is
 /// defined.
@@ -9,7 +9,7 @@ fn failing(fail: CellId, reason: CellId) -> impl Host {
         (cell == fail).then(|| {
             Definition::foreign(
                 fail,
-                Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::from_value(move |_, _, _| Ok(crate::absent::value(reason))),
             )
         })

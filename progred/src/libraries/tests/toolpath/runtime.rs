@@ -32,7 +32,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             let (origins, tracer) = (origins.clone(), tracer.clone());
             Some(::grap::Definition::foreign(
                 inspect,
-                Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
                     origins
                         .borrow_mut()
@@ -77,7 +77,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             let (origins, tracer) = (origins.clone(), tracer.clone());
             Some(::grap::Definition::foreign(
                 place,
-                Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::new(move |_, _, _| {
                     origins
                         .borrow_mut()

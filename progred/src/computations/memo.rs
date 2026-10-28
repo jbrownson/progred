@@ -6,7 +6,7 @@
 use gid::{CellId, Value};
 use grap::{Definition, Evaluation, Host, absent};
 use incremental::{Read, Source};
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
 
 #[cfg(test)]
 #[path = "tests/memo.rs"]
@@ -26,19 +26,8 @@ pub fn failure(error: incremental::Error) -> Value {
     })
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Resolved(pub Option<Definition>);
-
-impl PartialEq for Resolved {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (None, None) => true,
-            (Some(Definition::Value(x)), Some(Definition::Value(y))) => x == y,
-            (Some(Definition::Foreign(x)), Some(Definition::Foreign(y))) => Rc::ptr_eq(x, y),
-            _ => false,
-        }
-    }
-}
 
 pub type Definitions<S> = Source<S, CellId, Resolved>;
 

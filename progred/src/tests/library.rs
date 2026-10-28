@@ -36,7 +36,7 @@ fn right_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
 fn foreign_sources(libraries: &Libraries, cell: CellId) -> Vec<CellId> {
     libraries
         .definitions(cell)
-        .filter(|(_, definition)| matches!(definition, Definition::Foreign(_)))
+        .filter(|(_, definition)| definition.implementation().is_some())
         .map(|(library, _)| library)
         .collect()
 }
@@ -171,18 +171,18 @@ fn definitions_are_sorted_unique_and_copy_on_write() {
         SHARED_FUNCTION,
         Definition::foreign(
             SHARED_FUNCTION,
-            name::record("native", []),
+            [name::field("native")].into_iter().collect(),
             ForeignFunction::from_value(left_function),
         ),
     );
     definitions.insert(
         SHARED_CELL,
-        Definition::Value(Value::from(b"original".to_vec())),
+        Definition::from(Value::from(b"original".to_vec())),
     );
     let original = definitions.clone();
     definitions.insert(
         SHARED_CELL,
-        Definition::Value(Value::from(b"replacement".to_vec())),
+        Definition::from(Value::from(b"replacement".to_vec())),
     );
 
     assert_eq!(
@@ -201,10 +201,11 @@ fn definitions_are_sorted_unique_and_copy_on_write() {
         definitions.value(SHARED_FUNCTION).and_then(name::read),
         Some("native")
     );
-    assert!(matches!(
-        definitions.get(SHARED_FUNCTION),
-        Some(Definition::Foreign(_))
-    ));
+    assert!(
+        definitions
+            .get(SHARED_FUNCTION)
+            .is_some_and(|definition| definition.implementation().is_some())
+    );
 }
 
 #[test]

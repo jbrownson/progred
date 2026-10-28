@@ -131,7 +131,7 @@ impl<'a> Sources<'a> {
             value: contribution.value(),
             native: matches!(
                 contribution,
-                Contribution::Library(_, grap::Definition::Foreign(_))
+                Contribution::Library(_, definition) if definition.implementation().is_some()
             ),
             library: match contribution {
                 Contribution::Document(_) => None,
@@ -202,7 +202,7 @@ impl grap::Host for Sources<'_> {
     fn resolve(&self, cell: CellId) -> Option<grap::Definition> {
         self.definition(cell)
             .map(|contribution| match contribution {
-                Contribution::Document(value) => grap::Definition::Value(value.clone()),
+                Contribution::Document(value) => grap::Definition::from(value.clone()),
                 Contribution::Library(_, definition) => definition.clone(),
             })
     }

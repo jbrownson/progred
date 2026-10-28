@@ -96,7 +96,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
         sink,
         Definition::foreign(
             sink,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new({
                 let (traces, tracer) = (traces.clone(), tracer.clone());
                 move |_, _, _| {
@@ -180,7 +180,7 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
         sink,
         Definition::foreign(
             sink,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new({
                 let (traces, tracer) = (traces.clone(), tracer.clone());
                 move |_, _, _| {
@@ -342,7 +342,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
         interpret,
         Definition::foreign(
             interpret,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, _, environment| {
                 context.eval_runtime_code(&value, environment)
             }),
@@ -443,7 +443,7 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
         interpret,
         Definition::foreign(
             interpret,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, _, environment| {
                 context.eval_runtime_code(&value, environment)
             }),
@@ -554,12 +554,12 @@ fn host(definitions: Vec<(CellId, Definition)>) -> impl Host {
 fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks() {
     let (identity, argument, data) = (new_cell_id(), new_cell_id(), new_cell_id());
     let receiver = host(vec![
-        (data, Definition::Value(f64::value(9.0))),
+        (data, Definition::from(f64::value(9.0))),
         (
             identity,
             Definition::foreign(
                 identity,
-                Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
                     context.eval(call.field(argument).unwrap(), environment)
                 }),
@@ -621,7 +621,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
         identity,
         Definition::foreign(
             identity,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
                 context.eval(call.field(argument).unwrap(), environment)
             }),
@@ -681,7 +681,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
         identity,
         Definition::foreign(
             identity,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
                 context.eval(call.field(argument).unwrap(), environment)
             }),
@@ -745,7 +745,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
     let closure = {
         let creator = host(vec![(
             factory,
-            Definition::Value(lambda(
+            Definition::from(lambda(
                 [captured],
                 lambda([], call(sink.into(), [(captured, captured.into())])),
             )),
@@ -781,7 +781,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
             sink,
             Definition::foreign(
                 sink,
-                Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::new(move |context, call, environment| {
                     output.borrow_mut().push(observer.trace().unwrap());
                     let value = context.eval(call.field(captured).unwrap(), environment)?;
@@ -959,9 +959,9 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let creator = TestHost(move |cell| {
         if cell == first || cell == second {
-            Some(Definition::Value(enclosing.into()))
+            Some(Definition::from(Value::from(enclosing)))
         } else if cell == enclosing {
-            Some(Definition::Value(isa::record(
+            Some(Definition::from(isa::record(
                 vocabulary::kind::VALUE_WRAPPER,
                 [(vocabulary::VALUE, lambda([], call(sink.into(), [])))],
             )))
@@ -1044,7 +1044,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
         identity,
         Definition::foreign(
             identity,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
                 let expression = call.field(argument).unwrap();
                 assert!(expression.0.source.1.get().is_none());
@@ -1087,7 +1087,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
                 capture,
                 Definition::foreign(
                     capture,
-                    Value::record([]),
+                    gid::Record::default(),
                     ForeignFunction::new(move |context, call, environment| {
                         let expression = call.field(argument).unwrap();
                         Ok(context.prepare_callable(expression, environment)?.value)
@@ -1098,7 +1098,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
                 target,
                 Definition::foreign(
                     target,
-                    Value::record([]),
+                    gid::Record::default(),
                     ForeignFunction::new(move |_, _, _| {
                         let _ = &marker;
                         Ok(RuntimeValue::f64(1.0))
@@ -1118,7 +1118,7 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
         target,
         Definition::foreign(
             target,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(|_, _, _| Ok(RuntimeValue::f64(2.0))),
         ),
     )]);
@@ -1141,7 +1141,7 @@ fn retained_callables_use_the_receiving_scoped_capability() {
         capture,
         Definition::foreign(
             capture,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, call, environment| {
                 let expression = call.field(argument).unwrap();
                 Ok(context.prepare_callable(expression, environment)?.value)
@@ -1230,7 +1230,7 @@ fn every_entry_point_binds_in_its_context_index_table() {
         probe,
         Definition::foreign(
             probe,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::new(move |context, _, environment| {
                 seen.set(seen.get() && Rc::ptr_eq(&environment.indices, &context.indices));
                 Ok(RuntimeValue::f64(1.0))

@@ -9,10 +9,14 @@ fn definitions_from_parts<'a>(
     TestHost(move |cell| match (resolve(cell), foreign.get(cell)) {
         (value, Some(function)) => Some(Definition::foreign(
             cell,
-            value.unwrap_or_else(|| Value::record([])),
+            value
+                .as_ref()
+                .and_then(Value::as_record)
+                .cloned()
+                .unwrap_or_default(),
             function.clone(),
         )),
-        (Some(value), None) => Some(Definition::Value(value)),
+        (Some(value), None) => Some(Definition::from(value)),
         (None, None) => None,
     })
 }
@@ -52,7 +56,7 @@ fn a_direct_cell_call_returns_its_definitions_decline() {
             assert_eq!(cell, function);
             Some(Definition::foreign(
                 cell,
-                gid::Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
             ))
         }),
@@ -69,7 +73,7 @@ fn an_ordinary_absent_keeps_its_details() {
     let evaluation = super::evaluate_value(
         &call(Value::from(function), []),
         &TestHost(|cell| match cell {
-            cell if cell == function => Some(Definition::Value(Value::from(missing))),
+            cell if cell == function => Some(Definition::from(Value::from(missing))),
             cell if cell == missing => None,
             _ => unreachable!(),
         }),
@@ -91,7 +95,7 @@ fn host_apply_returns_the_definitions_decline() {
         &TestHost(|_| {
             Some(Definition::foreign(
                 function,
-                gid::Value::record([]),
+                gid::Record::default(),
                 ForeignFunction::from_value(|_, _, _| Ok(absent::decline())),
             ))
         }),
@@ -559,10 +563,10 @@ fn cell_reads_never_invoke_native_code_or_scoped_capabilities() {
         panic!("reading data must not invoke a scoped capability")
     };
     let overlay = ForeignOverlay::from_value(&functions, &invoke);
-    let first = Definition::Value(blob("document"));
+    let first = Definition::from(blob("document"));
     let second = Definition::foreign(
         cell,
-        Value::record([(cell, blob("library"))]),
+        [(cell, blob("library"))].into_iter().collect(),
         ForeignFunction::from_value(|_, _, _| {
             panic!("reading a native definition must not invoke it")
         }),
@@ -1386,7 +1390,7 @@ fn a_value_definitions_origin_is_its_cell() {
         &RuntimeValue::from(Value::from(cell)),
         &TestHost(|queried| {
             assert_eq!(queried, cell);
-            Some(Definition::Value(call(Value::from(foreign), [])))
+            Some(Definition::from(call(Value::from(foreign), [])))
         }),
         &overlay,
         20,

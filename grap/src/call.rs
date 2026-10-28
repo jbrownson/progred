@@ -8,8 +8,7 @@ use crate::foreign::{
 use crate::lower::{OriginId, runtime_call};
 use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
 use crate::{
-    Context, Definition, Expression, Halt, SourceOrigin, absent, arguments, isa, primitive, source,
-    vocabulary,
+    Context, Expression, Halt, SourceOrigin, absent, arguments, isa, primitive, source, vocabulary,
 };
 use gid::{CellId, Value};
 use std::cell::RefCell;
@@ -104,20 +103,18 @@ impl<'a> Context<'a> {
             Some(target) => target,
             None => {
                 let kind = match self.host.resolve(cell) {
-                    Some(Definition::Foreign(definition)) => {
-                        match &definition.implementation.primitive {
+                    Some(definition) => match definition.implementation() {
+                        Some(implementation) => match &implementation.primitive {
                             Some(primitive) => PreparedCallTargetKind::Primitive(
                                 **primitive,
                                 primitive.operands(call),
                             ),
-                            None => {
-                                PreparedCallTargetKind::Foreign(definition.implementation.clone())
-                            }
-                        }
-                    }
-                    Some(Definition::Value(value)) => {
-                        PreparedCallTargetKind::Value(self.lowered_cell(cell, &value))
-                    }
+                            None => PreparedCallTargetKind::Foreign(implementation.clone()),
+                        },
+                        None => PreparedCallTargetKind::Value(
+                            self.lowered_cell(cell, definition.value()),
+                        ),
+                    },
                     None => PreparedCallTargetKind::Missing,
                 };
                 let target = Rc::new(PreparedCallTarget {
@@ -424,31 +421,30 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
-        self.checked_call(|context| match context.host.resolve(cell) {
-            Some(Definition::Foreign(definition)) => context.apply_foreign(
-                &ResolvedForeign::Function(definition.implementation.clone()),
-                callable,
-                arguments,
-                environment,
-            ),
-            Some(Definition::Value(value)) => {
-                let expression = context.lower_source(
-                    &value,
-                    SourceOrigin::Cell {
-                        cell,
-                        path: Vec::new(),
-                    },
-                );
-                let callable = context.eval_definition(cell, expression, environment)?;
-                if callable.absent_reason().is_some() {
-                    Ok(callable)
-                } else {
-                    context
-                        .try_apply_callable(callable.clone(), &arguments, environment)
-                        .unwrap_or_else(|| Ok(not_callable(&callable)))
+        self.checked_call(|context| {
+            let Some(definition) = context.host.resolve(cell) else {
+                return Ok(missing_cell(cell));
+            };
+            match definition.implementation() {
+                Some(implementation) => context.apply_foreign(
+                    &ResolvedForeign::Function(implementation.clone()),
+                    callable,
+                    arguments,
+                    environment,
+                ),
+                None => {
+                    // Lowered once per evaluation, as a call of the cell is.
+                    let expression = context.lowered_cell(cell, definition.value());
+                    let callable = context.eval_definition(cell, expression, environment)?;
+                    if callable.absent_reason().is_some() {
+                        Ok(callable)
+                    } else {
+                        context
+                            .try_apply_callable(callable.clone(), &arguments, environment)
+                            .unwrap_or_else(|| Ok(not_callable(&callable)))
+                    }
                 }
             }
-            None => Ok(missing_cell(cell)),
         })
     }
 

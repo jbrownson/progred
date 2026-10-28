@@ -119,7 +119,7 @@ fn effects_in_arguments_and_nested_calls_make_a_decline_effectful() {
                 &operations,
                 |cell| {
                     assert_eq!(cell, function);
-                    Some(Definition::Value(lambda(
+                    Some(Definition::from(lambda(
                         [],
                         after(effect.clone(), absent::decline()),
                     )))
@@ -150,7 +150,7 @@ fn ordinary_absent_returns_keep_their_effects() {
             &operations,
             |cell| {
                 assert_eq!(cell, function);
-                Some(Definition::Value(lambda(
+                Some(Definition::from(lambda(
                     [],
                     after(operations.write(written.clone()), result.clone()),
                 )))
@@ -177,7 +177,7 @@ fn a_pure_decline_keeps_its_details() {
         Invocation::Expression,
         function.into(),
         &operations,
-        |_| Some(Definition::Value(lambda([], decline.clone()))),
+        |_| Some(Definition::from(lambda([], decline.clone()))),
         Value::record([]),
         100,
     );
@@ -197,10 +197,10 @@ fn halts_stop_without_rolling_back_temporary_state() {
             &operations,
             |cell| {
                 if cell == recurse {
-                    Some(Definition::Value(lambda([], call(recurse.into(), []))))
+                    Some(Definition::from(lambda([], call(recurse.into(), []))))
                 } else {
                     assert_eq!(cell, function);
-                    Some(Definition::Value(lambda(
+                    Some(Definition::from(lambda(
                         [],
                         after(
                             operations.write(Value::from(vec![42])),
@@ -263,7 +263,7 @@ fn a_non_callable_definition_returns_absent() {
         function.into(),
         &operations,
         |_| {
-            Some(Definition::Value(after(
+            Some(Definition::from(after(
                 operations.write(Value::from(vec![42])),
                 Value::record([]),
             )))
@@ -295,7 +295,7 @@ fn earlier_effects_do_not_prevent_a_later_pure_decline() {
                 ),
             ),
             &operations,
-            |_| Some(Definition::Value(lambda([], absent::decline()))),
+            |_| Some(Definition::from(lambda([], absent::decline()))),
             Value::record([]),
             100,
         );
@@ -333,7 +333,7 @@ fn rust_functions_obey_the_same_decline_contract() {
                     |_| {
                         Some(Definition::foreign(
                             function,
-                            gid::Value::record([]),
+                            gid::Record::default(),
                             foreign.clone(),
                         ))
                     },

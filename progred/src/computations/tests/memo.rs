@@ -6,6 +6,7 @@ use grap::{
 };
 use incremental::{Input, Memo, Runtime};
 use std::cell::Cell;
+use std::rc::Rc;
 
 type Table = Vec<(CellId, Definition)>;
 
@@ -26,7 +27,7 @@ fn counted(cell: CellId, runs: &Rc<Cell<usize>>, result: Value) -> Definition {
     let runs = runs.clone();
     Definition::foreign(
         cell,
-        Value::record([]),
+        gid::Record::default(),
         ForeignFunction::from_value(move |_, _, _| {
             runs.set(runs.get() + 1);
             Ok(result.clone())
@@ -70,7 +71,7 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
     table.set_by(
         vec![
             (cell, first),
-            (unrelated, Definition::Value(Value::record([]))),
+            (unrelated, Definition::from(Value::record([]))),
         ],
         |_, _| false,
     );
@@ -88,9 +89,9 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
 fn library_order_document_override_and_removal_are_observed() {
     let runtime = Runtime::default();
     let cell = new_cell_id();
-    let a = (cell, Definition::Value(Value::from(vec![1])));
-    let b = (cell, Definition::Value(Value::from(vec![2])));
-    let doc = (cell, Definition::Value(Value::from(vec![3])));
+    let a = (cell, Definition::from(Value::from(vec![1])));
+    let b = (cell, Definition::from(Value::from(vec![2])));
+    let doc = (cell, Definition::from(Value::from(vec![3])));
     let (table, source) = definitions(&runtime, vec![a.clone(), b.clone()]);
     let query = evaluate(
         &runtime,
@@ -124,7 +125,7 @@ fn undeclared_foreign_reads_disable_reuse() {
     let hidden = Rc::new(Cell::new(1u8));
     let definition = Definition::foreign(
         cell,
-        Value::record([]),
+        gid::Record::default(),
         ForeignFunction::from_value({
             let hidden = hidden.clone();
             move |_, _, _| Ok(Value::from(vec![hidden.get()]))

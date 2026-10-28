@@ -32,7 +32,7 @@ impl Definitions {
     pub fn from_parts(cells: Cells, foreign: ForeignFunctions) -> Self {
         let mut entries: Vec<_> = cells
             .iter()
-            .map(|(cell, value)| (*cell, Definition::Value(value.clone())))
+            .map(|(cell, value)| (*cell, Definition::from(value.clone())))
             .collect();
         entries.sort_unstable_by_key(|(cell, _)| *cell);
         let mut definitions = Self {
@@ -45,8 +45,9 @@ impl Definitions {
                     cell,
                     definitions
                         .value(cell)
+                        .and_then(gid::Value::as_record)
                         .cloned()
-                        .unwrap_or_else(|| gid::Value::record([])),
+                        .unwrap_or_default(),
                     function.clone(),
                 ),
             );
@@ -122,7 +123,7 @@ impl<World, Hover> Library<World, Hover> {
         values: impl IntoIterator<Item = (gid::CellId, gid::Value)>,
     ) -> Self {
         for (cell, value) in values {
-            self.definitions.insert(cell, Definition::Value(value));
+            self.definitions.insert(cell, Definition::from(value));
         }
         self
     }

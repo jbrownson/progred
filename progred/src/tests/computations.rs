@@ -30,7 +30,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         let mut definitions = crate::library::Definitions::default();
         definitions.insert(
             function,
-            Definition::foreign(function, Value::record([]), implementation),
+            Definition::foreign(function, gid::Record::default(), implementation),
         );
         let mut libraries = Libraries::default();
         libraries.insert(library, definitions);
@@ -98,7 +98,7 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
         function,
         Definition::foreign(
             function,
-            Value::record([]),
+            gid::Record::default(),
             ForeignFunction::from_value({
                 let runs = runs.clone();
                 move |context, call, environment| {

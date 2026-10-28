@@ -29,9 +29,8 @@ definition first, otherwise the first loaded library definition. Names, structur
 display, and cell evaluation use that value. Definitions are neither merged nor
 implicitly composed. Duplicate indicators and inspection UI are deferred.
 
-Each library has one definition per cell: either an ordinary value or a native
-definition (`grap::Definition::Foreign`) pairing a descriptive value with its
-Rust implementation. Reads and
+Each library has one definition per cell (`grap::Definition`): a value and,
+for a native definition, the Rust implementation the value describes. Reads and
 calls use the same lookup. A native definition's value says what it is,
 `{isa: foreign function, implementation: <its own cell>, name, params}`: a
 function the host implements under that cell. It's data, so a reference evaluates to it

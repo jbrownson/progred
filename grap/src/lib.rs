@@ -7,7 +7,7 @@ use crate::environment::CellIndices;
 use crate::eval::CellState;
 use crate::lower::{ByNode, OriginId, Thunk};
 use crate::runtime::RuntimeValueKind;
-use gid::{CellId, Value};
+use gid::{CellId, Record, Value};
 use std::rc::Rc;
 
 pub use call::PreparedCallable;
@@ -48,49 +48,66 @@ pub mod u64;
 mod unboxed;
 pub mod vocabulary;
 
-/// One host definition. A native implementation's value is the foreign
-/// function it defines, an ordinary value like any other; reading a
-/// definition never invokes native code.
+/// One host definition: a cell's value and, for a foreign function, the
+/// native code that implements it. A foreign function's value describes it,
+/// an ordinary value like any other; reading a definition never invokes
+/// native code.
 #[derive(Clone)]
-pub enum Definition {
-    Value(Value),
-    Foreign(Rc<ForeignDefinition>),
+pub struct Definition {
+    value: Value,
+    implementation: Option<Rc<ForeignFunction>>,
 }
 
-pub struct ForeignDefinition {
-    pub value: Value,
-    pub implementation: ForeignFunction,
+impl From<Value> for Definition {
+    fn from(value: Value) -> Self {
+        Self {
+            value,
+            implementation: None,
+        }
+    }
 }
 
 impl Definition {
-    /// `cell`'s definition as `implementation`: its description, a record,
-    /// says it's a foreign function implemented under `cell`. Declared
-    /// parameters join it under `params`, as a lambda's do, unless it lists
-    /// its own.
-    pub fn foreign(cell: CellId, mut value: Value, implementation: ForeignFunction) -> Self {
-        if let Value::Record(fields) = &mut value {
-            fields.set(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
-            fields.set(vocabulary::IMPLEMENTATION, Value::from(cell));
-            if let Some(parameters) = &implementation.parameters
-                && fields.get(&vocabulary::PARAMS).is_none()
-            {
-                fields.set(
-                    vocabulary::PARAMS,
-                    Value::list(parameters.iter().map(|&parameter| parameter.into())),
-                );
-            }
+    /// `cell`'s definition as `implementation`: its `description` says it's a
+    /// foreign function implemented under `cell`. Declared parameters join it
+    /// under `params`, as a lambda's do, unless it lists its own.
+    pub fn foreign(cell: CellId, mut description: Record, implementation: ForeignFunction) -> Self {
+        description.set(isa::ISA, Value::from(vocabulary::kind::FOREIGN_FUNCTION));
+        description.set(vocabulary::IMPLEMENTATION, Value::from(cell));
+        if let Some(parameters) = &implementation.parameters
+            && description.get(&vocabulary::PARAMS).is_none()
+        {
+            description.set(
+                vocabulary::PARAMS,
+                Value::list(parameters.iter().map(|&parameter| parameter.into())),
+            );
         }
-        Self::Foreign(Rc::new(ForeignDefinition {
-            value,
-            implementation,
-        }))
+        Self {
+            value: Value::Record(description),
+            implementation: Some(Rc::new(implementation)),
+        }
     }
 
     pub fn value(&self) -> &Value {
-        match self {
-            Self::Value(value) => value,
-            Self::Foreign(definition) => &definition.value,
-        }
+        &self.value
+    }
+
+    /// The native code a foreign function's definition runs.
+    pub fn implementation(&self) -> Option<&ForeignFunction> {
+        self.implementation.as_deref()
+    }
+}
+
+/// Two definitions are equal when their values are and they run the same
+/// native code, if any.
+impl PartialEq for Definition {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+            && match (&self.implementation, &other.implementation) {
+                (None, None) => true,
+                (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+                _ => false,
+            }
     }
 }
 
