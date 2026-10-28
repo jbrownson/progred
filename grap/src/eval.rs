@@ -3,10 +3,10 @@
 
 use crate::environment::{CellIndex, Environment};
 use crate::foreign::foreign_function;
-use crate::lower::{Form, OriginRoot};
+use crate::lower::Form;
 use crate::runtime::{RuntimeValue, RuntimeValueKind};
 use crate::unboxed::{Native, Unboxed};
-use crate::{Context, Evaluation, Expression, Halt, absent};
+use crate::{Context, Evaluation, Expression, Halt, SourceOrigin, absent};
 use gid::{CellId, Value};
 #[derive(Clone)]
 pub(crate) enum CellState {
@@ -55,7 +55,7 @@ impl<'a> Context<'a> {
 
     pub(crate) fn run(self, expression: &Value) -> Evaluation {
         self.conclude(|context| {
-            let expression = context.lower_source(expression, OriginRoot::Input);
+            let expression = context.lower_source(expression, SourceOrigin::Input(Vec::new()));
             let environment = context.empty_environment();
             context.eval(expression, &environment)
         })
@@ -225,8 +225,13 @@ impl<'a> Context<'a> {
                             Ok(cell_cycle(&self.resolving[stack_index..], cell))
                         }
                         CellState::Unknown => {
-                            let expression =
-                                self.lower_source(definition.value(), OriginRoot::Cell(cell));
+                            let expression = self.lower_source(
+                                definition.value(),
+                                SourceOrigin::Cell {
+                                    cell,
+                                    path: Vec::new(),
+                                },
+                            );
                             self.cell_states[index.0] = CellState::Ready(expression.clone());
                             self.eval_resolved_cell(index, cell, expression, environment)
                         }

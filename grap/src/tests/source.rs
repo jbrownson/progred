@@ -9,7 +9,7 @@ fn origins_round_trip_with_open_metadata_and_stable_paths() {
     ];
     for origin in [
         SourceOrigin::Input(path.clone()),
-        SourceOrigin::Stored(path.clone()),
+        SourceOrigin::Root(path.clone()),
         SourceOrigin::Cell {
             cell: new_cell_id(),
             path,
@@ -29,7 +29,7 @@ fn origins_round_trip_with_open_metadata_and_stable_paths() {
     assert_eq!(
         read(&Value::record([
             (vocabulary::INPUT, Value::list([])),
-            (vocabulary::STORED, Value::list([]))
+            (vocabulary::ROOT, Value::list([]))
         ])),
         None
     );

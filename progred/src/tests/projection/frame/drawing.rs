@@ -259,7 +259,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert!(selected.borrow().is_empty());
         // The drawing is the root's value, so its program is at `program`.
         let program = [gid::Step::Key(layout_data::vocabulary::PROGRAM)];
-        let source = SourceTrace::Stored(Rc::from(program.clone()));
+        let source = SourceTrace::Root(Rc::from(program.clone()));
         let Some((_, Claim::Direct(target))) = placed.claim.clone() else {
             panic!("expected a drawing source claim")
         };
@@ -394,7 +394,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     let path: Rc<[gid::Step]> = Rc::from([gid::Step::Key(layout_data::vocabulary::PROGRAM)]);
     let mut input = crate::frame::DispatchContext::new(
         Some(drawing_view.clone()),
-        Some(Hovered::Tree(Hover::Source(SourceTrace::Stored(
+        Some(Hovered::Tree(Hover::Source(SourceTrace::Root(
             path.clone(),
         )))),
     );

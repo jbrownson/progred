@@ -1075,7 +1075,7 @@ Closure GID records also retain an optional `body origin` field beside
 the closure. The ordinary record forms are:
 
 ```text
-{document source: path}
+{root source: path}
 {source cell: cell, source path: path}
 {input source: path}
 ```

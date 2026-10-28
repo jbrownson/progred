@@ -223,7 +223,7 @@ fn missing_argument<W: Host>(
 /// Where Grap says a call is, when it's somewhere a document names.
 fn location(origin: ::grap::SourceOrigin) -> Option<Location<'static>> {
     match origin {
-        ::grap::SourceOrigin::Stored(path) => Some(Location::root(path)),
+        ::grap::SourceOrigin::Root(path) => Some(Location::root(path)),
         ::grap::SourceOrigin::Cell { cell, path } => Some(Location::in_cell(cell, path)),
         ::grap::SourceOrigin::Input(_) => None,
     }

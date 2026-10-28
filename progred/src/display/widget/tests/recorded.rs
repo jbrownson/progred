@@ -30,8 +30,8 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
 
 #[test]
 fn recorded_hits_use_paint_order_and_the_current_placement() {
-    let back = calls_at(SourceOrigin::Stored(vec![Step::Key(new_cell_id())]));
-    let front = calls_at(SourceOrigin::Stored(vec![Step::Key(new_cell_id())]));
+    let back = calls_at(SourceOrigin::Root(vec![Step::Key(new_cell_id())]));
+    let front = calls_at(SourceOrigin::Root(vec![Step::Key(new_cell_id())]));
     let drawing = Recorded {
         commands: DrawList::new(),
         hits: vec![

@@ -59,7 +59,7 @@ impl SourceCalls {
     /// source paths for every painted shape.
     pub fn contains(&self, source: &SourceTrace) -> bool {
         self.trace.origins().any(|origin| match (origin, source) {
-            (grap::SourceOrigin::Stored(path), SourceTrace::Stored(target)) => {
+            (grap::SourceOrigin::Root(path), SourceTrace::Root(target)) => {
                 path.as_slice() == target.as_ref()
             }
             (
@@ -70,7 +70,7 @@ impl SourceCalls {
                 },
             ) => cell == target && path.as_slice() == target_path.as_ref(),
             (grap::SourceOrigin::Input(suffix), target) => match (&self.input, target) {
-                (Some(SourceTrace::Stored(base)), SourceTrace::Stored(path)) => {
+                (Some(SourceTrace::Root(base)), SourceTrace::Root(path)) => {
                     base.iter().chain(suffix).eq(path.iter())
                 }
                 (
@@ -87,7 +87,7 @@ impl SourceCalls {
 /// `trace` as Grap records a source, the inverse of [`from_grap`].
 pub(crate) fn to_grap(trace: SourceTrace) -> grap::SourceOrigin {
     match trace {
-        SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
+        SourceTrace::Root(path) => grap::SourceOrigin::Root(path.to_vec()),
         SourceTrace::InCell { cell, path } => grap::SourceOrigin::Cell {
             cell,
             path: path.to_vec(),
@@ -100,7 +100,7 @@ pub(crate) fn from_grap(
     input: Option<&SourceTrace>,
 ) -> Option<SourceTrace> {
     match origin {
-        grap::SourceOrigin::Stored(path) => Some(SourceTrace::Stored(path.into())),
+        grap::SourceOrigin::Root(path) => Some(SourceTrace::Root(path.into())),
         grap::SourceOrigin::Input(path) => input.map(|input| input.descendant(&path)),
         grap::SourceOrigin::Cell { cell, path } => Some(SourceTrace::InCell {
             cell,

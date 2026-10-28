@@ -123,7 +123,7 @@ fn splice(value: Value) -> Value {
 #[test]
 fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
     use crate::display::widget::source::SourceTrace;
-    let source = SourceTrace::Stored(Rc::from([]));
+    let source = SourceTrace::Root(Rc::from([]));
     let rect = Rect::new(30.0, 40.0, 34.0, 56.0);
     for clip in [
         Rect::new(0.0, 0.0, 3000.0, 1800.0),
@@ -383,7 +383,7 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
     let libraries = crate::stack::load().libraries;
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-        Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(A)])),
+        Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(A)])),
         &libraries,
         1000,
     )
@@ -402,7 +402,7 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
                 ),
             ),
         )),
-        Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(B)])),
+        Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(B)])),
         &libraries,
         1000,
     )

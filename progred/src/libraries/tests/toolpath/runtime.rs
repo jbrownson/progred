@@ -48,7 +48,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let make = |body, marker, value| {
         let maker = ::grap::evaluate_runtime_at(
             &::grap::RuntimeValue::from(::grap::lambda([captured], ::grap::lambda([], body))),
-            Some(SourceOrigin::Stored(vec![gid::Step::Key(marker)])),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(marker)])),
             &host,
             1000,
         )
@@ -143,7 +143,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
         "two program entries and six point/axis mapping calls"
     );
     for origin in origins.iter() {
-        let SourceOrigin::Stored(path) = origin else {
+        let SourceOrigin::Root(path) = origin else {
             panic!("lost stored call origin")
         };
         assert!(
@@ -158,9 +158,7 @@ fn scopes_and_failures_keep_runtime_payloads() {
     let host = crate::stack::load().libraries;
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(
-            gid::new_cell_id(),
-        )])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(gid::new_cell_id())])),
         &host,
         100,
     )
@@ -225,9 +223,7 @@ fn preview_constructor_preserves_its_runtime_program() {
     let host = crate::stack::load().libraries;
     let program = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], point_call(START_AT, [0.0; 3]))),
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(
-            gid::new_cell_id(),
-        )])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(gid::new_cell_id())])),
         &host,
         100,
     )

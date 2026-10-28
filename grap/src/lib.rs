@@ -5,7 +5,7 @@
 
 use crate::environment::CellIndices;
 use crate::eval::CellState;
-use crate::lower::{ByNode, OriginId, OriginNode, OriginRoot, Thunk};
+use crate::lower::{ByNode, OriginId, Thunk};
 use crate::runtime::RuntimeValueKind;
 use gid::{CellId, Value};
 use std::rc::Rc;
@@ -15,6 +15,7 @@ pub use environment::Environment;
 pub use foreign::{ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function};
 pub use lower::Expression;
 pub use runtime::{RuntimeListValues, RuntimeValue, Shape};
+pub use source::SourceOrigin;
 pub use trace::{Answering, CallTrace, Observed, Observer, Tracer};
 
 #[cfg(test)]
@@ -46,16 +47,6 @@ mod trace;
 pub mod u64;
 mod unboxed;
 pub mod vocabulary;
-
-/// Where a source expression came from before evaluation. Generated
-/// runtime values have no origin; expressions read from the input or a
-/// cell retain their structural route for host tooling.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SourceOrigin {
-    Input(Vec<gid::Step>),
-    Stored(Vec<gid::Step>),
-    Cell { cell: CellId, path: Vec<gid::Step> },
-}
 
 /// One host definition. A native implementation's value is the foreign
 /// function it defines, an ordinary value like any other; reading a
@@ -209,8 +200,7 @@ pub fn evaluate_runtime_at(
     fuel: usize,
 ) -> Evaluation {
     context(host, None, fuel).conclude(|context| {
-        let origin =
-            origin.map(|origin| OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(origin)))));
+        let origin = origin.map(OriginId::start);
         let expression = context.lower_runtime_code_at(expression, origin);
         let environment = context.empty_environment();
         context.eval(expression, &environment)

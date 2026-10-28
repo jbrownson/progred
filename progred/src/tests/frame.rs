@@ -73,7 +73,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         Occurs::jump(crate::location::Location::root(source.clone())),
     ]);
     // What the projection draws a conjected occurrence sharing.
-    let secondary = Secondary::Stored(crate::occurrence::of(&source).into());
+    let secondary = Secondary::Root(crate::occurrence::of(&source).into());
     let mut landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
         path: occurrence.clone(),
         area: Some(root.clone()),
@@ -92,7 +92,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         hover.clone(),
         false,
     );
-    let expected = SourceTrace::Stored(Rc::from(source));
+    let expected = SourceTrace::Root(Rc::from(source));
     assert_eq!(resolved.hovered_trace, Some(expected.clone()));
     assert_eq!(resolved.hovered_secondary, Some(secondary.clone()));
     // A held press must carry the owning view into successor attribution,
@@ -920,7 +920,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
 #[test]
 fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
     let code = Hovered::Tree(hover::Hover::Value(Trail::root(crate::test_document())));
-    let drawing = Hovered::Tree(hover::Hover::Source(SourceTrace::Stored(Rc::from([]))));
+    let drawing = Hovered::Tree(hover::Hover::Source(SourceTrace::Root(Rc::from([]))));
 
     assert!(source_hover_visible(Some(&code), false));
     assert!(!source_hover_visible(Some(&drawing), false));

@@ -26,7 +26,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     let host = crate::test_support::TestHost(|cell| grap.definitions.get(cell).cloned());
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
-        Some(::grap::SourceOrigin::Stored(vec![Step::Key(
+        Some(::grap::SourceOrigin::Root(vec![Step::Key(
             gid::new_cell_id(),
         )])),
         &host,

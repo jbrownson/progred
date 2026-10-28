@@ -3,7 +3,7 @@ use super::*;
 fn retained(body: Value, source: CellId, host: &dyn ::grap::Host) -> RuntimeValue {
     let result = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(&body),
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(source)])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(source)])),
         host,
         1000,
     );

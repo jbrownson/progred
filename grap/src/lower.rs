@@ -166,14 +166,15 @@ fn thunk(
 #[derive(Clone)]
 pub(crate) struct OriginId(pub(crate) Rc<OriginNode>);
 
-pub(crate) enum OriginRoot {
-    Input,
-    Located(SourceOrigin),
-    Cell(CellId),
+impl OriginId {
+    /// The origin of code written at `origin`, which its children extend.
+    pub(crate) fn start(origin: SourceOrigin) -> Self {
+        Self(Rc::new(OriginNode::Start(origin)))
+    }
 }
 
 pub(crate) enum OriginNode {
-    Root(OriginRoot),
+    Start(SourceOrigin),
     Child { parent: OriginId, step: gid::Step },
 }
 
@@ -213,9 +214,8 @@ impl LambdaParameters {
 }
 
 impl<'a> Context<'a> {
-    pub(crate) fn lower_source(&mut self, value: &Value, root: OriginRoot) -> Expression {
-        let origin = OriginId(Rc::new(OriginNode::Root(root)));
-        self.lower_with(value, Some(origin))
+    pub(crate) fn lower_source(&mut self, value: &Value, origin: SourceOrigin) -> Expression {
+        self.lower_with(value, Some(OriginId::start(origin)))
     }
 
     pub(crate) fn lower_unattributed_source(&mut self, value: &Value) -> Expression {
@@ -453,9 +453,21 @@ impl<'a> Context<'a> {
         }
         match &self.cell_states[index.0] {
             CellState::Ready(expression) => expression.clone(),
-            CellState::Evaluating { .. } => self.lower_source(value, OriginRoot::Cell(cell)),
+            CellState::Evaluating { .. } => self.lower_source(
+                value,
+                SourceOrigin::Cell {
+                    cell,
+                    path: Vec::new(),
+                },
+            ),
             CellState::Unknown => {
-                let expression = self.lower_source(value, OriginRoot::Cell(cell));
+                let expression = self.lower_source(
+                    value,
+                    SourceOrigin::Cell {
+                        cell,
+                        path: Vec::new(),
+                    },
+                );
                 self.cell_states[index.0] = CellState::Ready(expression.clone());
                 expression
             }

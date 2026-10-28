@@ -70,7 +70,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
             doc: &doc,
             libraries: &stack.libraries,
         },
-        Some(SourceTrace::Stored(Rc::from([]))),
+        Some(SourceTrace::Root(Rc::from([]))),
         &style::editor(style::Theme::Light.palette(), 1.0),
     );
     assert!(drawing.is_empty());
@@ -120,7 +120,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
         let drawing = Drawing::of(
             &record(grap::call(Value::from(function), []).into(), 100),
             &sources,
-            Some(SourceTrace::Stored(Rc::from([]))),
+            Some(SourceTrace::Root(Rc::from([]))),
             &style::editor(style::Theme::Light.palette(), 1.0),
         );
         assert_eq!(drawing.hits(), 1);

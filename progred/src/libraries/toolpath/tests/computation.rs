@@ -278,7 +278,7 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
     let callbacks = [X, Y].map(|source| {
         ::grap::evaluate_runtime_at(
             &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-            Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(source)])),
+            Some(::grap::SourceOrigin::Root(vec![gid::Step::Key(source)])),
             &host,
             100,
         )

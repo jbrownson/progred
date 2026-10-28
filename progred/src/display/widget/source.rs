@@ -6,10 +6,10 @@ use std::rc::Rc;
 
 /// A structural source location used by execution-linked display.
 /// Definition-relative routes survive multiple projections of the same definition;
-/// stored routes identify an ordinary document occurrence.
+/// routes from the root identify an ordinary document occurrence.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceTrace {
-    Stored(Rc<[Step]>),
+    Root(Rc<[Step]>),
     InCell { cell: CellId, path: Rc<[Step]> },
 }
 
@@ -21,7 +21,7 @@ impl SourceTrace {
         let location = stored.as_ref().unwrap_or(location);
         let path = Rc::from(location.path.as_ref());
         match location.start {
-            Start::Root => Self::Stored(path),
+            Start::Root => Self::Root(path),
             Start::Cell(cell) => Self::InCell { cell, path },
         }
     }
@@ -34,7 +34,7 @@ impl SourceTrace {
                 .collect::<Rc<[Step]>>()
         };
         match self {
-            Self::Stored(path) => Self::Stored(append(path)),
+            Self::Root(path) => Self::Root(append(path)),
             Self::InCell { cell, path } => Self::InCell {
                 cell: *cell,
                 path: append(path),
@@ -50,7 +50,7 @@ impl SourceTrace {
 #[derive(Clone, Debug)]
 pub enum Secondary {
     Cell(CellId),
-    Stored(crate::occurrence::Trail),
+    Root(crate::occurrence::Trail),
     InCell {
         cell: CellId,
         path: crate::occurrence::Trail,
@@ -76,7 +76,7 @@ impl Secondary {
                     path,
                     relative_from,
                 },
-                None => Self::Stored(path),
+                None => Self::Root(path),
             },
         }
     }
@@ -87,7 +87,7 @@ impl Secondary {
             crate::occurrence::Trail::in_view(view.clone(), &crate::occurrence::of(path))
         };
         match trace {
-            SourceTrace::Stored(path) => Self::Stored(trail(path)),
+            SourceTrace::Root(path) => Self::Root(trail(path)),
             SourceTrace::InCell { cell, path } => Self::InCell {
                 cell: *cell,
                 path: trail(path),
@@ -107,7 +107,7 @@ impl PartialEq for Secondary {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Cell(left), Self::Cell(right)) => left == right,
-            (Self::Stored(left), Self::Stored(right)) => left.same_after(0, right, 0),
+            (Self::Root(left), Self::Root(right)) => left.same_after(0, right, 0),
             (
                 Self::InCell {
                     cell: left_cell,

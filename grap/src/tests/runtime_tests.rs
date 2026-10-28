@@ -85,7 +85,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let invocation = new_cell_id();
     let closure = evaluate_runtime_at(
         &RuntimeValue::from(lambda([], call(sink.into(), []))),
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(creation)])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(creation)])),
         &host(vec![]),
         100,
     )
@@ -109,7 +109,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let expression = runtime_call([(vocabulary::FUNCTION, closure.clone())]);
     let result = evaluate_runtime_at(
         &expression,
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(invocation)])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(invocation)])),
         &Observed::new(&receiver, &*tracer),
         100,
     );
@@ -118,11 +118,11 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     assert_eq!(
         traces.borrow()[0].origins().cloned().collect::<Vec<_>>(),
         vec![
-            SourceOrigin::Stored(vec![
+            SourceOrigin::Root(vec![
                 gid::Step::Key(creation),
                 gid::Step::Key(vocabulary::BODY)
             ]),
-            SourceOrigin::Stored(vec![gid::Step::Key(invocation)]),
+            SourceOrigin::Root(vec![gid::Step::Key(invocation)]),
         ]
     );
     // Returning an embedded callback must not serialize and re-lower it.
@@ -154,19 +154,14 @@ fn runtime_syntax_origins_descend_through_generated_lists_and_lambdas() {
     )]);
     let receiver = host(vec![]);
     let mut context = context(&receiver, None, 100);
-    let origin = SourceOrigin::Stored(vec![gid::Step::Key(root)]);
-    let lowered = context.lower_runtime_code_at(
-        &syntax,
-        Some(OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(
-            origin,
-        ))))),
-    );
+    let origin = SourceOrigin::Root(vec![gid::Step::Key(root)]);
+    let lowered = context.lower_runtime_code_at(&syntax, Some(OriginId::start(origin)));
     let list = lowered.field(field).unwrap();
     let lambda = list.elements().unwrap()[0].clone();
     let body = lambda.field(vocabulary::BODY).unwrap();
     assert_eq!(
         body.source_origin(),
-        Some(SourceOrigin::Stored(vec![
+        Some(SourceOrigin::Root(vec![
             gid::Step::Key(root),
             gid::Step::Key(field),
             gid::Step::Element(gid::position::spread(1).remove(0)),
@@ -208,7 +203,7 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     let stored = runtime.to_value();
     for origin in [
         None,
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(location)])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(location)])),
     ] {
         for fuel in [0, 1, 100] {
             traces.borrow_mut().clear();
@@ -503,7 +498,7 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
     let make = |field| {
         evaluate_runtime_at(
             &RuntimeValue::from(lambda([], call(sink.into(), []))),
-            Some(SourceOrigin::Stored(vec![gid::Step::Key(field)])),
+            Some(SourceOrigin::Root(vec![gid::Step::Key(field)])),
             &empty,
             100,
         )
@@ -538,7 +533,7 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
                 .origins()
                 .cloned()
                 .collect::<Vec<_>>(),
-            [SourceOrigin::Stored(vec![
+            [SourceOrigin::Root(vec![
                 gid::Step::Key(field),
                 gid::Step::Key(vocabulary::BODY)
             ])]
@@ -839,7 +834,7 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         gid::Step::Element(gid::position::between(None, None).unwrap()),
     ];
     for origin in [
-        Some(SourceOrigin::Stored(path.clone())),
+        Some(SourceOrigin::Root(path.clone())),
         Some(SourceOrigin::Cell {
             cell: ancestor,
             path,
@@ -879,9 +874,9 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
             let expression = runtime_call([(vocabulary::FUNCTION, closure)]);
             let code = context.lower_runtime_code_at(
                 &expression,
-                Some(OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(
-                    SourceOrigin::Stored(vec![gid::Step::Key(invocation)]),
-                ))))),
+                Some(OriginId::start(SourceOrigin::Root(vec![gid::Step::Key(
+                    invocation,
+                )]))),
             );
             let result = context
                 .eval(code, &Environment::default())
@@ -898,7 +893,7 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
                 expected
                     .iter()
                     .cloned()
-                    .chain([SourceOrigin::Stored(vec![gid::Step::Key(invocation)])])
+                    .chain([SourceOrigin::Root(vec![gid::Step::Key(invocation)])])
                     .collect::<Vec<_>>()
             );
         }
@@ -919,7 +914,7 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
     let malformed = Value::Record(fields.with(source::vocabulary::BODY_ORIGIN, f64::value(3.0)));
     let driver = evaluate_runtime_at(
         &RuntimeValue::from(lambda([callback], call(callback.into(), []))),
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(caller)])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(caller)])),
         &empty,
         100,
     )
@@ -950,7 +945,7 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
                 .origins()
                 .cloned()
                 .collect::<Vec<_>>(),
-            [SourceOrigin::Stored(vec![
+            [SourceOrigin::Root(vec![
                 gid::Step::Key(caller),
                 gid::Step::Key(vocabulary::BODY)
             ])]
@@ -996,7 +991,7 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
     let empty = host(vec![]);
     let inner = evaluate_runtime_at(
         &RuntimeValue::from(lambda([], call(sink.into(), []))),
-        Some(SourceOrigin::Stored(vec![gid::Step::Key(location)])),
+        Some(SourceOrigin::Root(vec![gid::Step::Key(location)])),
         &empty,
         100,
     )
@@ -1033,7 +1028,7 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
                     .origins()
                     .cloned()
                     .collect::<Vec<_>>(),
-                [SourceOrigin::Stored(vec![
+                [SourceOrigin::Root(vec![
                     gid::Step::Key(location),
                     gid::Step::Key(vocabulary::BODY)
                 ])]

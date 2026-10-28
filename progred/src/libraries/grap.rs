@@ -768,7 +768,7 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::vocabulary::EXPRESSION, "expression"),
             (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
             (::grap::source::vocabulary::INPUT, "input source"),
-            (::grap::source::vocabulary::STORED, "document source"),
+            (::grap::source::vocabulary::ROOT, "root source"),
             (::grap::source::vocabulary::CELL, "source cell"),
             (::grap::source::vocabulary::PATH, "source path"),
             (vocabulary::GRAP, "grap"),

@@ -5,10 +5,11 @@ use crate::eval::{missing_cell, unbox};
 use crate::foreign::{
     ForeignFunction, ForeignFunctions, ForeignImplementation, OverlayCall, Prepare, Stage,
 };
-use crate::lower::{OriginId, OriginNode, OriginRoot, runtime_call};
+use crate::lower::{OriginId, runtime_call};
 use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
 use crate::{
-    Context, Definition, Expression, Halt, absent, arguments, isa, primitive, source, vocabulary,
+    Context, Definition, Expression, Halt, SourceOrigin, absent, arguments, isa, primitive, source,
+    vocabulary,
 };
 use gid::{CellId, Value};
 use std::cell::RefCell;
@@ -401,7 +402,7 @@ impl<'a> Context<'a> {
                 } else {
                     let function = match &function.0 {
                         RuntimeValueKind::Data(value) => {
-                            context.lower_source(value, OriginRoot::Input)
+                            context.lower_source(value, SourceOrigin::Input(Vec::new()))
                         }
                         _ => context.lower_runtime_code(function),
                     };
@@ -431,7 +432,13 @@ impl<'a> Context<'a> {
                 environment,
             ),
             Some(Definition::Value(value)) => {
-                let expression = context.lower_source(&value, OriginRoot::Cell(cell));
+                let expression = context.lower_source(
+                    &value,
+                    SourceOrigin::Cell {
+                        cell,
+                        path: Vec::new(),
+                    },
+                );
                 let callable = context.eval_definition(cell, expression, environment)?;
                 if callable.absent_reason().is_some() {
                     Ok(callable)
@@ -582,7 +589,7 @@ impl<'a> Context<'a> {
                 let origin = value
                     .field(source::vocabulary::BODY_ORIGIN)
                     .and_then(|value| source::read(value.as_value()))
-                    .map(|origin| OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(origin)))));
+                    .map(OriginId::start);
                 let body = self.lower_runtime_code_at(&lambda.field(vocabulary::BODY)?, origin);
                 let captured = value.field(vocabulary::ENVIRONMENT)?;
                 let environment = match &captured.0 {

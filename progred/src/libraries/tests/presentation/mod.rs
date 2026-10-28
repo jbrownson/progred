@@ -262,7 +262,7 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
     let host = crate::test_support::TestHost(|_| None);
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
-        Some(::grap::SourceOrigin::Stored(vec![Step::Key(LEFT_VALUE)])),
+        Some(::grap::SourceOrigin::Root(vec![Step::Key(LEFT_VALUE)])),
         &host,
         100,
     )

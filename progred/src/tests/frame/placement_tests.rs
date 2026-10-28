@@ -875,7 +875,7 @@ fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
 #[test]
 fn source_picks_share_pointer_order_and_respect_occlusion() {
     let target = Hovered::Tree(crate::hover::Hover::Source(
-        crate::display::widget::source::SourceTrace::Stored(std::rc::Rc::from([])),
+        crate::display::widget::source::SourceTrace::Root(std::rc::Rc::from([])),
     ));
     let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
     for covered in [false, true] {
