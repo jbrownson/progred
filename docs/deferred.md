@@ -964,6 +964,11 @@ through memory rather than registers, which covers most of the evaluator's.
   carry.
 - Putting the closure variant behind a pointer, taking the value to about 40
   bytes, read slightly slower when tried.
+- Moving the GID-form cache into the variants that need it would take the value
+  to 56 bytes: `Data` needs none, records and lists could keep it behind the
+  pointer they already hold, and an unboxed number has room inline. The inline
+  closure has none, so its cache would share an allocation it already has, such
+  as its parameters'.
 - Putting a halt's value behind a pointer would bring small results (`()`, an
   f64, a bool) to 16 bytes or less, in registers. The sizes are measured, the
   gain isn't.
