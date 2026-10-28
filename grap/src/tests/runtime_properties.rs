@@ -88,10 +88,9 @@ fn built(value: &Value) -> RuntimeValue {
             unboxed @ RuntimeValue(RuntimeValueKind::Unboxed(_), _) => unboxed,
             _ => RuntimeValue::record(fields.iter().map(|(label, value)| (*label, built(value)))),
         },
-        Value::List(elements) => RuntimeValue::positioned_list(
-            elements
-                .iter()
-                .map(|(position, value)| (position.clone(), built(value))),
+        Value::List(elements) => RuntimeValue::list_at(
+            elements.keys().cloned().collect(),
+            elements.values().map(built),
         ),
         Value::Cell(_) | Value::Blob(_) => value.into(),
     }

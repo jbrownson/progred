@@ -59,7 +59,7 @@ pub(crate) struct RuntimeList {
 }
 
 impl RuntimeList {
-    pub(crate) fn positions(&self) -> &[gid::Position] {
+    pub(crate) fn positions(&self) -> &Rc<[gid::Position]> {
         self.positions
             .get_or_init(|| gid::position::spread(self.values.len()).into())
     }
@@ -69,7 +69,10 @@ impl RuntimeList {
     fn same_positions(&self, other: &Self) -> bool {
         match (self.positions.get(), other.positions.get()) {
             (None, None) => true,
-            _ => self.positions() == other.positions(),
+            _ => {
+                Rc::ptr_eq(self.positions(), other.positions())
+                    || self.positions() == other.positions()
+            }
         }
     }
 }
@@ -200,16 +203,22 @@ impl RuntimeValue {
         }))
     }
 
-    /// A list whose elements keep the positions given, as a list derived
-    /// from another keeps the elements' positions there.
-    pub fn positioned_list(
-        entries: impl IntoIterator<Item = (gid::Position, RuntimeValue)>,
+    /// A list whose elements sit at `positions`, in increasing order and one
+    /// for each, as a list derived from another keeps its elements' positions
+    /// there. Shared positions are taken as they are, without a copy.
+    pub fn list_at(
+        positions: Rc<[gid::Position]>,
+        elements: impl IntoIterator<Item = RuntimeValue>,
     ) -> Self {
-        let (positions, values): (Vec<_>, Vec<_>) =
-            gid::sorted_entries(entries).into_iter().unzip();
+        let values: Rc<[RuntimeValue]> = elements.into_iter().collect();
+        assert_eq!(values.len(), positions.len(), "a position for each element");
+        debug_assert!(
+            positions.windows(2).all(|pair| pair[0] < pair[1]),
+            "positions in increasing order"
+        );
         Self::new(RuntimeValueKind::List(RuntimeList {
-            values: values.into(),
-            positions: OnceCell::from(Rc::from(positions)),
+            values,
+            positions: OnceCell::from(positions),
         }))
     }
 
@@ -401,6 +410,16 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_list()?.keys().cloned().collect()),
             RuntimeValueKind::List(list) => Some(list.positions().to_vec()),
+            _ => None,
+        }
+    }
+
+    /// [`Self::list_positions`], shared: a built list's own, or a stored
+    /// list's gathered once.
+    pub(crate) fn shared_list_positions(&self) -> Option<Rc<[gid::Position]>> {
+        match &self.0 {
+            RuntimeValueKind::Data(value) => Some(value.as_list()?.keys().cloned().collect()),
+            RuntimeValueKind::List(list) => Some(list.positions().clone()),
             _ => None,
         }
     }

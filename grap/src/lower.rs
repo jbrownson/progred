@@ -9,7 +9,7 @@ use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
 use crate::unboxed::Unboxed;
 use crate::{Context, Halt, SourceOrigin, absent, arguments, isa, source, vocabulary};
 use gid::{CellId, Record, Value};
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
 /// Expressions hash by node address. Addresses are aligned and clustered,
 /// so a folded multiply spreads them; SipHash would only add per-lookup cost
@@ -95,12 +95,22 @@ impl Expression {
     }
 
     pub fn elements(&self) -> Option<&[Expression]> {
-        self.0.elements.as_deref()
+        Some(&self.0.elements.as_ref()?.expressions)
     }
 
-    /// The positions of this list's elements, in order.
-    pub fn element_positions(&self) -> Option<Vec<gid::Position>> {
-        self.0.source.list_positions()
+    /// The positions of this list's elements, in order, gathered once and
+    /// shared, so a list built from them keeps them without a copy.
+    pub fn element_positions(&self) -> Option<Rc<[gid::Position]>> {
+        let elements = self.0.elements.as_ref()?;
+        Some(
+            elements
+                .positions
+                .get_or_init(|| {
+                    (self.0.source.shared_list_positions())
+                        .expect("a node with elements lowers a list")
+                })
+                .clone(),
+        )
     }
 
     /// Why this call has no argument under `cell`, naming where the call is.
@@ -124,7 +134,22 @@ pub(crate) struct Lowered {
     pub(crate) origin: Option<OriginId>,
     pub(crate) form: Form,
     fields: Option<Vec<(CellId, Expression)>>,
-    elements: Option<Vec<Expression>>,
+    elements: Option<Elements>,
+}
+
+/// A list's lowered elements, and their positions once something asks.
+struct Elements {
+    expressions: Vec<Expression>,
+    positions: OnceCell<Rc<[gid::Position]>>,
+}
+
+impl From<Vec<Expression>> for Elements {
+    fn from(expressions: Vec<Expression>) -> Self {
+        Self {
+            expressions,
+            positions: OnceCell::new(),
+        }
+    }
 }
 
 /// A lowered node's generated form: per-node decisions — dispatch,
@@ -231,10 +256,10 @@ impl<'a> Context<'a> {
                 }))
             }
             RuntimeValueKind::List(list) => {
-                let elements = if origin.is_some() {
+                let elements: Vec<_> = if origin.is_some() {
                     list.values
                         .iter()
-                        .zip(list.positions())
+                        .zip(list.positions().iter())
                         .map(|(value, position)| {
                             let child =
                                 child_origin(origin.clone(), gid::Step::Element(position.clone()));
@@ -252,7 +277,7 @@ impl<'a> Context<'a> {
                     origin,
                     form: Form::Ready(value.clone()),
                     fields: None,
-                    elements: Some(elements),
+                    elements: Some(elements.into()),
                 }))
             }
             _ => runtime_expression(value.clone()),
@@ -295,7 +320,8 @@ impl<'a> Context<'a> {
                                 child_origin(origin.clone(), gid::Step::Element(position.clone()));
                             self.lower_with(value, child)
                         })
-                        .collect(),
+                        .collect::<Vec<_>>()
+                        .into(),
                 ),
             ),
             Value::Blob(_) => (Form::Data, None, None),

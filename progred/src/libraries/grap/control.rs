@@ -157,7 +157,7 @@ fn all_foreign(
         (Some(elements), Some(positions)) => try_map_sized(elements, |expression| {
             context.eval(expression.clone(), environment)
         })
-        .map(|values| RuntimeValue::positioned_list(positions.into_iter().zip(values))),
+        .map(|values| RuntimeValue::list_at(positions, values)),
         _ => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
     }
 }
@@ -205,7 +205,7 @@ fn replace_unquotes(
         try_map_sized(elements, |value| {
             replace_unquotes(value.clone(), context, environment)
         })
-        .map(|values| RuntimeValue::positioned_list(positions.into_iter().zip(values)))
+        .map(|values| RuntimeValue::list_at(positions, values))
     } else {
         Ok(expression.value().clone().into())
     }

@@ -102,9 +102,9 @@ fn functions() -> ForeignFunctions {
                     let positions = list.positions();
                     let first = gid::position::between(None, positions.first())
                         .expect("there's room before any position");
-                    RuntimeValue::positioned_list(
-                        std::iter::once((first, item))
-                            .chain(positions.into_iter().zip(list.values())),
+                    RuntimeValue::list_at(
+                        std::iter::once(first).chain(positions).collect(),
+                        std::iter::once(item).chain(list.values()),
                     )
                 },
             )
@@ -147,9 +147,7 @@ fn functions() -> ForeignFunctions {
             ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
                 match list.len() {
                     0 => out_of_bounds(),
-                    _ => RuntimeValue::positioned_list(
-                        list.positions().into_iter().zip(list.values()).skip(1),
-                    ),
+                    _ => RuntimeValue::list_at(list.positions()[1..].into(), list.values().skip(1)),
                 }
             })
             .tracked(),
