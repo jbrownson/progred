@@ -5,8 +5,29 @@ use crate::environment::{CellIndex, Environment};
 use crate::lower::Form;
 use crate::runtime::{RuntimeValue, RuntimeValueKind};
 use crate::unboxed::{Native, Unboxed};
-use crate::{Context, Evaluation, Expression, Halt, SourceOrigin, absent};
+use crate::{Context, Evaluation, Expression, SourceOrigin, absent};
 use gid::{CellId, Value};
+
+/// Why an evaluation stopped before finishing.
+#[derive(Debug)]
+pub enum Halt {
+    FuelExhausted,
+    /// A call wrote something, then declined with this value.
+    EffectfulDecline(RuntimeValue),
+}
+
+impl Halt {
+    /// The absent a halted evaluation answers.
+    fn into_absent(self) -> RuntimeValue {
+        RuntimeValue::from(match self {
+            Self::FuelExhausted => absent::value(absent::FUEL_EXHAUSTED),
+            Self::EffectfulDecline(value) => {
+                absent::with_detail(absent::EFFECTFUL_DECLINE, absent::VALUE, value.into_value())
+            }
+        })
+    }
+}
+
 #[derive(Clone)]
 pub(crate) enum CellState {
     Unknown,
@@ -22,7 +43,7 @@ impl<'a> Context<'a> {
         let outcome = self.checked_call(run);
         Evaluation {
             completed: outcome.is_ok(),
-            result: outcome.unwrap_or_else(|Halt(result)| RuntimeValue::from(result)),
+            result: outcome.unwrap_or_else(Halt::into_absent),
             remaining_fuel: self.remaining_fuel,
         }
     }
@@ -42,11 +63,7 @@ impl<'a> Context<'a> {
         let before = self.effects;
         let result = run(self)?;
         if self.effects != before && result.declines() {
-            Err(Halt(absent::with_detail(
-                absent::EFFECTFUL_DECLINE,
-                absent::VALUE,
-                result.into_value(),
-            )))
+            Err(Halt::EffectfulDecline(result))
         } else {
             Ok(result)
         }
@@ -191,7 +208,7 @@ impl<'a> Context<'a> {
     pub fn burn(&mut self) -> Result<(), Halt> {
         self.remaining_fuel = self.remaining_fuel.saturating_sub(1);
         if self.remaining_fuel == 0 {
-            Err(Halt(absent::value(absent::FUEL_EXHAUSTED)))
+            Err(Halt::FuelExhausted)
         } else {
             Ok(())
         }

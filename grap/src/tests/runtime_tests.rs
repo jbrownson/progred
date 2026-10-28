@@ -880,7 +880,7 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
             );
             let result = context
                 .eval(code, &Environment::default())
-                .unwrap_or_else(|halt| panic!("{:?}", halt.0));
+                .unwrap_or_else(|halt| panic!("{halt:?}"));
             assert_eq!(result.as_f64(), Some(7.0));
             assert_eq!(
                 trace

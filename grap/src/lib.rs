@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 pub use call::PreparedCallable;
 pub use environment::Environment;
+pub use eval::Halt;
 pub use foreign::{
     ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function, implementation_cell,
 };
@@ -69,8 +70,6 @@ pub trait Host {
         None
     }
 }
-
-pub struct Halt(Value);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Evaluation<T = RuntimeValue> {
