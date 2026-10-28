@@ -32,6 +32,14 @@ fn right_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
     Some(text_layout("right"))
 }
 
+/// Each loaded library's definition of `cell`, in load order.
+fn definitions(libraries: &Libraries, cell: CellId) -> Vec<(CellId, &Value)> {
+    libraries
+        .iter()
+        .filter_map(|(library, definitions)| definitions.value(cell).map(|value| (library, value)))
+        .collect()
+}
+
 /// The libraries defining `cell` as a foreign function, in load order.
 fn foreign_sources(libraries: &Libraries, cell: CellId) -> Vec<CellId> {
     libraries
@@ -73,8 +81,8 @@ fn library_definitions_and_projections_compose_in_order() {
     ]);
 
     assert_eq!(
-        libraries
-            .definitions(SHARED_CELL)
+        definitions(&libraries, SHARED_CELL)
+            .into_iter()
             .map(|(library, value)| (library, value.clone()))
             .collect::<Vec<_>>(),
         [
@@ -135,16 +143,16 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
         ],
     );
     assert_eq!(
-        libraries
-            .definitions(SHARED_FUNCTION)
+        definitions(&libraries, SHARED_FUNCTION)
+            .into_iter()
             .map(|(_, value)| value)
             .collect::<Vec<_>>(),
         [&defined]
     );
     assert_eq!(foreign_sources(&libraries, SHARED_FUNCTION), [LEFT_LIBRARY]);
     assert_eq!(
-        libraries
-            .definitions(SHARED_FUNCTION)
+        definitions(&libraries, SHARED_FUNCTION)
+            .into_iter()
             .map(|(library, _)| library)
             .collect::<Vec<_>>(),
         [LEFT_LIBRARY]
@@ -294,8 +302,8 @@ fn unnamed_native_definitions_say_only_what_they_are() {
         )),
     )]);
     assert_eq!(
-        libraries
-            .definitions(SHARED_FUNCTION)
+        definitions(&libraries, SHARED_FUNCTION)
+            .into_iter()
             .map(|(_, value)| value.clone())
             .collect::<Vec<_>>(),
         [::grap::foreign_function(SHARED_FUNCTION)]
@@ -337,8 +345,8 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
     );
     assert_eq!(foreign_sources(&libraries, SHARED_CELL), [LEFT_LIBRARY]);
     assert_eq!(
-        libraries
-            .definitions(SHARED_CELL)
+        definitions(&libraries, SHARED_CELL)
+            .into_iter()
             .map(|(library, _)| library)
             .collect::<Vec<_>>(),
         [LEFT_LIBRARY, RIGHT_LIBRARY]
@@ -349,8 +357,8 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
         [LEFT_LIBRARY, RIGHT_LIBRARY]
     );
     assert_eq!(
-        libraries
-            .definitions(SHARED_CELL)
+        definitions(&libraries, SHARED_CELL)
+            .into_iter()
             .map(|(library, _)| library)
             .collect::<Vec<_>>(),
         [RIGHT_LIBRARY]

@@ -181,7 +181,7 @@ pub(crate) fn evaluate_with(
 
 /// The value of the first loaded library's definition of `cell`.
 pub(crate) fn first_value(libraries: &Libraries, cell: CellId) -> Option<&Value> {
-    libraries.definitions(cell).next().map(|(_, value)| value)
+    libraries.first_definition(cell).map(|(_, value)| value)
 }
 
 /// A request for `kind` offers matching `query` in `scope`, at the root of

@@ -245,16 +245,11 @@ impl Libraries {
             .map(|(id, definitions)| (*id, definitions))
     }
 
-    /// Each loaded library's definition of `cell`, in load order.
-    pub fn definitions(
-        &self,
-        cell: gid::CellId,
-    ) -> impl Iterator<Item = (gid::CellId, &gid::Value)> + '_ {
-        self.entries
-            .iter()
-            .filter_map(move |(library, definitions)| {
-                definitions.value(cell).map(|value| (*library, value))
-            })
+    /// The first loaded library to define `cell`, and its definition.
+    pub fn first_definition(&self, cell: gid::CellId) -> Option<(gid::CellId, &gid::Value)> {
+        self.entries.iter().find_map(|(library, definitions)| {
+            definitions.value(cell).map(|value| (*library, value))
+        })
     }
 
     /// The code the first loaded library with a foreign function implemented
@@ -277,9 +272,7 @@ impl Libraries {
 #[cfg(test)]
 impl ::grap::Host for Libraries {
     fn definition(&self, cell: gid::CellId) -> Option<gid::Value> {
-        self.definitions(cell)
-            .next()
-            .map(|(_, value)| value.clone())
+        self.first_definition(cell).map(|(_, value)| value.clone())
     }
 
     fn implementation(&self, cell: gid::CellId) -> Option<ForeignFunction> {

@@ -114,8 +114,7 @@ impl<'a> Sources<'a> {
             .map(Contribution::Document)
             .or_else(|| {
                 self.libraries
-                    .definitions(cell)
-                    .next()
+                    .first_definition(cell)
                     .map(|(library, value)| Contribution::Library(library, value))
             })
     }
