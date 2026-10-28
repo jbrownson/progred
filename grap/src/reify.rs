@@ -46,10 +46,17 @@ impl Reify {
                 .share(Some(Shared::Record(Rc::as_ptr(fields))), |this| {
                     Value::record(fields.iter().map(|(key, value)| (*key, this.value(value))))
                 }),
-            RuntimeValueKind::List(elements) => self
-                .share(Some(Shared::List(Rc::as_ptr(elements))), |this| {
-                    Value::list(elements.iter().map(|value| this.value(value)))
-                }),
+            RuntimeValueKind::List(list) => {
+                self.share(Some(Shared::List(Rc::as_ptr(&list.values))), |this| {
+                    Value::List(
+                        list.positions()
+                            .iter()
+                            .cloned()
+                            .zip(list.values.iter().map(|value| this.value(value)))
+                            .collect(),
+                    )
+                })
+            }
             // The lambda as written, then what it closes over and where its
             // body came from, beside it.
             RuntimeValueKind::Closure(closure) => {

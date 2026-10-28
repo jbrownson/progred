@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 gid.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

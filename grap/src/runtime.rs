@@ -46,8 +46,32 @@ pub(crate) enum RuntimeValueKind {
     Data(Value),
     Unboxed(Unboxed),
     Record(Rc<[(CellId, RuntimeValue)]>),
-    List(Rc<[RuntimeValue]>),
+    List(RuntimeList),
     Closure(Closure),
+}
+
+/// A list's elements and their positions: the ones it was given, or ones
+/// minted the first time something asks, as converting it to GID would.
+#[derive(Clone)]
+pub(crate) struct RuntimeList {
+    pub(crate) values: Rc<[RuntimeValue]>,
+    positions: OnceCell<Rc<[gid::Position]>>,
+}
+
+impl RuntimeList {
+    pub(crate) fn positions(&self) -> &[gid::Position] {
+        self.positions
+            .get_or_init(|| gid::position::spread(self.values.len()).into())
+    }
+
+    /// Whether both lists' elements sit at the same positions, without
+    /// minting any: two lists of one length that were given none agree.
+    fn same_positions(&self, other: &Self) -> bool {
+        match (self.positions.get(), other.positions.get()) {
+            (None, None) => true,
+            _ => self.positions() == other.positions(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -84,8 +108,13 @@ impl RuntimeValue {
                             .all(|((ak, av), (bk, bv))| ak == bk && av.same_result(bv)))
             }
             (RuntimeValueKind::List(a), RuntimeValueKind::List(b)) => {
-                Rc::ptr_eq(a, b)
-                    || (a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a.same_result(b)))
+                Rc::ptr_eq(&a.values, &b.values)
+                    || (a.values.len() == b.values.len()
+                        && a.same_positions(b)
+                        && a.values
+                            .iter()
+                            .zip(b.values.iter())
+                            .all(|(a, b)| a.same_result(b)))
             }
             (RuntimeValueKind::Closure(a), RuntimeValueKind::Closure(b)) => {
                 a.body == b.body
@@ -163,8 +192,25 @@ impl RuntimeValue {
         Self::new(RuntimeValueKind::Record(gid::sorted_entries(fields).into()))
     }
 
+    /// A new list, whose positions are minted when something first asks.
     pub fn list(elements: impl IntoIterator<Item = RuntimeValue>) -> Self {
-        Self::new(RuntimeValueKind::List(elements.into_iter().collect()))
+        Self::new(RuntimeValueKind::List(RuntimeList {
+            values: elements.into_iter().collect(),
+            positions: OnceCell::new(),
+        }))
+    }
+
+    /// A list whose elements keep the positions given, as a list derived
+    /// from another keeps the elements' positions there.
+    pub fn positioned_list(
+        entries: impl IntoIterator<Item = (gid::Position, RuntimeValue)>,
+    ) -> Self {
+        let (positions, values): (Vec<_>, Vec<_>) =
+            gid::sorted_entries(entries).into_iter().unzip();
+        Self::new(RuntimeValueKind::List(RuntimeList {
+            values: values.into(),
+            positions: OnceCell::from(Rc::from(positions)),
+        }))
     }
 
     pub fn as_f64(&self) -> Option<f64> {
@@ -287,7 +333,7 @@ impl RuntimeValue {
     pub fn list_len(&self) -> Option<usize> {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_list()?.len()),
-            RuntimeValueKind::List(elements) => Some(elements.len()),
+            RuntimeValueKind::List(list) => Some(list.values.len()),
             RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -340,7 +386,7 @@ impl RuntimeValue {
             RuntimeValueKind::Data(Value::Record(fields)) => {
                 Shape::Record(fields.keys().copied().collect())
             }
-            RuntimeValueKind::List(values) => Shape::List(gid::position::spread(values.len())),
+            RuntimeValueKind::List(list) => Shape::List(list.positions().to_vec()),
             RuntimeValueKind::Record(fields) => {
                 Shape::Record(fields.iter().map(|(key, _)| *key).collect())
             }
@@ -349,12 +395,12 @@ impl RuntimeValue {
         }
     }
 
-    /// Stored lists retain their positions; generated lists use the positions
-    /// they receive when materialized, also used by `list_element`.
+    /// The positions of the list's elements, in order: stored ones, the ones
+    /// a built list was given, or those minted for it once.
     pub fn list_positions(&self) -> Option<Vec<gid::Position>> {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_list()?.keys().cloned().collect()),
-            RuntimeValueKind::List(values) => Some(gid::position::spread(values.len())),
+            RuntimeValueKind::List(list) => Some(list.positions().to_vec()),
             _ => None,
         }
     }
@@ -366,7 +412,7 @@ impl RuntimeValue {
                 .iter()
                 .nth(index)
                 .map(|(_, value)| Self::from(value)),
-            RuntimeValueKind::List(elements) => elements.get(index).cloned(),
+            RuntimeValueKind::List(list) => list.values.get(index).cloned(),
             RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -376,11 +422,9 @@ impl RuntimeValue {
     pub fn list_element(&self, position: &gid::Position) -> Option<RuntimeValue> {
         match &self.0 {
             RuntimeValueKind::Data(value) => value.as_list()?.get(position).map(Self::from),
-            RuntimeValueKind::List(values) => {
-                let index = gid::position::spread(values.len())
-                    .binary_search(position)
-                    .ok()?;
-                values.get(index).cloned()
+            RuntimeValueKind::List(list) => {
+                let index = list.positions().binary_search(position).ok()?;
+                list.values.get(index).cloned()
             }
             _ => None,
         }
@@ -431,3 +475,7 @@ fn runtime_field(fields: &[(CellId, RuntimeValue)], label: CellId) -> Option<&Ru
         .ok()
         .map(|index| &fields[index].1)
 }
+
+#[cfg(test)]
+#[path = "tests/runtime_properties.rs"]
+mod properties;

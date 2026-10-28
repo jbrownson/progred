@@ -73,6 +73,10 @@ impl List {
     fn values(&self) -> ::grap::RuntimeListValues<'_> {
         self.0.list_values().expect("parsed as a list")
     }
+
+    fn positions(&self) -> Vec<gid::Position> {
+        self.0.list_positions().expect("parsed as a list")
+    }
 }
 
 impl Parse for List {
@@ -96,7 +100,13 @@ fn functions() -> ForeignFunctions {
             ForeignFunction::with_arguments(
                 [vocabulary::LIST, vocabulary::ITEM],
                 |_, (list, item): (List, RuntimeValue)| {
-                    RuntimeValue::list(std::iter::once(item).chain(list.values()))
+                    let positions = list.positions();
+                    let first = gid::position::between(None, positions.first())
+                        .expect("there's room before any position");
+                    RuntimeValue::positioned_list(
+                        std::iter::once((first, item))
+                            .chain(positions.into_iter().zip(list.values())),
+                    )
                 },
             )
             .tracked(),
@@ -136,10 +146,11 @@ fn functions() -> ForeignFunctions {
         .register(
             vocabulary::TAIL,
             ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
-                let mut values = list.values();
-                match values.next() {
-                    Some(_) => RuntimeValue::list(values),
-                    None => out_of_bounds(),
+                match list.len() {
+                    0 => out_of_bounds(),
+                    _ => RuntimeValue::positioned_list(
+                        list.positions().into_iter().zip(list.values()).skip(1),
+                    ),
                 }
             })
             .tracked(),

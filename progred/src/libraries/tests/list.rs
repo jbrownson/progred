@@ -30,6 +30,32 @@ fn list_operations_are_value_operations() {
     );
 }
 
+/// The elements an operation keeps keep their positions, so a path into its
+/// result still names the same element.
+#[test]
+fn prepend_and_tail_keep_their_elements_positions() {
+    let list = crate::test_values::typed_list([Value::from(vec![1]), Value::from(vec![2])]);
+    let positions = crate::test_values::positions(&list);
+    let evaluate = |expression: &Value| {
+        crate::test_support::test_evaluate(expression, |_| None, &functions(), 30).result
+    };
+    let prepended = evaluate(&call(
+        vocabulary::PREPEND,
+        [
+            (vocabulary::LIST, list.clone()),
+            (vocabulary::ITEM, Value::from(vec![0])),
+        ],
+    ));
+    assert_eq!(
+        prepended,
+        Value::list([0, 1, 2].map(|byte| Value::from(vec![byte])))
+    );
+    assert_eq!(crate::test_values::positions(&prepended)[1..], positions);
+    let tail = evaluate(&call(vocabulary::TAIL, [(vocabulary::LIST, list)]));
+    assert_eq!(tail, Value::list([Value::from(vec![2])]));
+    assert_eq!(crate::test_values::positions(&tail), positions[1..]);
+}
+
 fn check_step_results(operation: gid::CellId, results: impl IntoIterator<Item = (Value, Value)>) {
     let initial = Value::from(vec![7]);
     for (result, expected) in results {

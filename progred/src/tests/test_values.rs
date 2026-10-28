@@ -28,6 +28,28 @@ fn sample_labels() -> BTreeMap<String, CellId> {
         .collect()
 }
 
+/// A list at the positions typing its elements in order makes, each after
+/// the last, rather than the evenly spread ones a new list gets.
+pub fn typed_list(values: impl IntoIterator<Item = Value>) -> Value {
+    let mut last = None;
+    Value::List(
+        values
+            .into_iter()
+            .map(|value| {
+                let position = gid::position::between(last.as_ref(), None)
+                    .expect("there's room after any position");
+                last = Some(position.clone());
+                (position, value)
+            })
+            .collect(),
+    )
+}
+
+/// The positions of `list`'s elements, in order.
+pub fn positions(list: &Value) -> Vec<gid::Position> {
+    list.as_list().expect("a list").keys().cloned().collect()
+}
+
 pub fn key(s: &str) -> Step {
     Step::Key(crate::test_values::label(s))
 }

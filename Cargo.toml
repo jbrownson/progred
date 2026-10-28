@@ -37,6 +37,7 @@ kurbo = "0.13.1"
 parley = "0.11.1"
 peniko = "0.6.1"
 pollster = "0.4"
+proptest = { version = "1", default-features = false, features = ["std"] }
 puri = { path = "ui/puri" }
 puri-widgets = { path = "ui/puri-widgets" }
 serde = "1.0"

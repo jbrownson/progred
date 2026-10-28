@@ -161,18 +161,19 @@ impl<'a> Context<'a> {
                     elements: None,
                 }))
             }
-            RuntimeValueKind::List(values) => {
+            RuntimeValueKind::List(list) => {
                 let elements = if origin.is_some() {
-                    values
+                    list.values
                         .iter()
-                        .zip(gid::position::spread(values.len()))
+                        .zip(list.positions())
                         .map(|(value, position)| {
-                            let child = child_origin(origin.clone(), gid::Step::Element(position));
+                            let child =
+                                child_origin(origin.clone(), gid::Step::Element(position.clone()));
                             self.lower_runtime_code_at(value, child)
                         })
                         .collect()
                 } else {
-                    values
+                    list.values
                         .iter()
                         .map(|value| self.lower_runtime_code(value))
                         .collect()
@@ -384,6 +385,11 @@ impl<'a> Context<'a> {
 
     pub fn elements<'b>(&self, expression: &'b Expression) -> Option<&'b [Expression]> {
         expression.0.elements.as_deref()
+    }
+
+    /// The positions of `expression`'s elements, in order, when it's a list.
+    pub fn element_positions(&self, expression: &Expression) -> Option<Vec<gid::Position>> {
+        expression.0.source.list_positions()
     }
 
     /// Why `call` has no argument under `cell`, naming where the call is.

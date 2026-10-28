@@ -30,6 +30,12 @@ testing.
 
 - **Pure logic.** GID, Grap, `incremental`, layout, and the libraries test their
   functions directly. Prefer these where they can say what's being tested.
+- **Properties.** Where a claim holds for every value, a
+  [proptest](https://docs.rs/proptest) test checks it on generated ones and
+  shrinks a failure to the smallest value that still fails, as
+  [`grap/src/tests/runtime_properties.rs`](../grap/src/tests/runtime_properties.rs)
+  checks that a value built at runtime reads, converts and evaluates like the
+  stored one.
 - **Frames.** The frame harness in
   [`tests/projection/test_support.rs`](../progred/src/tests/projection/test_support.rs)
   and [`tests/frame/test_support.rs`](../progred/src/tests/frame/test_support.rs)

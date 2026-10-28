@@ -222,6 +222,21 @@ fn all_retains_absents_and_effects_and_continues_in_order() {
 }
 
 #[test]
+fn all_keeps_its_expressions_positions() {
+    let expressions = crate::test_values::typed_list([blob("a"), blob("b")]);
+    let result = evaluate(&grap::call(
+        Value::from(vocabulary::ALL),
+        [(vocabulary::EXPRESSIONS, expressions.clone())],
+    ))
+    .result;
+    assert_eq!(result, Value::list([blob("a"), blob("b")]));
+    assert_eq!(
+        crate::test_values::positions(&result),
+        crate::test_values::positions(&expressions),
+    );
+}
+
+#[test]
 fn all_handles_empty_and_malformed_lists_but_does_not_swallow_halts() {
     assert_eq!(evaluate(&all_call([])).result, Value::list([]));
     let missing = evaluate(&::grap::call(vocabulary::ALL.into(), []));
@@ -530,40 +545,32 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
 fn quote_replaces_unquotes_in_its_calling_environment() {
     let parameter = new_cell_id();
     let field = new_cell_id();
-    let template = Value::list([Value::record([(
-        field,
-        Value::record([
-            (
-                ::grap::isa::ISA,
-                gid::Value::from(vocabulary::kind::UNQUOTE).into(),
-            ),
-            (vocabulary::UNQUOTE, Value::from(parameter)),
-        ]),
-    )])]);
-    let positions = template
-        .as_list()
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
+    let template = crate::test_values::typed_list([
+        blob("kept"),
+        Value::record([(
+            field,
+            Value::record([
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(vocabulary::kind::UNQUOTE).into(),
+                ),
+                (vocabulary::UNQUOTE, Value::from(parameter)),
+            ]),
+        )]),
+    ]);
     let expression = grap::call(
-        grap::lambda([parameter], quote_call(template)),
+        grap::lambda([parameter], quote_call(template.clone())),
         [(parameter, blob("spliced"))],
     );
     let evaluation = evaluate(&expression);
     assert_eq!(
         evaluation.result,
-        Value::list([Value::record([(field, blob("spliced"))])])
+        Value::list([blob("kept"), Value::record([(field, blob("spliced"))])])
     );
+    // A path into the result still names the element it did in the template.
     assert_eq!(
-        evaluation
-            .result
-            .as_list()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
-        positions
+        crate::test_values::positions(&evaluation.result),
+        crate::test_values::positions(&template),
     );
 }
 

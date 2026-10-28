@@ -157,12 +157,15 @@ fn all_foreign(
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(call, vocabulary::EXPRESSIONS));
     };
-    match context.elements(&expressions) {
-        Some(elements) => try_map_sized(elements, |expression| {
+    match (
+        context.elements(&expressions),
+        context.element_positions(&expressions),
+    ) {
+        (Some(elements), Some(positions)) => try_map_sized(elements, |expression| {
             context.eval(expression.clone(), environment)
         })
-        .map(RuntimeValue::list),
-        None => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
+        .map(|values| RuntimeValue::positioned_list(positions.into_iter().zip(values))),
+        _ => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
     }
 }
 
@@ -204,11 +207,14 @@ fn replace_unquotes(
             ))
         })
         .map(RuntimeValue::record)
-    } else if let Some(elements) = context.elements(&expression) {
+    } else if let (Some(elements), Some(positions)) = (
+        context.elements(&expression),
+        context.element_positions(&expression),
+    ) {
         try_map_sized(elements, |value| {
             replace_unquotes(value.clone(), context, environment)
         })
-        .map(RuntimeValue::list)
+        .map(|values| RuntimeValue::positioned_list(positions.into_iter().zip(values)))
     } else {
         Ok(context.value(&expression).clone().into())
     }
