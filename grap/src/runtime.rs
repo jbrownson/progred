@@ -3,7 +3,7 @@
 
 use crate::environment::Environment;
 use crate::unboxed::{Native, Unboxed};
-use crate::{Expression, Shape, absent, isa, reify, source, vocabulary};
+use crate::{Expression, absent, isa, reify, source, vocabulary};
 use gid::{CellId, Record, Value};
 use std::cell::OnceCell;
 use std::fmt;
@@ -40,6 +40,14 @@ impl Iterator for RuntimeListValues<'_> {
 }
 
 impl ExactSizeIterator for RuntimeListValues<'_> {}
+
+/// GID's structural shapes, as a runtime value presents them.
+pub enum Shape<'a> {
+    Blob(&'a [u8]),
+    Cell(CellId),
+    List(Vec<gid::Position>),
+    Record(Vec<CellId>),
+}
 
 #[derive(Clone)]
 pub(crate) enum RuntimeValueKind {

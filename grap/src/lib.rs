@@ -14,7 +14,7 @@ pub use call::PreparedCallable;
 pub use environment::Environment;
 pub use foreign::{ForeignFunction, ForeignFunctions, ForeignOverlay, Stage, foreign_function};
 pub use lower::Expression;
-pub use runtime::{RuntimeListValues, RuntimeValue};
+pub use runtime::{RuntimeListValues, RuntimeValue, Shape};
 pub use trace::{Answering, CallTrace, Observed, Observer, Tracer};
 
 #[cfg(test)]
@@ -46,14 +46,6 @@ mod trace;
 pub mod u64;
 mod unboxed;
 pub mod vocabulary;
-
-/// GID's structural shapes, as a runtime value presents them.
-pub enum Shape<'a> {
-    Blob(&'a [u8]),
-    Cell(CellId),
-    List(Vec<gid::Position>),
-    Record(Vec<CellId>),
-}
 
 /// Where a source expression came from before evaluation. Generated
 /// runtime values have no origin; expressions read from the input or a
