@@ -1,25 +1,18 @@
 use super::*;
+use crate::libraries::{f64, u64};
 use ::grap;
-use gid::new_cell_id;
+use gid::Value;
 
-fn sample(seed: Option<Value>) -> Value {
-    let arguments = [
-        Some((
-            grap::vocabulary::EXPRESSION,
-            grap::call(
-                Value::from(vocabulary::BETWEEN),
-                [
-                    (vocabulary::MIN, f64::value(-2.0)),
-                    (vocabulary::MAX, f64::value(3.0)),
-                ],
-            ),
-        )),
-        seed.map(|seed| (vocabulary::SEED, seed)),
-    ];
+fn draw(key: u64, index: f64) -> Value {
     crate::test_support::test_evaluate(
         &grap::call(
-            Value::from(vocabulary::WITH_RANDOM),
-            arguments.into_iter().flatten(),
+            Value::from(vocabulary::BETWEEN),
+            [
+                (vocabulary::KEY, u64::value(key)),
+                (vocabulary::INDEX, f64::value(index)),
+                (vocabulary::MIN, f64::value(-2.0)),
+                (vocabulary::MAX, f64::value(3.0)),
+            ],
         ),
         |_| None,
         &functions(),
@@ -30,87 +23,54 @@ fn sample(seed: Option<Value>) -> Value {
 }
 
 #[test]
-fn a_seeded_scope_repeats_and_zero_is_the_default() {
-    assert_eq!(sample(None), sample(Some(u64::value(0))));
-    assert_eq!(sample(Some(u64::value(42))), sample(Some(u64::value(42))));
-    assert_ne!(sample(Some(u64::value(0))), sample(Some(u64::value(42))));
+fn a_draw_depends_only_on_its_key_and_index() {
+    assert_eq!(draw(42, 0.0), draw(42, 0.0));
+    assert_ne!(draw(42, 0.0), draw(42, 1.0));
+    assert_ne!(draw(42, 0.0), draw(43, 0.0));
+    let number = f64::read(&draw(42, 0.0)).unwrap();
+    assert!((-2.0..3.0).contains(&number));
 }
 
 #[test]
-fn successive_samples_advance_the_scoped_stream() {
-    let pair = new_cell_id();
-    let first_field = new_cell_id();
-    let second_field = new_cell_id();
-    let functions = functions().register(
-        pair,
-        ForeignFunction::from_value(move |context, call, environment| {
-            let first = call
-                .field(first_field)
-                .map(|expression| context.eval_to_value(expression, environment))
-                .transpose()?
-                .unwrap_or_else(|| call.missing_argument(first_field));
-            let second = call
-                .field(second_field)
-                .map(|expression| context.eval_to_value(expression, environment))
-                .transpose()?
-                .unwrap_or_else(|| call.missing_argument(second_field));
-            Ok(Value::list([first, second]))
-        }),
-    );
-    let between = || {
-        grap::call(
-            Value::from(vocabulary::BETWEEN),
-            [
-                (vocabulary::MIN, f64::value(0.0)),
-                (vocabulary::MAX, f64::value(1.0)),
-            ],
-        )
-    };
-    let expression = grap::call(
-        Value::from(vocabulary::WITH_RANDOM),
-        [
-            (vocabulary::SEED, u64::value(42)),
-            (
-                grap::vocabulary::EXPRESSION,
-                grap::call(
-                    Value::from(pair),
-                    [(first_field, between()), (second_field, between())],
-                ),
+fn derived_keys_differ_from_their_parent_and_each_other() {
+    let derived = |index: f64| {
+        crate::test_support::test_evaluate(
+            &grap::call(
+                Value::from(vocabulary::DERIVE),
+                [
+                    (vocabulary::KEY, u64::value(42)),
+                    (vocabulary::INDEX, f64::value(index)),
+                ],
             ),
-        ],
-    );
-    let evaluate =
-        || crate::test_support::test_evaluate(&expression, |_| None, &functions, 60).result;
-    let result = evaluate();
-
-    assert!(result.as_value().as_list().is_some_and(|values| {
-        let mut values = values.values();
-        matches!(
-            (values.next(), values.next(), values.next()),
-            (Some(first), Some(second), None) if first != second
+            |_| None,
+            &functions(),
+            30,
         )
-    }));
-    assert_eq!(result.to_value(), evaluate().to_value());
+        .result
+        .to_value()
+    };
+    assert_eq!(derived(0.0), u64::value(derive(42, 0.0)));
+    assert_ne!(derive(42, 0.0), derive(42, 1.0));
+    assert_ne!(derive(42, 0.0), 42);
+    // A key and a draw from the same key and index are unrelated.
+    assert_ne!(
+        between(42, 0.0, 0.0, 1.0),
+        between(derive(42, 0.0), 0.0, 0.0, 1.0)
+    );
 }
 
 #[test]
-fn sampling_outside_a_scope_returns_a_stable_absent() {
-    let result = crate::test_support::test_evaluate(
-        &grap::call(
-            Value::from(vocabulary::BETWEEN),
-            [
-                (vocabulary::MIN, f64::value(0.0)),
-                (vocabulary::MAX, f64::value(1.0)),
-            ],
-        ),
-        |_| None,
-        &functions(),
-        20,
-    )
-    .result;
-
-    assert_eq!(
-        result.to_value(),
-        ::grap::absent::value(vocabulary::OUTSIDE_SCOPE)
-    );
+fn draws_are_spread_across_the_range() {
+    let draws: Vec<_> = (0..1000)
+        .map(|index| between(7, index as f64, 0.0, 1.0))
+        .collect();
+    assert!(draws.iter().all(|draw| (0.0..1.0).contains(draw)));
+    for quarter in 0..4 {
+        let low = quarter as f64 / 4.0;
+        let count = draws
+            .iter()
+            .filter(|draw| (low..low + 0.25).contains(*draw))
+            .count();
+        assert!((200..300).contains(&count), "{count} draws in {low}..");
+    }
 }

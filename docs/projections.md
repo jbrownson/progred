@@ -817,8 +817,8 @@ inspect it without evaluating the callable, and tell a foreign function from a
 Grap lambda by its kind.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
-wrap selection, annotation, drawing/path writes, and deterministic random
-advancement in `context.effect(|| operation)`. The combinator marks the effect,
+wrap selection, annotation, and drawing/path writes in
+`context.effect(|| operation)`. The combinator marks the effect,
 runs the operation, and returns its result, telling the host so a reused result
 can't leave a write out. Reads do not mark an effect. A decline, like any other
 absent, is an ordinary result: the host that asked for the evaluation decides
@@ -829,8 +829,8 @@ when the requested state is missing.
 
 There are no per-call snapshots or rollback operations. The host stages the
 whole editor operation or drawing recording and discards that temporary output
-when evaluation halts. Drawing uses local vectors, and the random stream uses
-local scalar state. The interpreter does not mutate the live editor. Rust FFIs
+when evaluation halts. Drawing uses local vectors. The interpreter does not
+mutate the live editor. Rust FFIs
 must mark their observable writes and keep their effects local; external I/O
 is not reversible through this facility. Fuel is never restored.
 
@@ -958,6 +958,15 @@ the next; an absent action result stops it, otherwise completion returns `{}`.
 `collect {items}` explicitly materializes a GID list. Consumers retain the
 current callable and obey ordinary evaluator fuel limits. An empty range is a
 callable that immediately returns `{}`.
+
+The random library's numbers are pure functions of a key, a `u64`, as
+counter-based generators make them. `random between {key, index, minimum,
+maximum}` draws a number from `minimum` up to `maximum`; the same key and index
+always draw the same number. `random key {key, index}` derives another key, so
+each part of a computation draws from its own: the IoP tree gives each branch a
+key derived from its parent's, and each step of a loop one derived from its
+index. Nothing is threaded or hidden, so drawing one number changes no other,
+and editing one branch leaves the rest of the tree as it was.
 Grap-authored producers can use the same record/callable protocol; there is no
 new evaluator syntax, hidden stream handle, or precomputed list of indices.
 

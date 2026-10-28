@@ -1,13 +1,12 @@
-//! Deterministic random sampling inside an explicit Grap evaluation scope.
+//! Reproducible random numbers, as pure functions of a key. A key is a `u64`.
+//! `random key` derives another from it and an index, so each part of a
+//! computation, such as each branch of a tree, has its own, and `random
+//! between` draws a number from a key and an index. The same key and index
+//! always give the same number, and drawing one changes no other.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, f64, name, u64};
-use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
-};
-use gid::Value;
-use std::cell::Cell;
-use std::rc::Rc;
+use crate::libraries::{Library, name};
+use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
 
@@ -15,87 +14,71 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const BETWEEN: CellId = CellId::from_u128(0xe8a99ada91800bca33709da0db80c29f);
+    pub const DERIVE: CellId = CellId::from_u128(0xf623f74deb375d0c1476ed4baed4bd3c);
+    pub const KEY: CellId = CellId::from_u128(0x78727d568538f936fcb3e28c5961d0ca);
+    pub const INDEX: CellId = CellId::from_u128(0xb71da70705ea6085786117b5c47525e7);
     pub const MIN: CellId = CellId::from_u128(0x61213005b01abca2d4fb351cc4fe4d98);
     pub const MAX: CellId = CellId::from_u128(0x4be40301b427aeed939ef079ab63cf92);
-    pub const WITH_RANDOM: CellId = CellId::from_u128(0xf47ef735130ecf7a72105ac58f30075a);
-    pub const SEED: CellId = CellId::from_u128(0x208c3026e79e44fdbe405992c6cdea79);
-    pub const OUTSIDE_SCOPE: CellId = CellId::from_u128(0x7b590515407fafa2d520ed1bd0fc6b18);
-    pub const INVALID_SEED: CellId = CellId::from_u128(0xc188207adaefeee3f95d567476bd2d16);
 }
 
-fn evaluated(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    field: gid::CellId,
-) -> Result<Option<Value>, Halt> {
-    call.field(field)
-        .map(|value| context.eval_to_value(value, environment))
-        .transpose()
+/// SplitMix64's output function: a well-mixed `u64` from any other.
+fn mix(mut z: u64) -> u64 {
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }
 
-fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions<'static> {
-    ForeignFunctions::default().register(
-        vocabulary::BETWEEN,
-        ForeignFunction::with_arguments(
-            [vocabulary::MIN, vocabulary::MAX],
-            move |context, (min, max): (::core::primitive::f64, ::core::primitive::f64)| {
-                let next = state
-                    .get()
-                    .wrapping_mul(6_364_136_223_846_793_005)
-                    .wrapping_add(1_442_695_040_888_963_407);
-                context.effect(|| {
-                    state.set(next);
-                    let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-                    RuntimeValue::f64(min + (max - min) * unit)
-                })
-            },
-        ),
-    )
+/// `key` and `index` folded together in `domain`, so a key and a draw made
+/// from the same key and index differ.
+fn fold(key: u64, index: f64, domain: u64) -> u64 {
+    mix(key ^ mix(index.to_bits().wrapping_add(domain)))
+}
+
+/// The key for part `index` of what `key` draws.
+pub(crate) fn derive(key: u64, index: f64) -> u64 {
+    fold(key, index, 0x9e37_79b9_7f4a_7c15)
+}
+
+/// A number from `min` up to `max`, drawn from `key` at `index`.
+pub(crate) fn between(key: u64, index: f64, min: f64, max: f64) -> f64 {
+    let unit = (fold(key, index, 0x3c6e_f372_fe94_f82a) >> 11) as f64 / (1_u64 << 53) as f64;
+    min + (max - min) * unit
 }
 
 fn functions() -> ForeignFunctions<'static> {
+    use vocabulary::*;
     ForeignFunctions::default()
         .register(
-            vocabulary::BETWEEN,
-            absent::outside_scope(
-                vocabulary::OUTSIDE_SCOPE,
-                [vocabulary::MIN, vocabulary::MAX],
-            ),
+            DERIVE,
+            ForeignFunction::with_arguments([KEY, INDEX], |_, (key, index): (u64, f64)| {
+                RuntimeValue::u64(derive(key, index))
+            })
+            .cacheable(),
         )
         .register(
-            vocabulary::WITH_RANDOM,
-            ForeignFunction::new(|context, call, environment| {
-                // An omitted seed is zero; one that isn't a u64 is invalid.
-                match evaluated(context, call, environment, vocabulary::SEED)?
-                    .map_or(Some(0), |seed| u64::read(&seed))
-                {
-                    Some(seed) => match call.field(::grap::vocabulary::EXPRESSION) {
-                        Some(expression) => context
-                            .with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
-                                context.eval(expression, environment)
-                            }),
-                        None => Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
-                    },
-                    None => Ok(::grap::absent::value(vocabulary::INVALID_SEED).into()),
-                }
-            })
-            .parameters([::grap::vocabulary::EXPRESSION]),
+            BETWEEN,
+            ForeignFunction::with_arguments(
+                [KEY, INDEX, MIN, MAX],
+                |_, (key, index, min, max): (u64, f64, f64, f64)| {
+                    RuntimeValue::f64(between(key, index, min, max))
+                },
+            )
+            .cacheable(),
         )
 }
 
 pub fn library<W: Host>() -> Library<W> {
+    use vocabulary::*;
     name::named_library(
         ID,
         "random",
         [
-            (vocabulary::BETWEEN, "random between"),
-            (vocabulary::MIN, "minimum"),
-            (vocabulary::MAX, "maximum"),
-            (vocabulary::WITH_RANDOM, "with random"),
-            (vocabulary::SEED, "seed"),
-            (vocabulary::OUTSIDE_SCOPE, "random outside scope"),
-            (vocabulary::INVALID_SEED, "invalid random seed"),
+            (BETWEEN, "random between"),
+            (DERIVE, "random key"),
+            (KEY, "key"),
+            (INDEX, "index"),
+            (MIN, "minimum"),
+            (MAX, "maximum"),
         ],
         functions(),
     )
