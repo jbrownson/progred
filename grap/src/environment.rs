@@ -1,6 +1,7 @@
 //! Environments: the bindings a closure or call sees, keyed by interned cell
 //! indices.
 
+use crate::eval::unbox;
 use crate::reify;
 use crate::runtime::RuntimeValue;
 use gid::{CellId, Value};
@@ -188,6 +189,7 @@ impl Environment {
     }
 
     fn push_indexed(&mut self, bindings: impl IntoIterator<Item = (CellIndex, RuntimeValue)>) {
+        let bindings = unboxed(bindings);
         match &mut self.frame {
             Some(frame) => {
                 let frame = Rc::make_mut(frame);
@@ -209,7 +211,7 @@ impl Environment {
         &self,
         bindings: impl IntoIterator<Item = (CellIndex, RuntimeValue)>,
     ) -> Self {
-        let bindings: Vec<_> = bindings.into_iter().collect();
+        let bindings: Vec<_> = unboxed(bindings).collect();
         if bindings.is_empty() {
             self.clone()
         } else {
@@ -222,6 +224,16 @@ impl Environment {
             }
         }
     }
+}
+
+/// `bindings` with their values unboxed, once as they're bound, so a read
+/// needn't look for a number again.
+fn unboxed(
+    bindings: impl IntoIterator<Item = (CellIndex, RuntimeValue)>,
+) -> impl Iterator<Item = (CellIndex, RuntimeValue)> {
+    bindings
+        .into_iter()
+        .map(|(index, value)| (index, unbox(value)))
 }
 
 impl From<Environment> for Value {
