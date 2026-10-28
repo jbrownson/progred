@@ -1,7 +1,8 @@
 //! Whole-evaluation memo boundaries. Each execution owns a fresh interpreter,
 //! so prepared calls cannot bypass an enclosing computation's observations.
 //! The evaluation's host records each cell it resolves, and gives up
-//! reuse when Grap reports an untracked call or an effect the memo doesn't own.
+//! reuse when Grap reports an uncacheable call or an effect the memo doesn't
+//! own.
 
 use gid::{CellId, Value};
 use grap::{Evaluation, ForeignFunction, Host, absent};
@@ -53,7 +54,7 @@ impl<S: 'static> Host for ObservingHost<'_, S> {
             .read(cell, &mut self.read.borrow_mut())
             .implementation
     }
-    fn untracked(&self) {
+    fn uncacheable(&self) {
         self.read.borrow_mut().untracked();
     }
     fn effect(&self) {

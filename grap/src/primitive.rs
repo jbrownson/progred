@@ -116,7 +116,7 @@ impl Primitive {
             Rc::new(move |context, environment| self.run(context, &call, &operands, environment))
         })
         .parameters(self.labels())
-        .tracked()
+        .cacheable()
         .as_primitive(self)
     }
 

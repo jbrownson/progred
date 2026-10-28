@@ -137,23 +137,23 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             RANGE,
-            ForeignFunction::with_arguments([COUNT], range).tracked(),
+            ForeignFunction::with_arguments([COUNT], range).cacheable(),
         )
         .register(
             RANGE_STEP,
-            ForeignFunction::with_arguments([COUNT, INDEX], range_step).tracked(),
+            ForeignFunction::with_arguments([COUNT, INDEX], range_step).cacheable(),
         )
         .register(
             FOR_EACH,
             ForeignFunction::new(|cx, call, env| consume(cx, call, env, false))
                 .parameters([ITEMS, ACTION])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             COLLECT,
             ForeignFunction::new(|cx, call, env| consume(cx, call, env, true))
                 .parameters([ITEMS])
-                .tracked(),
+                .cacheable(),
         )
 }
 

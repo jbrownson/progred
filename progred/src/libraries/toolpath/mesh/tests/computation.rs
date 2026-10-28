@@ -371,7 +371,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
                 Ok(Value::record([]))
             }
         })
-        .tracked(),
+        .cacheable(),
     );
     libraries.insert(new_cell_id(), definitions);
     let mut doc = Document::default();

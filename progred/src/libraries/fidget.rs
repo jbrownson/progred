@@ -362,19 +362,19 @@ fn functions() -> ForeignFunctions {
             vocabulary::PREVIEW,
             ForeignFunction::from_value(preview_function)
                 .parameters([presentation::vocabulary::VALUE])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::PREVIEW_3D,
             ForeignFunction::from_value(preview_3d_function)
                 .parameters([presentation::vocabulary::VALUE])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::PREVIEW_MESH,
             ForeignFunction::from_value(mesh::preview)
                 .parameters([presentation::vocabulary::VALUE])
-                .tracked(),
+                .cacheable(),
         )
 }
 

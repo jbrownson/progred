@@ -130,7 +130,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
                     ]))
                 }
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             action,
@@ -147,7 +147,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
                     })
                 }
             })
-            .tracked(),
+            .cacheable(),
         );
     let sequence = ::grap::lambda([], call(pull, [(INDEX, f64::value(0.0))]));
     let result = crate::test_support::test_evaluate(
@@ -223,7 +223,7 @@ fn steps_end_without_next_and_failures_malformed_steps_and_fuel_are_not_completi
                 let output = output.clone();
                 move |_, _, _| Ok(output.clone().into())
             })
-            .tracked(),
+            .cacheable(),
         );
         let result = crate::test_support::test_evaluate(
             &call(COLLECT, [(ITEMS, sequence.clone())]),

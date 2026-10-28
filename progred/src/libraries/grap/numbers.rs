@@ -173,7 +173,7 @@ fn f64_parts() -> Parts {
     ]);
     parts.functions = parts.functions.register(
         f64::LERP,
-        ForeignFunction::with_arguments([f64::START, f64::END, f64::AMOUNT], lerp).tracked(),
+        ForeignFunction::with_arguments([f64::START, f64::END, f64::AMOUNT], lerp).cacheable(),
     );
     parts.names.extend(
         [
@@ -377,7 +377,7 @@ fn conversion<From: Parse + 'static, N: 'static>(
     ForeignFunction::with_arguments([vocabulary::OPERAND], move |_, (number,): (From,)| {
         runtime(convert(number))
     })
-    .tracked()
+    .cacheable()
 }
 
 /// A selected number takes its type's single-character operators as typing:

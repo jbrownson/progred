@@ -256,12 +256,12 @@ impl<'a> Context<'a> {
         environment: &Environment,
         stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
     ) -> Result<RuntimeValue, Halt> {
-        let tracked = match foreign {
-            ResolvedForeign::Function(function) => function.tracked,
-            ResolvedForeign::Overlay(_) => self.overlay.is_some_and(|overlay| overlay.tracked),
+        let cacheable = match foreign {
+            ResolvedForeign::Function(function) => function.cacheable,
+            ResolvedForeign::Overlay(_) => self.overlay.is_some_and(|overlay| overlay.cacheable),
         };
-        if !tracked {
-            self.host.untracked();
+        if !cacheable {
+            self.host.uncacheable();
         }
         let value = match foreign {
             ResolvedForeign::Function(function) => match &function.implementation {

@@ -188,8 +188,8 @@ each projected frame; controls do not cache emitted widgets. The memo behind
 dimensions or control state, so resizing rebuilds presentation without
 collecting the tree or recording its paths again. A surrounding render
 can also reuse pure evaluation.
-The `with controls` constructor declares its reads tracked;
-it only evaluates arguments and returns data. Effects or untracked reads in
+The `with controls` constructor is declared cacheable;
+it only evaluates arguments and returns data. Effects or uncacheable calls in
 those arguments still prevent reuse. The view's expensive geometry also uses
 that system.
 Controls do not reduce the view's assigned size. Their bottom alignment comes

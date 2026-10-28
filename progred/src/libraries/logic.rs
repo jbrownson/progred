@@ -32,7 +32,7 @@ fn functions() -> ForeignFunctions {
                 )
             }
         })
-        .tracked(),
+        .cacheable(),
     )
 }
 

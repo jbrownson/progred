@@ -5,7 +5,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
     use grap::ForeignFunction;
     use std::cell::Cell;
 
-    for mode in ["tracked", "effectful", "untracked"] {
+    for mode in ["cacheable", "effectful", "uncacheable"] {
         let [function, argument, dependency, library, unrelated] =
             std::array::from_fn(|_| gid::new_cell_id());
         let runs = Rc::new(Cell::new(0));
@@ -22,10 +22,10 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
                 Ok(Value::list([value, observed]))
             }
         });
-        let implementation = if mode == "untracked" {
+        let implementation = if mode == "uncacheable" {
             implementation
         } else {
-            implementation.tracked()
+            implementation.cacheable()
         };
         let mut definitions = crate::library::Definitions::default();
         definitions.insert_foreign(function, implementation);
@@ -65,7 +65,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         assert_eq!(first, run(&doc, &data));
         doc.cells.set_value(unrelated, Value::record([]));
         assert_eq!(first, run(&doc, &data));
-        assert_eq!(runs.get(), if mode == "tracked" { 1 } else { 3 });
+        assert_eq!(runs.get(), if mode == "cacheable" { 1 } else { 3 });
         let before = runs.get();
         doc.cells.set_value(dependency, Value::from(vec![1]));
         assert_ne!(first, run(&doc, &data));
@@ -101,7 +101,7 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
                 context.eval_to_value(argument, environment)
             }
         })
-        .tracked(),
+        .cacheable(),
     );
     let mut libraries = Libraries::default();
     libraries.insert(library, definitions);

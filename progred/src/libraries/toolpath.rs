@@ -396,7 +396,7 @@ pub fn run<T>(
         |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
             runtime_result(operation(function, context, call, environment, &output))
         };
-    evaluate(&ForeignOverlay::new(EMITTERS, &emit).tracked())
+    evaluate(&ForeignOverlay::new(EMITTERS, &emit).cacheable())
 }
 
 /// What the 3D path previews require; their other arguments have defaults.
@@ -431,19 +431,19 @@ fn functions() -> ForeignFunctions {
             PREVIEW_3D,
             ForeignFunction::new(fidget::preview)
                 .parameters(PATH_PREVIEW_PARAMETERS)
-                .tracked(),
+                .cacheable(),
         )
         .register(
             PREVIEW_MESH,
             ForeignFunction::new(mesh::preview)
                 .parameters(PATH_PREVIEW_PARAMETERS)
-                .tracked(),
+                .cacheable(),
         )
         .register(
             PREVIEW_REFINED,
             ForeignFunction::new(refined::preview)
                 .parameters(PATH_PREVIEW_PARAMETERS)
-                .tracked(),
+                .cacheable(),
         )
         .register(
             POINT,
@@ -451,7 +451,7 @@ fn functions() -> ForeignFunctions {
                 runtime_result(point(context, call, environment).map(runtime_point_value))
             })
             .parameters([X, Y, Z])
-            .tracked(),
+            .cacheable(),
         )
         .register(
             PREVIEW,
@@ -463,7 +463,7 @@ fn functions() -> ForeignFunctions {
                 layout::vocabulary::WIDTH,
                 layout::vocabulary::HEIGHT,
             ])
-            .tracked(),
+            .cacheable(),
         )
 }
 

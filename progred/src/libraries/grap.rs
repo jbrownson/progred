@@ -745,7 +745,7 @@ fn functions() -> ForeignFunctions {
                 ::grap::vocabulary::EXPRESSION,
                 ::grap::vocabulary::ENVIRONMENT,
             ])
-            .tracked(),
+            .cacheable(),
     )
 }
 

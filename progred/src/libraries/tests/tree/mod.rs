@@ -142,7 +142,7 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
         let result = ::grap::evaluate_runtime_scoped(
             &::grap::RuntimeValue::from(call(B, [])),
             host,
-            &::grap::ForeignOverlay::from_value(&[B], &emit).tracked(),
+            &::grap::ForeignOverlay::from_value(&[B], &emit).cacheable(),
             1000,
         )
         .into_value();
@@ -335,9 +335,9 @@ fn nested_collect_checks_arguments_and_does_not_steal_outer_emissions() {
 }
 
 #[test]
-fn untracked_builders_and_halted_runs_are_not_memoized() {
+fn uncacheable_builders_and_halted_runs_are_not_memoized() {
     use std::cell::Cell;
-    for tracked in [false, true] {
+    for cacheable in [false, true] {
         let runs = Rc::new(Cell::new(0));
         let mut definitions = Definitions::default();
         let implementation = ForeignFunction::from_value({
@@ -349,15 +349,15 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
         });
         definitions.insert_foreign(
             B,
-            if tracked {
-                implementation.tracked()
+            if cacheable {
+                implementation.cacheable()
             } else {
                 implementation
             },
         );
         let mut libraries = crate::stack::load().libraries;
         libraries.insert(C, definitions);
-        let body = if tracked {
+        let body = if cacheable {
             group(sequence([call(B, []), call(A, [])]))
         } else {
             group(Value::list([leaf(call(B, []))]))
@@ -373,7 +373,7 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
         assert!(before > 0);
         let second = prepared(&computations, &site(), Value::from(A).into(), 100);
         assert!(runs.get() > before);
-        assert_eq!(first.is_err(), tracked);
-        assert_eq!(second.is_err(), tracked);
+        assert_eq!(first.is_err(), cacheable);
+        assert_eq!(second.is_err(), cacheable);
     }
 }

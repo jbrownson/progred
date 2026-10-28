@@ -718,7 +718,7 @@ pub fn library<W: Host>() -> Library<W> {
             WITH_CONTROLS,
             ForeignFunction::new(constructor)
                 .parameters([CONTROLS, VIEW, VALUE, WIDTH, HEIGHT])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             SLIDER,

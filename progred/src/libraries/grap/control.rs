@@ -78,37 +78,37 @@ fn functions() -> ForeignFunctions {
             vocabulary::MATCH,
             ForeignFunction::staged(match_prepare)
                 .parameters([vocabulary::VALUE, vocabulary::CASES])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::LET,
             ForeignFunction::staged(bindings_prepare)
                 .parameters([vocabulary::BINDINGS, ::grap::vocabulary::EXPRESSION])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::WHERE,
             ForeignFunction::staged(bindings_prepare)
                 .parameters([vocabulary::BINDINGS, ::grap::vocabulary::EXPRESSION])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::DO,
             ForeignFunction::new(do_foreign)
                 .parameters([vocabulary::EXPRESSIONS])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::ALL,
             ForeignFunction::new(all_foreign)
                 .parameters([vocabulary::EXPRESSIONS])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             vocabulary::QUOTE,
             ForeignFunction::new(quote_foreign)
                 .parameters([::grap::vocabulary::EXPRESSION])
-                .tracked(),
+                .cacheable(),
         )
 }
 

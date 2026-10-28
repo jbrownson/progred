@@ -37,8 +37,8 @@ impl Host for Observed<'_> {
         self.host.implementation(cell)
     }
 
-    fn untracked(&self) {
-        self.host.untracked()
+    fn uncacheable(&self) {
+        self.host.uncacheable()
     }
 
     fn effect(&self) {

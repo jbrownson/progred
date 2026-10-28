@@ -54,7 +54,7 @@ An asynchronous node can also retain that result while its replacement runs.
 The editor's `computations::memo` observes whole evaluations, using a fresh
 interpreter on a miss so prepared calls cannot bypass another memo's
 observations. Grap knows nothing of memos. Its `Host` resolves every definition
-an evaluation reads, hears of each untracked foreign call and each effect, and
+an evaluation reads, hears of each uncacheable foreign call and each effect, and
 sees whether the evaluation completed; the memo's host turns those into
 observations. This is a Rust API, **not yet a Grap `memo` function or
 arbitrary-expression intrinsic**. Native nodes can nest evaluations and other
@@ -68,8 +68,8 @@ or completions must observe that ordered result, not just the selected definitio
 Those UI computations are not memoized here. Expressions, arguments/environments,
 and fuel belong in explicit node inputs.
 
-Foreign calls are untracked by default and prevent reuse. `tracked()` opts a
-function or scoped overlay into an author contract: captured state is immutable
+Foreign functions are uncacheable by default and prevent reuse. `cacheable()`
+opts a function or scoped overlay into an author contract: captured state is immutable
 or evaluation-local, every changing read goes through evaluation, and
 observable writes use `Context::effect`. This is not discovery of arbitrary
 Rust closure reads.

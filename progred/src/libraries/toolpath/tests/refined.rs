@@ -102,7 +102,7 @@ impl Fixture {
                     Ok(Value::record([]))
                 }
             })
-            .tracked(),
+            .cacheable(),
         );
         libraries.insert(new_cell_id(), definitions);
         computations.begin(Rc::new(Document::default()), libraries);

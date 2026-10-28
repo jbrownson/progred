@@ -108,7 +108,7 @@ fn functions() -> ForeignFunctions {
                     )
                 },
             )
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::CONCAT,
@@ -121,14 +121,14 @@ fn functions() -> ForeignFunctions {
                     RuntimeValue::list(left.values().chain(right.values()))
                 },
             )
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::LENGTH,
             ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
                 RuntimeValue::f64(list.len() as f64)
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::AT,
@@ -140,7 +140,7 @@ fn functions() -> ForeignFunctions {
                         .unwrap_or_else(out_of_bounds)
                 },
             )
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::TAIL,
@@ -150,7 +150,7 @@ fn functions() -> ForeignFunctions {
                     _ => RuntimeValue::list_at(list.positions()[1..].into(), list.values().skip(1)),
                 }
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::UNFOLD,
@@ -188,7 +188,7 @@ fn functions() -> ForeignFunctions {
                 }
             })
             .parameters([vocabulary::INITIAL, vocabulary::STEP])
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::FOLD,
@@ -218,7 +218,7 @@ fn functions() -> ForeignFunctions {
                 }
             })
             .parameters([vocabulary::LIST, vocabulary::INITIAL, vocabulary::STEP])
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::ITERATE,
@@ -242,7 +242,7 @@ fn functions() -> ForeignFunctions {
                 }
             })
             .parameters([vocabulary::INITIAL, vocabulary::STEP])
-            .tracked(),
+            .cacheable(),
         )
 }
 

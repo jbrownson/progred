@@ -341,7 +341,7 @@ pub trait Env {
 
     /// [`Env::evaluate_runtime`], reusing a completed evaluation when its
     /// observed inputs are unchanged. Hosts without a computation runtime may
-    /// simply evaluate. Untracked reads, effects, and halts prevent reuse in
+    /// simply evaluate. Uncacheable calls, effects, and halts prevent reuse in
     /// hosts that provide memoization.
     fn evaluate_runtime_memo(
         &self,

@@ -760,7 +760,7 @@ pub fn library<W: Host>() -> Library<W> {
             vocabulary::LAYOUT_PROGRAM,
             ForeignFunction::new(scope::program)
                 .parameters([::grap::vocabulary::EXPRESSION])
-                .tracked(),
+                .cacheable(),
         ),
     )
     .with_projections_for(

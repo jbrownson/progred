@@ -106,7 +106,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                     &group_output,
                 )
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             MAP,
@@ -123,7 +123,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                 map_output.maps.borrow_mut().pop();
                 result
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             LEAF,
@@ -158,7 +158,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                     })
                 })
             })
-            .tracked(),
+            .cacheable(),
         )
 }
 
@@ -281,7 +281,7 @@ fn evaluate(
     let evaluation = ::grap::evaluate_runtime_scoped(
         &expression,
         host,
-        &::grap::ForeignOverlay::new(&[COLLECT], &emit).tracked(),
+        &::grap::ForeignOverlay::new(&[COLLECT], &emit).cacheable(),
         fuel,
     );
     (evaluation, built.into_inner())
@@ -382,7 +382,7 @@ pub fn library<W: Host>() -> Library<W> {
                 })
             })
             .parameters([PROGRAM])
-            .tracked(),
+            .cacheable(),
         );
     name::named_library(
         ID,

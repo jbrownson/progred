@@ -21,7 +21,7 @@ pub(crate) enum ForeignImplementation {
 #[derive(Clone)]
 pub struct ForeignFunction {
     pub(crate) implementation: ForeignImplementation,
-    pub(crate) tracked: bool,
+    pub(crate) cacheable: bool,
     pub(crate) parameters: Option<Rc<[CellId]>>,
     /// The operation this function runs, when the evaluator can run it
     /// directly; behind a pointer so copying a function stays cheap.
@@ -33,7 +33,7 @@ impl ForeignFunction {
         call: impl Fn(&mut Context, &Expression, &Environment) -> Result<Value, Halt> + 'static,
     ) -> Self {
         Self {
-            tracked: false,
+            cacheable: false,
             implementation: ForeignImplementation::Direct(Rc::new(
                 move |context, expression, environment| {
                     call(context, expression, environment).map(RuntimeValue::from)
@@ -48,7 +48,7 @@ impl ForeignFunction {
         call: impl Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt> + 'static,
     ) -> Self {
         Self {
-            tracked: false,
+            cacheable: false,
             implementation: ForeignImplementation::Direct(Rc::new(call)),
             parameters: None,
             primitive: None,
@@ -64,18 +64,19 @@ impl ForeignFunction {
     /// would burn.
     pub fn staged(prepare: impl Fn(&Expression) -> Stage + 'static) -> Self {
         Self {
-            tracked: false,
+            cacheable: false,
             implementation: ForeignImplementation::Staged(Rc::new(prepare)),
             parameters: None,
             primitive: None,
         }
     }
 
-    /// Opt in only when every changing read goes through evaluation and every
-    /// observable write uses Context::effect. Captures must be immutable or
-    /// evaluation-local; hidden mutable state prevents sound memoization.
-    pub fn tracked(mut self) -> Self {
-        self.tracked = true;
+    /// A host may reuse results this function helped compute. Opt in only
+    /// when every changing read goes through evaluation and every observable
+    /// write uses Context::effect. Captures must be immutable or
+    /// evaluation-local; hidden mutable state makes a reused result wrong.
+    pub fn cacheable(mut self) -> Self {
+        self.cacheable = true;
         self
     }
 
@@ -100,7 +101,7 @@ impl ForeignFunction {
 /// Two functions are equal when they run the same native code.
 impl PartialEq for ForeignFunction {
     fn eq(&self, other: &Self) -> bool {
-        self.tracked == other.tracked
+        self.cacheable == other.cacheable
             && match (&self.implementation, &other.implementation) {
                 (ForeignImplementation::Direct(left), ForeignImplementation::Direct(right)) => {
                     Rc::ptr_eq(left, right)
@@ -172,7 +173,7 @@ pub(crate) enum OverlayCall<'a> {
 pub struct ForeignOverlay<'a> {
     functions: &'a [CellId],
     pub(crate) call: OverlayCall<'a>,
-    pub(crate) tracked: bool,
+    pub(crate) cacheable: bool,
 }
 
 impl<'a> ForeignOverlay<'a> {
@@ -191,7 +192,7 @@ impl<'a> ForeignOverlay<'a> {
         Self {
             functions,
             call: OverlayCall::Runtime(call),
-            tracked: false,
+            cacheable: false,
         }
     }
 
@@ -204,14 +205,14 @@ impl<'a> ForeignOverlay<'a> {
         Self {
             functions,
             call: OverlayCall::Value(call),
-            tracked: false,
+            cacheable: false,
         }
     }
 
-    /// The same observation contract as ForeignFunction::tracked. This does
-    /// not make emitted effects cacheable: their owner must record the output.
-    pub fn tracked(mut self) -> Self {
-        self.tracked = true;
+    /// The same contract as ForeignFunction::cacheable. This does not make
+    /// emitted effects cacheable: their owner must record the output.
+    pub fn cacheable(mut self) -> Self {
+        self.cacheable = true;
         self
     }
 

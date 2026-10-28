@@ -35,7 +35,7 @@ fn counted(cell: CellId, runs: &Rc<Cell<usize>>, result: Value) -> TestDefinitio
             runs.set(runs.get() + 1);
             Ok(result.clone())
         })
-        .tracked(),
+        .cacheable(),
     )
 }
 
@@ -162,7 +162,7 @@ fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
                     Ok(Value::record([]))
                 };
                 let cells = [cell];
-                let overlay = ForeignOverlay::from_value(&cells, &emit).tracked();
+                let overlay = ForeignOverlay::from_value(&cells, &emit).cacheable();
                 let eval = |host: &dyn Host| {
                     evaluate_runtime_scoped(
                         &RuntimeValue::from(call(cell.into(), [])),

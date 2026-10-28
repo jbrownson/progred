@@ -52,16 +52,16 @@ pub mod vocabulary;
 
 /// Where an evaluation finds definitions, and the native code foreign
 /// functions run. A host that reuses results can rely on every changing read
-/// being a `definition` or an `implementation`, except where `untracked` says
-/// otherwise.
+/// being a `definition` or an `implementation`, except where `uncacheable`
+/// says otherwise.
 pub trait Host {
     /// `cell`'s definition.
     fn definition(&self, cell: CellId) -> Option<Value>;
     /// The native code a foreign function implemented under `cell` runs.
     fn implementation(&self, cell: CellId) -> Option<ForeignFunction>;
-    /// A foreign call not declared tracked ran, so the result may depend on
-    /// reads the host didn't see.
-    fn untracked(&self) {}
+    /// A foreign function not declared cacheable ran, so the result may depend
+    /// on reads the host didn't see, and reusing it could be wrong.
+    fn uncacheable(&self) {}
     /// An observable write ran, which a reused result would leave out.
     fn effect(&self) {}
     /// What watches the evaluations run against this host, if anything.

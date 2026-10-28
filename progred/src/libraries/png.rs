@@ -157,7 +157,7 @@ fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
             |size| crate::libraries::f64::value(f64::from(pick(size))),
         )
     })
-    .tracked()
+    .cacheable()
 }
 
 fn functions() -> ForeignFunctions {

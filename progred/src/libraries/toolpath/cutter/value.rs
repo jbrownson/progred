@@ -263,7 +263,7 @@ fn mill(
         )
     })
     .parameters(parameters)
-    .tracked()
+    .cacheable()
 }
 
 /// A mill's diameter and length, read in that order.

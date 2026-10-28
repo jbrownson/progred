@@ -98,7 +98,7 @@ around f64) can defer to that facet.
 Explicit Rust memo boundaries can run whole Grap evaluations through the
 [dependency-tracking adapter](incremental.md#grap-and-foreign-calls).
 Ordinary projection/evaluation remains uncached. Foreign functions opt into
-tracked reads; unknown calls and unrecorded effects prevent reuse.
+being cacheable; other calls and unrecorded effects prevent reuse.
 
 Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial checks its preconditions and fails
@@ -488,8 +488,8 @@ projection, so anywhere but a pane's entry it's the record it is, its
 expression editable; a tutorial slot, a pane of its own, presents one too.
 A render requests an observed evaluation memo at its current view/path; hosts without a
 computation runtime evaluate directly. The existing Grap observer tracks cell
-definitions (including missing ones) and native observations. Untracked foreign
-reads, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel
+definitions (including missing ones) and native observations. Uncacheable foreign
+calls, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel
 are explicit inputs. This memo retains only the computed Value, never widgets,
 handlers, or rendered output.
 
@@ -541,7 +541,7 @@ to the viewport function. Preparation uses the ordinary dependency-tracked
 application memo at the declaration's occurrence. Its inputs are the callable,
 source data, and optional `fuel` (defaulting to Grap's usual allowance), plus
 observed definitions. Dimensions are deliberately not inputs. Effects or
-untracked reads prevent reuse, just as for other observed Grap evaluations.
+uncacheable calls prevent reuse, just as for other observed Grap evaluations.
 This lets a pane construct a program independently of its size without
 changing the contract of existing declarations. A preparation absent exposes
 the stored source without calling the viewport function.

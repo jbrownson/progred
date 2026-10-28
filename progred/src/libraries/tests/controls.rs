@@ -653,13 +653,13 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
 }
 
 #[test]
-fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arguments() {
+fn controls_declaration_reuses_cacheable_inputs_but_not_effectful_or_uncacheable_arguments() {
     use crate::{computations::Computations, library::Definitions};
     use std::cell::Cell;
 
     // Constructing the declaration only evaluates its arguments. Running the
     // widgets is a separate interpretation, and must still happen each frame.
-    for mode in ["pure", "effectful", "untracked"] {
+    for mode in ["pure", "effectful", "uncacheable"] {
         let (function, input, unrelated, library) = (
             gid::new_cell_id(),
             gid::new_cell_id(),
@@ -679,10 +679,10 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
                 Ok(value)
             }
         });
-        let implementation = if mode == "untracked" {
+        let implementation = if mode == "uncacheable" {
             implementation
         } else {
-            implementation.tracked()
+            implementation.cacheable()
         };
         let mut definitions = Definitions::default();
         definitions.insert_foreign(function, implementation);

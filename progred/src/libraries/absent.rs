@@ -261,7 +261,7 @@ pub fn outside_scope(
 ) -> ForeignFunction {
     ForeignFunction::from_value(move |_, _, _| Ok(::grap::absent::value(reason)))
         .parameters(parameters)
-        .tracked()
+        .cacheable()
 }
 
 fn functions() -> ForeignFunctions {
@@ -282,7 +282,7 @@ fn functions() -> ForeignFunctions {
             }
         })
         .parameters([vocabulary::VALUE, vocabulary::DEFAULT])
-        .tracked(),
+        .cacheable(),
     )
 }
 
