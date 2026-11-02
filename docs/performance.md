@@ -114,7 +114,13 @@ The tool runs the test executables directly, outside the build sandbox, so on a
 Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
 offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure
 it, not the CPU fallback. The two GPU compositor canaries run only on a hardware
-adapter, or with `--gpu`. Implicit rasterization in software uses Fidget's VM on
+adapter, or with `--gpu`. On the Linux laptop's Intel Arc B390 under Mesa
+26.2.5, `editor_compositor_profile` fails its pixel check because Vello's MSAA
+renders vary from run to run there, as
+[deferred work](deferred.md#report-msaa-renders-that-vary-on-intel-arc)
+describes; until that's fixed,
+`make perf ARGS='--only "^(?!shell_tests::compositor::editor_compositor)"'`
+runs the rest. Implicit rasterization in software uses Fidget's VM on
 every platform. A run with features compares with earlier runs with the same
 features, or with the default build until there is one.
 

@@ -1132,6 +1132,34 @@ atlas for native draw-image operations, with per-window upload ownership and
 headless fidelity, resize, lifetime, and performance checks. Image brushes still
 use Vello's atlas.
 
+## Report MSAA renders that vary on Intel Arc
+
+On the Linux laptop's Intel Arc B390 (Panther Lake) under Mesa 26.2.5, Vello
+0.11's MSAA renders of one scene differ from run to run, on antialiased edges,
+while its area antialiasing gives the same pixels every time. A 1024 × 1024
+scene of 20,000 small circles varies at about 14,000 pixels with eight samples
+and 17,500 with sixteen. The compositor draws with sixteen, so
+`editor_compositor_profile`'s pixel check fails there, at the last recorded
+commit too, and a redraw can change edge pixels slightly.
+[`msaa_repro`](../ui/puri-vello/examples/msaa_repro.rs) shows it with only Vello
+and pollster:
+
+```sh
+./tools/linux-cargo build --release -p puri-vello --features capture --example msaa_repro
+target/sandbox/build/release/examples/msaa_repro [CIRCLES [RADIUS_SCALE]]
+```
+
+Measured on 2 November 2026, the evidence points at the driver more than at
+Vello. One circle never varies, and more circles vary more. Forcing compute
+SIMD16 with `INTEL_SIMD_DEBUG=cs16` lowers the variation without removing it,
+and turning off the shader cache changes nothing. Vello's MSAA tallies each
+pixel's covered samples with integer atomics in workgroup memory, whose totals
+don't depend on order, and a `workgroupBarrier()` added at the end of its MSAA
+fills, so that no fill resets shared memory another thread still reads, changed
+nothing. The machine had no other Vulkan driver to compare with. A report for
+Mesa's anv tracker was drafted but not yet filed. Once a Mesa update or upstream
+fix lands, rerun the example and the canary.
+
 ## CAM preview navigation and execution grouping
 
 Explore an execution hierarchy distinct from the document's authoring outline.

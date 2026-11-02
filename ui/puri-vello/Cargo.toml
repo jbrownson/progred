@@ -18,3 +18,7 @@ vello.workspace = true
 [dev-dependencies]
 nalgebra = "0.35"
 png = "0.18.1"
+
+[[example]]
+name = "msaa_repro"
+required-features = ["capture"]
