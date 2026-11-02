@@ -154,8 +154,24 @@ def machine():
             f"{len(os.sched_getaffinity(0))} CPUs, {memory / 2**20:.0f} GiB"
             + (", virtual machine" if virtual else "")
         )
-        conditions = f"{platform.system()} {platform.release()}"
+        conditions = f"{platform.system()} {platform.release()}{linux_power()}"
     return hardware, f"{conditions}, {rustc}"
+
+
+def linux_power():
+    """A laptop's power source, and the profile power-profiles-daemon sets,
+    which can hold its clocks down; empty where the machine has neither."""
+    batteries = [
+        (path / "status").read_text().strip()
+        for path in Path("/sys/class/power_supply").glob("*")
+        if (path / "type").read_text().strip() == "Battery"
+    ]
+    profile = command(["powerprofilesctl", "get"]) if shutil.which("powerprofilesctl") else ""
+    return "".join(
+        f", {part}"
+        for part in (["battery" if "Discharging" in batteries else "AC power"] if batteries else [])
+        + ([f"{profile} profile"] if profile else [])
+    )
 
 
 def commit():
@@ -288,7 +304,12 @@ def main():
                 results[workload(test, metric)] = result
         rounds.append(results)
     results = summarize(rounds)
-    show(results, previous(logged(), hardware, gpu, args.features))
+    before = previous(logged(), hardware, gpu, args.features)
+    show(results, before)
+    # A power profile or compiler can account for a change; say when they differ.
+    earlier = sorted({row["environment"] for row in before.values()} - {conditions})
+    if earlier:
+        print(f"\nconditions of the last record: {'; '.join(earlier)}")
     if args.record is not None:
         new = not LOG.exists()
         date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")

@@ -71,14 +71,19 @@ recorded run:
 - **machine**: the hardware, which decides what is comparable, with the
   processor's family, model and stepping on a virtual machine;
 - **gpu**: the adapter Fidget's implicit previews select;
-- **environment**: the OS version, power source on macOS, Rust version, and
-  any Cargo features the build enabled;
+- **environment**: the OS version, the power source on a laptop, low power
+  mode on macOS or the power profile on Linux, the Rust version, and any Cargo
+  features the build enabled;
 - **median_ms** and **p95_ms**, the measured **samples** per round, the
   **rounds**, and their **spread_pct**;
 - a **note** on what changed or why the run was recorded.
 
 Compare runs only on the same machine and adapter, and keep the environment in
-mind: a different power state, OS, or compiler can account for a change. Even on
+mind: a different power state, OS, or compiler can account for a change, and
+`make perf` names the last record's conditions when they differ. In November
+2026 the Linux laptop's power-saver profile, which holds its cores near 1.3 GHz,
+ran the CAM canaries at about a third of their recorded speed although their
+code ran fewer instructions than when recorded. Even on
 one Mac, three default runs in October 2026, on battery, on AC power after two
 release builds, and on AC power idle, spread by up to 18% on the heavy
 workloads, so a smaller difference on a stock or Fidget workload is drift, not a
