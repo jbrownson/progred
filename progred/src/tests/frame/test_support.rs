@@ -129,8 +129,8 @@ pub(crate) fn settle(mut placed: HoverOutput<crate::Editor>, sources: &Sources<'
     bench
 }
 
-/// A window for a bench frame: its size, its zoom, and optionally the
-/// viewport declaration it shows alone, as a pane does.
+/// A window for a bench frame: its size, its zoom, and optionally the part
+/// of the document it shows alone, as the part's pane does.
 pub(crate) struct ProfileView {
     /// Logical points; the projection and clip receive physical pixels.
     pub(crate) size: kurbo::Size,
@@ -138,19 +138,28 @@ pub(crate) struct ProfileView {
     pub(crate) root: Option<crate::occurrence::Path>,
 }
 
+/// A [`ProfileView`] as its pane shows it: a part's root resolved through
+/// its cells, and whether that's a viewport filling the window or content
+/// inside the editor's margin.
+pub(crate) struct PreparedView {
+    pub(crate) size: kurbo::Size,
+    pub(crate) scale: f64,
+    pub(crate) root: Option<crate::occurrence::Path>,
+    pub(crate) viewport: bool,
+}
+
 impl ProfileView {
-    /// A bench for this view, with a pane's projection when it shows a
-    /// viewport, and the viewport's path resolved through its cells.
-    pub(crate) fn prepare(self, doc: &Document) -> (Self, BenchContext) {
+    /// A bench for this view, with a pane's projection when it shows a part.
+    pub(crate) fn prepare(self, doc: &Document) -> (PreparedView, BenchContext) {
         self.prepare_with(doc, BenchContext::new())
     }
 
     /// As [`Self::prepare`], on a bench whose projection the caller chose.
     pub(crate) fn prepare_with(
-        mut self,
+        self,
         doc: &Document,
         mut context: BenchContext,
-    ) -> (Self, BenchContext) {
+    ) -> (PreparedView, BenchContext) {
         context.styles = crate::display::widget::style::editor(
             crate::display::widget::style::Theme::Light.palette(),
             self.scale,
@@ -180,23 +189,32 @@ impl ProfileView {
             self.size * self.scale,
             self.scale,
         );
-        assert!(
-            self.root.is_none() || shown.viewport,
-            "profile target must be a viewport declaration"
+        let (root, projection, viewport) = (
+            shown.root_path,
+            shown.projection.into_owned(),
+            shown.viewport,
         );
-        let (root, projection) = (shown.root_path, shown.projection.into_owned());
-        self.root = self.root.map(|_| root);
         context.stack.projection = projection;
-        (self, context)
+        (
+            PreparedView {
+                size: self.size,
+                scale: self.scale,
+                root: self.root.map(|_| root),
+                viewport,
+            },
+            context,
+        )
     }
+}
 
+impl PreparedView {
     pub(crate) fn frame<'a>(
         &'a self,
         doc: &'a Document,
         annotations: &'a Annotations,
     ) -> BenchFrame<'a> {
         let size = self.size * self.scale;
-        let margin = content_margin(self.root.is_some(), self.scale);
+        let margin = content_margin(self.viewport, self.scale);
         BenchFrame {
             doc,
             selection: None,

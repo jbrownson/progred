@@ -244,11 +244,15 @@ measure an open RGBA picker; `_form_profile` runs both workloads.
 `BenchFrame` takes a document, root path, selection,
 annotations, available width, placement origin, clipping rectangle, and pointer.
 `BenchContext` retains the library stack, fonts, layout context, text shaping,
-and caller-owned computation graph. A `ProfileView` configures logical size and display scale, using zero
-padding for viewport declarations and the editor's normal margin for a document
-view. The `profile` combinator takes a frame-producing closure and an output
-check. Other documents and state sequences can reuse it without changes to the
-libraries or runtime.
+and caller-owned computation graph. A `ProfileView` configures logical size and
+display scale, and shows the whole document or one part of it alone, as the
+part's pane does: a viewport declaration fills the window, and anything else,
+such as an example's source beside its viewport, draws inside the editor's
+normal margin. The examples' roots are rows of parts, and a row projected whole
+draws its parts side by side, its viewport included, so a source canary shows
+its source part rather than the root. The `profile` combinator takes a
+frame-producing closure and an output check. Other documents and state
+sequences can reuse it without changes to the libraries or runtime.
 
 Each iteration rebuilds the projected view, measures and places it, and runs its
 paint continuations into a headless `DrawList`. The report separates:
@@ -273,7 +277,7 @@ before/after runs when evaluating small changes.
 | Workload | Logical size | Scale | Input sequence |
 | --- | --- | --- | --- |
 | IoP picture | 500 × 500 | 1 | Rebuild the declared viewport |
-| IoP source | 1400 × 900 | 1 | Project the document's top clipped viewport |
+| IoP source | 1400 × 900 | 1 | Project the source part's top clipped viewport |
 | RGBA picker | 600 × 400 | 2 | Project a selected color with its picker open |
 | Fidget orbit | 400 × 600 | 2 | Advance yaw by 2° per frame; pitch 60°, zoom 1 |
 | Torus orbit | 400 × 600 | 2 | Same camera sequence |

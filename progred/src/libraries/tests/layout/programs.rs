@@ -2,7 +2,7 @@
 //! the same layouts built as data.
 
 use crate::annotations::Annotations;
-use crate::frame::test_support::ProfileView;
+use crate::frame::test_support::{PreparedView, ProfileView};
 use crate::libraries::{grap::control::vocabulary as control, layout, presentation, text};
 use crate::perf::{distribution, iterations};
 use crate::projection::test_support::BenchContext;
@@ -118,32 +118,29 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
     }
 }
 
-/// A window tall enough for every row.
-fn view() -> ProfileView {
+/// A window tall enough for every row, showing the whole document, which
+/// prepares alike for every `doc`, on a bench whose root is drawn as a
+/// pane's: presenting the document's value through its own projection field,
+/// or a render as its result.
+fn presenting(doc: &Document) -> (PreparedView, BenchContext) {
+    let mut context = BenchContext::new();
+    context.stack.projection = context.stack.pane_projection.clone();
     ProfileView {
         size: kurbo::Size::new(1400.0, 10000.0),
         scale: 1.0,
         root: None,
     }
-}
-
-/// A bench whose root is drawn as a pane's, presenting the document's value
-/// through its own projection field, or a render as its result.
-fn presenting() -> BenchContext {
-    let mut context = BenchContext::new();
-    context.stack.projection = context.stack.pane_projection.clone();
-    context
+    .prepare_with(doc, context)
 }
 
 #[test]
 fn scoped_layout_program_matches_value_layout_through_the_real_frame_with_and_without_a_border() {
     for bordered in [false, true] {
-        let (view, mut context) = (view(), presenting());
+        let docs = [false, true].map(|emitting| document(emitting, 6, bordered));
+        let (view, mut context) = presenting(&docs[0]);
         let annotations = Annotations::default();
-        let (data, data_extent) =
-            context.frame(view.frame(&document(false, 6, bordered), &annotations));
-        let (native, native_extent) =
-            context.frame(view.frame(&document(true, 6, bordered), &annotations));
+        let (data, data_extent) = context.frame(view.frame(&docs[0], &annotations));
+        let (native, native_extent) = context.frame(view.frame(&docs[1], &annotations));
         assert_eq!(native_extent, data_extent);
         assert_eq!(format!("{:?}", native.list.0), format!("{:?}", data.list.0));
         assert!(native.list.0.len() >= 12);
@@ -228,7 +225,7 @@ fn grap_layout_ffi_profile_loop() {
         doc
     });
     // The root is a render, which a pane draws as its result.
-    let (view, mut context) = (view(), presenting());
+    let (view, mut context) = presenting(&docs[0]);
     let annotations = Annotations::default();
     let count = iterations();
     let mut samples = [Vec::new(), Vec::new()];

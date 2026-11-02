@@ -42,7 +42,7 @@ fn iop_source_form_profile() {
     let (view, mut context) = ProfileView {
         size: kurbo::Size::new(1400.0, 900.0),
         scale: 1.0,
-        root: None,
+        root: Some(crate::occurrence::of(&source_part(&doc))),
     }
     .prepare(&doc);
     profile_forms("IoP source", || {
@@ -63,7 +63,7 @@ fn cam_source_scroll_form_profile() {
     let (view, mut context) = ProfileView {
         size: kurbo::Size::new(600.0, 900.0),
         scale: 2.0,
-        root: None,
+        root: Some(crate::occurrence::of(&source_part(&doc))),
     }
     .prepare(&doc);
     let annotations = Annotations::default();
@@ -82,14 +82,16 @@ fn cam_source_scroll_form_profile() {
 #[ignore = "Layout navigation allocation count on Toolpaths source"]
 fn navigation_allocation_profile() {
     let doc = fixture(&cam_profile_source());
+    let source = source_part(&doc);
     let (view, mut context) = ProfileView {
         size: kurbo::Size::new(600.0, 900.0),
         scale: 2.0,
-        root: None,
+        root: Some(crate::occurrence::of(&source)),
     }
     .prepare(&doc);
     let annotations = Annotations::default();
-    let selection = make_selection(vec![]);
+    // The drawn root, the source, selected.
+    let selection = make_selection(source);
     profile_forms("Layout navigation", || {
         let mut frame = view.frame(&doc, &annotations);
         frame.selection = Some(&selection);

@@ -84,6 +84,13 @@ fn first_viewport(doc: &Document) -> gid::Path {
         .expect("example declares a viewport")
 }
 
+/// The part an example's root row shows beside its viewport: its source.
+fn source_part(doc: &Document) -> gid::Path {
+    <[_; 2]>::try_from(crate::workspace::panes(doc.root.as_ref()))
+        .map(|[_, source]| source)
+        .expect("example shows its source beside a viewport")
+}
+
 fn iop_tree() -> Document {
     fixture(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -101,6 +108,10 @@ fn iop_tree_profile_loop() {
         root: Some(crate::occurrence::of(&first_viewport(&doc))),
     };
     let (view, mut context) = view.prepare(&doc);
+    assert!(
+        view.viewport,
+        "profile target must be a viewport declaration"
+    );
     profile(
         "IoP picture, 500x500 @1",
         |_| context.frame(view.frame(&doc, &Annotations::default())).0,
@@ -115,9 +126,10 @@ fn iop_tree_source_profile_loop() {
     let view = ProfileView {
         size: kurbo::Size::new(1400.0, 900.0),
         scale: 1.0,
-        root: None,
+        root: Some(crate::occurrence::of(&source_part(&doc))),
     };
     let (view, mut context) = view.prepare(&doc);
+    assert!(!view.viewport, "an example's source isn't a viewport");
     profile(
         "IoP source, 1400x900 @1",
         |_| context.frame(view.frame(&doc, &Annotations::default())).0,
@@ -220,9 +232,10 @@ fn cam_source_profile(scrolling: bool) {
     let (view, mut context) = ProfileView {
         size: kurbo::Size::new(600.0, 900.0),
         scale: 2.0,
-        root: None,
+        root: Some(crate::occurrence::of(&source_part(doc))),
     }
     .prepare(doc);
+    assert!(!view.viewport, "an example's source isn't a viewport");
     profile(
         if scrolling {
             "CAM source scrolling, 600x900 @2"
@@ -335,6 +348,10 @@ fn fidget_orbit_profile(name: &str, source: &str) {
     context.stack.projection = context.stack.projection.preceded_by(observe.clone());
     context.stack.pane_projection = context.stack.pane_projection.preceded_by(observe);
     let (view, mut context) = view.prepare_with(&doc, context);
+    assert!(
+        view.viewport,
+        "profile target must be a viewport declaration"
+    );
     let first_image = std::cell::RefCell::new(None::<ImageData>);
     let changed = std::cell::Cell::new(false);
     profile(
@@ -429,6 +446,10 @@ fn cam_controls_profile_loop() {
     context.stack.projection = context.stack.projection.preceded_by(omitted.clone());
     context.stack.pane_projection = context.stack.pane_projection.preceded_by(omitted);
     let (view, mut context) = view.prepare_with(&doc, context);
+    assert!(
+        view.viewport,
+        "profile target must be a viewport declaration"
+    );
     profile(
         "CAM viewport/control pipeline, 400x600 @2, no 3D work",
         |_| context.frame(view.frame(&doc, &Annotations::default())).0,
