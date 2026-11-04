@@ -147,6 +147,17 @@ installation and every scan run inside the sandbox, with network access. The
 weekly
 [dependency check](dependency-checks.md) runs it along with `make outdated`.
 
+## Verus
+
+`make verify` runs the [Verus](verification.md) release pinned in
+`tools/verus-settings.sh`, a prebuilt download from GitHub rather than a crate.
+The wrappers' `verify` command downloads it with network access inside the
+sandbox, checks the archive against the SHA-256 digest recorded for the
+platform, unpacks it offline inside the sandbox into `target/sandbox/verus`, and
+runs it there offline. Choose a release at least seven days old, as for crates.
+The `verus_builtin_macros` crate that strips proofs from ordinary builds is an
+ordinary dependency, a procedural macro built in the sandbox like any other.
+
 ## npm packages
 
 JavaScript tooling lives in two npm packages, each with exact pins and its own

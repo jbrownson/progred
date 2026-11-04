@@ -28,6 +28,14 @@ empty.
   and Raw and switch a library off and on from the Projections menu, and
   switch between Light, Dark and Follow System Appearance.
 
+- **`make verify`.** The wrappers' `verify` command and
+  `tools/verus-settings.sh` ran on Linux only. On a Mac, install the 1.99.1
+  toolchain and run `make verify`: it should download the arm64 release, match
+  its recorded digest, unpack it under the Seatbelt profile, and prove
+  `gid/src/position.rs`. Its `rust_verify` finds the compiler's libraries only
+  through `DYLD_FALLBACK_LIBRARY_PATH`, which the command sets inside the
+  sandbox; see [verification](verification.md#running-it).
+
 ## Later
 
 - **Rust 1.100, due 12 November 2026.** Move the wrappers' `update` (and

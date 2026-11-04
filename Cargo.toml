@@ -45,6 +45,8 @@ skrifa = "0.44.0"
 ui-events = "0.3"
 uig = { path = "ui/uig" }
 vello = "0.11.0"
+# Exactly the release `make verify` runs; see docs/verification.md.
+verus_builtin_macros = "=0.0.0-2026-10-25-0158"
 volume = { path = "volume" }
 wasm-bindgen = "0.2"
 web-sys = "0.3"

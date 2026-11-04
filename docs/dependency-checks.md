@@ -13,8 +13,10 @@ to suggest one.
    incompatible releases, and outdated npm packages.
 3. Before applying an update, look at the packages it would add or remove, which
    `make outdated` lists, and at anything unexpected.
-4. Check the Rust toolchain with `rustup check`, and the vendored Fidget patches
-   against upstream (see [vendor/README.md](../vendor/README.md)).
+4. Check the Rust toolchain with `rustup check`, the vendored Fidget patches
+   against upstream (see [vendor/README.md](../vendor/README.md)), and whether
+   a newer Verus release is worth taking (see
+   [verification](verification.md#updating-verus)).
 5. Apply what's worth it through the update commands (see [build
    security](build-security.md)), then run `make test`, and `make perf` when the
    update could affect performance. Plan breaking upgrades separately.

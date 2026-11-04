@@ -13,7 +13,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf sweep audit outdated sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test verify test-vendor test-gpu test-web-gpu perf sweep audit outdated sandbox-app
 
 help:
 	@echo "Development:"
@@ -30,6 +30,7 @@ help:
 	@echo "  make build        Build the workspace"
 	@echo "  make test         Test the workspace, except the vendored Fidget packages"
 	@echo "                    (ARGS='NAME' runs only the tests whose names contain NAME)"
+	@echo "  make verify       Prove the Verus-verified source files (docs/verification.md)"
 	@echo "  make test-vendor  Test the vendored Fidget packages"
 	@echo "  make test-gpu     Run the tests that need a GPU"
 	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome (macOS)"
@@ -105,6 +106,11 @@ TEST := test --workspace --tests $(VENDORED:%=--exclude %)
 
 test:
 	$(NATIVE_CARGO) $(TEST) $(if $(ARGS),-- $(ARGS))
+
+# Verus's proofs of the files tools/verus-settings.sh lists. ARGS go to Verus,
+# such as ARGS='--expand-errors'.
+verify:
+	$(NATIVE_CARGO) verify $(ARGS)
 
 # Upstream's tests of the vendored packages, optimized as vendor/README.md
 # advises. Run them after changing a patch or upgrading Fidget. The binaries

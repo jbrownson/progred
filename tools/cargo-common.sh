@@ -64,6 +64,38 @@ use_publish_age_cargo() {
     use_toolchain "$web_toolchain"
 }
 
+# Downloads the pinned Verus release with network access, checks the archive
+# against its recorded digest, and unpacks it offline, all in the sandbox.
+fetch_verus() {
+    if [ -z "$verus_platform" ]; then
+        echo "$wrapper: no Verus release is pinned for $(uname -s) $(uname -m)" >&2
+        exit 1
+    fi
+    verus_dir="$build_root/verus"
+    archive="$verus_dir/verus-$verus_version-$verus_platform.zip"
+    staging="$verus_dir/staging"
+    mkdir -p "$verus_dir"
+    rm -rf "$staging" "$archive"
+    echo "$wrapper: downloading Verus $verus_version" >&2
+    run_sandboxed 1 0 /usr/bin/curl --fail --location --silent --show-error \
+        --output "$archive" \
+        "https://github.com/verus-lang/verus/releases/download/release%2F$verus_version/verus-$verus_version-$verus_platform.zip"
+    if command -v sha256sum >/dev/null 2>&1; then
+        digest=$(sha256sum "$archive")
+    else
+        digest=$(shasum -a 256 "$archive")
+    fi
+    if [ "${digest%% *}" != "$verus_digest" ]; then
+        echo "$wrapper: the Verus archive's digest is ${digest%% *}, not the pinned $verus_digest" >&2
+        rm -f "$archive"
+        exit 1
+    fi
+    run_sandboxed 0 0 unzip -q "$archive" -d "$staging"
+    rm -rf "$verus_root"
+    mv "$staging/verus-$verus_platform" "$verus_root"
+    rm -rf "$staging" "$archive"
+}
+
 cargo_command() {
     case ${1-} in
         fetch)
@@ -96,6 +128,31 @@ cargo_command() {
             fi
             run_sandboxed 1 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
             ;;
+        # Verus proves the files tools/verus-settings.sh lists. The first run
+        # downloads the pinned release with network access and checks its
+        # digest; the proofs run offline. Arguments go to every verus run.
+        verify)
+            shift
+            . "$tool_dir/verus-settings.sh"
+            use_toolchain "$verus_toolchain"
+            verus_root="$build_root/verus/$verus_version"
+            if [ ! -x "$verus_root/verus" ]; then
+                fetch_verus
+            fi
+            for file in $verus_verified; do
+                echo "verus: $file" >&2
+                # The verus launcher would find its toolchain through rustup,
+                # which the sandbox hides; it runs the toolchain's own
+                # libraries directly instead. env sets the library path inside
+                # the sandbox, since macOS drops DYLD_ variables when it
+                # starts a system program such as sandbox-exec.
+                run_sandboxed 0 0 /usr/bin/env VERUS_USE_RUSTUP=0 \
+                    LD_LIBRARY_PATH="$toolchain_root/lib" \
+                    DYLD_FALLBACK_LIBRARY_PATH="$toolchain_root/lib" \
+                    "$verus_root/verus" --crate-type=lib --edition=2024 \
+                    "$project_root/$file" "$@"
+            done
+            ;;
         # Browser workers rebuild std with atomics; native builds stay stable.
         # The fallback, for pages without shared memory, builds without them.
         web-threaded-fetch | web-threaded | web-fallback)
@@ -118,7 +175,7 @@ cargo_command() {
             fi
             ;;
         "")
-            echo "usage: tools/$wrapper audit | fetch | update | resolve | web-threaded-fetch | web-threaded <cargo command> | web-fallback <cargo command> | <cargo command> [arguments...]" >&2
+            echo "usage: tools/$wrapper audit | fetch | update | resolve | verify | web-threaded-fetch | web-threaded <cargo command> | web-fallback <cargo command> | <cargo command> [arguments...]" >&2
             exit 2
             ;;
         # Builds are offline; fetch the locked graph first if anything is

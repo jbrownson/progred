@@ -8,6 +8,13 @@ license.workspace = true
 getrandom.workspace = true
 imbl = "7"
 serde = { workspace = true, features = ["derive"] }
+# Strips the proofs from verified source, such as position.rs, in ordinary
+# builds; `make verify` checks them. See docs/verification.md.
+verus_builtin_macros.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[lints.rust]
+# Verus sets verus_only while it verifies; ordinary builds never do.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(verus_only)'] }

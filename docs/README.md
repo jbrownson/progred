@@ -25,6 +25,8 @@ Start with:
   and updates, and its log.
 - [Testing](testing.md): test layers, the headless driver, SVG captures, and
   opt-in GPU and performance tests.
+- [Verification](verification.md): Verus proofs, `make verify`, and what they
+  trust.
 - [Platforms](platforms.md): building and running on macOS, Linux, and the
   browser.
 
