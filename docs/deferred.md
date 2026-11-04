@@ -734,8 +734,9 @@ host the evaluation to reuse and its key, and the host would keep the memo, as
 the editor's `computations::memo` does for Rust boundaries. Future readers of
 ordered contributor sets must observe that set, not just a selected
 definition. Do not add an ad-hoc cache or event-specific relevance checks
-alongside this mechanism. Incremental lambda calculus and incremental Fidget
-algorithms are separate research.
+alongside this mechanism. Incremental Fidget algorithms are separate research;
+for incremental lambda calculus, see
+[derivative mode](#a-reference-grap-and-derivative-mode).
 
 The [2026-09-04 tree profile](history/tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
@@ -1132,6 +1133,49 @@ In October 2026, Grap's evaluator and its values took 70% of the IoP tree
 benchmark's instructions, malloc not counted, 24% of the layout FFI
 benchmark's, 19% of the forest slider's and 13% of CAM scrolling's, where
 Fidget took 25%.
+
+### A reference Grap and derivative mode
+
+From a November 2026 discussion, after Verus arrived to prove `gid::position`
+(see [verification](verification.md)). Two uses, neither started:
+
+- **A reference evaluator as Grap's definition.** A slow, simple evaluator,
+  written as Verus specification functions, would define what Grap means:
+  results, absents and their causes, effects and their order, remaining fuel
+  under `Context::burn`'s model, and the call origins click-to-source reads.
+  [`conformance.rs`](../progred/src/libraries/conformance.rs) is a hand-written
+  slice of it. The fast evaluator would be proven to match, so optimizations,
+  an LLM's included, need review only of the specification and the list of
+  trusted assumptions. The current evaluator's `Rc<dyn Fn>` closures and
+  `RefCell` caches are outside what Verus follows well, so the likely route is
+  a new, plainer evaluator proven against the reference, then made fast under
+  the proof. Much of the language is library code driving the evaluator through
+  `Context`, such as `match`, `let` and `do`, so the reference needs a contract
+  for that interface too. Fuel stays exact: an optimization that skips
+  evaluations burns their fuel, which works for work already measured but rules
+  out skipping work of unknown cost, such as dead code that might loop.
+- **Derivative mode.** Every value would be a jet, a value with its change, as
+  in Phil Freeman's [Purview](https://github.com/paf31/purescript-purview), and
+  any function, user-defined ones included, would run in normal or derivative
+  mode. GID's stable keys give one change structure for every value: patches
+  keyed by cell for records and by position for lists. Proofs would show each
+  change structure's laws, that each derivative agrees with its function
+  through a specification both share, and, once, the chain rule. Open
+  questions:
+  - A derivative-mode run still walks all the code. It pays only when it skips
+    parts whose inputs didn't change, which needs the previous run's
+    intermediate results and somewhere to keep them, such as a store keyed by
+    call path.
+  - Numbers change by replacement, since a float delta applied by addition
+    doesn't always give back the new value.
+  - A branch whose condition changes runs fresh. A changed closure is a
+    replacement, which keeps the proof first-order.
+  - The IoP tree's sequential random stream makes an early change reach every
+    later draw; a seed per branch would keep it local.
+  - Exact fuel needs each derivative to report the change in what a full
+    evaluation burns.
+  - AGENTS.md routes reuse across frames through `incremental`, so derivatives
+    either nest inside memos or that rule changes.
 
 ### Notebook and REPL
 

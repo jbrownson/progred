@@ -4,7 +4,8 @@
 Rust code: a function's specification states what it returns, and Verus, with
 the Z3 solver, checks every input against it rather than sampled ones.
 `make verify` runs it in the build sandbox. Today it proves the digit arithmetic
-under `gid::position::between`.
+under `gid::position::between`; [deferred work](deferred.md#a-reference-grap-and-derivative-mode)
+holds the larger plans.
 
 ## What is proven
 
