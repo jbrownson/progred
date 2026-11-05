@@ -5,9 +5,10 @@
 
 #[cfg(verus_only)]
 use crate::definition;
-use crate::definition::Reached;
 #[cfg(verus_only)]
 use crate::definition::{Definition, Outcome};
+use crate::definition::{Primitive, Reached};
+use crate::number::{binary, unary};
 use crate::value::*;
 use std::rc::Rc;
 use verus_builtin_macros::verus;
@@ -20,6 +21,7 @@ verus! {
 pub enum ExecDefinition {
     Grap(ExecValue),
     Foreign(ExecValue),
+    Primitive(ExecValue, Primitive),
 }
 
 /// What evaluating an expression came to, as the evaluator holds it.
@@ -40,6 +42,7 @@ pub open spec fn view_definition(definition: ExecDefinition) -> Definition {
     match definition {
         ExecDefinition::Grap(value) => Definition::Grap(view(value)),
         ExecDefinition::Foreign(value) => Definition::Foreign(view(value)),
+        ExecDefinition::Primitive(value, primitive) => Definition::Primitive(view(value), primitive),
     }
 }
 
@@ -85,6 +88,7 @@ fn definition_value(definition: &ExecDefinition) -> (value: &ExecValue)
     match definition {
         ExecDefinition::Grap(value) => value,
         ExecDefinition::Foreign(description) => description,
+        ExecDefinition::Primitive(description, _) => description,
     }
 }
 
@@ -535,6 +539,14 @@ fn through_cell(
         let (outcome, spent) = match resolve(host, cell) {
             None => (ExecOutcome::Done(missing_cell(cell)), 0),
             Some(ExecDefinition::Foreign(_)) => (ExecOutcome::Beyond, 0),
+            Some(ExecDefinition::Primitive(_, primitive)) => primitive_call(
+                primitive,
+                call_fields,
+                environment,
+                host,
+                stack,
+                rest,
+            ),
             Some(ExecDefinition::Grap(found)) => match first_resolving(stack.as_slice(), cell) {
                 Some(at) => (ExecOutcome::Done(cycle(stack, at, cell)), 0),
                 None => {
@@ -668,6 +680,89 @@ fn bind(
                 bind(rest, body, &bound, call_fields, environment, host, stack, fuel)
             },
         }
+    }
+}
+
+fn operand(
+    label: u128,
+    call_fields: &Vec<(u128, ExecValue)>,
+    environment: &Vec<(u128, ExecValue)>,
+    host: &[(u128, ExecDefinition)],
+    stack: &Vec<(u128, Reached)>,
+    fuel: usize,
+) -> (evaluated: (ExecOutcome, usize))
+    ensures
+        evaluated.1 <= fuel,
+        (view_outcome(evaluated.0), evaluated.1 as nat) == definition::operand(
+            label,
+            view_map(call_fields@),
+            view_map(environment@),
+            view_host(host@),
+            stack@,
+            fuel as nat,
+        ),
+    decreases fuel, 1nat, 0nat,
+{
+    match get(call_fields, label) {
+        Some(argument) => eval(argument, environment, host, stack, fuel),
+        None => (ExecOutcome::Done(missing_argument(label)), 0),
+    }
+}
+
+fn primitive_call(
+    primitive: &Primitive,
+    call_fields: &Vec<(u128, ExecValue)>,
+    environment: &Vec<(u128, ExecValue)>,
+    host: &[(u128, ExecDefinition)],
+    stack: &Vec<(u128, Reached)>,
+    fuel: usize,
+) -> (evaluated: (ExecOutcome, usize))
+    ensures
+        evaluated.1 <= fuel,
+        (view_outcome(evaluated.0), evaluated.1 as nat) == definition::primitive_call(
+            *primitive,
+            view_map(call_fields@),
+            view_map(environment@),
+            view_host(host@),
+            stack@,
+            fuel as nat,
+        ),
+    decreases fuel, 2nat, 0nat,
+{
+    match primitive {
+        Primitive::Binary { operation, left, right } => {
+            let (first, spent) = operand(*left, call_fields, environment, host, stack, fuel);
+            match first {
+                ExecOutcome::Done(first) => {
+                    let (second, more) = operand(
+                        *right,
+                        call_fields,
+                        environment,
+                        host,
+                        stack,
+                        fuel - spent,
+                    );
+                    match second {
+                        ExecOutcome::Done(second) => (
+                            ExecOutcome::Done(binary(operation, *left, &first, *right, &second)),
+                            spent + more,
+                        ),
+                        stopped => (stopped, spent + more),
+                    }
+                },
+                stopped => (stopped, spent),
+            }
+        },
+        Primitive::Unary { operation, operand: label } => {
+            let (value, spent) = operand(*label, call_fields, environment, host, stack, fuel);
+            match value {
+                ExecOutcome::Done(value) => (
+                    ExecOutcome::Done(unary(operation, *label, &value)),
+                    spent,
+                ),
+                stopped => (stopped, spent),
+            }
+        },
     }
 }
 

@@ -125,6 +125,188 @@ pub fn copy(value: &ExecValue) -> (copied: ExecValue)
     }
 }
 
+/// Whether two values are the same, as GID compares them.
+pub fn same_value(a: &ExecValue, b: &ExecValue) -> (same: bool)
+    ensures
+        same == (view(*a) == view(*b)),
+    decreases *a,
+{
+    match a {
+        ExecValue::Cell(x) => match b {
+            ExecValue::Cell(y) => *x == *y,
+            _ => false,
+        },
+        ExecValue::Blob(x) => match b {
+            ExecValue::Blob(y) => {
+                proof {
+                    assert(view(*a) == Value::Blob(x@));
+                    assert(view(*b) == Value::Blob(y@));
+                }
+                if x.len() != y.len() {
+                    return false;
+                }
+                let mut i = 0;
+                while i < x.len()
+                    invariant
+                        view(*a) == Value::Blob(x@),
+                        view(*b) == Value::Blob(y@),
+                        x@.len() == y@.len(),
+                        i <= x@.len(),
+                        forall|j: int| 0 <= j < i ==> x@[j] == y@[j],
+                    decreases x.len() - i,
+                {
+                    if x[i] != y[i] {
+                        proof {
+                            assert(x@[i as int] != y@[i as int]);
+                        }
+                        return false;
+                    }
+                    i += 1;
+                }
+                proof {
+                    assert(x@ =~= y@);
+                }
+                true
+            },
+            _ => false,
+        },
+        ExecValue::List(x) => match b {
+            ExecValue::List(y) => {
+                proof {
+                    assert(view(*a) == Value::List(view_elements(x@)));
+                    assert(view(*b) == Value::List(view_elements(y@)));
+                }
+                if x.len() != y.len() {
+                    proof {
+                        assert(view_elements(x@).len() != view_elements(y@).len());
+                    }
+                    return false;
+                }
+                let mut i = 0;
+                while i < x.len()
+                    invariant
+                        *a == ExecValue::List(*x),
+                        view(*a) == Value::List(view_elements(x@)),
+                        view(*b) == Value::List(view_elements(y@)),
+                        x@.len() == y@.len(),
+                        i <= x@.len(),
+                        forall|j: int| 0 <= j < i ==> view(#[trigger] x@[j]) == view(y@[j]),
+                    decreases x.len() - i,
+                {
+                    if !same_value(&x[i], &y[i]) {
+                        proof {
+                            assert(view_elements(x@)[i as int] != view_elements(y@)[i as int]);
+                        }
+                        return false;
+                    }
+                    i += 1;
+                }
+                proof {
+                    assert(view_elements(x@) =~= view_elements(y@));
+                }
+                true
+            },
+            _ => false,
+        },
+        ExecValue::Record(x) => match b {
+            ExecValue::Record(y) => {
+                proof {
+                    lemma_view_record(*x);
+                    lemma_view_record(*y);
+                }
+                let mut i = 0;
+                while i < x.len()
+                    invariant
+                        *a == ExecValue::Record(*x),
+                        i <= x@.len(),
+                        view(*a) == Value::Record(view_map(x@)),
+                        view(*b) == Value::Record(view_map(y@)),
+                        forall|j: int|
+                            0 <= j < i ==> view_map(y@).contains_key((#[trigger] x@[j]).0)
+                                && view_map(x@)[x@[j].0] == view_map(y@)[x@[j].0],
+                    decreases x.len() - i,
+                {
+                    let cell = x[i].0;
+                    proof {
+                        lemma_view_map_keys(x@, cell);
+                        assert(x@[i as int].0 == cell);
+                    }
+                    match get_index(x, cell) {
+                        Some(here) => match get_index(y, cell) {
+                            Some(there) => {
+                                if !same_value(&x[here].1, &y[there].1) {
+                                    return false;
+                                }
+                            },
+                            None => {
+                                return false;
+                            },
+                        },
+                        None => {
+                            return false;
+                        },
+                    }
+                    i += 1;
+                }
+                let mut j = 0;
+                while j < y.len()
+                    invariant
+                        j <= y@.len(),
+                        view(*a) == Value::Record(view_map(x@)),
+                        view(*b) == Value::Record(view_map(y@)),
+                        forall|k: int| 0 <= k < j ==> view_map(x@).contains_key((#[trigger] y@[k]).0),
+                    decreases y.len() - j,
+                {
+                    let present = has(x, y[j].0);
+                    if !present {
+                        proof {
+                            lemma_view_map_keys(y@, y@[j as int].0);
+                        }
+                        return false;
+                    }
+                    j += 1;
+                }
+                proof {
+                    assert forall|cell: u128| #[trigger]
+                        view_map(x@).contains_key(cell) implies view_map(y@).contains_key(cell)
+                        && view_map(x@)[cell] == view_map(y@)[cell] by {
+                        lemma_view_map_keys(x@, cell);
+                        let k = choose|k: int| 0 <= k < x@.len() && #[trigger] x@[k].0 == cell;
+                        assert(view_map(y@).contains_key(x@[k].0));
+                    }
+                    assert forall|cell: u128| #[trigger]
+                        view_map(y@).contains_key(cell) implies view_map(x@).contains_key(cell) by {
+                        lemma_view_map_keys(y@, cell);
+                        let k = choose|k: int| 0 <= k < y@.len() && #[trigger] y@[k].0 == cell;
+                        assert(view_map(x@).contains_key(y@[k].0));
+                    }
+                    assert(view_map(x@) =~= view_map(y@));
+                }
+                true
+            },
+            _ => false,
+        },
+    }
+}
+
+/// `{field: value}`.
+pub fn exec_single(field: u128, value: ExecValue) -> (made: ExecValue)
+    ensures
+        view(made) == Value::Record(map![field => view(value)]),
+{
+    let mut fields = Vec::new();
+    fields.push((field, value));
+    let fields = Rc::new(fields);
+    proof {
+        lemma_view_record(fields);
+        lemma_view_pairs_push(seq![], (field, value));
+        assert(fields@ =~= Seq::<(u128, ExecValue)>::empty().push((field, value)));
+        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
+        assert(view_map(fields@) =~= map![field => view(value)]);
+    }
+    ExecValue::Record(fields)
+}
+
 /// The pairs themselves, sharing their values' contents.
 pub fn copy_pairs(pairs: &Vec<(u128, ExecValue)>) -> (copied: Vec<(u128, ExecValue)>)
     ensures
@@ -146,13 +328,13 @@ pub fn copy_pairs(pairs: &Vec<(u128, ExecValue)>) -> (copied: Vec<(u128, ExecVal
     copied
 }
 
-/// The value under `cell`, when there is one: the last pair for it.
-pub fn get(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: Option<&ExecValue>)
+/// Where the value under `cell` is, when there is one: the last pair for it.
+pub fn get_index(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: Option<usize>)
     ensures
         match found {
-            Some(value) => view_map(pairs@).contains_key(cell) && view_map(pairs@)[cell] == view(
-                *value,
-            ),
+            Some(at) => at < pairs.len() && pairs@[at as int].0 == cell && view_map(
+                pairs@,
+            ).contains_key(cell) && view_map(pairs@)[cell] == view(pairs@[at as int].1),
             None => !view_map(pairs@).contains_key(cell),
         },
 {
@@ -176,7 +358,7 @@ pub fn get(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: Option<&ExecVa
             lemma_view_pairs_push(pairs@.subrange(0, i - 1), pairs@[i - 1]);
         }
         if pairs[i - 1].0 == cell {
-            return Some(&pairs[i - 1].1);
+            return Some(i - 1);
         }
         i -= 1;
     }
@@ -184,6 +366,53 @@ pub fn get(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: Option<&ExecVa
         assert(view_pairs(pairs@.subrange(0, 0)) =~= Seq::<(u128, Value)>::empty());
     }
     None
+}
+
+/// The value under `cell`, when there is one: the last pair for it.
+pub fn get(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: Option<&ExecValue>)
+    ensures
+        match found {
+            Some(value) => view_map(pairs@).contains_key(cell) && view_map(pairs@)[cell] == view(
+                *value,
+            ),
+            None => !view_map(pairs@).contains_key(cell),
+        },
+{
+    match get_index(pairs, cell) {
+        Some(at) => Some(&pairs[at].1),
+        None => None,
+    }
+}
+
+/// A record's fields are the cells its pairs name.
+pub proof fn lemma_view_map_keys(pairs: Seq<(u128, ExecValue)>, cell: u128)
+    ensures
+        view_map(pairs).contains_key(cell) <==> exists|j: int|
+            0 <= j < pairs.len() && #[trigger] pairs[j].0 == cell,
+    decreases pairs.len(),
+{
+    if pairs.len() == 0 {
+        assert(view_pairs(pairs) =~= Seq::<(u128, Value)>::empty());
+    } else {
+        let init = pairs.drop_last();
+        assert(pairs =~= init.push(pairs.last()));
+        lemma_view_pairs_push(init, pairs.last());
+        lemma_view_map_keys(init, cell);
+        if view_map(pairs).contains_key(cell) {
+            if pairs.last().0 == cell {
+                assert(pairs[pairs.len() - 1].0 == cell);
+            } else {
+                let j = choose|j: int| 0 <= j < init.len() && #[trigger] init[j].0 == cell;
+                assert(pairs[j] == init[j]);
+            }
+        }
+        if exists|j: int| 0 <= j < pairs.len() && #[trigger] pairs[j].0 == cell {
+            let j = choose|j: int| 0 <= j < pairs.len() && #[trigger] pairs[j].0 == cell;
+            if j < pairs.len() - 1 {
+                assert(init[j] == pairs[j]);
+            }
+        }
+    }
 }
 
 /// Whether there is a value under `cell`.
@@ -357,5 +586,30 @@ pub const INVALID_PARAMETER: u128 = 0x93ca0e9199372c46ee24bd4c508e178c;
 pub const NOT_CALLABLE: u128 = 0x8624488c2d10d2a4b84560dfa99a38e6;
 
 pub const MISSING_ARGUMENT: u128 = 0x8b2f0db36e5c3d35595eb5666cc89c78;
+
+/// Why a function couldn't use its arguments, carrying why each it couldn't
+/// use under its label.
+pub const INVALID_ARGUMENTS: u128 = 0xaeb37f359ed1437cbc1adee0a05ac60f;
+
+// The number and boolean conventions Grap holds natively, the same
+// identities as in grap's f64, f32, u64 and logic modules.
+
+pub const F64: u128 = 0xed11fde03b7c2c1ba2fccc3cdba5d561;
+
+pub const NOT_F64: u128 = 0x4aabc44d46a2402dbb9ef64e377632db;
+
+pub const F32: u128 = 0x64810cfeb0631ca8875e282d1ad4af79;
+
+pub const NOT_F32: u128 = 0x6a124272d8df415ab944020cd1fd352b;
+
+pub const U64: u128 = 0xfc77282178c2fa31b80aed2b8b6f7888;
+
+pub const NOT_U64: u128 = 0xae77a805a7ce41dbac03b292d2685918;
+
+pub const BOOL: u128 = 0xb2d13b64336a9e808133d0c7d5e4981e;
+
+pub const TRUE: u128 = 0x04831f9b704935059231eb111770e62e;
+
+pub const FALSE: u128 = 0x8fcc0a2e5f26c72efd9e917a28919801;
 
 } // verus!
