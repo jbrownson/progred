@@ -1149,15 +1149,19 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
   trusted assumptions. Fuel stays exact: an optimization that skips
   evaluations burns their fuel, which works for work already measured but rules
   out skipping work of unknown cost, such as dead code that might loop.
-  - The first slice exists: [`grap-reference`](../grap-reference/src/definition.rs)
-    defines the core, without foreign functions or origins, with an executable
-    evaluator proven to compute it, and Grap's evaluator agrees with it on the
-    tests in `grap/src/reference_tests.rs`. See
+  - Two slices exist: [`grap-reference`](../grap-reference/src/definition.rs)
+    defines the core, and the number operations Grap runs natively, without
+    other foreign functions or origins, with an executable evaluator proven to
+    compute it, and Grap's evaluator agrees with it on the tests in
+    `grap/src/reference_tests.rs`. See
     [verification](verification.md#graps-core).
-  - Next, in order: the number primitives; the control functions, `match`,
-    `let`, `do`, `all` and `quote`, which drive the evaluator through
-    `Context`, so the definition needs a contract for that interface too;
-    effects; and the call origins click-to-source reads.
+  - The tests register the number operations as the numbers library does, but
+    under cells of their own, so nothing yet checks the library's table, which
+    cell it registers each operation under.
+  - Next, in order: the control functions, `match`, `let`, `do`, `all` and
+    `quote`, which drive the evaluator through `Context`, so the definition
+    needs a contract for that interface too; effects; and the call origins
+    click-to-source reads.
   - Then the fast evaluator. The current one's `Rc<dyn Fn>` closures and
     `RefCell` caches are outside what Verus follows well, so the likely route
     is a new, plainer evaluator proven against the definition, then made fast

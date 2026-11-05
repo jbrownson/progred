@@ -5,8 +5,9 @@ Rust code: a function's specification states what it returns, and Verus, with
 the Z3 solver, checks every input against it rather than sampled ones.
 `make verify` runs it in the build sandbox. Today it proves the digit arithmetic
 under `gid::position::between`, and an evaluator that computes exactly what
-Grap's core is defined to mean; [deferred work](deferred.md#a-reference-grap-and-derivative-mode)
-holds the larger plans.
+Grap's core, number operations included, is defined to mean;
+[deferred work](deferred.md#a-reference-grap-and-derivative-mode) holds the
+larger plans.
 
 ## What is proven
 
@@ -32,9 +33,10 @@ means: a slow, simple evaluator written as Verus specification functions, the
 law of how the core works. The core is what Grap's evaluator does itself:
 cells, lambdas, calls, value wrappers, closures, the absents those come to, and
 fuel, which is exact, one unit per expression evaluated as `Context::burn`
-documents. A program that calls a foreign function leaves the core, and the
-definition says so rather than guessing, so the libraries' functions aren't
-defined yet.
+documents; and the number operations it runs natively, which the numbers
+library registers as primitives. A program that calls any other foreign
+function leaves the core, and the definition says so rather than guessing, so
+the rest of the libraries' functions aren't defined yet.
 
 The definition reads GID values as they mean, not as they're stored: a record,
 and so an environment, maps cells to values, and a list is its elements in
@@ -44,10 +46,30 @@ the definition never needs a second notion of value. Evaluation reports the
 fuel it spent, and callers pass on only what's left, which makes the
 definition's termination visible to Verus.
 
+The number operations are the library's: f64 and f32 arithmetic and
+comparisons, f64's `sin`, `cos`, `floor`, `ceil` and `is_finite`, and u64's
+arithmetic, which fails rather than wrapping. A call to one evaluates its
+operands in label order and reads each as a number of the operation's type, a
+record whose tag holds exactly that type's bytes, whatever else it holds. When
+one isn't, the call comes to "invalid arguments", carrying why under each label
+by the rule Grap's `absent::caused_by_all` follows: an absent the same as one
+before it isn't repeated, and when the longest chain of causes among them
+reaches the limit, that cause passes on as it is rather than growing.
+
+u64 arithmetic is defined exactly. The float operations are named rather than
+defined, as Rust computes them on the platform the evaluator runs on: IEEE 754
+defines most of their results, but Rust leaves a NaN's sign and payload, which
+of two equal zeros `min` and `max` answer, and how closely `hypot`, `sin` and
+`cos` round to the platform. The definition holds Grap to whatever Rust
+computes for them.
+
 [`evaluator.rs`](../grap-reference/src/evaluator.rs) is the same evaluator as
 code that runs, and Verus proves it computes exactly what the definition says
 for every program, host and budget: result, fuel left and completion.
-`value.rs` holds the model and the cells Grap's vocabulary names.
+`value.rs` holds the model and the cells Grap's vocabulary names, and
+`absent.rs` and `number.rs` the evaluator's absents and numbers. `absent.rs`
+compares chains of causes without counting them, so no count overflows,
+however deep an absent a program writes.
 
 The definition is the part to read, and it records two behaviours the
 evaluator has that nothing else had written down:
@@ -61,11 +83,16 @@ evaluator has that nothing else had written down:
 Grap's own tests, in [`grap/src/reference_tests.rs`](../grap/src/reference_tests.rs),
 check its real evaluator against the proven one: on the core cases of
 `conformance.rs`, with their pinned results and fuel, on the behaviours above,
-and on 20,000 generated programs, about 19,500 of which stay in the core. The
-comparison leaves out the source origins closures carry for click-to-source,
-which the core doesn't define yet. When the evaluator changes what the core
-does, these tests fail, and either the definition changes with it, deliberately,
-or the evaluator is wrong.
+and on 20,000 generated programs, about 19,500 of which stay in the core. They
+register the number operations as the numbers library does, and check every
+one on every pair from a spread of operands, NaNs with payloads, infinities,
+zeros of both signs, subnormals, u64's limits and values of the wrong type or
+none, with the invalid-arguments rule's cases pinned, and on 20,000 more
+generated programs that call them, about 19,500 of which stay within the
+definition. The comparison leaves out the source origins closures carry for
+click-to-source, which the core doesn't define yet. When the evaluator changes
+what the core does, these tests fail, and either the definition changes with
+it, deliberately, or the evaluator is wrong.
 
 ## What is trusted
 
@@ -84,10 +111,16 @@ or the evaluator is wrong.
 - For Grap's core, that the definition says what Grap should mean. The proof
   ties the reference evaluator to it, and the tests tie Grap's evaluator to the
   reference evaluator, on the programs they try rather than all of them.
+- For the float operations, that `float_binary` and `float_unary` in
+  [`number.rs`](../grap-reference/src/number.rs) compute what the definition
+  names: they run Rust's operations on the operands' bytes, in plain code
+  beside them. Where Rust leaves a result to the platform, it lets it differ
+  even between two runs of one operation, which the trust assumes it doesn't;
+  the tests compare the results with Grap's own on the same machine.
 
-The proofs use no `assume`, `admit` or `external_body`, Verus's ways to accept
-a claim unchecked. Once more code is verified, `make verify` should reject them
-outside a reviewed list.
+The proofs use no `assume` or `admit`, and `external_body`, Verus's way to
+accept a function unchecked, only on those two float functions. Once more code
+is verified, `make verify` should reject them outside a reviewed list.
 
 ## Running it
 
