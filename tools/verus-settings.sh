@@ -8,7 +8,7 @@ verus_version=0.2026.10.26.d17fbd0
 verus_toolchain=1.99.1
 
 # The files Verus proves, each checked on its own as a crate root.
-verus_verified='gid/src/position.rs'
+verus_verified='gid/src/position.rs grap-reference/src/lib.rs'
 
 case "$(uname -s)-$(uname -m)" in
     Linux-x86_64)

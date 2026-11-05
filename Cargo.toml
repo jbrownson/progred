@@ -4,6 +4,7 @@ members = [
     "cam",
     "gid",
     "grap",
+    "grap-reference",
     "incremental",
     "progred",
     "ui/measured",
@@ -32,6 +33,7 @@ cam = { path = "cam" }
 fidget-engine = { package = "fidget", version = "0.5.1", default-features = false }
 getrandom = "0.3"
 gid = { path = "gid" }
+grap-reference = { path = "grap-reference" }
 incremental = { path = "incremental" }
 kurbo = "0.13.1"
 parley = "0.11.1"

@@ -1,0 +1,14 @@
+[package]
+name = "grap-reference"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+# Strips the definition and proofs from ordinary builds; `make verify` checks
+# them. See docs/verification.md.
+verus_builtin_macros.workspace = true
+
+[lints.rust]
+# Verus sets verus_only while it verifies; ordinary builds never do.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(verus_only)'] }
