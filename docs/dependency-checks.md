@@ -24,6 +24,40 @@ to suggest one.
 
 ## Log
 
+- 2026-11-05 (`d121dc44`), on a cloud VM.
+  - **Advisories:** Cargo reports RUSTSEC-2026-0192, `ttf-parser` unmaintained
+    through winit, still waiting on winit 0.31; RUSTSEC-2026-0386, tokio
+    1.53.2's unsound `AsyncFd` constructors, fixed from 1.53.3 (tokio is in the
+    lockfile only through `wasm-bindgen-futures` for Emscripten, so it isn't
+    built); and a yanked `clipboard-win` 5.4.1. The website's Wrangler 4.149.0
+    brought `undici` advisories through miniflare, one high and two moderate.
+    The tools package is clean.
+  - **Applied:** compatible Cargo updates to 46 packages, through the sandboxed
+    `update`, among them icu 2.4, tokio 1.54.1 and `clipboard-win` 5.4.3.
+    Nothing is new to the lockfile; `icu_segmenter` 2.4 now uses `zerotrie`,
+    already there. The website's Wrangler to 4.155.0, the newest past the
+    cutoff, through `tools/npm-update`; it brings `undici` 7.30.1, outside the
+    advisories' range. `make audit` now reports only RUSTSEC-2026-0192.
+    `make test` passes, and `npm ci` with install scripts off and a dry-run
+    deploy both work.
+  - **Toolchain:** stable is 1.99.1, the toolchain `make verify` pins. Rust
+    1.100 follows on 12 November, when the wrappers' `update` can move to
+    stable Cargo (see [macOS follow-ups](macos-followups.md)).
+  - **Fidget:** no release after 0.5.1, and none of the patches are upstream.
+    Upstream's main has a new `fidget-wgpu` architecture
+    ([#510](https://github.com/mkeeter/fidget/pull/510)), which the GPU spill
+    rejection patch will need reworking for at the next release.
+  - **Verus:** 0.2026.11.02 passes the cutoff on 9 November.
+  - **Deferred:** breaking upgrades to parley 0.12, pollster 1.0, getrandom
+    0.4, and base64 0.23 for tests; skrifa 0.49 waits on Vello and parley,
+    which require 0.44. Under the cutoff: wasm-bindgen 0.2.130 with js-sys and
+    web-sys, and `utf8_iter` 1.1.0, until 6 November; `log` 0.4.35 until 7
+    November; `winnow` 1.0.5 until 12 November.
+- 2026-10-15 (`553ecf64`), the Wrangler update due from the first check.
+  - **Applied:** the website's Wrangler from 4.136.1 to 4.149.0, through
+    `tools/npm-update`, which clears the `undici` and `sharp` advisories it
+    brought through miniflare. `make audit` now reports only RUSTSEC-2026-0192.
+    `npm ci` with install scripts off and a dry-run deploy both work.
 - 2026-10-11 (`21a3216b`), the first logged check.
   - **Advisories:** Cargo reports only RUSTSEC-2026-0192, `ttf-parser`
     unmaintained, through winit; it waits on winit 0.31. The website's Wrangler
@@ -47,8 +81,3 @@ to suggest one.
     0.48 waits on Vello and parley, which require 0.44.
   - **Also today:** Linux builds now run in a namespace sandbox like the macOS
     one.
-- 2026-10-15 (`553ecf64`), the Wrangler update due from the first check.
-  - **Applied:** the website's Wrangler from 4.136.1 to 4.149.0, through
-    `tools/npm-update`, which clears the `undici` and `sharp` advisories it
-    brought through miniflare. `make audit` now reports only RUSTSEC-2026-0192.
-    `npm ci` with install scripts off and a dry-run deploy both work.
