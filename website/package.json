@@ -6,6 +6,6 @@
     "stage": "wrangler versions upload --preview-alias staged"
   },
   "devDependencies": {
-    "wrangler": "4.149.0"
+    "wrangler": "4.155.0"
   }
 }
