@@ -1163,9 +1163,40 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
     needs a contract for that interface too; effects; and the call origins
     click-to-source reads.
   - Then the fast evaluator. The current one's `Rc<dyn Fn>` closures and
-    `RefCell` caches are outside what Verus follows well, so the likely route
-    is a new, plainer evaluator proven against the definition, then made fast
-    under the proof.
+    `RefCell` caches are outside what Verus follows well, so the route is a
+    new evaluator proven against the definition, made fast under the proof.
+    A first one exists for the core and numbers:
+    [`fast.rs`](../grap-reference/src/fast.rs) lowers code once, holds
+    closures and numbers as runtime values and environments as shared frames,
+    and Verus proves it computes the definition exactly, with about 1,400
+    lines of specification and proof for 900 of code. On the timing programs
+    in `grap/src/reference_tests.rs` (`evaluator_speed`, in microseconds per
+    evaluation on a 4-core VM in November 2026) it beats Grap's evaluator on
+    all five, partly because Grap also tracks click-to-source origins and
+    compiles every node into a closure on each evaluation:
+
+    | Program | Grap | Reference | Fast |
+    | --- | --- | --- | --- |
+    | 1,023 operations, run once | 729 | 108 | 124 |
+    | 2,047 closures called through cells | 374 | 1,249 | 253 |
+    | 255 operations under 20 frames | 106 | 31 | 28 |
+    | 255 operations run 64 times | 1,281 | 1,949 | 715 |
+    | A cell calling itself until fuel runs out | 113 | 2,454 | 95 |
+
+    Next: grow it with the definition, lower a host's definitions once rather
+    than per evaluation, then run Grap's evaluation through it.
+  - Variables can't get slots fixed ahead of time: a cell's definition is
+    evaluated where it's referenced, so the same code runs under different
+    environments, and recursion through a cell grows the environment a frame
+    per call. Lookups stay dynamic; skipping the frames for a cell nothing
+    binds keeps them cheap, and proving the skip takes an invariant over
+    every environment. Calling a closure written as data, which can bind any
+    cell, turns the skip off for the rest of that evaluation.
+  - Float NaNs can differ between places that run the same operation, since
+    Rust leaves their sign and payload unspecified, and the tests have seen
+    it. Making every NaN result the same NaN in Grap would make float results
+    deterministic and let the definition say what they are; until then the
+    tests compare NaNs as NaNs.
   - Two behaviours the definition records are open questions: whether calling
     a cell whose definition comes to an absent should answer that it isn't
     callable, as calling a binding to one does, and whether a reference should

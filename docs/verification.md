@@ -4,10 +4,10 @@
 Rust code: a function's specification states what it returns, and Verus, with
 the Z3 solver, checks every input against it rather than sampled ones.
 `make verify` runs it in the build sandbox. Today it proves the digit arithmetic
-under `gid::position::between`, and an evaluator that computes exactly what
-Grap's core, number operations included, is defined to mean;
-[deferred work](deferred.md#a-reference-grap-and-derivative-mode) holds the
-larger plans.
+under `gid::position::between`, and two evaluators that compute exactly what
+Grap's core, number operations included, is defined to mean: a simple one, and
+one built for speed. [Deferred work](deferred.md#a-reference-grap-and-derivative-mode)
+holds the larger plans.
 
 ## What is proven
 
@@ -71,6 +71,20 @@ for every program, host and budget: result, fuel left and completion.
 compares chains of causes without counting them, so no count overflows,
 however deep an absent a program writes.
 
+[`fast.rs`](../grap-reference/src/fast.rs) is a second evaluator, proven the
+same way, built the way a fast one is: expressions lowered once into nodes,
+closures and numbers held as runtime values rather than records, environments
+as shared frames rather than copies, host cells resolved when code is lowered,
+and a sorted set of every cell a lambda binds, so looking up any other cell
+skips the frames. Its proof relates each structure to what it means, a runtime
+value to the GID value it materializes as, frames to the environment they
+make, lowered code to the expressions it came from, and shows each step does
+what the definition's does to those meanings. On the timing programs in
+`grap/src/reference_tests.rs` it is faster than Grap's evaluator, which also
+does what the definition leaves out, such as tracking click-to-source origins;
+[deferred work](deferred.md#a-reference-grap-and-derivative-mode) has the
+numbers.
+
 The definition is the part to read, and it records two behaviours the
 evaluator has that nothing else had written down:
 
@@ -81,7 +95,7 @@ evaluator has that nothing else had written down:
   defined as a reference to itself evaluates its definition twice first.
 
 Grap's own tests, in [`grap/src/reference_tests.rs`](../grap/src/reference_tests.rs),
-check its real evaluator against the proven one: on the core cases of
+check its real evaluator against the proven ones: on the core cases of
 `conformance.rs`, with their pinned results and fuel, on the behaviours above,
 and on 20,000 generated programs, about 19,500 of which stay in the core. They
 register the number operations as the numbers library does, and check every
@@ -90,9 +104,10 @@ zeros of both signs, subnormals, u64's limits and values of the wrong type or
 none, with the invalid-arguments rule's cases pinned, and on 20,000 more
 generated programs that call them, about 19,500 of which stay within the
 definition. The comparison leaves out the source origins closures carry for
-click-to-source, which the core doesn't define yet. When the evaluator changes
-what the core does, these tests fail, and either the definition changes with
-it, deliberately, or the evaluator is wrong.
+click-to-source, which the core doesn't define yet, and compares a float NaN as
+any NaN, since Rust leaves its sign and payload unspecified. When the evaluator
+changes what the core does, these tests fail, and either the definition changes
+with it, deliberately, or the evaluator is wrong.
 
 ## What is trusted
 
@@ -112,14 +127,18 @@ it, deliberately, or the evaluator is wrong.
   ties the reference evaluator to it, and the tests tie Grap's evaluator to the
   reference evaluator, on the programs they try rather than all of them.
 - For the float operations, that `float_binary` and `float_unary` in
-  [`number.rs`](../grap-reference/src/number.rs) compute what the definition
-  names: they run Rust's operations on the operands' bytes, in plain code
-  beside them. Where Rust leaves a result to the platform, it lets it differ
-  even between two runs of one operation, which the trust assumes it doesn't;
-  the tests compare the results with Grap's own on the same machine.
+  [`number.rs`](../grap-reference/src/number.rs), which both evaluators call,
+  compute what the definition names: they run Rust's operations on the
+  operands' bits, in plain code beside them. Where Rust leaves a result to the
+  platform, it lets it differ even between two places that run one operation,
+  which the trust assumes it doesn't, and it does happen: one f64 operation on
+  NaNs of both signs answered `+NaN` in Grap's evaluator and `−NaN` in the
+  reference's. The tests compare NaNs as NaNs for that reason.
 
 The proofs use no `assume` or `admit`, and `external_body`, Verus's way to
-accept a function unchecked, only on those two float functions. Once more code
+accept a function unchecked, only on those two float functions.
+`loop_isolation(false)`, on a few functions, only lets a loop's body see what
+was known before it, and `rlimit` only gives one proof more time. Once more code
 is verified, `make verify` should reject them outside a reviewed list.
 
 ## Running it
@@ -137,7 +156,7 @@ Verus needs the toolchain its release was built with, named in
 that release from GitHub, about 450–490 MB, checks the archive against the
 SHA-256 digest recorded there for the platform, and unpacks it, about 1.6 GB,
 into `target/sandbox/verus`. It needs `curl` and `unzip`. Later runs are
-offline and take about a second per verified file. Arguments to Verus go in
+offline: `position.rs` takes about a second, `grap-reference` about fifteen. Arguments to Verus go in
 `ARGS`, such as `make verify ARGS='--expand-errors'`, which explains a failed
 proof in more detail.
 
