@@ -26,6 +26,8 @@ robustness tend to follow.
   `deferred.md`, `puri.md`, `toolpaths.md` and `model.md`, are references:
   search them for the section a change needs rather than reading them whole.
 - `docs/build-security.md`: the build sandbox and dependency policy.
+- `docs/verification.md`: what Verus proves, `make verify`, and what the
+  proofs trust, including `grap-reference`, the definition of Grap's core.
 - `docs/dependency-checks.md`: the weekly dependency and security check, and
   its log.
 - `vendor/README.md`: vendored dependencies and their local patches.
@@ -56,8 +58,10 @@ superseded notes to `docs/history/`.
   `docs/gid.md`.
 - Commit when it makes sense, and keep unrelated changes in separate commits;
   don't bundle housekeeping with feature work. Before pushing, run
-  `cargo fmt --all -- --check` and `make test`. When pushing to a session
-  branch, add commits as work proceeds and rewrite its history only when asked.
+  `cargo fmt --all -- --check` and `make test`, and `make verify` after
+  changing a file it proves (`tools/verus-settings.sh` lists them). When
+  pushing to a session branch, add commits as work proceeds and rewrite its
+  history only when asked.
 - While iterating, run only the tests that cover the change, with
   `make test ARGS='<filter>'`, which reuses the full run's build; selecting a
   package with `-p` builds much of the graph again. A test build checks the code
@@ -184,6 +188,9 @@ upstream when it can be.
   `std::array::from_fn` over mutable accumulators and loops where it doesn't
   make things worse.
 - Avoid `let mut` when a functional alternative is equally clear.
+- Code Verus proves is the exception to the two rules above: write it the way
+  Verus can follow, with loops and invariants, and the standard library calls
+  vstd specifies; see `docs/verification.md`.
 - No `isX()` predicate methods; use `matches!` or pattern matching at the call
   site.
 - Eliminate partial functions: use `split_first`/`split_last` over manual
