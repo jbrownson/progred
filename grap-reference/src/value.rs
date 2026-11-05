@@ -415,6 +415,66 @@ pub proof fn lemma_view_map_keys(pairs: Seq<(u128, ExecValue)>, cell: u128)
     }
 }
 
+/// A map built from pairs has a cell when some pair names it.
+pub proof fn lemma_to_map_keys(pairs: Seq<(u128, Value)>, cell: u128)
+    ensures
+        to_map(pairs).contains_key(cell) <==> exists|i: int|
+            0 <= i < pairs.len() && #[trigger] pairs[i].0 == cell,
+    decreases pairs.len(),
+{
+    if pairs.len() > 0 {
+        let init = pairs.drop_last();
+        lemma_to_map_keys(init, cell);
+        if to_map(pairs).contains_key(cell) && pairs.last().0 != cell {
+            let i = choose|i: int| 0 <= i < init.len() && #[trigger] init[i].0 == cell;
+            assert(pairs[i] == init[i]);
+        }
+        if exists|i: int| 0 <= i < pairs.len() && #[trigger] pairs[i].0 == cell {
+            let i = choose|i: int| 0 <= i < pairs.len() && #[trigger] pairs[i].0 == cell;
+            if i < pairs.len() - 1 {
+                assert(init[i] == pairs[i]);
+            }
+        }
+    }
+}
+
+/// What a map built from pairs holds under a cell is its last pair's.
+pub proof fn lemma_to_map_last(pairs: Seq<(u128, Value)>, i: int)
+    requires
+        0 <= i < pairs.len(),
+        forall|j: int| i < j < pairs.len() ==> #[trigger] pairs[j].0 != pairs[i].0,
+    ensures
+        to_map(pairs).contains_key(pairs[i].0),
+        to_map(pairs)[pairs[i].0] == pairs[i].1,
+    decreases pairs.len(),
+{
+    if i < pairs.len() - 1 {
+        let init = pairs.drop_last();
+        assert(init[i] == pairs[i]);
+        assert forall|j: int| i < j < init.len() implies #[trigger] init[j].0 != init[i].0 by {
+            assert(init[j] == pairs[j]);
+        }
+        lemma_to_map_last(init, i);
+    }
+}
+
+/// Later pairs replace what they name.
+pub proof fn lemma_to_map_concat(first: Seq<(u128, Value)>, second: Seq<(u128, Value)>)
+    ensures
+        to_map(first + second) == to_map(first).union_prefer_right(to_map(second)),
+    decreases second.len(),
+{
+    if second.len() == 0 {
+        assert(first + second =~= first);
+        assert(to_map(first).union_prefer_right(to_map(second)) =~= to_map(first));
+    } else {
+        lemma_to_map_concat(first, second.drop_last());
+        assert((first + second).drop_last() =~= first + second.drop_last());
+        assert((first + second).last() == second.last());
+        assert(to_map(first + second) =~= to_map(first).union_prefer_right(to_map(second)));
+    }
+}
+
 /// Whether there is a value under `cell`.
 pub fn has(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: bool)
     ensures

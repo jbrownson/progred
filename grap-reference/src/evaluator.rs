@@ -92,7 +92,7 @@ fn definition_value(definition: &ExecDefinition) -> (value: &ExecValue)
     }
 }
 
-fn first_resolving(stack: &[(u128, Reached)], cell: u128) -> (at: Option<usize>)
+pub(crate) fn first_resolving(stack: &[(u128, Reached)], cell: u128) -> (at: Option<usize>)
     ensures
         match at {
             Some(at) => definition::first_resolving(stack@, cell) == Some(at as int) && at
@@ -117,7 +117,7 @@ fn first_resolving(stack: &[(u128, Reached)], cell: u128) -> (at: Option<usize>)
     }
 }
 
-fn referenced_at(stack: &[(u128, Reached)], cell: u128) -> (at: Option<usize>)
+pub(crate) fn referenced_at(stack: &[(u128, Reached)], cell: u128) -> (at: Option<usize>)
     ensures
         match at {
             Some(at) => definition::referenced_at(stack@, cell) == Some(at as int) && at
@@ -170,7 +170,7 @@ fn resolving(stack: &Vec<(u128, Reached)>, cell: u128, reached: Reached) -> (pus
     pushed
 }
 
-fn cycle(stack: &Vec<(u128, Reached)>, at: usize, cell: u128) -> (made: ExecValue)
+pub(crate) fn cycle(stack: &Vec<(u128, Reached)>, at: usize, cell: u128) -> (made: ExecValue)
     requires
         at < stack.len(),
     ensures
@@ -212,21 +212,21 @@ fn cycle(stack: &Vec<(u128, Reached)>, at: usize, cell: u128) -> (made: ExecValu
     exec_absent(CELL_CYCLE, CYCLE, list)
 }
 
-fn missing_cell(cell: u128) -> (made: ExecValue)
+pub(crate) fn missing_cell(cell: u128) -> (made: ExecValue)
     ensures
         view(made) == definition::missing_cell(cell),
 {
     exec_absent(MISSING_CELL, ABSENT_CELL, ExecValue::Cell(cell))
 }
 
-fn missing_argument(parameter: u128) -> (made: ExecValue)
+pub(crate) fn missing_argument(parameter: u128) -> (made: ExecValue)
     ensures
         view(made) == definition::missing_argument(parameter),
 {
     exec_absent(MISSING_ARGUMENT, ABSENT_CELL, ExecValue::Cell(parameter))
 }
 
-fn parameters(params: &[ExecValue]) -> (parsed: Result<Vec<u128>, ExecValue>)
+pub(crate) fn parameters(params: &[ExecValue]) -> (parsed: Result<Vec<u128>, ExecValue>)
     ensures
         match (parsed, definition::parameters(view_elements(params@))) {
             (Ok(cells), Ok(spec_cells)) => cells@ == spec_cells,
@@ -324,7 +324,7 @@ fn lambda(fields: &Rc<Vec<(u128, ExecValue)>>, environment: &Vec<(u128, ExecValu
     }
 }
 
-fn closure(callable: &ExecValue) -> (parts: Option<(Vec<u128>, &ExecValue, &Vec<(u128, ExecValue)>)>)
+pub(crate) fn closure(callable: &ExecValue) -> (parts: Option<(Vec<u128>, &ExecValue, &Vec<(u128, ExecValue)>)>)
     ensures
         match (parts, definition::closure(view(*callable))) {
             (Some((params, body, captured)), Some((spec_params, spec_body, spec_captured))) =>
@@ -364,7 +364,7 @@ fn closure(callable: &ExecValue) -> (parts: Option<(Vec<u128>, &ExecValue, &Vec<
     }
 }
 
-fn named_cell(callable: &ExecValue) -> (cell: Option<u128>)
+pub(crate) fn named_cell(callable: &ExecValue) -> (cell: Option<u128>)
     ensures
         cell == definition::named_cell(view(*callable)),
 {

@@ -1,6 +1,7 @@
 //! Grap's core, defined: what it means, as Verus specification functions in
-//! `definition`, and an evaluator, `evaluate`, proven to compute exactly
-//! that. Grap's own tests check its real evaluator against it.
+//! `definition`, and two evaluators proven to compute exactly that: a simple
+//! one, `evaluate`, and one built for speed, `fast::evaluate`. Grap's own
+//! tests check its real evaluator against them.
 //!
 //! The core is what Grap's evaluator does itself: cells, lambdas, calls,
 //! value wrappers, closures, the absents those come to, and fuel; and the
@@ -13,6 +14,7 @@
 mod absent;
 mod definition;
 mod evaluator;
+pub mod fast;
 mod number;
 mod value;
 

@@ -67,6 +67,34 @@ fn without_origins(value: &Value) -> Value {
     }
 }
 
+/// `value` with every float NaN made the same NaN. Rust leaves a NaN
+/// result's sign and payload unspecified, even between two places that run
+/// the same operation, so Grap's evaluator and the reference can differ in
+/// them; the definition names float operations rather than defining them for
+/// that reason.
+fn canonical_nans(value: &Value) -> Value {
+    let canonical = |number: &Value, width: usize, nan: Vec<u8>| -> Option<Value> {
+        let bytes = number.as_blob()?;
+        let is_nan = match width {
+            8 => f64::from_le_bytes(bytes.try_into().ok()?).is_nan(),
+            _ => f32::from_le_bytes(bytes.try_into().ok()?).is_nan(),
+        };
+        is_nan.then(|| Value::from(nan))
+    };
+    match value {
+        Value::List(elements) => Value::list(elements.values().map(canonical_nans)),
+        Value::Record(fields) => Value::record(fields.iter().map(|(field, value)| {
+            let replaced = match *field {
+                crate::f64::F64 => canonical(value, 8, f64::NAN.to_le_bytes().to_vec()),
+                crate::f32::F32 => canonical(value, 4, f32::NAN.to_le_bytes().to_vec()),
+                _ => None,
+            };
+            (*field, replaced.unwrap_or_else(|| canonical_nans(value)))
+        })),
+        _ => value.clone(),
+    }
+}
+
 /// A host definition: Grap's own, a foreign function's description, or a
 /// number operation, with its description, as the definition names it and as
 /// Grap runs it.
@@ -118,7 +146,27 @@ fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<
             (reference_cell(*cell), defined.reference(definition))
         })
         .collect();
-    let expected = reference::evaluate(&to_reference(expression), &reference_host, fuel)?;
+    let expected = reference::evaluate(&to_reference(expression), &reference_host, fuel);
+    let fast = reference::fast::evaluate(&to_reference(expression), &reference_host, fuel);
+    match (&expected, &fast) {
+        (Some(expected), Some(fast)) => {
+            assert_eq!(
+                canonical_nans(&from_reference(&fast.result)),
+                canonical_nans(&from_reference(&expected.result)),
+                "fast result of {expression:?} with fuel {fuel}"
+            );
+            assert_eq!(
+                (fast.remaining_fuel, fast.completed),
+                (expected.remaining_fuel, expected.completed),
+                "fast fuel and completion of {expression:?} with fuel {fuel}"
+            );
+        }
+        (None, None) => {}
+        _ => panic!(
+            "only one of the reference and the fast evaluator left the definition for {expression:?}"
+        ),
+    }
+    let expected = expected?;
     let resolver = TestHost(|cell| {
         definitions
             .iter()
@@ -128,8 +176,8 @@ fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<
     });
     let actual = evaluate_value(expression, &resolver, fuel);
     assert_eq!(
-        without_origins(&actual.result),
-        from_reference(&expected.result),
+        canonical_nans(&without_origins(&actual.result)),
+        canonical_nans(&from_reference(&expected.result)),
         "result of {expression:?} with fuel {fuel}"
     );
     assert_eq!(
@@ -1005,4 +1053,241 @@ fn the_reference_agrees_on_random_number_programs() {
         numbers > 500 && invalid > 2000 && limited > 300,
         "numbers {numbers}, invalid arguments {invalid}, at the chain limit {limited}"
     );
+}
+
+/// A host for timing that finds definitions as an editor's does, by hash,
+/// rather than by the tests' search.
+struct MapHost(std::collections::HashMap<CellId, Definition>);
+
+impl Host for MapHost {
+    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
+        self.0
+            .get(&cell)
+            .map(|definition| (Resolution::Document, definition.clone()))
+    }
+}
+
+/// Programs in the core and the number operations, for timing the
+/// evaluators: name, expression, host and fuel.
+fn timing_programs(numbers: &Numbers) -> Vec<(&'static str, Value, Vec<(CellId, Defined)>, usize)> {
+    use reference::BinaryOperation as Named;
+    let (left, right) = (numbers.left, numbers.right);
+    let operations = [
+        numbers.binary(Named::F64Sum),
+        numbers.binary(Named::F64Multiply),
+        numbers.binary(Named::F64Subtract),
+    ];
+    // A balanced tree of arithmetic over `leaves`, `depth` deep.
+    fn tree(
+        operations: &[CellId; 3],
+        left: CellId,
+        right: CellId,
+        leaves: &[CellId],
+        depth: usize,
+        at: &mut usize,
+    ) -> Value {
+        if depth == 0 {
+            *at += 1;
+            Value::from(leaves[*at % leaves.len()])
+        } else {
+            let first = tree(operations, left, right, leaves, depth - 1, at);
+            let second = tree(operations, left, right, leaves, depth - 1, at);
+            super::call(
+                Value::from(operations[depth % 3]),
+                [(left, first), (right, second)],
+            )
+        }
+    }
+    let number = |n: f64| crate::f64::value(n);
+    let mut programs = Vec::new();
+
+    let parameters: Vec<CellId> = (0..4).map(|_| new_cell_id()).collect();
+    let body = tree(&operations, left, right, &parameters, 10, &mut 0);
+    programs.push((
+        "arithmetic: 1,023 operations on four bindings",
+        super::call(
+            super::lambda(parameters.clone(), body),
+            parameters
+                .iter()
+                .enumerate()
+                .map(|(index, parameter)| (*parameter, number(index as f64 + 0.5))),
+        ),
+        numbers.host(),
+        1_000_000,
+    ));
+
+    let x = new_cell_id();
+    let cells: Vec<CellId> = (0..=10).map(|_| new_cell_id()).collect();
+    let mut host = numbers.host();
+    host.push((
+        cells[0],
+        Defined::Grap(super::lambda(
+            [x],
+            numbers.call(
+                operations[0],
+                [(left, Value::from(x)), (right, number(1.0))],
+            ),
+        )),
+    ));
+    for level in 1..cells.len() {
+        let inner = super::call(Value::from(cells[level - 1]), [(x, Value::from(x))]);
+        host.push((
+            cells[level],
+            Defined::Grap(super::lambda(
+                [x],
+                super::call(Value::from(cells[level - 1]), [(x, inner)]),
+            )),
+        ));
+    }
+    programs.push((
+        "calls: 2,047 closures called through cells",
+        super::call(Value::from(cells[10]), [(x, number(0.0))]),
+        host,
+        1_000_000,
+    ));
+
+    let variables: Vec<CellId> = (0..20).map(|_| new_cell_id()).collect();
+    let mut program = tree(&operations, left, right, &variables, 7, &mut 0);
+    for (index, variable) in variables.iter().enumerate().rev() {
+        program = super::call(
+            super::lambda([*variable], program),
+            [(*variable, number(index as f64))],
+        );
+    }
+    programs.push((
+        "environments: 255 operations under 20 frames",
+        program,
+        numbers.host(),
+        1_000_000,
+    ));
+
+    let y = new_cell_id();
+    let repeated: Vec<CellId> = (0..=6).map(|_| new_cell_id()).collect();
+    let mut host = numbers.host();
+    host.push((
+        repeated[0],
+        Defined::Grap(super::lambda(
+            [y],
+            tree(&operations, left, right, &[y], 8, &mut 0),
+        )),
+    ));
+    for level in 1..repeated.len() {
+        let inner = super::call(Value::from(repeated[level - 1]), [(y, Value::from(y))]);
+        host.push((
+            repeated[level],
+            Defined::Grap(super::lambda(
+                [y],
+                super::call(Value::from(repeated[level - 1]), [(y, inner)]),
+            )),
+        ));
+    }
+    programs.push((
+        "repeated: 255 operations run 64 times",
+        super::call(Value::from(repeated[6]), [(y, number(0.5))]),
+        host,
+        1_000_000,
+    ));
+
+    let n = new_cell_id();
+    let looping = new_cell_id();
+    let mut host = numbers.host();
+    host.push((
+        looping,
+        Defined::Grap(super::lambda(
+            [n],
+            super::call(
+                Value::from(looping),
+                [(
+                    n,
+                    numbers.call(
+                        operations[0],
+                        [(left, Value::from(n)), (right, number(1.0))],
+                    ),
+                )],
+            ),
+        )),
+    ));
+    programs.push((
+        "recursion: a cell calling itself until 3,000 fuel runs out",
+        super::call(Value::from(looping), [(n, number(0.0))]),
+        host,
+        3_000,
+    ));
+    programs
+}
+
+/// The median time of `runs`, in microseconds, over batches of `batch`.
+fn median_micros(batch: usize, mut run: impl FnMut()) -> f64 {
+    for _ in 0..batch {
+        run();
+    }
+    let mut samples: Vec<f64> = (0..15)
+        .map(|_| {
+            let start = std::time::Instant::now();
+            for _ in 0..batch {
+                run();
+            }
+            start.elapsed().as_secs_f64() * 1e6 / batch as f64
+        })
+        .collect();
+    samples.sort_by(f64::total_cmp);
+    samples[samples.len() / 2]
+}
+
+/// How fast each evaluator runs the timing programs. Run with
+/// `./tools/linux-cargo test --profile perf -p grap --lib evaluator_speed --
+/// --ignored --nocapture`.
+#[test]
+#[ignore]
+fn evaluator_speed() {
+    let run = || {
+        let numbers = Numbers::new();
+        println!(
+            "{:<60} {:>10} {:>10} {:>10}",
+            "program", "grap µs", "reference", "fast"
+        );
+        for (name, expression, host, fuel) in timing_programs(&numbers) {
+            let definitions: Vec<_> = host
+                .iter()
+                .map(|(cell, defined)| (*cell, defined.grap()))
+                .collect();
+            let reference_host: Vec<_> = host
+                .iter()
+                .zip(&definitions)
+                .map(|((cell, defined), (_, definition))| {
+                    (reference_cell(*cell), defined.reference(definition))
+                })
+                .collect();
+            let grap_host = MapHost(definitions.into_iter().collect());
+            let reference_expression = to_reference(&expression);
+            let expected = agree(&expression, &host, fuel).unwrap();
+            let grap = median_micros(20, || {
+                std::hint::black_box(evaluate_value(&expression, &grap_host, fuel));
+            });
+            let reference = median_micros(5, || {
+                std::hint::black_box(reference::evaluate(
+                    &reference_expression,
+                    &reference_host,
+                    fuel,
+                ));
+            });
+            let fast = median_micros(20, || {
+                std::hint::black_box(reference::fast::evaluate(
+                    &reference_expression,
+                    &reference_host,
+                    fuel,
+                ));
+            });
+            println!(
+                "{name:<60} {grap:>10.1} {reference:>10.1} {fast:>10.1}   (fuel left {}, completed {})",
+                expected.remaining_fuel, expected.completed
+            );
+        }
+    };
+    std::thread::Builder::new()
+        .stack_size(1 << 30)
+        .spawn(run)
+        .unwrap()
+        .join()
+        .unwrap();
 }
