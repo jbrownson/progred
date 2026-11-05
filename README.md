@@ -217,6 +217,8 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
 
 - [`gid/`](gid) — values, cells, documents, and positions
 - [`grap/`](grap) — evaluator
+- [`grap-reference/`](grap-reference) — the definition of Grap's core, with an
+  evaluator proven to compute it; see [verification](docs/verification.md)
 - [`incremental/`](incremental) — dependency graph and background computations
 - [`volume/`](volume) — Fidget shapes meshed for display, built optimized
 - [`cam/`](cam) — cutters, toolpaths and stock as Fidget fields, built

@@ -1137,23 +1137,35 @@ Fidget took 25%.
 ### A reference Grap and derivative mode
 
 From a November 2026 discussion, after Verus arrived to prove `gid::position`
-(see [verification](verification.md)). Two uses, neither started:
+(see [verification](verification.md)). Two uses:
 
 - **A reference evaluator as Grap's definition.** A slow, simple evaluator,
-  written as Verus specification functions, would define what Grap means:
+  written as Verus specification functions, defines what Grap means:
   results, absents and their causes, effects and their order, remaining fuel
   under `Context::burn`'s model, and the call origins click-to-source reads.
   [`conformance.rs`](../progred/src/libraries/conformance.rs) is a hand-written
   slice of it. The fast evaluator would be proven to match, so optimizations,
   an LLM's included, need review only of the specification and the list of
-  trusted assumptions. The current evaluator's `Rc<dyn Fn>` closures and
-  `RefCell` caches are outside what Verus follows well, so the likely route is
-  a new, plainer evaluator proven against the reference, then made fast under
-  the proof. Much of the language is library code driving the evaluator through
-  `Context`, such as `match`, `let` and `do`, so the reference needs a contract
-  for that interface too. Fuel stays exact: an optimization that skips
+  trusted assumptions. Fuel stays exact: an optimization that skips
   evaluations burns their fuel, which works for work already measured but rules
   out skipping work of unknown cost, such as dead code that might loop.
+  - The first slice exists: [`grap-reference`](../grap-reference/src/definition.rs)
+    defines the core, without foreign functions or origins, with an executable
+    evaluator proven to compute it, and Grap's evaluator agrees with it on the
+    tests in `grap/src/reference_tests.rs`. See
+    [verification](verification.md#graps-core).
+  - Next, in order: the number primitives; the control functions, `match`,
+    `let`, `do`, `all` and `quote`, which drive the evaluator through
+    `Context`, so the definition needs a contract for that interface too;
+    effects; and the call origins click-to-source reads.
+  - Then the fast evaluator. The current one's `Rc<dyn Fn>` closures and
+    `RefCell` caches are outside what Verus follows well, so the likely route
+    is a new, plainer evaluator proven against the definition, then made fast
+    under the proof.
+  - Two behaviours the definition records are open questions: whether calling
+    a cell whose definition comes to an absent should answer that it isn't
+    callable, as calling a binding to one does, and whether a reference should
+    notice a cycle through a call, as a call does through a reference.
 - **Derivative mode.** Every value would be a jet, a value with its change, as
   in Phil Freeman's [Purview](https://github.com/paf31/purescript-purview), and
   any function, user-defined ones included, would run in normal or derivative

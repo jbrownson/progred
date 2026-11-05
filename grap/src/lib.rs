@@ -13,6 +13,9 @@ use unboxed::{Native, Unboxed};
 mod effect_tests;
 
 #[cfg(test)]
+mod reference_tests;
+
+#[cfg(test)]
 mod runtime_tests;
 
 pub mod absent;

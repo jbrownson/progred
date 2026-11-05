@@ -611,6 +611,10 @@ of improved speed for arbitrary programs.
 
 ## Evaluation
 
+[`grap-reference`](../grap-reference/src/definition.rs) defines what the core
+forms below mean, and Grap's tests check this evaluator against it; see
+[verification](verification.md#graps-core).
+
 Grap recognizes these shapes through its vocabulary cells:
 
 ```text
