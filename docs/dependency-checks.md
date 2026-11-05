@@ -39,7 +39,11 @@ to suggest one.
     cutoff, through `tools/npm-update`; it brings `undici` 7.30.1, outside the
     advisories' range. `make audit` now reports only RUSTSEC-2026-0192.
     `make test` passes, and `npm ci` with install scripts off and a dry-run
-    deploy both work.
+    deploy both work. `make perf` against the morning's record on the same VM
+    flagged nothing. The CAM and IoP source canaries read 34% and 9% slower,
+    but interleaved with the build from before the updates they differ by
+    under 9%, within the VM's noise, and callgrind counts the same
+    instructions for both within 0.1%.
   - **Toolchain:** stable is 1.99.1, the toolchain `make verify` pins. Rust
     1.100 follows on 12 November, when the wrappers' `update` can move to
     stable Cargo (see [macOS follow-ups](macos-followups.md)).
