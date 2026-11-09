@@ -108,7 +108,7 @@ impl<'a> Context<'a> {
 
     /// Evaluate an expression a caller will read as a number, skipping
     /// the owned `RuntimeValue` round trip when the answer is already
-    /// an unboxed f64. Fuel and results match
+    /// an unboxed f64. Fuel, halts and results match
     /// [`Self::eval`] followed by [`RuntimeValue::as_f64`] exactly.
     pub fn eval_f64(
         &mut self,
@@ -117,7 +117,7 @@ impl<'a> Context<'a> {
     ) -> Result<Option<f64>, Halt> {
         self.burn()?;
         match unboxed_f64(&expression, environment) {
-            Some(number) => Ok(Some(number)),
+            Some(number) => self.nest().map(|()| Some(number)),
             None => self
                 .eval_burned(expression, environment)
                 .map(|value| value.as_f64()),
@@ -133,10 +133,20 @@ impl<'a> Context<'a> {
     ) -> Result<Result<f64, RuntimeValue>, Halt> {
         self.burn()?;
         match unboxed_f64(&expression, environment) {
-            Some(number) => Ok(Ok(number)),
+            Some(number) => self.nest().map(|()| Ok(number)),
             None => self
                 .eval_burned(expression, environment)
                 .map(|value| value.as_f64().ok_or(value)),
+        }
+    }
+
+    /// Whether an evaluation may nest here. A shortcut that answers without
+    /// evaluating halts where the evaluation it skips would.
+    fn nest(&self) -> Result<(), Halt> {
+        if self.remaining_depth == 0 {
+            Err(Halt::DepthExhausted)
+        } else {
+            Ok(())
         }
     }
 
@@ -145,9 +155,7 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        if self.remaining_depth == 0 {
-            return Err(Halt::DepthExhausted);
-        }
+        self.nest()?;
         let compiled = match self.compiled.get(&expression) {
             Some(compiled) => compiled.clone(),
             None => {
