@@ -140,8 +140,8 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Whether an evaluation may nest here. A shortcut that answers without
-    /// evaluating halts where the evaluation it skips would.
+    /// Whether an evaluation may nest here, which a number operand's
+    /// shortcut checks too, halting where the evaluation it skips would.
     fn nest(&self) -> Result<(), Halt> {
         if self.remaining_depth == 0 {
             Err(Halt::DepthExhausted)

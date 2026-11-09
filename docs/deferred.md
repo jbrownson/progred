@@ -1494,13 +1494,13 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
     it. Making every NaN result the same NaN in Grap would make float results
     deterministic and let the definition say what they are; until then the
     tests compare NaNs as NaNs.
-  - A behaviour the definition records is an open question: calling a cell,
-    or a function bound in the environment, spends the unit evaluating the
-    function would but doesn't check the depth that evaluation would, so it
-    can't halt there. The two questions the first slice raised are settled:
-    calling a cell whose definition comes to an absent, or a binding to one,
-    answers that absent, and Grap no longer detects cycles, halting instead
-    where evaluations nest too deeply.
+  - The two questions the first slice raised are settled: calling a cell
+    whose definition comes to an absent, or a binding to one, answers that
+    absent, and Grap no longer detects cycles, halting instead where
+    evaluations nest too deeply. Exactly where a step spends fuel or checks
+    depth is Grap's to choose, and the definition records whatever it does:
+    calling a cell, or a function bound in the environment, spends a unit
+    without checking depth, for instance.
 - **Derivative mode.** Every value would be a jet, a value with its change, as
   in Phil Freeman's [Purview](https://github.com/paf31/purescript-purview), and
   any function, user-defined ones included, would run in normal or derivative
