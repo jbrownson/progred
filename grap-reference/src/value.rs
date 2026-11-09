@@ -112,6 +112,13 @@ pub proof fn lemma_view_pairs_prefix(pairs: Seq<(u128, ExecValue)>, n: int)
     assert(view_pairs(pairs.subrange(0, n)) =~= view_pairs(pairs).subrange(0, n));
 }
 
+pub proof fn lemma_view_elements_push(elements: Seq<ExecValue>, element: ExecValue)
+    ensures
+        view_elements(elements.push(element)) == view_elements(elements).push(view(element)),
+{
+    assert(view_elements(elements.push(element)) =~= view_elements(elements).push(view(element)));
+}
+
 /// The value itself, sharing its contents.
 pub fn copy(value: &ExecValue) -> (copied: ExecValue)
     ensures
@@ -307,6 +314,43 @@ pub fn exec_single(field: u128, value: ExecValue) -> (made: ExecValue)
     ExecValue::Record(fields)
 }
 
+/// `{first: a, second: b}`.
+pub fn exec_pair(first: u128, a: ExecValue, second: u128, b: ExecValue) -> (made: ExecValue)
+    ensures
+        view(made) == Value::Record(map![first => view(a), second => view(b)]),
+{
+    let mut fields = Vec::new();
+    proof {
+        lemma_view_pairs_push(fields@, (first, a));
+    }
+    fields.push((first, a));
+    proof {
+        lemma_view_pairs_push(fields@, (second, b));
+    }
+    fields.push((second, b));
+    let fields = Rc::new(fields);
+    proof {
+        lemma_view_record(fields);
+        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
+        assert(view_map(fields@) =~= map![first => view(a), second => view(b)]);
+    }
+    ExecValue::Record(fields)
+}
+
+/// `{}`.
+pub fn exec_empty() -> (made: ExecValue)
+    ensures
+        view(made) == Value::Record(Map::empty()),
+{
+    let fields: Rc<Vec<(u128, ExecValue)>> = Rc::new(Vec::new());
+    proof {
+        lemma_view_record(fields);
+        assert(view_pairs(fields@) =~= Seq::<(u128, Value)>::empty());
+        assert(view_map(fields@) =~= Map::<u128, Value>::empty());
+    }
+    ExecValue::Record(fields)
+}
+
 /// The pairs themselves, sharing their values' contents.
 pub fn copy_pairs(pairs: &Vec<(u128, ExecValue)>) -> (copied: Vec<(u128, ExecValue)>)
     ensures
@@ -483,107 +527,163 @@ pub fn has(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (found: bool)
     get(pairs, cell).is_some()
 }
 
-/// The pairs without any for `cell`.
-pub fn without(pairs: &Vec<(u128, ExecValue)>, cell: u128) -> (rest: Vec<(u128, ExecValue)>)
-    ensures
-        view_map(rest@) == view_map(pairs@).remove(cell),
-{
-    let mut rest: Vec<(u128, ExecValue)> = Vec::new();
-    let mut i = 0;
-    proof {
-        assert(view_pairs(pairs@.subrange(0, 0)) =~= Seq::<(u128, Value)>::empty());
-        assert(view_pairs(rest@) =~= Seq::<(u128, Value)>::empty());
-        assert(view_map(rest@) =~= view_map(pairs@.subrange(0, 0)).remove(cell));
-    }
-    while i < pairs.len()
-        invariant
-            i <= pairs.len(),
-            view_map(rest@) == view_map(pairs@.subrange(0, i as int)).remove(cell),
-        decreases pairs.len() - i,
-    {
-        let ghost before = rest@;
-        proof {
-            assert(pairs@.subrange(0, i + 1) =~= pairs@.subrange(0, i as int).push(pairs@[i as int]));
-            lemma_view_pairs_push(pairs@.subrange(0, i as int), pairs@[i as int]);
-        }
-        if pairs[i].0 != cell {
-            rest.push((pairs[i].0, copy(&pairs[i].1)));
-            proof {
-                lemma_view_pairs_push(before, rest@.last());
-                assert(rest@ =~= before.push(rest@.last()));
-                assert(view_map(rest@) =~= view_map(pairs@.subrange(0, i + 1)).remove(cell));
-            }
-        } else {
-            proof {
-                assert(view_map(rest@) =~= view_map(pairs@.subrange(0, i + 1)).remove(cell));
-            }
-        }
-        i += 1;
-    }
-    proof {
-        assert(pairs@.subrange(0, pairs.len() as int) =~= pairs@);
-    }
-    rest
+/// The fields an absent for `reason` starts with: `{isa: absent, reason}`.
+pub open spec fn absent_header(reason: u128) -> Seq<(u128, Value)> {
+    seq![(ISA, Value::Cell(KIND_ABSENT)), (REASON, Value::Cell(reason))]
 }
 
-/// `{absent: reason, field: detail}`.
-pub open spec fn absent(reason: u128, field: u128, detail: Value) -> Value {
-    Value::Record(map![ABSENT => Value::Cell(reason), field => detail])
+/// An absent for `reason` carrying `details`: `{isa: absent, reason,
+/// ...details}`, a later detail under a field replacing an earlier one, as
+/// GID builds records.
+pub open spec fn absent(reason: u128, details: Seq<(u128, Value)>) -> Value {
+    Value::Record(to_map(absent_header(reason) + details))
 }
 
-/// `{absent: fuel exhausted}`, what a program that runs out of fuel comes to.
-pub open spec fn fuel_exhausted() -> Value {
-    Value::Record(map![ABSENT => Value::Cell(FUEL_EXHAUSTED)])
+/// An absent for `reason` carrying one detail.
+pub open spec fn with_detail(reason: u128, field: u128, detail: Value) -> Value {
+    absent(reason, seq![(field, detail)])
 }
 
-/// Whether `value` is an absent: a record naming its reason with a cell.
+/// Whether `value` is an absent: a record whose kind is absent, naming its
+/// reason with a cell.
 pub open spec fn is_absent(value: Value) -> bool {
-    value matches Value::Record(fields) && fields.contains_key(ABSENT) && fields[ABSENT] is Cell
+    value matches Value::Record(fields) && fields.contains_key(ISA) && fields[ISA] == Value::Cell(
+        KIND_ABSENT,
+    ) && fields.contains_key(REASON) && fields[REASON] is Cell
 }
 
-pub fn exec_absent(reason: u128, field: u128, detail: ExecValue) -> (made: ExecValue)
+/// An absent for `reason` carrying `details`, as `absent` says.
+pub fn exec_absent(reason: u128, details: &Vec<(u128, ExecValue)>) -> (made: ExecValue)
+    ensures
+        view(made) == absent(reason, view_pairs(details@)),
+{
+    let mut fields: Vec<(u128, ExecValue)> = Vec::new();
+    let kind = (ISA, ExecValue::Cell(KIND_ABSENT));
+    proof {
+        lemma_view_pairs_push(fields@, kind);
+    }
+    fields.push(kind);
+    let named = (REASON, ExecValue::Cell(reason));
+    proof {
+        lemma_view_pairs_push(fields@, named);
+    }
+    fields.push(named);
+    let ghost head = absent_header(reason);
+    proof {
+        reveal_with_fuel(view, 2);
+        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
+        assert(view_pairs(fields@) =~= head + view_pairs(details@).subrange(0, 0));
+    }
+    let mut i = 0;
+    while i < details.len()
+        invariant
+            i <= details@.len(),
+            view_pairs(fields@) == head + view_pairs(details@).subrange(0, i as int),
+        decreases details.len() - i,
+    {
+        let pair = (details[i].0, copy(&details[i].1));
+        proof {
+            lemma_view_pairs_push(fields@, pair);
+        }
+        fields.push(pair);
+        i += 1;
+        proof {
+            assert(view_pairs(fields@) =~= head + view_pairs(details@).subrange(0, i as int));
+        }
+    }
+    proof {
+        assert(view_pairs(details@).subrange(0, details@.len() as int) =~= view_pairs(details@));
+    }
+    let fields = Rc::new(fields);
+    proof {
+        lemma_view_record(fields);
+    }
+    ExecValue::Record(fields)
+}
+
+/// An absent for `reason` carrying one detail, as `with_detail` says.
+pub fn exec_with_detail(reason: u128, field: u128, detail: ExecValue) -> (made: ExecValue)
+    ensures
+        view(made) == with_detail(reason, field, view(detail)),
+{
+    let mut details = Vec::new();
+    proof {
+        lemma_view_pairs_push(details@, (field, detail));
+        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
+    }
+    details.push((field, detail));
+    proof {
+        assert(view_pairs(details@) =~= seq![(field, view(detail))]);
+    }
+    exec_absent(reason, &details)
+}
+
+/// `{isa: absent, reason}`, an absent carrying nothing more.
+pub fn exec_bare_absent(reason: u128) -> (made: ExecValue)
+    ensures
+        view(made) == absent(reason, Seq::empty()),
+{
+    let details: Vec<(u128, ExecValue)> = Vec::new();
+    proof {
+        assert(view_pairs(details@) =~= Seq::<(u128, Value)>::empty());
+    }
+    exec_absent(reason, &details)
+}
+
+/// The kind `fields` say they are: the cell under `isa`.
+pub open spec fn kind(fields: Map<u128, Value>) -> Option<u128> {
+    if fields.contains_key(ISA) {
+        match fields[ISA] {
+            Value::Cell(kind) => Some(kind),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+pub fn exec_kind(fields: &Vec<(u128, ExecValue)>) -> (found: Option<u128>)
+    ensures
+        found == kind(view_map(fields@)),
+{
+    match get(fields, ISA) {
+        Some(ExecValue::Cell(kind)) => Some(*kind),
+        _ => None,
+    }
+}
+
+/// Whether `fields` say they're a `kind`.
+pub fn exec_is_kind(fields: &Vec<(u128, ExecValue)>, kind_cell: u128) -> (is: bool)
+    ensures
+        is == (kind(view_map(fields@)) == Some(kind_cell)),
+{
+    match exec_kind(fields) {
+        Some(found) => found == kind_cell,
+        None => false,
+    }
+}
+
+/// An absent whose details don't name its kind field is an absent, of its
+/// kind.
+pub proof fn lemma_absent_kind(reason: u128, details: Seq<(u128, Value)>)
     requires
-        field != ABSENT,
+        forall|i: int| 0 <= i < details.len() ==> (#[trigger] details[i]).0 != ISA && details[i].0
+            != REASON,
     ensures
-        view(made) == absent(reason, field, view(detail)),
+        kind(absent(reason, details)->Record_0) == Some(KIND_ABSENT),
+        is_absent(absent(reason, details)),
 {
-    let mut fields = Vec::new();
-    fields.push((ABSENT, ExecValue::Cell(reason)));
-    fields.push((field, detail));
-    let fields = Rc::new(fields);
-    proof {
-        lemma_view_record(fields);
-        lemma_view_pairs_push(seq![], (ABSENT, ExecValue::Cell(reason)));
-        lemma_view_pairs_push(seq![(ABSENT, ExecValue::Cell(reason))], (field, detail));
-        assert(seq![(ABSENT, ExecValue::Cell(reason))] =~= Seq::<(u128, ExecValue)>::empty().push(
-            (ABSENT, ExecValue::Cell(reason)),
-        ));
-        assert(fields@ =~= seq![(ABSENT, ExecValue::Cell(reason))].push((field, detail)));
-        reveal_with_fuel(view, 2);
-        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
-        assert(view_map(fields@) =~= map![ABSENT => Value::Cell(reason), field => view(detail)]);
+    let pairs = absent_header(reason) + details;
+    assert forall|j: int| 0 < j < pairs.len() implies #[trigger] pairs[j].0 != pairs[0].0 by {
+        if j >= 2 {
+            assert(pairs[j] == details[j - 2]);
+        }
     }
-    ExecValue::Record(fields)
-}
-
-pub fn exec_fuel_exhausted() -> (made: ExecValue)
-    ensures
-        view(made) == fuel_exhausted(),
-{
-    let mut fields = Vec::new();
-    fields.push((ABSENT, ExecValue::Cell(FUEL_EXHAUSTED)));
-    let fields = Rc::new(fields);
-    proof {
-        lemma_view_record(fields);
-        lemma_view_pairs_push(seq![], (ABSENT, ExecValue::Cell(FUEL_EXHAUSTED)));
-        assert(fields@ =~= Seq::<(u128, ExecValue)>::empty().push(
-            (ABSENT, ExecValue::Cell(FUEL_EXHAUSTED)),
-        ));
-        reveal_with_fuel(view, 2);
-        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
-        assert(view_map(fields@) =~= map![ABSENT => Value::Cell(FUEL_EXHAUSTED)]);
+    lemma_to_map_last(pairs, 0);
+    assert forall|j: int| 1 < j < pairs.len() implies #[trigger] pairs[j].0 != pairs[1].0 by {
+        assert(pairs[j] == details[j - 2]);
     }
-    ExecValue::Record(fields)
+    lemma_to_map_last(pairs, 1);
 }
 
 pub fn exec_is_absent(value: &ExecValue) -> (absent: bool)
@@ -595,9 +695,12 @@ pub fn exec_is_absent(value: &ExecValue) -> (absent: bool)
             proof {
                 lemma_view_record(*fields);
             }
-            match get(fields, ABSENT) {
-                Some(ExecValue::Cell(_)) => true,
-                _ => false,
+            match exec_kind(fields) {
+                Some(kind) => kind == KIND_ABSENT && match get(fields, REASON) {
+                    Some(ExecValue::Cell(_)) => true,
+                    _ => false,
+                },
+                None => false,
             }
         },
         _ => false,
@@ -605,7 +708,29 @@ pub fn exec_is_absent(value: &ExecValue) -> (absent: bool)
 }
 
 // The cells Grap's evaluator reads and writes, the same identities as in
-// grap's vocabulary, absent and source modules.
+// grap's isa, vocabulary, absent, source and path modules.
+
+/// The field a record names the kind of thing it is under.
+pub const ISA: u128 = 0xdbd7e1a38e30425fb1b408b2e446bb1b;
+
+/// The kind of a call, `{isa: call, function, ...arguments}`.
+pub const KIND_CALL: u128 = 0x8dd318828a4c42cf9f2d5d1ba9b068fe;
+
+/// The kind of a lambda, `{isa: lambda, params, body}`.
+pub const KIND_LAMBDA: u128 = 0xe4a0653134ca48379cab2e008bed03e7;
+
+/// The kind of a closure, `{isa: closure, lambda, environment, body origin}`.
+pub const KIND_CLOSURE: u128 = 0x0e8180c5b2f0492291ce5150f2292697;
+
+/// The kind of a value wrapper, `{isa: value wrapper, value}`.
+pub const KIND_VALUE_WRAPPER: u128 = 0xf615f8d777294ffd9e5296faf34edd9d;
+
+/// The kind of a function the host implements, `{isa: foreign function,
+/// implementation}`.
+pub const KIND_FOREIGN_FUNCTION: u128 = 0xa394a3373e334363ab5a2965ec3204fa;
+
+/// The kind of a value that isn't there, `{isa: absent, reason}`.
+pub const KIND_ABSENT: u128 = 0x6509cd9921ab4cf28657ac75a9976d71;
 
 pub const FUNCTION: u128 = 0x751fca4373debdd0b7e6eb73e08d684b;
 
@@ -615,15 +740,18 @@ pub const BODY: u128 = 0x986143866eda2e2fbf9ab8484357a0c9;
 
 pub const VALUE: u128 = 0x5adde9ececa6ad57c81a3b2907e75e08;
 
-pub const CLOSURE: u128 = 0xdb39600f3ed07398c77ac120deb108a8;
+/// A closure's lambda, as written.
+pub const LAMBDA: u128 = 0xe070bde324bb9d90e1d457a2fdba6bf7;
 
 pub const ENVIRONMENT: u128 = 0xe910025c710c25c43d0a5b296378f374;
 
-pub const FFI: u128 = 0x912adb7252d689659b6de9eeeb827658;
+/// The cell the host implements a foreign function under.
+pub const IMPLEMENTATION: u128 = 0x24e1165744a040d7a4a4ff7d46f3b03c;
 
 pub const BODY_ORIGIN: u128 = 0x215831fe58bde294e79cccbc74212318;
 
-pub const ABSENT: u128 = 0xd9c0a7145a38859a245640d3469cbcd4;
+/// The field an absent names its reason under.
+pub const REASON: u128 = 0xc2a01958bce64151beb2b3992017de4c;
 
 /// The field an absent names a cell under.
 pub const ABSENT_CELL: u128 = 0x7ba69298ef92cf954456784b66e86032;
@@ -631,13 +759,14 @@ pub const ABSENT_CELL: u128 = 0x7ba69298ef92cf954456784b66e86032;
 /// The field an absent carries a value under.
 pub const ABSENT_VALUE: u128 = 0xcfeaf191b71e06afef86c27ee43eb936;
 
-pub const CYCLE: u128 = 0x2776d28585d66ef8a747a8bc6dad7381;
+/// The field an absent names where the call it's about is under.
+pub const ABSENT_CALL: u128 = 0x31232e62ec458b0e6e201f3a7c1c10fe;
 
 pub const FUEL_EXHAUSTED: u128 = 0x513628d759c04b3e7088b575e555a80e;
 
-pub const MISSING_CELL: u128 = 0xa5a1b4e3d0df96bd11af00f0780136ff;
+pub const DEPTH_EXHAUSTED: u128 = 0x4f9f758d18767f18c098ca72090ede64;
 
-pub const CELL_CYCLE: u128 = 0x150e0fc7e38d1670f41283c3d23a9b8d;
+pub const MISSING_CELL: u128 = 0xa5a1b4e3d0df96bd11af00f0780136ff;
 
 pub const MALFORMED_LAMBDA: u128 = 0xfbf5894d7f62b6d0048d17d26851b415;
 
@@ -647,9 +776,31 @@ pub const NOT_CALLABLE: u128 = 0x8624488c2d10d2a4b84560dfa99a38e6;
 
 pub const MISSING_ARGUMENT: u128 = 0x8b2f0db36e5c3d35595eb5666cc89c78;
 
+/// Why a call, a lambda or a value wrapper can't be used yet: it lacks a
+/// field its kind requires, named under `ABSENT_CELL`.
+pub const MISSING_FIELD: u128 = 0xafc95de9df924ebd8de30f7b0243c6b5;
+
 /// Why a function couldn't use its arguments, carrying why each it couldn't
 /// use under its label.
 pub const INVALID_ARGUMENTS: u128 = 0xaeb37f359ed1437cbc1adee0a05ac60f;
+
+// Where code was written, as grap's source and path modules record it.
+
+pub const ORIGIN_INPUT: u128 = 0x9a87743644af3453a0415dab056a0c5d;
+
+pub const ORIGIN_ROOT: u128 = 0x7548280579760b782d1f1ce75b5394e9;
+
+pub const ORIGIN_CELL: u128 = 0xad9b456873ec85947b96bab375b3e28e;
+
+pub const ORIGIN_PATH: u128 = 0x7da5a4ab1d994cc1f9df7af5668b6c85;
+
+pub const STEP_KEY: u128 = 0xf12dea12c741fe36312750a264f3a235;
+
+pub const STEP_ELEMENT: u128 = 0x2eb44bbe78bbb0e96af4a9cbf6e949e1;
+
+pub const STEP_FOLLOW: u128 = 0x33c6fb363ddc6f13fd054c68f7a37a98;
+
+pub const STEP_INDEXABLE: u128 = 0xbd69ea5a7f839fe98dab761c01c22c13;
 
 // The number and boolean conventions Grap holds natively, the same
 // identities as in grap's f64, f32, u64 and logic modules.

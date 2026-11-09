@@ -2,17 +2,21 @@
 //! specification functions, over the GID values of `value`.
 //!
 //! The core is what Grap's evaluator does itself, not what libraries add:
-//! cells, lambdas, calls, value wrappers, closures, the absents those come to,
-//! and fuel; and the number operations it runs natively, which the numbers
-//! library registers as primitives. Calling any other foreign function leaves
-//! the core, and evaluation that gets there says so (`Outcome::Beyond`) rather
-//! than guessing.
+//! cells; the forms a record's `isa` makes it, calls, lambdas and value
+//! wrappers; the closures lambdas come to; the absents all of these come to;
+//! where code was written, which closures and some absents carry; fuel; and
+//! how deeply evaluations nest. With it come the number operations Grap runs
+//! natively, which the numbers library registers as primitives. Calling any
+//! other foreign function leaves the core, and evaluation that gets there
+//! says so (`Outcome::Beyond`) rather than guessing.
 //!
 //! Each function returns its outcome and the fuel it spent. Every expression
 //! evaluated spends one unit before anything else; evaluation halts when that
 //! would leave none, having spent all there was. Spending, rather than
 //! returning what's left, is what lets the definition terminate visibly: a
-//! caller hands on what's left after what it has spent, never more.
+//! caller hands on what's left after what it has spent, never more. An
+//! expression is evaluated with the depth evaluations may still nest within
+//! it, and one evaluated with none left halts too, once it has spent its unit.
 
 #[cfg(verus_only)]
 use crate::value::*;
@@ -22,16 +26,35 @@ use vstd::prelude::*;
 
 verus! {
 
-/// A cell's definition, as the host resolves it: Grap's own, a foreign
-/// function's, or a primitive's. A function's descriptive value is what
-/// referencing its cell evaluates; calling a foreign function leaves the core,
-/// while calling a primitive runs its operation.
-#[cfg(verus_only)]
-pub enum Definition {
-    Grap(Value),
-    Foreign(Value),
-    Primitive(Value, Primitive),
+/// What the host implements a foreign function with: an operation Grap runs
+/// natively, or code of its own, which the definition leaves out.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Implementation {
+    Primitive(Primitive),
+    Foreign,
 }
+
+/// A cell's definition, as the host gives it: its value, and the code it
+/// implements under the cell, if any. Referencing the cell evaluates the
+/// value. Calling it runs the implementation when the value is a foreign
+/// function implemented under the cell itself, and otherwise calls what the
+/// value comes to.
+#[cfg(verus_only)]
+pub struct Definition {
+    pub value: Value,
+    pub implementation: Option<Implementation>,
+}
+
+/// Why an evaluation stopped before finishing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Halt {
+    FuelExhausted,
+    /// Evaluations nested deeper than `MAX_DEPTH`.
+    DepthExhausted,
+}
+
+/// How deeply evaluations may nest, as Grap's `MAX_DEPTH` says.
+pub const MAX_DEPTH: usize = 256;
 
 /// A number type Grap holds natively: a record whose tag holds the number's
 /// little-endian bytes, `{f64: 8 bytes}`, `{f32: 4 bytes}` or `{u64: 8 bytes}`.
@@ -125,13 +148,31 @@ pub enum Answer {
     Failure(u128),
 }
 
-/// How a cell under resolution was reached. A reference notices a cycle
-/// only through another reference to the same cell, a call through anything
-/// under resolution; the evaluator detects them differently, and this says
-/// what it does.
-pub enum Reached {
-    Reference,
-    Call,
+
+/// A step from code into code within it, as GID paths take them: into a
+/// record's field, into a list's element at a position, by its bytes, or
+/// through a reference.
+#[cfg(verus_only)]
+pub enum Step {
+    Key(u128),
+    Element(Seq<u8>),
+    Follow,
+}
+
+/// Where an origin's path starts: the input an evaluation was handed, the
+/// host's document root, or a cell's definition.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Start {
+    Input,
+    Root,
+    Cell(u128),
+}
+
+/// Where code was written: where its path starts, and the path from there.
+#[cfg(verus_only)]
+pub struct Origin {
+    pub start: Start,
+    pub path: Seq<Step>,
 }
 
 /// What evaluating an expression came to.
@@ -141,6 +182,8 @@ pub enum Outcome {
     Done(Value),
     /// Fuel ran out, which halts the whole evaluation.
     OutOfFuel,
+    /// Evaluations nested too deeply, which halts the whole evaluation.
+    OutOfDepth,
     /// Evaluation called a foreign function, which this definition leaves out.
     Beyond,
 }
@@ -168,64 +211,209 @@ pub open spec fn resolve(host: Seq<(u128, Definition)>, cell: u128) -> Option<De
     }
 }
 
-/// The value a definition is evaluated as.
-pub open spec fn definition_value(definition: Definition) -> Value {
-    match definition {
-        Definition::Grap(value) => value,
-        Definition::Foreign(description) => description,
-        Definition::Primitive(description, _) => description,
+// Where code was written.
+
+/// The code under `field` of code written at `origin`, which has no origin
+/// when that code has none: code a program builds as it runs.
+pub open spec fn child(origin: Option<Origin>, field: u128) -> Option<Origin> {
+    match origin {
+        Some(origin) => Some(Origin { start: origin.start, path: origin.path.push(Step::Key(field)) }),
+        None => None,
     }
 }
 
-/// Where `cell` first went under resolution, however it was reached.
-pub open spec fn first_resolving(stack: Seq<(u128, Reached)>, cell: u128) -> Option<int>
-    decreases stack.len(),
+/// Where a cell's definition starts.
+pub open spec fn defined_at(cell: u128) -> Origin {
+    Origin { start: Start::Cell(cell), path: Seq::empty() }
+}
+
+/// Where the input an evaluation was handed starts.
+pub open spec fn input() -> Origin {
+    Origin { start: Start::Input, path: Seq::empty() }
+}
+
+/// A step as GID path data: `{key: cell}`, `{element: {indexable: bytes}}`
+/// or `{follow: {}}`.
+pub open spec fn step_value(step: Step) -> Value {
+    match step {
+        Step::Key(cell) => Value::Record(map![STEP_KEY => Value::Cell(cell)]),
+        Step::Element(position) => Value::Record(
+            map![STEP_ELEMENT => Value::Record(map![STEP_INDEXABLE => Value::Blob(position)])],
+        ),
+        Step::Follow => Value::Record(map![STEP_FOLLOW => Value::Record(Map::empty())]),
+    }
+}
+
+/// Steps' values, in order.
+pub open spec fn step_values(path: Seq<Step>) -> Seq<Value> {
+    Seq::new(path.len(), |i: int| step_value(path[i]))
+}
+
+/// A path as GID data: a list of its steps.
+pub open spec fn path_value(path: Seq<Step>) -> Value {
+    Value::List(step_values(path))
+}
+
+/// An origin as GID data: `{input: path}`, `{root: path}` or `{cell, path}`.
+pub open spec fn origin_value(origin: Origin) -> Value {
+    match origin.start {
+        Start::Input => Value::Record(map![ORIGIN_INPUT => path_value(origin.path)]),
+        Start::Root => Value::Record(map![ORIGIN_ROOT => path_value(origin.path)]),
+        Start::Cell(cell) => Value::Record(
+            map![ORIGIN_CELL => Value::Cell(cell), ORIGIN_PATH => path_value(origin.path)],
+        ),
+    }
+}
+
+/// Whether bytes are a GID position's: some, the last not zero.
+pub open spec fn position(bytes: Seq<u8>) -> bool {
+    bytes.len() > 0 && bytes.last() != 0
+}
+
+/// The step GID path data is: one with exactly one of `key`, `element` and
+/// `follow`, a key naming a cell and an element holding a position.
+pub open spec fn read_step(value: Value) -> Option<Step> {
+    match value {
+        Value::Record(fields) => {
+            let key = fields.contains_key(STEP_KEY);
+            let element = fields.contains_key(STEP_ELEMENT);
+            let follow = fields.contains_key(STEP_FOLLOW);
+            if key && !element && !follow {
+                match fields[STEP_KEY] {
+                    Value::Cell(cell) => Some(Step::Key(cell)),
+                    _ => None,
+                }
+            } else if !key && element && !follow {
+                match fields[STEP_ELEMENT] {
+                    Value::Record(element) => if element.contains_key(STEP_INDEXABLE) {
+                        match element[STEP_INDEXABLE] {
+                            Value::Blob(bytes) => if position(bytes) {
+                                Some(Step::Element(bytes))
+                            } else {
+                                None
+                            },
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    },
+                    _ => None,
+                }
+            } else if !key && !element && follow {
+                Some(Step::Follow)
+            } else {
+                None
+            }
+        },
+        _ => None,
+    }
+}
+
+/// The steps values are, when each is one.
+pub open spec fn read_steps(values: Seq<Value>) -> Option<Seq<Step>>
+    decreases values.len(),
 {
-    if stack.len() == 0 {
-        None
-    } else if stack[0].0 == cell {
-        Some(0)
+    if values.len() == 0 {
+        Some(Seq::empty())
     } else {
-        match first_resolving(stack.drop_first(), cell) {
-            Some(at) => Some(at + 1),
+        match read_steps(values.drop_last()) {
+            Some(steps) => match read_step(values.last()) {
+                Some(step) => Some(steps.push(step)),
+                None => None,
+            },
             None => None,
         }
     }
 }
 
-/// Where a reference first put `cell` under resolution.
-pub open spec fn referenced_at(stack: Seq<(u128, Reached)>, cell: u128) -> Option<int>
-    decreases stack.len(),
-{
-    if stack.len() == 0 {
-        None
-    } else if stack[0].0 == cell && stack[0].1 is Reference {
-        Some(0)
-    } else {
-        match referenced_at(stack.drop_first(), cell) {
-            Some(at) => Some(at + 1),
-            None => None,
-        }
+/// The path GID data is: a list of steps.
+pub open spec fn read_path(value: Value) -> Option<Seq<Step>> {
+    match value {
+        Value::List(values) => read_steps(values),
+        _ => None,
     }
 }
 
-/// The cells under resolution from `at` on.
-pub open spec fn resolving_cells(stack: Seq<(u128, Reached)>, at: int) -> Seq<Value> {
-    Seq::new((stack.len() - at) as nat, |i: int| Value::Cell(stack[at + i].0))
+/// The origin GID data is: one with exactly one of `input`, `root` and
+/// `cell`, holding a path, or with a cell, naming it and with its `path`.
+pub open spec fn read_origin(value: Value) -> Option<Origin> {
+    match value {
+        Value::Record(fields) => {
+            let input = fields.contains_key(ORIGIN_INPUT);
+            let root = fields.contains_key(ORIGIN_ROOT);
+            let cell = fields.contains_key(ORIGIN_CELL);
+            if input && !root && !cell {
+                match read_path(fields[ORIGIN_INPUT]) {
+                    Some(path) => Some(Origin { start: Start::Input, path }),
+                    None => None,
+                }
+            } else if !input && root && !cell {
+                match read_path(fields[ORIGIN_ROOT]) {
+                    Some(path) => Some(Origin { start: Start::Root, path }),
+                    None => None,
+                }
+            } else if !input && !root && cell && fields.contains_key(ORIGIN_PATH) {
+                match fields[ORIGIN_CELL] {
+                    Value::Cell(cell) => match read_path(fields[ORIGIN_PATH]) {
+                        Some(path) => Some(Origin { start: Start::Cell(cell), path }),
+                        None => None,
+                    },
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        },
+        _ => None,
+    }
 }
 
-/// `{absent: cell cycle, cycle: [...]}`: the cells under resolution from
-/// `at` on, then `cell` again.
-pub open spec fn cycle(stack: Seq<(u128, Reached)>, at: int, cell: u128) -> Value {
-    absent(CELL_CYCLE, CYCLE, Value::List(resolving_cells(stack, at).push(Value::Cell(cell))))
+/// `{call: origin}`, where the call an absent is about is, when it has an
+/// origin, and nothing when it doesn't.
+pub open spec fn called(call: Option<Origin>) -> Seq<(u128, Value)> {
+    match call {
+        Some(call) => seq![(ABSENT_CALL, origin_value(call))],
+        None => Seq::empty(),
+    }
 }
 
+// The absents the core's forms come to.
+
+/// `{isa: absent, reason: missing cell, cell}`.
 pub open spec fn missing_cell(cell: u128) -> Value {
-    absent(MISSING_CELL, ABSENT_CELL, Value::Cell(cell))
+    with_detail(MISSING_CELL, ABSENT_CELL, Value::Cell(cell))
 }
 
-pub open spec fn missing_argument(parameter: u128) -> Value {
-    absent(MISSING_ARGUMENT, ABSENT_CELL, Value::Cell(parameter))
+/// Why a call has no argument under `parameter`: carrying where the call
+/// is, when it has an origin.
+pub open spec fn missing_argument(parameter: u128, call: Option<Origin>) -> Value {
+    absent(MISSING_ARGUMENT, seq![(ABSENT_CELL, Value::Cell(parameter))] + called(call))
+}
+
+/// Why a form can't be used while it lacks `field`, which its kind
+/// requires.
+pub open spec fn missing_field(field: u128) -> Value {
+    with_detail(MISSING_FIELD, ABSENT_CELL, Value::Cell(field))
+}
+
+/// Why `callable` can't be called: an absent `callable` as it is, since what
+/// failed before it is the reason.
+pub open spec fn not_callable(callable: Value) -> Value {
+    if is_absent(callable) {
+        callable
+    } else {
+        with_detail(NOT_CALLABLE, ABSENT_VALUE, callable)
+    }
+}
+
+/// The code under a field a form's kind requires: what's there, or, while
+/// it's missing, why, which evaluates to itself.
+pub open spec fn required(fields: Map<u128, Value>, field: u128) -> Value {
+    if fields.contains_key(field) {
+        fields[field]
+    } else {
+        missing_field(field)
+    }
 }
 
 /// A lambda's parameters, when each is a cell, or the first that isn't.
@@ -245,39 +433,80 @@ pub open spec fn parameters(params: Seq<Value>) -> Result<Seq<u128>, Value>
     }
 }
 
-/// `{params, body, ...}` evaluated in `environment`: a closure capturing the
-/// environment, the record `{closure: {params, body, ..., environment}}`,
-/// which keeps the lambda's other fields. Parameters that aren't a list, or
-/// include something that isn't a cell, come to an absent instead.
-pub open spec fn lambda(fields: Map<u128, Value>, environment: Map<u128, Value>) -> Value {
-    match fields[PARAMS] {
-        Value::List(params) => match parameters(params) {
-            Ok(_) => Value::Record(
-                map![CLOSURE => Value::Record(fields.remove(BODY_ORIGIN).insert(ENVIRONMENT, Value::Record(environment)))],
-            ),
-            Err(parameter) => absent(INVALID_PARAMETER, ABSENT_VALUE, parameter),
-        },
-        _ => absent(MALFORMED_LAMBDA, ABSENT_VALUE, Value::Record(fields)),
+/// A closure: `{isa: closure, lambda, environment}`, with where its body was
+/// written under `body origin` when it was.
+pub open spec fn closure_record(
+    lambda: Map<u128, Value>,
+    environment: Map<u128, Value>,
+    body_origin: Option<Origin>,
+) -> Value {
+    let fields = map![ISA => Value::Cell(KIND_CLOSURE), LAMBDA => Value::Record(lambda), ENVIRONMENT => Value::Record(environment)];
+    match body_origin {
+        Some(origin) => Value::Record(fields.insert(BODY_ORIGIN, origin_value(origin))),
+        None => Value::Record(fields),
     }
 }
 
-/// A closure record's parameters, body and captured environment, when
-/// `callable` is one: `{closure: {params: [cells], body, environment: {...}}}`.
-pub open spec fn closure(callable: Value) -> Option<(Seq<u128>, Value, Map<u128, Value>)> {
+/// A lambda `{isa: lambda, params, body, ...}`, written at `origin`,
+/// evaluated in `environment`: a closure capturing the environment, holding
+/// the lambda as written, its body why it's missing if it is. Parameters
+/// that aren't a list, or include something that isn't a cell, come to an
+/// absent instead.
+pub open spec fn lambda(
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
+    environment: Map<u128, Value>,
+) -> Value {
+    let malformed = with_detail(MALFORMED_LAMBDA, ABSENT_VALUE, Value::Record(fields));
+    if fields.contains_key(PARAMS) {
+        match fields[PARAMS] {
+            Value::List(params) => match parameters(params) {
+                Ok(_) => closure_record(
+                    fields.insert(BODY, required(fields, BODY)),
+                    environment,
+                    child(origin, BODY),
+                ),
+                Err(parameter) => with_detail(INVALID_PARAMETER, ABSENT_VALUE, parameter),
+            },
+            _ => malformed,
+        }
+    } else {
+        malformed
+    }
+}
+
+/// Where a closure's body was written, when its record says so legibly.
+pub open spec fn body_origin(fields: Map<u128, Value>) -> Option<Origin> {
+    if fields.contains_key(BODY_ORIGIN) {
+        read_origin(fields[BODY_ORIGIN])
+    } else {
+        None
+    }
+}
+
+/// A closure's parameters, body, where its body was written and captured
+/// environment, when `callable` is a closure record: its lambda with a list
+/// of cells for parameters, and a body, and a record for its environment.
+pub open spec fn closure(callable: Value) -> Option<(Seq<u128>, Value, Option<Origin>, Map<u128, Value>)> {
     match callable {
-        Value::Record(outer) => if outer.contains_key(CLOSURE) {
-            match outer[CLOSURE] {
-                Value::Record(fields) => if fields.contains_key(PARAMS) && fields.contains_key(BODY)
-                    && fields.contains_key(ENVIRONMENT) {
-                    match (fields[PARAMS], fields[ENVIRONMENT]) {
-                        (Value::List(params), Value::Record(captured)) => match parameters(params) {
-                            Ok(cells) => Some((cells, fields[BODY], captured)),
-                            Err(_) => None,
-                        },
-                        _ => None,
-                    }
-                } else {
-                    None
+        Value::Record(fields) => if kind(fields) == Some(KIND_CLOSURE) && fields.contains_key(LAMBDA)
+            && fields.contains_key(ENVIRONMENT) {
+            match fields[LAMBDA] {
+                Value::Record(lambda) => match fields[ENVIRONMENT] {
+                    Value::Record(captured) => if lambda.contains_key(PARAMS) && lambda.contains_key(
+                        BODY,
+                    ) {
+                        match lambda[PARAMS] {
+                            Value::List(params) => match parameters(params) {
+                                Ok(cells) => Some((cells, lambda[BODY], body_origin(fields), captured)),
+                                Err(_) => None,
+                            },
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    },
+                    _ => None,
                 },
                 _ => None,
             }
@@ -288,12 +517,14 @@ pub open spec fn closure(callable: Value) -> Option<(Seq<u128>, Value, Map<u128,
     }
 }
 
-/// The cell a callable names, as a bare cell or as `{ffi: cell}`.
-pub open spec fn named_cell(callable: Value) -> Option<u128> {
-    match callable {
-        Value::Cell(cell) => Some(cell),
-        Value::Record(fields) => if fields.contains_key(FFI) {
-            match fields[FFI] {
+/// The cell a foreign function is implemented under, when `value` is one:
+/// `{isa: foreign function, implementation: cell}`.
+pub open spec fn implementation_cell(value: Value) -> Option<u128> {
+    match value {
+        Value::Record(fields) => if kind(fields) == Some(KIND_FOREIGN_FUNCTION) && fields.contains_key(
+            IMPLEMENTATION,
+        ) {
+            match fields[IMPLEMENTATION] {
                 Value::Cell(cell) => Some(cell),
                 _ => None,
             }
@@ -304,31 +535,48 @@ pub open spec fn named_cell(callable: Value) -> Option<u128> {
     }
 }
 
-/// Evaluating `expression` in `environment`: one unit of fuel, then by its
-/// form. A record with a `function` is a call; one with `params` and `body`,
-/// a lambda; one with a `value`, that value's expression, in the same
-/// environment. Anything else is data, its own value.
+/// The cell calling `callable` calls: the cell it is, or the one a foreign
+/// function is implemented under.
+pub open spec fn callee_cell(callable: Value) -> Option<u128> {
+    match callable {
+        Value::Cell(cell) => Some(cell),
+        _ => implementation_cell(callable),
+    }
+}
+
+// Evaluation.
+
+/// Evaluating `expression`, written at `origin`, in `environment`: one unit
+/// of fuel, then, with evaluations allowed to nest one less deep within it,
+/// by its form. A cell is a reference. A record is what its `isa` makes it:
+/// a call, a lambda, or a value wrapper, whose value is evaluated in the same
+/// environment; a record of any other kind, or of none, and anything else,
+/// are data, their own value.
 pub open spec fn eval(
     expression: Value,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 0nat, 0nat,
 {
     if fuel < 2 {
         (Outcome::OutOfFuel, fuel)
+    } else if depth == 0 {
+        (Outcome::OutOfDepth, 1)
     } else {
         let rest = (fuel - 1) as nat;
+        let within = (depth - 1) as nat;
         let (outcome, spent) = match expression {
-            Value::Cell(cell) => reference(cell, environment, host, stack, rest),
-            Value::Record(fields) => if fields.contains_key(FUNCTION) {
-                call(fields, environment, host, stack, rest)
-            } else if fields.contains_key(PARAMS) && fields.contains_key(BODY) {
-                (Outcome::Done(lambda(fields, environment)), 0)
-            } else if fields.contains_key(VALUE) {
-                eval(fields[VALUE], environment, host, stack, rest)
+            Value::Cell(cell) => reference(cell, environment, host, rest, within),
+            Value::Record(fields) => if kind(fields) == Some(KIND_CALL) {
+                call(fields, origin, environment, host, rest, within)
+            } else if kind(fields) == Some(KIND_LAMBDA) {
+                (Outcome::Done(lambda(fields, origin, environment)), 0)
+            } else if kind(fields) == Some(KIND_VALUE_WRAPPER) {
+                eval(required(fields, VALUE), child(origin, VALUE), environment, host, rest, within)
             } else {
                 (Outcome::Done(expression), 0)
             },
@@ -338,15 +586,14 @@ pub open spec fn eval(
     }
 }
 
-/// A reference to `cell`: its lexical binding; otherwise its definition,
-/// evaluated where it's referenced, unless a reference already has the cell
-/// under resolution.
+/// A reference to `cell`: its lexical binding; otherwise its definition's
+/// value, evaluated where it's referenced.
 pub open spec fn reference(
     cell: u128,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 1nat, 0nat,
 {
@@ -355,34 +602,34 @@ pub open spec fn reference(
     } else {
         match resolve(host, cell) {
             None => (Outcome::Done(missing_cell(cell)), 0),
-            Some(definition) => match referenced_at(stack, cell) {
-                Some(at) => (Outcome::Done(cycle(stack, at, cell)), 0),
-                None => eval(
-                    definition_value(definition),
-                    environment,
-                    host,
-                    stack.push((cell, Reached::Reference)),
-                    fuel,
-                ),
-            },
+            Some(definition) => eval(
+                definition.value,
+                Some(defined_at(cell)),
+                environment,
+                host,
+                fuel,
+                depth,
+            ),
         }
     }
 }
 
-/// A call `{function, ...arguments}`. A function that's a cell without a
-/// lexical binding calls through the cell's definition; one with a binding
-/// spends a unit of fuel and applies the bound value; any other is evaluated
-/// and its value applied.
+/// A call `{isa: call, function, ...arguments}`, written at `origin`. A
+/// function that's a cell without a lexical binding calls the cell; one with
+/// a binding spends a unit of fuel and applies the bound value; any other is
+/// evaluated and its value applied. A missing function is why it's missing,
+/// which isn't callable.
 pub open spec fn call(
     fields: Map<u128, Value>,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 4nat, 0nat,
 {
-    match fields[FUNCTION] {
+    match required(fields, FUNCTION) {
         Value::Cell(cell) => if environment.contains_key(cell) {
             if fuel < 2 {
                 (Outcome::OutOfFuel, fuel)
@@ -390,27 +637,36 @@ pub open spec fn call(
                 let (outcome, spent) = apply(
                     environment[cell],
                     fields,
+                    origin,
                     environment,
                     host,
-                    stack,
                     (fuel - 1) as nat,
+                    depth,
                 );
                 (outcome, spent + 1)
             }
         } else {
-            through_cell(cell, fields, environment, host, stack, fuel)
+            call_cell(cell, fields, origin, environment, host, fuel, depth)
         },
         function => {
-            let (outcome, spent) = eval(function, environment, host, stack, fuel);
+            let (outcome, spent) = eval(
+                function,
+                child(origin, FUNCTION),
+                environment,
+                host,
+                fuel,
+                depth,
+            );
             match outcome {
                 Outcome::Done(callable) => {
                     let (applied, more) = apply(
                         callable,
                         fields,
+                        origin,
                         environment,
                         host,
-                        stack,
                         left(fuel, spent),
+                        depth,
                     );
                     (applied, spent + more)
                 },
@@ -420,18 +676,18 @@ pub open spec fn call(
     }
 }
 
-/// Calling through `cell`: a unit of fuel, then its definition. A foreign
-/// function's leaves the core, and a primitive's runs. Grap's is evaluated
-/// where the call is, unless anything already has the cell under
-/// resolution, and is applied unless it comes to an absent, which is the
-/// call's result as it is.
-pub open spec fn through_cell(
+/// Calling `cell`: a unit of fuel, then its definition. A value that's a
+/// foreign function implemented under the cell runs what the host
+/// implements there: a primitive's operation, or code that leaves the core;
+/// without any, it isn't callable. Any other value is called as code.
+pub open spec fn call_cell(
     cell: u128,
-    call_fields: Map<u128, Value>,
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 2nat, 0nat,
 {
@@ -441,75 +697,93 @@ pub open spec fn through_cell(
         let rest = (fuel - 1) as nat;
         let (outcome, spent) = match resolve(host, cell) {
             None => (Outcome::Done(missing_cell(cell)), 0),
-            Some(Definition::Foreign(_)) => (Outcome::Beyond, 0),
-            Some(Definition::Primitive(_, primitive)) => primitive_call(
-                primitive,
-                call_fields,
-                environment,
-                host,
-                stack,
-                rest,
-            ),
-            Some(Definition::Grap(definition)) => match first_resolving(stack, cell) {
-                Some(at) => (Outcome::Done(cycle(stack, at, cell)), 0),
-                None => {
-                    let (evaluated, spent) = eval(
-                        definition,
+            Some(definition) => if implementation_cell(definition.value) == Some(cell) {
+                match definition.implementation {
+                    Some(Implementation::Primitive(primitive)) => primitive_call(
+                        primitive,
+                        fields,
+                        origin,
                         environment,
                         host,
-                        stack.push((cell, Reached::Call)),
                         rest,
-                    );
-                    match evaluated {
-                        Outcome::Done(callable) => if is_absent(callable) {
-                            (Outcome::Done(callable), spent)
-                        } else {
-                            let (applied, more) = apply(
-                                callable,
-                                call_fields,
-                                environment,
-                                host,
-                                stack,
-                                left(rest, spent),
-                            );
-                            (applied, spent + more)
-                        },
-                        stopped => (stopped, spent),
-                    }
-                },
+                        depth,
+                    ),
+                    Some(Implementation::Foreign) => (Outcome::Beyond, 0),
+                    None => (Outcome::Done(not_callable(definition.value)), 0),
+                }
+            } else {
+                call_code(definition.value, cell, fields, origin, environment, host, rest, depth)
             },
         };
         (outcome, spent + 1)
     }
 }
 
-/// Applying a callable to a call's arguments: a closure binds its parameters
-/// and evaluates its body; a value naming a cell calls through the cell;
-/// anything else isn't callable.
-pub open spec fn apply(
-    callable: Value,
-    call_fields: Map<u128, Value>,
+/// Calling `cell`, whose definition is code, `value`: it's evaluated where
+/// the call is, and applied unless it comes to an absent, which is the
+/// call's result as it is.
+pub open spec fn call_code(
+    value: Value,
+    cell: u128,
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
+) -> (Outcome, nat)
+    decreases fuel, 5nat, 0nat,
+{
+    let (evaluated, spent) = eval(value, Some(defined_at(cell)), environment, host, fuel, depth);
+    match evaluated {
+        Outcome::Done(callable) => if is_absent(callable) {
+            (Outcome::Done(callable), spent)
+        } else {
+            let (applied, more) = apply(
+                callable,
+                fields,
+                origin,
+                environment,
+                host,
+                left(fuel, spent),
+                depth,
+            );
+            (applied, spent + more)
+        },
+        stopped => (stopped, spent),
+    }
+}
+
+/// Applying a callable to a call's arguments: a closure binds its parameters
+/// and evaluates its body; a value naming a cell calls the cell; anything
+/// else isn't callable.
+pub open spec fn apply(
+    callable: Value,
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
+    environment: Map<u128, Value>,
+    host: Seq<(u128, Definition)>,
+    fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 3nat, 0nat,
 {
     match closure(callable) {
-        Some((params, body, captured)) => bind(
+        Some((params, body, body_origin, captured)) => bind(
             params,
             body,
+            body_origin,
             captured,
-            call_fields,
+            fields,
+            origin,
             environment,
             host,
-            stack,
             fuel,
+            depth,
         ),
-        None => match named_cell(callable) {
-            Some(cell) => through_cell(cell, call_fields, environment, host, stack, fuel),
-            None => (Outcome::Done(absent(NOT_CALLABLE, ABSENT_VALUE, callable)), 0),
+        None => match callee_cell(callable) {
+            Some(cell) => call_cell(cell, fields, origin, environment, host, fuel, depth),
+            None => (Outcome::Done(not_callable(callable)), 0),
         },
     }
 }
@@ -521,32 +795,43 @@ pub open spec fn apply(
 pub open spec fn bind(
     params: Seq<u128>,
     body: Value,
+    body_origin: Option<Origin>,
     captured: Map<u128, Value>,
-    call_fields: Map<u128, Value>,
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 2nat, params.len(),
 {
     if params.len() == 0 {
-        eval(body, captured, host, stack, fuel)
+        eval(body, body_origin, captured, host, fuel, depth)
     } else {
         let parameter = params[0];
-        if call_fields.contains_key(parameter) {
-            let (evaluated, spent) = eval(call_fields[parameter], environment, host, stack, fuel);
+        if fields.contains_key(parameter) {
+            let (evaluated, spent) = eval(
+                fields[parameter],
+                child(origin, parameter),
+                environment,
+                host,
+                fuel,
+                depth,
+            );
             match evaluated {
                 Outcome::Done(argument) => {
                     let (outcome, more) = bind(
                         params.drop_first(),
                         body,
+                        body_origin,
                         captured.insert(parameter, argument),
-                        call_fields,
+                        fields,
+                        origin,
                         environment,
                         host,
-                        stack,
                         left(fuel, spent),
+                        depth,
                     );
                     (outcome, spent + more)
                 },
@@ -556,12 +841,14 @@ pub open spec fn bind(
             bind(
                 params.drop_first(),
                 body,
-                captured.insert(parameter, missing_argument(parameter)),
-                call_fields,
+                body_origin,
+                captured.insert(parameter, missing_argument(parameter, origin)),
+                fields,
+                origin,
                 environment,
                 host,
-                stack,
                 fuel,
+                depth,
             )
         }
     }
@@ -571,50 +858,62 @@ pub open spec fn bind(
 /// the call is, or, missing, its absence, at no cost.
 pub open spec fn operand(
     label: u128,
-    call_fields: Map<u128, Value>,
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 1nat, 0nat,
 {
-    if call_fields.contains_key(label) {
-        eval(call_fields[label], environment, host, stack, fuel)
+    if fields.contains_key(label) {
+        eval(fields[label], child(origin, label), environment, host, fuel, depth)
     } else {
-        (Outcome::Done(missing_argument(label)), 0)
+        (Outcome::Done(missing_argument(label, origin)), 0)
     }
 }
 
 /// Calling a primitive: its operands in order, then its operation on them.
-/// Running out of fuel or leaving the core on an operand stops the call
-/// there.
+/// Halting or leaving the core on an operand stops the call there.
 pub open spec fn primitive_call(
     primitive: Primitive,
-    call_fields: Map<u128, Value>,
+    fields: Map<u128, Value>,
+    origin: Option<Origin>,
     environment: Map<u128, Value>,
     host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
     fuel: nat,
+    depth: nat,
 ) -> (Outcome, nat)
     decreases fuel, 2nat, 0nat,
 {
     match primitive {
         Primitive::Binary { operation, left: first_label, right: second_label } => {
-            let (first, spent) = operand(first_label, call_fields, environment, host, stack, fuel);
+            let (first, spent) = operand(
+                first_label,
+                fields,
+                origin,
+                environment,
+                host,
+                fuel,
+                depth,
+            );
             match first {
                 Outcome::Done(first) => {
                     let (second, more) = operand(
                         second_label,
-                        call_fields,
+                        fields,
+                        origin,
                         environment,
                         host,
-                        stack,
                         left(fuel, spent),
+                        depth,
                     );
                     match second {
                         Outcome::Done(second) => (
-                            Outcome::Done(binary(operation, first_label, first, second_label, second)),
+                            Outcome::Done(
+                                binary(operation, origin, first_label, first, second_label, second),
+                            ),
                             spent + more,
                         ),
                         stopped => (stopped, spent + more),
@@ -624,20 +923,24 @@ pub open spec fn primitive_call(
             }
         },
         Primitive::Unary { operation, operand: label } => {
-            let (value, spent) = operand(label, call_fields, environment, host, stack, fuel);
+            let (value, spent) = operand(label, fields, origin, environment, host, fuel, depth);
             match value {
-                Outcome::Done(value) => (Outcome::Done(unary(operation, label, value)), spent),
+                Outcome::Done(value) => (Outcome::Done(unary(operation, origin, label, value)), spent),
                 stopped => (stopped, spent),
             }
         },
     }
 }
 
-/// A binary operation on its operands' values, under their labels: its
-/// answer when both are numbers of its type, and otherwise "invalid
-/// arguments", carrying why each that isn't couldn't be used.
+// Numbers.
+
+/// A binary operation on its operands' values, under their labels, for a
+/// call written at `call`: its answer when both are numbers of its type,
+/// and otherwise "invalid arguments", carrying why each that isn't couldn't
+/// be used.
 pub open spec fn binary(
     operation: BinaryOperation,
+    call: Option<Origin>,
     first_label: u128,
     first: Value,
     second_label: u128,
@@ -648,14 +951,17 @@ pub open spec fn binary(
         (Some(left), Some(right)) => answer_value(number, binary_answer(operation, left, right)),
         (Some(_), None) => caused_by_all(
             INVALID_ARGUMENTS,
+            call,
             seq![(second_label, not_a_number(number, second))],
         ),
         (None, Some(_)) => caused_by_all(
             INVALID_ARGUMENTS,
+            call,
             seq![(first_label, not_a_number(number, first))],
         ),
         (None, None) => caused_by_all(
             INVALID_ARGUMENTS,
+            call,
             seq![
                 (first_label, not_a_number(number, first)),
                 (second_label, not_a_number(number, second)),
@@ -664,12 +970,13 @@ pub open spec fn binary(
     }
 }
 
-/// A unary operation on its operand's value, under its label.
-pub open spec fn unary(operation: UnaryOperation, label: u128, value: Value) -> Value {
+/// A unary operation on its operand's value, under its label, for a call
+/// written at `call`.
+pub open spec fn unary(operation: UnaryOperation, call: Option<Origin>, label: u128, value: Value) -> Value {
     let number = unary_number(operation);
     match number_bytes(number, value) {
         Some(bytes) => answer_value(number, unary_answer(operation, bytes)),
-        None => caused_by_all(INVALID_ARGUMENTS, seq![(label, not_a_number(number, value))]),
+        None => caused_by_all(INVALID_ARGUMENTS, call, seq![(label, not_a_number(number, value))]),
     }
 }
 
@@ -721,24 +1028,24 @@ pub open spec fn number_bytes(number: Number, value: Value) -> Option<Seq<u8>> {
 }
 
 /// Why `value` isn't a `number`: an absent says why already, and passes on
-/// as it is; anything else is `{absent: not <type>, value}`.
+/// as it is; anything else is `{isa: absent, reason: not <type>, value}`.
 pub open spec fn not_a_number(number: Number, value: Value) -> Value {
     if is_absent(value) {
         value
     } else {
-        absent(not_reason(number), ABSENT_VALUE, value)
+        with_detail(not_reason(number), ABSENT_VALUE, value)
     }
 }
 
 /// An answer as a value: `{<type>: bytes}`, `{bool: true}` or `{bool:
-/// false}`, or `{absent: reason}`.
+/// false}`, or `{isa: absent, reason}`.
 pub open spec fn answer_value(number: Number, answer: Answer) -> Value {
     match answer {
         Answer::Number(bytes) => Value::Record(map![tag(number) => Value::Blob(bytes)]),
         Answer::Truth(truth) => Value::Record(
             map![BOOL => Value::Cell(if truth { TRUE } else { FALSE })],
         ),
-        Answer::Failure(reason) => Value::Record(map![ABSENT => Value::Cell(reason)]),
+        Answer::Failure(reason) => absent(reason, Seq::empty()),
     }
 }
 
@@ -859,21 +1166,27 @@ pub uninterp spec fn float_unary(operation: UnaryOperation, operand: Seq<u8>) ->
 /// A float predicate's answer.
 pub uninterp spec fn float_predicate(operation: UnaryOperation, operand: Seq<u8>) -> bool;
 
+// Absents caused by others.
+
 /// The longest chain of causes an absent grows: past it, an absent passes on
 /// unchanged instead of gaining another layer.
 pub const CHAIN_LIMIT: usize = 8;
 
-/// An absent for `reason`, carrying each detail under its field: its causes
-/// are those that are absent. An absent the same as one kept before it isn't
-/// repeated. When the longest chain of causes among them holds
-/// `CHAIN_LIMIT` absents or more, that detail passes on unchanged instead:
-/// the last of the longest.
-pub open spec fn caused_by_all(reason: u128, details: Seq<(u128, Value)>) -> Value {
+/// An absent for `reason`, about a call written at `call`, carrying each
+/// detail under its field: its causes are those that are absent. An absent
+/// the same as one kept before it isn't repeated. When the longest chain of
+/// causes among them holds `CHAIN_LIMIT` absents or more, that detail passes
+/// on unchanged instead: the last of the longest.
+pub open spec fn caused_by_all(
+    reason: u128,
+    call: Option<Origin>,
+    details: Seq<(u128, Value)>,
+) -> Value {
     let kept = distinct(details);
     if kept.len() > 0 && chain_at_least(kept[longest(kept)].1, CHAIN_LIMIT as nat) {
         kept[longest(kept)].1
     } else {
-        Value::Record(to_map(seq![(ABSENT, Value::Cell(reason))] + kept))
+        absent(reason, called(call) + kept)
     }
 }
 
@@ -919,7 +1232,8 @@ pub open spec fn as_long(value: Value, other: Value) -> bool {
 
 /// Whether `value`'s causes hold a chain of at least `n` absents: none
 /// trivially; otherwise `value` is absent, and, past one, a detail of it
-/// other than its reason holds the rest.
+/// holds the rest. Its kind and reason are cells, never absent, so only its
+/// causes can.
 pub open spec fn chain_at_least(value: Value, n: nat) -> bool
     decreases n,
 {
@@ -928,7 +1242,7 @@ pub open spec fn chain_at_least(value: Value, n: nat) -> bool
     } else {
         match value {
             Value::Record(fields) => is_absent(value) && (n == 1 || exists|field: u128|
-                field != ABSENT && #[trigger] fields.contains_key(field) && chain_at_least(
+                #[trigger] fields.contains_key(field) && chain_at_least(
                     fields[field],
                     (n - 1) as nat,
                 )),
@@ -937,16 +1251,28 @@ pub open spec fn chain_at_least(value: Value, n: nat) -> bool
     }
 }
 
-/// A program evaluated with `fuel`: its result, the fuel left, and whether it
-/// completed, or `None` when it calls a foreign function. A program that
-/// runs out comes to `{absent: fuel exhausted}`, with none left.
+/// A program, handed to an evaluation as its input, evaluated with `fuel`:
+/// its result, the fuel left, and why it halted, if it did; or `None` when
+/// it calls a foreign function. A halted program comes to the halt's absent,
+/// `{isa: absent, reason: fuel exhausted}` with no fuel left, or `{isa:
+/// absent, reason: depth exhausted}`.
 pub open spec fn evaluate(expression: Value, host: Seq<(u128, Definition)>, fuel: nat) -> Option<
-    (Value, nat, bool),
+    (Value, nat, Option<Halt>),
 > {
-    let (outcome, spent) = eval(expression, Map::empty(), host, Seq::empty(), fuel);
+    let (outcome, spent) = eval(
+        expression,
+        Some(input()),
+        Map::empty(),
+        host,
+        fuel,
+        MAX_DEPTH as nat,
+    );
     match outcome {
-        Outcome::Done(result) => Some((result, left(fuel, spent), true)),
-        Outcome::OutOfFuel => Some((fuel_exhausted(), 0, false)),
+        Outcome::Done(result) => Some((result, left(fuel, spent), None)),
+        Outcome::OutOfFuel => Some((absent(FUEL_EXHAUSTED, Seq::empty()), 0, Some(Halt::FuelExhausted))),
+        Outcome::OutOfDepth => Some(
+            (absent(DEPTH_EXHAUSTED, Seq::empty()), left(fuel, spent), Some(Halt::DepthExhausted)),
+        ),
         Outcome::Beyond => None,
     }
 }

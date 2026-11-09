@@ -8,8 +8,10 @@
 #[cfg(verus_only)]
 use crate::definition;
 use crate::definition::CHAIN_LIMIT;
+#[cfg(verus_only)]
+use crate::origin::view_at;
+use crate::origin::{At, push_called};
 use crate::value::*;
-use std::rc::Rc;
 use verus_builtin_macros::verus;
 #[cfg(verus_only)]
 use vstd::prelude::*;
@@ -28,8 +30,10 @@ pub proof fn lemma_chain_shorter(value: Value, n: nat, m: nat)
     if n >= 2 {
         let fields = value->Record_0;
         let field = choose|field: u128|
-            field != ABSENT && #[trigger] fields.contains_key(field)
-                && definition::chain_at_least(fields[field], (m - 1) as nat);
+            #[trigger] fields.contains_key(field) && definition::chain_at_least(
+                fields[field],
+                (m - 1) as nat,
+            );
         lemma_chain_shorter(fields[field], (n - 1) as nat, (m - 1) as nat);
     }
 }
@@ -62,33 +66,30 @@ pub fn chain_at_least(value: &ExecValue, n: usize) -> (holds: bool)
                     view(*value) == Value::Record(view_map(fields@)),
                     is_absent(view(*value)),
                     forall|k: int|
-                        0 <= k < i && (#[trigger] fields@[k]).0 != ABSENT
-                            ==> !definition::chain_at_least(
-                            view_map(fields@)[fields@[k].0],
+                        0 <= k < i ==> !definition::chain_at_least(
+                            view_map(fields@)[(#[trigger] fields@[k]).0],
                             (n - 1) as nat,
                         ),
                 decreases fields.len() - i,
             {
                 let cell = fields[i].0;
-                if cell != ABSENT {
-                    proof {
-                        lemma_view_map_keys(fields@, cell);
-                        assert(fields@[i as int].0 == cell);
-                    }
-                    match get_index(fields, cell) {
-                        Some(at) => {
-                            if chain_at_least(&fields[at].1, n - 1) {
-                                return true;
-                            }
-                        },
-                        None => {},
-                    }
+                proof {
+                    lemma_view_map_keys(fields@, cell);
+                    assert(fields@[i as int].0 == cell);
+                }
+                match get_index(fields, cell) {
+                    Some(at) => {
+                        if chain_at_least(&fields[at].1, n - 1) {
+                            return true;
+                        }
+                    },
+                    None => {},
                 }
                 i += 1;
             }
             proof {
                 assert forall|cell: u128|
-                    cell != ABSENT && #[trigger] view_map(fields@).contains_key(
+                    #[trigger] view_map(fields@).contains_key(
                         cell,
                     ) implies !definition::chain_at_least(
                     view_map(fields@)[cell],
@@ -96,7 +97,7 @@ pub fn chain_at_least(value: &ExecValue, n: usize) -> (holds: bool)
                 ) by {
                     lemma_view_map_keys(fields@, cell);
                     let k = choose|k: int| 0 <= k < fields@.len() && #[trigger] fields@[k].0 == cell;
-                    assert(fields@[k].0 != ABSENT);
+                    assert(0 <= k < fields@.len());
                 }
             }
             false
@@ -108,11 +109,8 @@ pub fn chain_at_least(value: &ExecValue, n: usize) -> (holds: bool)
 /// Whether `value`'s causes include one at least as long as `other`'s
 /// detail under `cell`, when that detail is a cause.
 pub open spec fn matched(value: Map<u128, Value>, other: Map<u128, Value>, cell: u128) -> bool {
-    cell != ABSENT && is_absent(other[cell]) ==> exists|field: u128|
-        field != ABSENT && #[trigger] value.contains_key(field) && definition::as_long(
-            value[field],
-            other[cell],
-        )
+    is_absent(other[cell]) ==> exists|field: u128|
+        #[trigger] value.contains_key(field) && definition::as_long(value[field], other[cell])
 }
 
 /// Whether `value`'s longest chain of causes is at least as long as
@@ -180,7 +178,7 @@ pub fn as_long(value: &ExecValue, other: &ExecValue) -> (holds: bool)
                             return false;
                         },
                     };
-                    if cell != ABSENT && exec_is_absent(&others[at].1) {
+                    if exec_is_absent(&others[at].1) {
                         let ghost cause = theirs[cell];
                         let mut found = false;
                         let ghost mut bound: nat = 1;
@@ -194,62 +192,63 @@ pub fn as_long(value: &ExecValue, other: &ExecValue) -> (holds: bool)
                                 cause == view(others@[at as int].1),
                                 is_absent(cause),
                                 found ==> exists|field: u128|
-                                    field != ABSENT && #[trigger] mine.contains_key(field)
-                                        && definition::as_long(mine[field], cause),
+                                    #[trigger] mine.contains_key(field) && definition::as_long(
+                                        mine[field],
+                                        cause,
+                                    ),
                                 !found ==> bound >= 1 && definition::chain_at_least(cause, bound),
                                 !found ==> forall|k: int|
-                                    0 <= k < i && (#[trigger] fields@[k]).0 != ABSENT
-                                        ==> !definition::chain_at_least(mine[fields@[k].0], bound),
+                                    0 <= k < i ==> !definition::chain_at_least(
+                                        mine[(#[trigger] fields@[k]).0],
+                                        bound,
+                                    ),
                             decreases fields.len() - i,
                         {
                             let field = fields[i].0;
-                            if field != ABSENT {
-                                proof {
-                                    lemma_view_map_keys(fields@, field);
-                                    assert(fields@[i as int].0 == field);
-                                }
-                                match get_index(fields, field) {
-                                    Some(here) => {
-                                        if as_long(&fields[here].1, &others[at].1) {
-                                            found = true;
-                                        } else {
-                                            proof {
-                                                let detail = mine[field];
-                                                let n = choose|n: nat|
-                                                    #[trigger] definition::chain_at_least(cause, n)
-                                                        && !definition::chain_at_least(detail, n);
-                                                let previous = bound;
-                                                if n > bound {
-                                                    bound = n;
-                                                }
-                                                assert forall|k: int|
-                                                    0 <= k <= i && (#[trigger] fields@[k]).0
-                                                        != ABSENT implies !definition::chain_at_least(
-                                                    mine[fields@[k].0],
-                                                    bound,
-                                                ) by {
-                                                    if k < i {
-                                                        if definition::chain_at_least(
+                            proof {
+                                lemma_view_map_keys(fields@, field);
+                                assert(fields@[i as int].0 == field);
+                            }
+                            match get_index(fields, field) {
+                                Some(here) => {
+                                    if as_long(&fields[here].1, &others[at].1) {
+                                        found = true;
+                                    } else {
+                                        proof {
+                                            let detail = mine[field];
+                                            let n = choose|n: nat|
+                                                #[trigger] definition::chain_at_least(cause, n)
+                                                    && !definition::chain_at_least(detail, n);
+                                            let previous = bound;
+                                            if n > bound {
+                                                bound = n;
+                                            }
+                                            assert forall|k: int|
+                                                0 <= k <= i implies !definition::chain_at_least(
+                                                mine[(#[trigger] fields@[k]).0],
+                                                bound,
+                                            ) by {
+                                                if k < i {
+                                                    if definition::chain_at_least(
+                                                        mine[fields@[k].0],
+                                                        bound,
+                                                    ) {
+                                                        lemma_chain_shorter(
                                                             mine[fields@[k].0],
+                                                            previous,
                                                             bound,
-                                                        ) {
-                                                            lemma_chain_shorter(
-                                                                mine[fields@[k].0],
-                                                                previous,
-                                                                bound,
-                                                            );
-                                                        }
-                                                    } else {
-                                                        if definition::chain_at_least(detail, bound) {
-                                                            lemma_chain_shorter(detail, n, bound);
-                                                        }
+                                                        );
+                                                    }
+                                                } else {
+                                                    if definition::chain_at_least(detail, bound) {
+                                                        lemma_chain_shorter(detail, n, bound);
                                                     }
                                                 }
                                             }
                                         }
-                                    },
-                                    None => {},
-                                }
+                                    }
+                                },
+                                None => {},
                             }
                             i += 1;
                         }
@@ -260,13 +259,13 @@ pub fn as_long(value: &ExecValue, other: &ExecValue) -> (holds: bool)
                                     assert(theirs.contains_key(cell));
                                 }
                                 assert forall|field: u128|
-                                    field != ABSENT && #[trigger] mine.contains_key(
+                                    #[trigger] mine.contains_key(
                                         field,
                                     ) implies !definition::chain_at_least(mine[field], bound) by {
                                     lemma_view_map_keys(fields@, field);
                                     let k = choose|k: int|
                                         0 <= k < fields@.len() && #[trigger] fields@[k].0 == field;
-                                    assert(fields@[k].0 != ABSENT);
+                                    assert(0 <= k < fields@.len());
                                 }
                                 assert(!definition::chain_at_least(view(*value), n));
                             }
@@ -283,15 +282,19 @@ pub fn as_long(value: &ExecValue, other: &ExecValue) -> (holds: bool)
                     ) by {
                         if n >= 2 {
                             let cell = choose|cell: u128|
-                                cell != ABSENT && #[trigger] theirs.contains_key(cell)
-                                    && definition::chain_at_least(theirs[cell], (n - 1) as nat);
+                                #[trigger] theirs.contains_key(cell) && definition::chain_at_least(
+                                    theirs[cell],
+                                    (n - 1) as nat,
+                                );
                             lemma_view_map_keys(others@, cell);
                             let k = choose|k: int|
                                 0 <= k < others@.len() && #[trigger] others@[k].0 == cell;
                             assert(matched(mine, theirs, others@[k].0));
                             let field = choose|field: u128|
-                                field != ABSENT && #[trigger] mine.contains_key(field)
-                                    && definition::as_long(mine[field], theirs[cell]);
+                                #[trigger] mine.contains_key(field) && definition::as_long(
+                                    mine[field],
+                                    theirs[cell],
+                                );
                             assert(definition::chain_at_least(mine[field], (n - 1) as nat));
                         }
                     }
@@ -429,11 +432,11 @@ fn longest(details: &Vec<(u128, ExecValue)>) -> (at: usize)
     at
 }
 
-/// An absent for `reason`, carrying each detail under its field, as
-/// `definition::caused_by_all` says.
-pub fn caused_by_all(reason: u128, details: &Vec<(u128, ExecValue)>) -> (made: ExecValue)
+/// An absent for `reason`, about a call written at `call`, carrying each
+/// detail under its field, as `definition::caused_by_all` says.
+pub fn caused_by_all(reason: u128, call: &At, details: &Vec<(u128, ExecValue)>) -> (made: ExecValue)
     ensures
-        view(made) == definition::caused_by_all(reason, view_pairs(details@)),
+        view(made) == definition::caused_by_all(reason, view_at(*call), view_pairs(details@)),
 {
     let kept = distinct(details);
     if kept.len() > 0 {
@@ -443,15 +446,13 @@ pub fn caused_by_all(reason: u128, details: &Vec<(u128, ExecValue)>) -> (made: E
         }
     }
     let mut fields: Vec<(u128, ExecValue)> = Vec::new();
-    let first = (ABSENT, ExecValue::Cell(reason));
     proof {
-        lemma_view_pairs_push(fields@, first);
+        assert(view_pairs(fields@) =~= Seq::<(u128, Value)>::empty());
     }
-    fields.push(first);
-    let ghost head = seq![(ABSENT, Value::Cell(reason))];
+    push_called(&mut fields, call);
+    let ghost head = view_pairs(fields@);
     proof {
-        reveal_with_fuel(view, 2);
-        assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<(u128, Value)>::empty());
+        assert(head =~= definition::called(view_at(*call)));
         assert(view_pairs(fields@) =~= head + view_pairs(kept@).subrange(0, 0));
     }
     let mut i = 0;
@@ -474,11 +475,7 @@ pub fn caused_by_all(reason: u128, details: &Vec<(u128, ExecValue)>) -> (made: E
     proof {
         assert(view_pairs(kept@).subrange(0, kept@.len() as int) =~= view_pairs(kept@));
     }
-    let fields = Rc::new(fields);
-    proof {
-        lemma_view_record(fields);
-    }
-    ExecValue::Record(fields)
+    exec_absent(reason, &fields)
 }
 
 } // verus!

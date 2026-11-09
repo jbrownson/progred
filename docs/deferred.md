@@ -1444,38 +1444,41 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
   evaluations burns their fuel, which works for work already measured but rules
   out skipping work of unknown cost, such as dead code that might loop.
   - Two slices exist: [`grap-reference`](../grap-reference/src/definition.rs)
-    defines the core, and the number operations Grap runs natively, without
-    other foreign functions or origins, with an executable evaluator proven to
+    defines the core, with the origins closures and its absents carry and the
+    depth evaluations may nest, and the number operations Grap runs natively,
+    without other foreign functions, with an executable evaluator proven to
     compute it, and Grap's evaluator agrees with it on the tests in
-    `grap/src/reference_tests.rs`. See
+    `grap/src/tests/reference.rs`. See
     [verification](verification.md#graps-core).
   - The tests register the number operations as the numbers library does, but
     under cells of their own, so nothing yet checks the library's table, which
     cell it registers each operation under.
   - Next, in order: the control functions, `match`, `let`, `do`, `all` and
     `quote`, which drive the evaluator through `Context`, so the definition
-    needs a contract for that interface too; effects; and the call origins
-    click-to-source reads.
+    needs a contract for that interface too; effects; and the calls an
+    observer is told of, which click-to-source reads.
   - Then the fast evaluator. The current one's `Rc<dyn Fn>` closures and
     `RefCell` caches are outside what Verus follows well, so the route is a
     new evaluator proven against the definition, made fast under the proof.
     A first one exists for the core and numbers:
     [`fast.rs`](../grap-reference/src/fast.rs) lowers code once, holds
     closures and numbers as runtime values and environments as shared frames,
-    and Verus proves it computes the definition exactly, with about 1,400
+    and Verus proves it computes the definition exactly, with about 1,550
     lines of specification and proof for 900 of code. On the timing programs
-    in `grap/src/reference_tests.rs` (`evaluator_speed`, in microseconds per
-    evaluation on a 4-core VM in November 2026) it beats Grap's evaluator on
-    all five, partly because Grap also tracks click-to-source origins and
-    compiles every node into a closure on each evaluation:
+    in `grap/src/tests/reference.rs` (`evaluator_speed`, in microseconds per
+    evaluation on a 4-core VM in November 2026, after forms began dispatching
+    on `isa`) it beats Grap's evaluator on four and matches it on the fifth,
+    partly because Grap compiles every node into a closure on each
+    evaluation. Since both track origins now, lowering costs the fast one
+    more than it did, which shows on code run once:
 
     | Program | Grap | Reference | Fast |
     | --- | --- | --- | --- |
-    | 1,023 operations, run once | 729 | 108 | 124 |
-    | 2,047 closures called through cells | 374 | 1,249 | 253 |
-    | 255 operations under 20 frames | 106 | 31 | 28 |
-    | 255 operations run 64 times | 1,281 | 1,949 | 715 |
-    | A cell calling itself until fuel runs out | 113 | 2,454 | 95 |
+    | 1,023 operations, run once | 1,290 | 197 | 470 |
+    | 2,047 closures called through cells | 561 | 3,250 | 390 |
+    | 255 operations under 20 frames | 205 | 130 | 92 |
+    | 255 operations run 64 times | 1,700 | 4,300 | 1,170 |
+    | A cell calling itself until it nests too deeply | 101 | 1,470 | 106 |
 
     Next: grow it with the definition, lower a host's definitions once rather
     than per evaluation, then run Grap's evaluation through it.
@@ -1491,10 +1494,13 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
     it. Making every NaN result the same NaN in Grap would make float results
     deterministic and let the definition say what they are; until then the
     tests compare NaNs as NaNs.
-  - Two behaviours the definition records are open questions: whether calling
-    a cell whose definition comes to an absent should answer that it isn't
-    callable, as calling a binding to one does, and whether a reference should
-    notice a cycle through a call, as a call does through a reference.
+  - A behaviour the definition records is an open question: calling a cell,
+    or a function bound in the environment, spends the unit evaluating the
+    function would but doesn't check the depth that evaluation would, so it
+    can't halt there. The two questions the first slice raised are settled:
+    calling a cell whose definition comes to an absent, or a binding to one,
+    answers that absent, and Grap no longer detects cycles, halting instead
+    where evaluations nest too deeply.
 - **Derivative mode.** Every value would be a jet, a value with its change, as
   in Phil Freeman's [Purview](https://github.com/paf31/purescript-purview), and
   any function, user-defined ones included, would run in normal or derivative

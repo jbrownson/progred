@@ -2,24 +2,27 @@
 //! compute exactly what `definition` says, built the way a fast one is:
 //! expressions lowered once into nodes, closures and numbers held as runtime
 //! values rather than records, environments as shared frames, host cells
-//! resolved when code is lowered, and a sorted set of every cell a lambda
-//! binds, so looking up any other cell skips the frames.
+//! resolved when code is lowered, where code was written shared rather than
+//! copied, and a sorted set of every cell a lambda binds, so looking up any
+//! other cell skips the frames.
 //!
 //! The proof relates each structure to what it means: a runtime value to the
 //! GID value it materializes as (`means`), frames to the environment they
 //! make (`environment_means`), and lowered code to the expressions it came
-//! from (`node_ok`). Each step then computes what the definition's step does
-//! on those meanings.
+//! from and where they were written (`node_ok`). Each step then computes what
+//! the definition's step does on those meanings.
 
 use crate::absent::caused_by_all;
 #[cfg(verus_only)]
 use crate::definition;
 #[cfg(verus_only)]
-use crate::definition::{Answer, Definition};
-use crate::definition::{BinaryOperation, Number, Primitive, Reached, UnaryOperation};
+use crate::definition::{Answer, Definition, Origin};
+use crate::definition::{
+    BinaryOperation, Halt, Implementation, MAX_DEPTH, Number, Primitive, UnaryOperation,
+};
 use crate::evaluator::{
-    ExecDefinition, ExecEvaluation, closure, cycle, first_resolving, missing_argument,
-    missing_cell, named_cell, parameters, referenced_at,
+    ExecDefinition, ExecEvaluation, callee_cell, closure, closure_record, implemented_here,
+    missing_argument, missing_cell, missing_field, not_callable, parameters,
 };
 #[cfg(verus_only)]
 use crate::evaluator::{view_definition, view_host};
@@ -29,6 +32,11 @@ use crate::number::{
 };
 #[cfg(verus_only)]
 use crate::number::{float_answer, lemma_le_bytes_round_trip, lemma_le_round_trip, power256};
+use crate::origin::{At, child, defined_at, input, share as share_at};
+#[cfg(verus_only)]
+use crate::origin::{
+    lemma_child_valid, lemma_read_origin_valid, lemma_read_origin_value, valid_at, view_at,
+};
 use crate::value::*;
 use std::rc::Rc;
 use verus_builtin_macros::verus;
@@ -45,13 +53,15 @@ pub enum Runtime {
     Closure(Rc<Closure>),
 }
 
-/// A closure: its parameters and body, the code the body is in, the lambda's
-/// other fields, for the record it materializes as, and what it captured.
+/// A closure: its parameters, the code its body is in and the body's node
+/// there, its lambda as the closure holds it, body included, where its body
+/// was written, and what it captured.
 pub struct Closure {
     pub params: Rc<Vec<u128>>,
     pub body: usize,
     pub code: Rc<Code>,
-    pub fields: Rc<Vec<(u128, ExecValue)>>,
+    pub lambda: Rc<Vec<(u128, ExecValue)>>,
+    pub body_origin: At,
     pub environment: Environment,
 }
 
@@ -71,10 +81,11 @@ pub struct Code {
     pub fields: Vec<(u128, usize)>,
 }
 
-/// An expression as lowered: the value it was lowered from, and what
-/// evaluating it does, decided once.
+/// An expression as lowered: the value it was lowered from, where that was
+/// written, and what evaluating it does, decided once.
 pub struct Node {
     pub source: ExecValue,
+    pub origin: At,
     pub kind: Kind,
 }
 
@@ -83,22 +94,24 @@ pub enum Kind {
     Reference { cell: u128, resolved: Option<usize> },
     /// A call: the node of its function, and the range of its fields.
     Call { function: usize, start: usize, end: usize },
-    Lambda { params: Rc<Vec<u128>>, body: usize, fields: Rc<Vec<(u128, ExecValue)>> },
+    /// A lambda: its parameters, its body's node, and itself as its closures
+    /// hold it, body included.
+    Lambda { params: Rc<Vec<u128>>, body: usize, lambda: Rc<Vec<(u128, ExecValue)>> },
     /// A lambda whose parameters aren't valid: the absent it comes to.
     Malformed(ExecValue),
-    /// `{value: x}`: the node of `x`.
+    /// A value wrapper: the node of its value.
     Wrapped(usize),
     /// A record that is exactly a number.
     Number(Number, u64),
     Data,
 }
 
-/// A host entry, lowered: the node of its value or description, and a
-/// primitive's operation.
-pub enum Prepared {
-    Grap(usize),
-    Foreign(usize),
-    Primitive(usize, Primitive),
+/// A host entry, lowered: the node of its value, what the host implements
+/// under its cell, and whether calling the cell runs that.
+pub struct Prepared {
+    pub root: usize,
+    pub implementation: Option<Implementation>,
+    pub here: bool,
 }
 
 /// Where each of the host's cells first appears: its cells, sorted, each
@@ -118,17 +131,17 @@ pub struct Host {
     pub bound: Vec<u128>,
 }
 
-/// What evaluation changes as it goes: the cells under resolution, and
-/// whether a closure written as data has been called. Such a closure can
-/// bind cells no lambda names, so from then on lookups search every frame.
+/// What evaluation changes as it goes: whether a closure written as data
+/// has been called. Such a closure can bind cells no lambda names, so from
+/// then on lookups search every frame.
 pub struct State {
-    pub stack: Vec<(u128, Reached)>,
     pub dynamic: bool,
 }
 
 pub enum Outcome {
     Done(Runtime),
     OutOfFuel,
+    OutOfDepth,
     Beyond,
 }
 
@@ -148,8 +161,10 @@ pub open spec fn means(value: Runtime) -> Value
     match value {
         Runtime::Data(data) => view(data),
         Runtime::Number(number, bits) => number_value(number, bits),
-        Runtime::Closure(closure) => Value::Record(
-            map![CLOSURE => Value::Record(view_map(closure.fields@).insert(ENVIRONMENT, Value::Record(environment_means(closure.environment))))],
+        Runtime::Closure(closure) => definition::closure_record(
+            view_map(closure.lambda@),
+            environment_means(closure.environment),
+            view_at(closure.body_origin),
         ),
     }
 }
@@ -188,15 +203,11 @@ pub open spec fn frame_means(parent: Environment, bindings: Seq<(u128, Runtime)>
     environment_means(parent).union_prefer_right(to_map(bindings_values(bindings)))
 }
 
-/// What a closure captured.
-pub open spec fn captured_of(closure: Closure) -> Environment {
-    closure.environment
-}
-
 pub open spec fn outcome_means(outcome: Outcome) -> definition::Outcome {
     match outcome {
         Outcome::Done(value) => definition::Outcome::Done(means(value)),
         Outcome::OutOfFuel => definition::Outcome::OutOfFuel,
+        Outcome::OutOfDepth => definition::Outcome::OutOfDepth,
         Outcome::Beyond => definition::Outcome::Beyond,
     }
 }
@@ -204,6 +215,11 @@ pub open spec fn outcome_means(outcome: Outcome) -> definition::Outcome {
 /// The expression a node was lowered from.
 pub open spec fn source(code: Code, node: int) -> Value {
     view(code.nodes@[node].source)
+}
+
+/// Where the expression a node was lowered from was written.
+pub open spec fn node_origin(code: Code, node: int) -> Option<Origin> {
+    view_at(code.nodes@[node].origin)
 }
 
 /// A call's fields, from `start` to `end`, as the record's pairs.
@@ -250,48 +266,41 @@ pub open spec fn resolved_ok(keys: Seq<u128>, cell: u128, resolved: Option<usize
     }
 }
 
-/// Whether `value` evaluates to itself.
+/// Whether `value` evaluates to itself: anything but a cell, or a record
+/// whose kind makes it a form.
 pub open spec fn data_form(value: Value) -> bool {
     match value {
         Value::Cell(_) => false,
-        Value::Record(fields) => !fields.contains_key(FUNCTION) && !(fields.contains_key(PARAMS)
-            && fields.contains_key(BODY)) && !fields.contains_key(VALUE),
+        Value::Record(fields) => kind(fields) != Some(KIND_CALL) && kind(fields) != Some(KIND_LAMBDA)
+            && kind(fields) != Some(KIND_VALUE_WRAPPER),
         _ => true,
     }
 }
 
-pub open spec fn lambda_ok(
-    fields: Map<u128, Value>,
-    params: Seq<u128>,
-    body: Value,
-    closure_fields: Map<u128, Value>,
-) -> bool {
-    &&& !fields.contains_key(FUNCTION)
+/// Whether a lambda's parameters are a list of cells, these.
+pub open spec fn params_ok(fields: Map<u128, Value>, params: Seq<u128>) -> bool {
     &&& fields.contains_key(PARAMS)
-    &&& fields.contains_key(BODY)
     &&& fields[PARAMS] is List
     &&& definition::parameters(fields[PARAMS]->List_0) == Ok::<Seq<u128>, Value>(params)
-    &&& body == fields[BODY]
-    &&& closure_fields == fields.remove(BODY_ORIGIN)
 }
 
-pub open spec fn malformed_ok(fields: Map<u128, Value>) -> bool {
-    &&& !fields.contains_key(FUNCTION)
+/// Whether a lambda's parameters are a list of cells, whichever.
+pub open spec fn valid_params(fields: Map<u128, Value>) -> bool {
     &&& fields.contains_key(PARAMS)
-    &&& fields.contains_key(BODY)
-    &&& !(fields[PARAMS] is List && definition::parameters(fields[PARAMS]->List_0) is Ok)
+    &&& fields[PARAMS] is List
+    &&& definition::parameters(fields[PARAMS]->List_0) is Ok
 }
 
-pub open spec fn wrapped_ok(fields: Map<u128, Value>) -> bool {
-    &&& !fields.contains_key(FUNCTION)
-    &&& !(fields.contains_key(PARAMS) && fields.contains_key(BODY))
-    &&& fields.contains_key(VALUE)
-}
-
-/// Whether a node of `kind`, lowered from `value`, does in `code` what
-/// evaluating `value` does.
-pub open spec fn kind_ok(kind: Kind, value: Value, code: Code, keys: Seq<u128>) -> bool {
-    match kind {
+/// Whether a node of `kind`, lowered from `value` written at `origin`, does
+/// in `code` what evaluating `value` there does.
+pub open spec fn kind_ok(
+    form: Kind,
+    value: Value,
+    origin: Option<Origin>,
+    code: Code,
+    keys: Seq<u128>,
+) -> bool {
+    match form {
         Kind::Reference { cell, resolved } => value == Value::Cell(cell) && resolved_ok(
             keys,
             cell,
@@ -301,37 +310,54 @@ pub open spec fn kind_ok(kind: Kind, value: Value, code: Code, keys: Seq<u128>) 
             &&& start <= end <= code.fields@.len()
             &&& forall|i: int|
                 start <= i < end ==> (#[trigger] code.fields@[i]).1 < code.nodes@.len()
+                    && node_origin(code, code.fields@[i].1 as int) == definition::child(
+                    origin,
+                    code.fields@[i].0,
+                )
             &&& function < code.nodes@.len()
             &&& value == Value::Record(to_map(call_pairs(code, start as int, end as int)))
-            &&& to_map(call_pairs(code, start as int, end as int)).contains_key(FUNCTION)
-            &&& source(code, function as int) == to_map(
-                call_pairs(code, start as int, end as int),
-            )[FUNCTION]
+            &&& kind(to_map(call_pairs(code, start as int, end as int))) == Some(KIND_CALL)
+            &&& source(code, function as int) == definition::required(
+                to_map(call_pairs(code, start as int, end as int)),
+                FUNCTION,
+            )
+            &&& node_origin(code, function as int) == definition::child(origin, FUNCTION)
         },
-        Kind::Lambda { params, body, fields } => {
+        Kind::Lambda { params, body, lambda } => {
             &&& value is Record
+            &&& kind(value->Record_0) == Some(KIND_LAMBDA)
+            &&& params_ok(value->Record_0, params@)
             &&& body < code.nodes@.len()
-            &&& lambda_ok(value->Record_0, params@, source(code, body as int), view_map(fields@))
+            &&& source(code, body as int) == definition::required(value->Record_0, BODY)
+            &&& node_origin(code, body as int) == definition::child(origin, BODY)
+            &&& view_map(lambda@) == value->Record_0.insert(
+                BODY,
+                definition::required(value->Record_0, BODY),
+            )
         },
         Kind::Malformed(made) => {
             &&& value is Record
-            &&& malformed_ok(value->Record_0)
-            &&& view(made) == definition::lambda(value->Record_0, Map::empty())
+            &&& kind(value->Record_0) == Some(KIND_LAMBDA)
+            &&& !valid_params(value->Record_0)
+            &&& view(made) == definition::lambda(value->Record_0, origin, Map::empty())
         },
         Kind::Wrapped(inner) => {
             &&& value is Record
-            &&& wrapped_ok(value->Record_0)
+            &&& kind(value->Record_0) == Some(KIND_VALUE_WRAPPER)
             &&& inner < code.nodes@.len()
-            &&& source(code, inner as int) == value->Record_0[VALUE]
+            &&& source(code, inner as int) == definition::required(value->Record_0, VALUE)
+            &&& node_origin(code, inner as int) == definition::child(origin, VALUE)
         },
         Kind::Number(number, bits) => value == number_value(number, bits),
         Kind::Data => data_form(value),
     }
 }
 
-/// Whether a node does what evaluating its expression does.
+/// Whether a node does what evaluating its expression where it was written
+/// does, and where that was reads back from what it's written as.
 pub open spec fn node_ok(code: Code, node: int, keys: Seq<u128>) -> bool {
-    kind_ok(code.nodes@[node].kind, source(code, node), code, keys)
+    &&& kind_ok(code.nodes@[node].kind, source(code, node), node_origin(code, node), code, keys)
+    &&& valid_at(node_origin(code, node))
 }
 
 pub open spec fn wf_code(code: Code, keys: Seq<u128>) -> bool {
@@ -357,14 +383,13 @@ pub open spec fn code_marked(code: Code, bound: Seq<u128>) -> bool {
 
 /// A closure as a lambda node makes one.
 pub open spec fn closure_ok(closure: Closure, keys: Seq<u128>) -> bool {
-    let fields = view_map(closure.fields@);
+    let lambda = view_map(closure.lambda@);
     &&& wf_code(*closure.code, keys)
     &&& closure.body < closure.code.nodes@.len()
-    &&& fields.contains_key(PARAMS)
-    &&& fields.contains_key(BODY)
-    &&& fields[PARAMS] is List
-    &&& definition::parameters(fields[PARAMS]->List_0) == Ok::<Seq<u128>, Value>(closure.params@)
-    &&& fields[BODY] == source(*closure.code, closure.body as int)
+    &&& params_ok(lambda, closure.params@)
+    &&& lambda.contains_key(BODY)
+    &&& lambda[BODY] == source(*closure.code, closure.body as int)
+    &&& view_at(closure.body_origin) == node_origin(*closure.code, closure.body as int)
 }
 
 pub open spec fn shape_ok(value: Runtime, keys: Seq<u128>) -> bool
@@ -430,23 +455,8 @@ pub open spec fn marked_bindings(bindings: Seq<(u128, Runtime)>, bound: Seq<u128
         )
 }
 
-pub open spec fn prepared_root(prepared: Prepared) -> usize {
-    match prepared {
-        Prepared::Grap(root) => root,
-        Prepared::Foreign(root) => root,
-        Prepared::Primitive(root, _) => root,
-    }
-}
-
 pub open spec fn prepared_definition(code: Code, prepared: Prepared) -> Definition {
-    match prepared {
-        Prepared::Grap(root) => Definition::Grap(source(code, root as int)),
-        Prepared::Foreign(root) => Definition::Foreign(source(code, root as int)),
-        Prepared::Primitive(root, primitive) => Definition::Primitive(
-            source(code, root as int),
-            primitive,
-        ),
-    }
+    Definition { value: source(code, prepared.root as int), implementation: prepared.implementation }
 }
 
 /// The definitions a host holds.
@@ -459,6 +469,15 @@ pub open spec fn host_means(host: Host) -> Seq<(u128, Definition)> {
 
 pub open spec fn keys_of(host: Host) -> Seq<u128> {
     Seq::new(host.entries@.len(), |i: int| host.entries@[i].0)
+}
+
+/// A host entry lowered as its definition: its value's node, where a cell's
+/// definition starts, and whether calling the cell runs its implementation.
+pub open spec fn entry_ok(code: Code, entry: (u128, Prepared)) -> bool {
+    &&& entry.1.root < code.nodes@.len()
+    &&& node_origin(code, entry.1.root as int) == Some(definition::defined_at(entry.0))
+    &&& entry.1.here == (definition::implementation_cell(source(code, entry.1.root as int))
+        == Some(entry.0))
 }
 
 pub open spec fn sorted(cells: Seq<u128>) -> bool {
@@ -481,8 +500,7 @@ pub open spec fn index_wf(index: Index) -> bool {
 pub open spec fn wf_host(host: Host) -> bool {
     &&& wf_code(*host.code, keys_of(host))
     &&& forall|i: int|
-        0 <= i < host.entries@.len() ==> prepared_root((#[trigger] host.entries@[i]).1)
-            < host.code.nodes@.len()
+        0 <= i < host.entries@.len() ==> entry_ok(*host.code, #[trigger] host.entries@[i])
     &&& index_wf(host.index)
     &&& host.index.keys@ == keys_of(host)
     &&& sorted(host.bound@)
@@ -561,12 +579,19 @@ pub proof fn lemma_host_keys(host: Host)
 }
 
 /// A node's kind does what it did in code that grows.
-pub proof fn lemma_kind_extends(kind: Kind, value: Value, code: Code, grown: Code, keys: Seq<u128>)
+pub proof fn lemma_kind_extends(
+    kind: Kind,
+    value: Value,
+    origin: Option<Origin>,
+    code: Code,
+    grown: Code,
+    keys: Seq<u128>,
+)
     requires
         extends(code, grown),
-        kind_ok(kind, value, code, keys),
+        kind_ok(kind, value, origin, code, keys),
     ensures
-        kind_ok(kind, value, grown, keys),
+        kind_ok(kind, value, origin, grown, keys),
 {
     match kind {
         Kind::Call { function, start, end } => {
@@ -585,6 +610,13 @@ pub proof fn lemma_kind_extends(kind: Kind, value: Value, code: Code, grown: Cod
                 }
             }
             assert(grown.nodes@[function as int] == code.nodes@[function as int]);
+            assert forall|i: int| start <= i < end implies (#[trigger] grown.fields@[i]).1
+                < grown.nodes@.len() && node_origin(grown, grown.fields@[i].1 as int)
+                == definition::child(origin, grown.fields@[i].0) by {
+                assert(grown.fields@[i] == code.fields@[i]);
+                assert(code.fields@[i].1 < code.nodes@.len());
+                assert(grown.nodes@[code.fields@[i].1 as int] == code.nodes@[code.fields@[i].1 as int]);
+            }
         },
         Kind::Lambda { body, .. } => {
             assert(grown.nodes@[body as int] == code.nodes@[body as int]);
@@ -618,7 +650,14 @@ pub proof fn lemma_extends(code: Code, grown: Code, keys: Seq<u128>, bound: Seq<
         keys,
     ) by {
         assert(grown.nodes@[node] == code.nodes@[node]);
-        lemma_kind_extends(code.nodes@[node].kind, source(code, node), code, grown, keys);
+        lemma_kind_extends(
+            code.nodes@[node].kind,
+            source(code, node),
+            node_origin(code, node),
+            code,
+            grown,
+            keys,
+        );
     }
     assert forall|node: int|
         0 <= node < code.nodes@.len() && lambda_marked(
@@ -697,19 +736,71 @@ pub proof fn lemma_closure(keys: Seq<u128>)
                 (
                     closure.params@,
                     source(*closure.code, closure.body as int),
+                    node_origin(*closure.code, closure.body as int),
                     environment_means(closure.environment),
                 ),
             ),
 {
+    assert forall|closure: Rc<Closure>| closure_ok(*closure, keys) implies #[trigger] definition::closure(
+        means(Runtime::Closure(closure)),
+    ) == Some(
+        (
+            closure.params@,
+            source(*closure.code, closure.body as int),
+            node_origin(*closure.code, closure.body as int),
+            environment_means(closure.environment),
+        ),
+    ) by {
+        assert(node_ok(*closure.code, closure.body as int, keys));
+        match view_at(closure.body_origin) {
+            Some(origin) => {
+                lemma_read_origin_value(origin);
+            },
+            None => {},
+        }
+    }
 }
 
-/// A number record isn't a closure, a named cell or an absent.
+/// A closure record isn't an absent.
+pub proof fn lemma_closure_present(
+    lambda: Map<u128, Value>,
+    environment: Map<u128, Value>,
+    body_origin: Option<Origin>,
+)
+    ensures
+        !is_absent(definition::closure_record(lambda, environment, body_origin)),
+{
+}
+
+/// A closure isn't an absent.
+pub proof fn lemma_closures_present()
+    ensures
+        forall|closure: Rc<Closure>| !is_absent(#[trigger] means(Runtime::Closure(closure))),
+{
+    assert forall|closure: Rc<Closure>| !is_absent(#[trigger] means(Runtime::Closure(closure))) by {
+        lemma_closure_present(
+            view_map(closure.lambda@),
+            environment_means(closure.environment),
+            view_at(closure.body_origin),
+        );
+    }
+}
+
+/// A number record isn't a closure, a callee or an absent.
 pub proof fn lemma_number_value(number: Number, bits: u64)
     ensures
         definition::closure(number_value(number, bits)) is None,
-        definition::named_cell(number_value(number, bits)) is None,
+        definition::callee_cell(number_value(number, bits)) is None,
         !is_absent(number_value(number, bits)),
 {
+}
+
+/// Why a field is missing is data.
+pub proof fn lemma_missing_field(field: u128)
+    ensures
+        data_form(definition::missing_field(field)),
+{
+    lemma_absent_kind(MISSING_FIELD, seq![(ABSENT_CELL, Value::Cell(field))]);
 }
 
 /// Every cell a frame binds is marked, so an unmarked cell isn't bound.
@@ -948,14 +1039,22 @@ fn exact_number(fields: &Rc<Vec<(u128, ExecValue)>>) -> (number: Option<(Number,
     }
 }
 
-/// A node of `kind`, lowered from `value`, added to `code`.
+
+/// A node of `kind`, lowered from `value` written at `at`, added to `code`.
 #[allow(unused_variables)]
-fn push_node(code: &mut Code, value: &ExecValue, kind: Kind, index: &Index, bound: &Vec<u128>) -> (node:
-    usize)
+fn push_node(
+    code: &mut Code,
+    value: &ExecValue,
+    at: &At,
+    kind: Kind,
+    index: &Index,
+    bound: &Vec<u128>,
+) -> (node: usize)
     requires
         wf_code(*old(code), index.keys@),
         code_marked(*old(code), bound@),
-        kind_ok(kind, view(*value), *old(code), index.keys@),
+        kind_ok(kind, view(*value), view_at(*at), *old(code), index.keys@),
+        valid_at(view_at(*at)),
         lambda_marked(kind, bound@),
     ensures
         extends(*old(code), *final(code)),
@@ -965,16 +1064,17 @@ fn push_node(code: &mut Code, value: &ExecValue, kind: Kind, index: &Index, boun
         node == old(code).nodes@.len(),
         node < final(code).nodes@.len(),
         source(*final(code), node as int) == view(*value),
+        node_origin(*final(code), node as int) == view_at(*at),
 {
     let ghost keys = index.keys@;
     let ghost bound = bound@;
     let ghost before = *code;
     let ghost spec_kind = kind;
-    code.nodes.push(Node { source: copy(value), kind });
+    code.nodes.push(Node { source: copy(value), origin: share_at(at), kind });
     proof {
         assert(extends(before, *code));
         lemma_extends(before, *code, keys, bound);
-        lemma_kind_extends(spec_kind, view(*value), before, *code, keys);
+        lemma_kind_extends(spec_kind, view(*value), view_at(*at), before, *code, keys);
         let node = before.nodes@.len() as int;
         assert(code.nodes@[node].kind == spec_kind);
         assert(node_ok(*code, node, keys));
@@ -983,16 +1083,41 @@ fn push_node(code: &mut Code, value: &ExecValue, kind: Kind, index: &Index, boun
     code.nodes.len() - 1
 }
 
-/// `value` lowered into `code`, with the expressions in it, marking the
-/// cells its lambdas bind: its node.
+/// A node for why `field`, which a form's kind requires, is missing,
+/// written where the field would be.
+fn missing_node(field: u128, at: &At, index: &Index, bound: &Vec<u128>, code: &mut Code) -> (node:
+    usize)
+    requires
+        wf_code(*old(code), index.keys@),
+        code_marked(*old(code), bound@),
+        valid_at(view_at(*at)),
+    ensures
+        extends(*old(code), *final(code)),
+        final(code).fields@ == old(code).fields@,
+        wf_code(*final(code), index.keys@),
+        code_marked(*final(code), bound@),
+        node < final(code).nodes@.len(),
+        source(*final(code), node as int) == definition::missing_field(field),
+        node_origin(*final(code), node as int) == view_at(*at),
+{
+    let missing = missing_field(field);
+    proof {
+        lemma_missing_field(field);
+    }
+    push_node(code, &missing, at, Kind::Data, index, bound)
+}
+
+/// `value`, written at `at`, lowered into `code`, with the expressions in
+/// it, marking the cells its lambdas bind: its node.
 #[verifier::loop_isolation(false)]
-fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Code) -> (node:
+fn lower(value: &ExecValue, at: &At, index: &Index, bound: &mut Vec<u128>, code: &mut Code) -> (node:
     usize)
     requires
         index_wf(*index),
         sorted(old(bound)@),
         wf_code(*old(code), index.keys@),
         code_marked(*old(code), old(bound)@),
+        valid_at(view_at(*at)),
     ensures
         extends(*old(code), *final(code)),
         wf_code(*final(code), index.keys@),
@@ -1001,6 +1126,7 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
         includes(old(bound)@, final(bound)@),
         node < final(code).nodes@.len(),
         source(*final(code), node as int) == view(*value),
+        node_origin(*final(code), node as int) == view_at(*at),
     decreases *value,
 {
     let ghost keys = index.keys@;
@@ -1008,17 +1134,14 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
     let ghost original_bound = bound@;
     match value {
         ExecValue::Cell(cell) => {
-            let kind = Kind::Reference {
-                cell: *cell,
-                resolved: resolve_index(index, *cell),
-            };
-            push_node(code, value, kind, index, bound)
+            let kind = Kind::Reference { cell: *cell, resolved: resolve_index(index, *cell) };
+            push_node(code, value, at, kind, index, bound)
         },
         ExecValue::Record(fields) => {
             proof {
                 lemma_view_record(*fields);
             }
-            if has(fields, FUNCTION) {
+            if exec_is_kind(fields, KIND_CALL) {
                 let mut children: Vec<(u128, usize)> = Vec::new();
                 let mut i = 0;
                 while i < fields.len()
@@ -1035,22 +1158,57 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
                                 && children@[k].1 < code.nodes@.len() && source(
                                 *code,
                                 children@[k].1 as int,
-                            ) == view(fields@[k].1),
+                            ) == view(fields@[k].1) && node_origin(*code, children@[k].1 as int)
+                                == definition::child(view_at(*at), fields@[k].0),
                     decreases fields.len() - i,
                 {
                     let ghost before = *code;
-                    let child = lower(&fields[i].1, index, bound, code);
+                    let child_at = child(at, fields[i].0);
+                    proof {
+                        lemma_child_valid(view_at(*at), fields@[i as int].0);
+                    }
+                    let node = lower(&fields[i].1, &child_at, index, bound, code);
                     proof {
                         assert forall|k: int| 0 <= k < i implies source(
                             *code,
                             (#[trigger] children@[k]).1 as int,
-                        ) == view(fields@[k].1) by {
+                        ) == view(fields@[k].1) && node_origin(*code, children@[k].1 as int)
+                            == definition::child(view_at(*at), fields@[k].0) by {
                             assert(code.nodes@[children@[k].1 as int]
                                 == before.nodes@[children@[k].1 as int]);
                         }
                     }
-                    children.push((fields[i].0, child));
+                    children.push((fields[i].0, node));
                     i += 1;
+                }
+                let ghost lowered_children = *code;
+                let function = match get_index(fields, FUNCTION) {
+                    Some(k) => children[k].1,
+                    None => {
+                        proof {
+                            lemma_child_valid(view_at(*at), FUNCTION);
+                        }
+                        missing_node(FUNCTION, &child(at, FUNCTION), index, bound, code)
+                    },
+                };
+                proof {
+                    assert forall|k: int| 0 <= k < children@.len() implies source(
+                        *code,
+                        (#[trigger] children@[k]).1 as int,
+                    ) == view(fields@[k].1) && node_origin(*code, children@[k].1 as int)
+                        == definition::child(view_at(*at), fields@[k].0) && children@[k].1
+                        < code.nodes@.len() by {
+                        assert(code.nodes@[children@[k].1 as int]
+                            == lowered_children.nodes@[children@[k].1 as int]);
+                    }
+                    assert(source(*code, function as int) == definition::required(
+                        view_map(fields@),
+                        FUNCTION,
+                    ));
+                    assert(node_origin(*code, function as int) == definition::child(
+                        view_at(*at),
+                        FUNCTION,
+                    ));
                 }
                 let start = code.fields.len();
                 let ghost lowered = *code;
@@ -1061,7 +1219,8 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
                         start == lowered.fields@.len(),
                         code.nodes@ == lowered.nodes@,
                         code.fields@.len() == start + j,
-                        forall|k: int| 0 <= k < start ==> #[trigger] code.fields@[k] == lowered.fields@[k],
+                        forall|k: int|
+                            0 <= k < start ==> #[trigger] code.fields@[k] == lowered.fields@[k],
                         forall|k: int| 0 <= k < j ==> code.fields@[start + k] == children@[k],
                     decreases children.len() - j,
                 {
@@ -1069,10 +1228,6 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
                     j += 1;
                 }
                 let end = code.fields.len();
-                let function = match get_index(fields, FUNCTION) {
-                    Some(at) => children[at].1,
-                    None => 0,
-                };
                 proof {
                     assert(extends(lowered, *code));
                     lemma_extends(lowered, *code, keys, bound@);
@@ -1087,13 +1242,14 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
                     }
                     assert(call_pairs(*code, start as int, end as int) =~= view_pairs(fields@));
                     assert forall|k: int| start <= k < end implies (#[trigger] code.fields@[k]).1
-                        < code.nodes@.len() by {
+                        < code.nodes@.len() && node_origin(*code, code.fields@[k].1 as int)
+                        == definition::child(view_at(*at), code.fields@[k].0) by {
                         assert(code.fields@[k] == children@[k - start]);
                     }
                 }
                 let kind = Kind::Call { function, start, end };
-                push_node(code, value, kind, index, bound)
-            } else if has(fields, PARAMS) && has(fields, BODY) {
+                push_node(code, value, at, kind, index, bound)
+            } else if exec_is_kind(fields, KIND_LAMBDA) {
                 match get(fields, PARAMS) {
                     Some(ExecValue::List(elements)) => match parameters(elements.as_slice()) {
                         Ok(params) => {
@@ -1114,66 +1270,76 @@ fn lower(value: &ExecValue, index: &Index, bound: &mut Vec<u128>, code: &mut Cod
                                 lemma_code_marked_grows(*code, original_bound, bound@);
                             }
                             let ghost marked_bound = bound@;
+                            let body_at = child(at, BODY);
+                            proof {
+                                lemma_child_valid(view_at(*at), BODY);
+                            }
                             let body = match get_index(fields, BODY) {
-                                Some(at) => lower(&fields[at].1, index, bound, code),
-                                None => 0,
+                                Some(k) => lower(&fields[k].1, &body_at, index, bound, code),
+                                None => missing_node(BODY, &body_at, index, bound, code),
                             };
-                            let closure_fields = if has(fields, BODY_ORIGIN) {
-                                Rc::new(without(fields, BODY_ORIGIN))
-                            } else {
-                                proof {
-                                    assert(view_map(fields@).remove(BODY_ORIGIN) =~= view_map(
-                                        fields@,
-                                    ));
-                                }
-                                Rc::clone(fields)
-                            };
+                            let mut lambda = copy_pairs(fields);
+                            let body_source = copy(&code.nodes[body].source);
+                            proof {
+                                lemma_view_pairs_push(lambda@, (BODY, body_source));
+                            }
+                            lambda.push((BODY, body_source));
                             proof {
                                 assert forall|i: int| 0 <= i < params@.len() implies bound@.contains(
                                     #[trigger] params@[i],
                                 ) by {
                                     assert(marked_bound.contains(params@[i]));
                                 }
+                                assert(source(*code, body as int) == definition::required(
+                                    view_map(fields@),
+                                    BODY,
+                                ));
                             }
-                            let kind = Kind::Lambda { params: Rc::new(params), body, fields: closure_fields };
-                            push_node(code, value, kind, index, bound)
+                            let kind = Kind::Lambda {
+                                params: Rc::new(params),
+                                body,
+                                lambda: Rc::new(lambda),
+                            };
+                            push_node(code, value, at, kind, index, bound)
                         },
                         Err(parameter) => {
                             let kind = Kind::Malformed(
-                                exec_absent(INVALID_PARAMETER, ABSENT_VALUE, parameter),
+                                exec_with_detail(INVALID_PARAMETER, ABSENT_VALUE, parameter),
                             );
-                            push_node(code, value, kind, index, bound)
+                            push_node(code, value, at, kind, index, bound)
                         },
                     },
                     _ => {
                         let kind = Kind::Malformed(
-                            exec_absent(MALFORMED_LAMBDA, ABSENT_VALUE, copy(value)),
+                            exec_with_detail(MALFORMED_LAMBDA, ABSENT_VALUE, copy(value)),
                         );
-                        push_node(code, value, kind, index, bound)
+                        push_node(code, value, at, kind, index, bound)
                     },
                 }
+            } else if exec_is_kind(fields, KIND_VALUE_WRAPPER) {
+                let inner_at = child(at, VALUE);
+                proof {
+                    lemma_child_valid(view_at(*at), VALUE);
+                }
+                let inner = match get_index(fields, VALUE) {
+                    Some(k) => lower(&fields[k].1, &inner_at, index, bound, code),
+                    None => missing_node(VALUE, &inner_at, index, bound, code),
+                };
+                push_node(code, value, at, Kind::Wrapped(inner), index, bound)
             } else {
-                match get_index(fields, VALUE) {
-                    Some(at) => {
-                        let inner = lower(&fields[at].1, index, bound, code);
-                        push_node(code, value, Kind::Wrapped(inner), index, bound)
-                    },
-                    None => {
-                        let kind = match exact_number(fields) {
-                            Some((number, bits)) => Kind::Number(number, bits),
-                            None => Kind::Data,
-                        };
-                        push_node(code, value, kind, index, bound)
-                    },
-                }
+                let kind = match exact_number(fields) {
+                    Some((number, bits)) => Kind::Number(number, bits),
+                    None => Kind::Data,
+                };
+                push_node(code, value, at, kind, index, bound)
             }
         },
-        _ => push_node(code, value, Kind::Data, index, bound),
+        _ => push_node(code, value, at, Kind::Data, index, bound),
     }
 }
 
-/// The host's definitions lowered, with each cell's first entry, marking
-/// the cells their lambdas bind.
+/// The host's definitions lowered, each where a cell's definition starts,
+/// with each cell's first entry, marking the cells their lambdas bind.
 #[verifier::loop_isolation(false)]
 fn prepare(host: &Vec<(u128, ExecDefinition)>, bound: &mut Vec<u128>) -> (prepared: (
     Code,
@@ -1185,10 +1351,10 @@ fn prepare(host: &Vec<(u128, ExecDefinition)>, bound: &mut Vec<u128>) -> (prepar
     ensures
         prepared.1@.len() == host@.len(),
         forall|i: int|
-            0 <= i < host@.len() ==> (#[trigger] prepared.1@[i]).0 == host@[i].0 && prepared_root(
-                prepared.1@[i].1,
-            ) < prepared.0.nodes@.len() && prepared_definition(prepared.0, prepared.1@[i].1)
-                == view_definition(host@[i].1),
+            0 <= i < host@.len() ==> (#[trigger] prepared.1@[i]).0 == host@[i].0 && entry_ok(
+                prepared.0,
+                prepared.1@[i],
+            ) && prepared_definition(prepared.0, prepared.1@[i].1) == view_definition(host@[i].1),
         wf_code(prepared.0, host_keys(view_host(host@))),
         code_marked(prepared.0, final(bound)@),
         index_wf(prepared.2),
@@ -1302,41 +1468,33 @@ fn prepare(host: &Vec<(u128, ExecDefinition)>, bound: &mut Vec<u128>) -> (prepar
             j <= host@.len(),
             index_wf(index),
             index.keys@ == keys,
+            keys.len() == host@.len(),
+            forall|k: int| 0 <= k < host@.len() ==> #[trigger] keys[k] == host@[k].0,
             entries@.len() == j,
             wf_code(code, keys),
             code_marked(code, bound@),
             sorted(bound@),
             includes(old(bound)@, bound@),
             forall|k: int|
-                0 <= k < j ==> (#[trigger] entries@[k]).0 == host@[k].0 && prepared_root(entries@[k].1)
-                    < code.nodes@.len() && prepared_definition(code, entries@[k].1)
-                    == view_definition(host@[k].1),
+                0 <= k < j ==> (#[trigger] entries@[k]).0 == host@[k].0 && entry_ok(
+                    code,
+                    entries@[k],
+                ) && prepared_definition(code, entries@[k].1) == view_definition(host@[k].1),
         decreases host.len() - j,
     {
         let ghost before = code;
-        let entry = match &host[j].1 {
-            ExecDefinition::Grap(value) => Prepared::Grap(
-                lower(value, &index, bound, &mut code),
-            ),
-            ExecDefinition::Foreign(description) => Prepared::Foreign(
-                lower(description, &index, bound, &mut code),
-            ),
-            ExecDefinition::Primitive(description, primitive) => Prepared::Primitive(
-                lower(description, &index, bound, &mut code),
-                *primitive,
-            ),
-        };
+        let cell = host[j].0;
+        let at = defined_at(cell);
+        let root = lower(&host[j].1.value, &at, &index, bound, &mut code);
+        let here = implemented_here(&host[j].1.value, cell);
+        let entry = Prepared { root, implementation: host[j].1.implementation, here };
         proof {
-            assert forall|k: int| 0 <= k < j implies prepared_definition(
-                code,
-                (#[trigger] entries@[k]).1,
-            ) == view_definition(host@[k].1) by {
-                assert(code.nodes@[prepared_root(entries@[k].1) as int] == before.nodes@[prepared_root(
-                    entries@[k].1,
-                ) as int]);
+            assert forall|k: int| 0 <= k < j implies entry_ok(code, #[trigger] entries@[k])
+                && prepared_definition(code, entries@[k].1) == view_definition(host@[k].1) by {
+                assert(code.nodes@[entries@[k].1.root as int] == before.nodes@[entries@[k].1.root as int]);
             }
         }
-        entries.push((host[j].0, entry));
+        entries.push((cell, entry));
         j += 1;
     }
     (code, entries, index)
@@ -1378,19 +1536,8 @@ fn materialize(value: &Runtime) -> (made: ExecValue)
             ExecValue::Blob(Rc::new(encode(*bits, width(*number)))),
         ),
         Runtime::Closure(closure) => {
-            let mut inner = copy_pairs(&closure.fields);
             let pairs = Rc::new(flatten(&closure.environment));
-            let environment = ExecValue::Record(pairs);
-            proof {
-                lemma_view_record(pairs);
-                lemma_view_pairs_push(inner@, (ENVIRONMENT, environment));
-            }
-            inner.push((ENVIRONMENT, environment));
-            let inner = Rc::new(inner);
-            proof {
-                lemma_view_record(inner);
-            }
-            exec_single(CLOSURE, ExecValue::Record(inner))
+            closure_record(Rc::clone(&closure.lambda), pairs, &closure.body_origin)
         },
     }
 }
@@ -1459,7 +1606,18 @@ fn is_absent_value(value: &Runtime) -> (absent: bool)
 {
     match value {
         Runtime::Data(data) => exec_is_absent(data),
-        _ => false,
+        Runtime::Number(_number, _bits) => {
+            proof {
+                lemma_number_value(*_number, *_bits);
+            }
+            false
+        },
+        Runtime::Closure(_) => {
+            proof {
+                lemma_closures_present();
+            }
+            false
+        },
     }
 }
 
@@ -1554,7 +1712,10 @@ fn field(code: &Code, call: usize, label: u128, host: &Host) -> (found: Option<u
         match found {
             Some(node) => node < code.nodes@.len() && call_map(*code, call as int).contains_key(
                 label,
-            ) && call_map(*code, call as int)[label] == source(*code, node as int),
+            ) && call_map(*code, call as int)[label] == source(*code, node as int) && node_origin(
+                *code,
+                node as int,
+            ) == definition::child(node_origin(*code, call as int), label),
             None => !call_map(*code, call as int).contains_key(label),
         },
 {
@@ -1575,6 +1736,11 @@ fn field(code: &Code, call: usize, label: u128, host: &Host) -> (found: Option<u
                     proof {
                         lemma_to_map_last(pairs, i - *start);
                         assert(code.fields@[i as int].1 < code.nodes@.len());
+                        assert(node_origin(*code, code.fields@[i as int].1 as int)
+                            == definition::child(
+                            node_origin(*code, call as int),
+                            code.fields@[i as int].0,
+                        ));
                     }
                     return Some(code.fields[i].1);
                 }
@@ -1650,7 +1816,7 @@ fn failure(reason: u128) -> (made: Runtime)
         means(made) == definition::answer_value(Number::U64, Answer::Failure(reason)),
         !(made is Closure),
 {
-    Runtime::Data(exec_single(ABSENT, ExecValue::Cell(reason)))
+    Runtime::Data(exec_bare_absent(reason))
 }
 
 /// A binary operation on numbers' bits.
@@ -1731,23 +1897,31 @@ fn not_number(number: Number, value: &Runtime) -> (made: ExecValue)
 
 fn binary(
     operation: &BinaryOperation,
+    call: &At,
     left: u128,
     first: &Runtime,
     right: u128,
     second: &Runtime,
 ) -> (made: Runtime)
     ensures
-        means(made) == definition::binary(*operation, left, means(*first), right, means(*second)),
+        means(made) == definition::binary(
+            *operation,
+            view_at(*call),
+            left,
+            means(*first),
+            right,
+            means(*second),
+        ),
         !(made is Closure),
 {
     let number = binary_number(operation);
     match (bits(number, first), bits(number, second)) {
         (Some(a), Some(b)) => binary_bits(operation, a, b),
         (Some(_), None) => Runtime::Data(
-            caused_by_all(INVALID_ARGUMENTS, &one_detail(right, not_number(number, second))),
+            caused_by_all(INVALID_ARGUMENTS, call, &one_detail(right, not_number(number, second))),
         ),
         (None, Some(_)) => Runtime::Data(
-            caused_by_all(INVALID_ARGUMENTS, &one_detail(left, not_number(number, first))),
+            caused_by_all(INVALID_ARGUMENTS, call, &one_detail(left, not_number(number, first))),
         ),
         (None, None) => {
             let mut details = one_detail(left, not_number(number, first));
@@ -1762,14 +1936,14 @@ fn binary(
                     (right, definition::not_a_number(number, means(*second))),
                 ]);
             }
-            Runtime::Data(caused_by_all(INVALID_ARGUMENTS, &details))
+            Runtime::Data(caused_by_all(INVALID_ARGUMENTS, call, &details))
         },
     }
 }
 
-fn unary(operation: &UnaryOperation, label: u128, value: &Runtime) -> (made: Runtime)
+fn unary(operation: &UnaryOperation, call: &At, label: u128, value: &Runtime) -> (made: Runtime)
     ensures
-        means(made) == definition::unary(*operation, label, means(*value)),
+        means(made) == definition::unary(*operation, view_at(*call), label, means(*value)),
         !(made is Closure),
 {
     match bits(Number::F64, value) {
@@ -1778,7 +1952,11 @@ fn unary(operation: &UnaryOperation, label: u128, value: &Runtime) -> (made: Run
             FloatAnswer::Truth(answer) => truth(answer),
         },
         None => Runtime::Data(
-            caused_by_all(INVALID_ARGUMENTS, &one_detail(label, not_number(Number::F64, value))),
+            caused_by_all(
+                INVALID_ARGUMENTS,
+                call,
+                &one_detail(label, not_number(Number::F64, value)),
+            ),
         ),
     }
 }
@@ -1792,20 +1970,21 @@ fn eval(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         node < code.nodes@.len(),
         ready(**code, *environment, *host, old(state).dynamic),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::eval(
             source(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 0nat, 0nat,
@@ -1817,7 +1996,11 @@ fn eval(
     if fuel < 2 {
         return (Outcome::OutOfFuel, fuel);
     }
+    if depth == 0 {
+        return (Outcome::OutOfDepth, 1);
+    }
     let rest = fuel - 1;
+    let within = depth - 1;
     let (outcome, spent) = match &code.nodes[node].kind {
         Kind::Reference { cell, resolved } => reference(
             *cell,
@@ -1826,15 +2009,17 @@ fn eval(
             host,
             state,
             rest,
+            within,
         ),
-        Kind::Call { .. } => call(code, node, environment, host, state, rest),
-        Kind::Lambda { params, body, fields } => {
+        Kind::Call { .. } => call(code, node, environment, host, state, rest, within),
+        Kind::Lambda { params, body, lambda } => {
             let closure = Rc::new(
                 Closure {
                     params: Rc::clone(params),
                     body: *body,
                     code: Rc::clone(code),
-                    fields: Rc::clone(fields),
+                    lambda: Rc::clone(lambda),
+                    body_origin: share_at(&code.nodes[*body].origin),
                     environment: share(environment),
                 },
             );
@@ -1844,25 +2029,11 @@ fn eval(
             (Outcome::Done(Runtime::Closure(closure)), 0)
         },
         Kind::Malformed(made) => (Outcome::Done(Runtime::Data(copy(made))), 0),
-        Kind::Wrapped(inner) => eval(code, *inner, environment, host, state, rest),
+        Kind::Wrapped(inner) => eval(code, *inner, environment, host, state, rest, within),
         Kind::Number(number, bits) => (Outcome::Done(Runtime::Number(*number, *bits)), 0),
         Kind::Data => (Outcome::Done(Runtime::Data(copy(&code.nodes[node].source))), 0),
     };
     (outcome, spent + 1)
-}
-
-/// The node a host entry's cell evaluates as when referenced.
-fn entry_root(host: &Host, entry: usize) -> (node: usize)
-    requires
-        entry < host.entries@.len(),
-    ensures
-        node == prepared_root(host.entries@[entry as int].1),
-{
-    match &host.entries[entry].1 {
-        Prepared::Grap(root) => *root,
-        Prepared::Foreign(root) => *root,
-        Prepared::Primitive(root, _) => *root,
-    }
 }
 
 fn reference(
@@ -1872,6 +2043,7 @@ fn reference(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         wf_host(*host),
@@ -1879,15 +2051,14 @@ fn reference(
         old(state).dynamic || marked_environment(*environment, host.bound@),
         resolved_ok(keys_of(*host), cell, resolved),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::reference(
             cell,
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 1nat, 0nat,
@@ -1895,23 +2066,18 @@ fn reference(
     proof {
         lemma_host_keys(*host);
         lemma_resolve(host_means(*host), cell);
+        lemma_first_index(keys_of(*host), cell);
     }
     match lookup(environment, host, state.dynamic, cell) {
         Some(bound) => (Outcome::Done(duplicate(bound)), 0),
         None => match resolved {
             None => (Outcome::Done(Runtime::Data(missing_cell(cell))), 0),
-            Some(entry) => match referenced_at(state.stack.as_slice(), cell) {
-                Some(at) => (Outcome::Done(Runtime::Data(cycle(&state.stack, at, cell))), 0),
-                None => {
-                    let root = entry_root(host, entry);
-                    proof {
-                        assert(prepared_root(host.entries@[entry as int].1) < host.code.nodes@.len());
-                    }
-                    state.stack.push((cell, Reached::Reference));
-                    let evaluated = eval(&host.code, root, environment, host, state, fuel);
-                    state.stack.pop();
-                    evaluated
-                },
+            Some(entry) => {
+                let root = host.entries[entry].1.root;
+                proof {
+                    assert(entry_ok(*host.code, host.entries@[entry as int]));
+                }
+                eval(&host.code, root, environment, host, state, fuel, depth)
             },
         },
     }
@@ -1924,21 +2090,22 @@ fn call(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         node < code.nodes@.len(),
         code.nodes@[node as int].kind is Call,
         ready(**code, *environment, *host, old(state).dynamic),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::call(
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 4nat, 0nat,
@@ -1973,14 +2140,25 @@ fn call(
                         host,
                         state,
                         fuel - 1,
+                        depth,
                     );
                     (outcome, spent + 1)
                 }
             },
-            None => through_cell(*cell, *resolved, code, node, environment, host, state, fuel),
+            None => call_cell(
+                *cell,
+                *resolved,
+                code,
+                node,
+                environment,
+                host,
+                state,
+                fuel,
+                depth,
+            ),
         },
         _ => {
-            let (outcome, spent) = eval(code, function, environment, host, state, fuel);
+            let (outcome, spent) = eval(code, function, environment, host, state, fuel, depth);
             match outcome {
                 Outcome::Done(callable) => {
                     let (applied, more) = apply(
@@ -1991,6 +2169,7 @@ fn call(
                         host,
                         state,
                         fuel - spent,
+                        depth,
                     );
                     (applied, spent + more)
                 },
@@ -2000,7 +2179,7 @@ fn call(
     }
 }
 
-fn through_cell(
+fn call_cell(
     cell: u128,
     resolved: Option<usize>,
     code: &Rc<Code>,
@@ -2009,6 +2188,7 @@ fn through_cell(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         node < code.nodes@.len(),
@@ -2016,16 +2196,16 @@ fn through_cell(
         ready(**code, *environment, *host, old(state).dynamic),
         resolved_ok(keys_of(*host), cell, resolved),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
-        (outcome_means(evaluated.0), evaluated.1 as nat) == definition::through_cell(
+        (outcome_means(evaluated.0), evaluated.1 as nat) == definition::call_cell(
             cell,
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 2nat, 0nat,
@@ -2033,6 +2213,7 @@ fn through_cell(
     proof {
         lemma_host_keys(*host);
         lemma_resolve(host_means(*host), cell);
+        lemma_first_index(keys_of(*host), cell);
     }
     if fuel < 2 {
         return (Outcome::OutOfFuel, fuel);
@@ -2040,71 +2221,42 @@ fn through_cell(
     let rest = fuel - 1;
     let (outcome, spent) = match resolved {
         None => (Outcome::Done(Runtime::Data(missing_cell(cell))), 0),
-        Some(entry) => match &host.entries[entry].1 {
-            Prepared::Foreign(_) => (Outcome::Beyond, 0),
-            Prepared::Primitive(_, primitive) => primitive_call(
-                primitive,
-                code,
-                node,
-                environment,
-                host,
-                state,
-                rest,
-            ),
-            Prepared::Grap(root) => {
-                proof {
-                    assert(prepared_root(host.entries@[entry as int].1) < host.code.nodes@.len());
+        Some(entry) => {
+            let prepared = &host.entries[entry].1;
+            proof {
+                assert(entry_ok(*host.code, host.entries@[entry as int]));
+            }
+            if prepared.here {
+                match &prepared.implementation {
+                    Some(Implementation::Primitive(primitive)) => primitive_call(
+                        primitive,
+                        code,
+                        node,
+                        environment,
+                        host,
+                        state,
+                        rest,
+                        depth,
+                    ),
+                    Some(Implementation::Foreign) => (Outcome::Beyond, 0),
+                    None => (
+                        Outcome::Done(
+                            Runtime::Data(not_callable(&host.code.nodes[prepared.root].source)),
+                        ),
+                        0,
+                    ),
                 }
-                call_grap(cell, *root, code, node, environment, host, state, rest)
-            },
+            } else {
+                call_code(cell, prepared.root, code, node, environment, host, state, rest, depth)
+            }
         },
     };
     (outcome, spent + 1)
 }
 
-/// What `definition::through_cell` does once `cell` resolves to Grap's
-/// `definition`, with the fuel left after its unit.
-pub open spec fn through_grap(
-    cell: u128,
-    definition: Value,
-    call_fields: Map<u128, Value>,
-    environment: Map<u128, Value>,
-    host: Seq<(u128, Definition)>,
-    stack: Seq<(u128, Reached)>,
-    fuel: nat,
-) -> (definition::Outcome, nat) {
-    match definition::first_resolving(stack, cell) {
-        Some(at) => (definition::Outcome::Done(definition::cycle(stack, at, cell)), 0),
-        None => {
-            let (evaluated, spent) = definition::eval(
-                definition,
-                environment,
-                host,
-                stack.push((cell, Reached::Call)),
-                fuel,
-            );
-            match evaluated {
-                definition::Outcome::Done(callable) => if is_absent(callable) {
-                    (definition::Outcome::Done(callable), spent)
-                } else {
-                    let (applied, more) = definition::apply(
-                        callable,
-                        call_fields,
-                        environment,
-                        host,
-                        stack,
-                        definition::left(fuel, spent),
-                    );
-                    (applied, spent + more)
-                },
-                stopped => (stopped, spent),
-            }
-        },
-    }
-}
-
-/// Calling through `cell`, whose definition is Grap's, at host node `root`.
-fn call_grap(
+/// Calling `cell`, whose definition is code, at host node `root`.
+#[allow(unused_variables)]
+fn call_code(
     cell: u128,
     root: usize,
     code: &Rc<Code>,
@@ -2113,94 +2265,104 @@ fn call_grap(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         root < host.code.nodes@.len(),
+        node_origin(*host.code, root as int) == Some(definition::defined_at(cell)),
         node < code.nodes@.len(),
         code.nodes@[node as int].kind is Call,
         ready(**code, *environment, *host, old(state).dynamic),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
-        (outcome_means(evaluated.0), evaluated.1 as nat) == through_grap(
-            cell,
+        (outcome_means(evaluated.0), evaluated.1 as nat) == definition::call_code(
             source(*host.code, root as int),
+            cell,
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 5nat, 0nat,
 {
-    let ghost stack = state.stack@;
-    let ghost pushed = stack.push((cell, Reached::Call));
-    match first_resolving(state.stack.as_slice(), cell) {
-        Some(at) => (Outcome::Done(Runtime::Data(cycle(&state.stack, at, cell))), 0),
-        None => {
-            state.stack.push((cell, Reached::Call));
-            proof {
-                assert(state.stack@ == pushed);
-            }
-            let (evaluated, spent) = eval(&host.code, root, environment, host, state, fuel);
-            proof {
-                assert(outcome_means(evaluated) == definition::eval(
-                    source(*host.code, root as int),
-                    environment_means(*environment),
-                    host_means(*host),
-                    pushed,
-                    fuel as nat,
-                ).0 && spent as nat == definition::eval(
-                    source(*host.code, root as int),
-                    environment_means(*environment),
-                    host_means(*host),
-                    pushed,
-                    fuel as nat,
-                ).1);
-            }
-            state.stack.pop();
-            proof {
-                assert(state.stack@ =~= stack);
-            }
-            match evaluated {
-                Outcome::Done(callable) => {
-                    if is_absent_value(&callable) {
-                        (Outcome::Done(callable), spent)
-                    } else {
-                        let (applied, more) = apply(
-                            &callable,
-                            code,
-                            node,
-                            environment,
-                            host,
-                            state,
-                            fuel - spent,
-                        );
-                        proof {
-                            assert(outcome_means(applied) == definition::apply(
-                                means(callable),
-                                call_map(**code, node as int),
-                                environment_means(*environment),
-                                host_means(*host),
-                                stack,
-                                definition::left(fuel as nat, spent as nat),
-                            ).0 && more as nat == definition::apply(
-                                means(callable),
-                                call_map(**code, node as int),
-                                environment_means(*environment),
-                                host_means(*host),
-                                stack,
-                                definition::left(fuel as nat, spent as nat),
-                            ).1);
-                        }
-                        (applied, spent + more)
-                    }
-                },
-                stopped => (stopped, spent),
+    let (evaluated, spent) = eval(&host.code, root, environment, host, state, fuel, depth);
+    proof {
+        assert(outcome_means(evaluated) == definition::eval(
+            source(*host.code, root as int),
+            Some(definition::defined_at(cell)),
+            environment_means(*environment),
+            host_means(*host),
+            fuel as nat,
+            depth as nat,
+        ).0 && spent as nat == definition::eval(
+            source(*host.code, root as int),
+            Some(definition::defined_at(cell)),
+            environment_means(*environment),
+            host_means(*host),
+            fuel as nat,
+            depth as nat,
+        ).1);
+    }
+    match evaluated {
+        Outcome::Done(callable) => {
+            if is_absent_value(&callable) {
+                (Outcome::Done(callable), spent)
+            } else {
+                let (applied, more) = apply(
+                    &callable,
+                    code,
+                    node,
+                    environment,
+                    host,
+                    state,
+                    fuel - spent,
+                    depth,
+                );
+                proof {
+                    assert(outcome_means(applied) == definition::apply(
+                        means(callable),
+                        call_map(**code, node as int),
+                        node_origin(**code, node as int),
+                        environment_means(*environment),
+                        host_means(*host),
+                        definition::left(fuel as nat, spent as nat),
+                        depth as nat,
+                    ).0 && more as nat == definition::apply(
+                        means(callable),
+                        call_map(**code, node as int),
+                        node_origin(**code, node as int),
+                        environment_means(*environment),
+                        host_means(*host),
+                        definition::left(fuel as nat, spent as nat),
+                        depth as nat,
+                    ).1);
+                }
+                (applied, spent + more)
             }
         },
+        stopped => (stopped, spent),
+    }
+}
+
+/// Where a closure record's body was written reads back.
+proof fn lemma_closure_origin_valid(value: Value)
+    ensures
+        match definition::closure(value) {
+            Some((_, _, origin, _)) => valid_at(origin),
+            None => true,
+        },
+{
+    match value {
+        Value::Record(fields) => {
+            if fields.contains_key(BODY_ORIGIN) {
+                lemma_read_origin_valid(fields[BODY_ORIGIN]);
+            }
+        },
+        _ => {},
     }
 }
 
@@ -2213,6 +2375,7 @@ fn apply(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         node < code.nodes@.len(),
@@ -2221,16 +2384,16 @@ fn apply(
         shape_ok(*callable, keys_of(*host)),
         old(state).dynamic || marked_value(*callable, host.bound@),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::apply(
             means(*callable),
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 3nat, 0nat,
@@ -2259,14 +2422,18 @@ fn apply(
                 host,
                 state,
                 fuel,
+                depth,
             )
         },
         Runtime::Data(data) => match closure(data) {
-            Some((params, body, captured)) => {
+            Some((params, body, at, captured)) => {
                 state.dynamic = true;
+                proof {
+                    lemma_closure_origin_valid(view(*data));
+                }
                 let mut scratch: Vec<u128> = Vec::new();
                 let mut body_code = Code { nodes: Vec::new(), fields: Vec::new() };
-                let root = lower(body, &host.index, &mut scratch, &mut body_code);
+                let root = lower(body, &at, &host.index, &mut scratch, &mut body_code);
                 let mut bindings: Vec<(u128, Runtime)> = Vec::new();
                 let mut i = 0;
                 proof {
@@ -2321,10 +2488,11 @@ fn apply(
                     host,
                     state,
                     fuel,
+                    depth,
                 )
             },
-            None => match named_cell(data) {
-                Some(cell) => through_cell(
+            None => match callee_cell(data) {
+                Some(cell) => call_cell(
                     cell,
                     resolve_index(&host.index, cell),
                     code,
@@ -2333,25 +2501,16 @@ fn apply(
                     host,
                     state,
                     fuel,
+                    depth,
                 ),
-                None => (
-                    Outcome::Done(
-                        Runtime::Data(exec_absent(NOT_CALLABLE, ABSENT_VALUE, copy(data))),
-                    ),
-                    0,
-                ),
+                None => (Outcome::Done(Runtime::Data(not_callable(data))), 0),
             },
         },
         Runtime::Number(_number, _bits) => {
             proof {
                 lemma_number_value(*_number, *_bits);
             }
-            (
-                Outcome::Done(
-                    Runtime::Data(exec_absent(NOT_CALLABLE, ABSENT_VALUE, materialize(callable))),
-                ),
-                0,
-            )
+            (Outcome::Done(Runtime::Data(not_callable(&materialize(callable)))), 0)
         },
     }
 }
@@ -2372,6 +2531,7 @@ fn bind(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         i <= params@.len(),
@@ -2387,18 +2547,19 @@ fn bind(
             host.bound@,
         ) && marked_bindings(bindings@, host.bound@) && all_marked(params@, host.bound@)),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::bind(
             params@.subrange(i as int, params@.len() as int),
             source(**body_code, body as int),
+            node_origin(**body_code, body as int),
             frame_means(*captured, bindings@),
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 2nat, params@.len() - i,
@@ -2409,7 +2570,7 @@ fn bind(
     }
     if i == params.len() {
         let frame = Some(Rc::new(Frame { parent: share(captured), bindings }));
-        return eval(body_code, body, &frame, host, state, fuel);
+        return eval(body_code, body, &frame, host, state, fuel, depth);
     }
     let parameter = params[i];
     proof {
@@ -2420,7 +2581,7 @@ fn bind(
     let mut bindings = bindings;
     match field(code, node, parameter, host) {
         Some(argument) => {
-            let (evaluated, spent) = eval(code, argument, environment, host, state, fuel);
+            let (evaluated, spent) = eval(code, argument, environment, host, state, fuel, depth);
             match evaluated {
                 Outcome::Done(value) => {
                     let binding = (parameter, value);
@@ -2441,6 +2602,7 @@ fn bind(
                         host,
                         state,
                         fuel - spent,
+                        depth,
                     );
                     (outcome, spent + more)
                 },
@@ -2448,7 +2610,8 @@ fn bind(
             }
         },
         None => {
-            let binding = (parameter, Runtime::Data(missing_argument(parameter)));
+            let missing = missing_argument(parameter, &code.nodes[node].origin);
+            let binding = (parameter, Runtime::Data(missing));
             proof {
                 lemma_frame_push(*captured, bindings@, binding);
             }
@@ -2466,6 +2629,7 @@ fn bind(
                 host,
                 state,
                 fuel,
+                depth,
             )
         },
     }
@@ -2479,22 +2643,23 @@ fn operand(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         node < code.nodes@.len(),
         code.nodes@[node as int].kind is Call,
         ready(**code, *environment, *host, old(state).dynamic),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::operand(
             label,
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 1nat, 0nat,
@@ -2503,8 +2668,11 @@ fn operand(
         assert(node_ok(**code, node as int, keys_of(*host)));
     }
     match field(code, node, label, host) {
-        Some(argument) => eval(code, argument, environment, host, state, fuel),
-        None => (Outcome::Done(Runtime::Data(missing_argument(label))), 0),
+        Some(argument) => eval(code, argument, environment, host, state, fuel, depth),
+        None => (
+            Outcome::Done(Runtime::Data(missing_argument(label, &code.nodes[node].origin))),
+            0,
+        ),
     }
 }
 
@@ -2516,29 +2684,31 @@ fn primitive_call(
     host: &Host,
     state: &mut State,
     fuel: usize,
+    depth: usize,
 ) -> (evaluated: (Outcome, usize))
     requires
         node < code.nodes@.len(),
         code.nodes@[node as int].kind is Call,
         ready(**code, *environment, *host, old(state).dynamic),
     ensures
-        final(state).stack@ == old(state).stack@,
         old(state).dynamic ==> final(state).dynamic,
         evaluated.1 <= fuel,
         (outcome_means(evaluated.0), evaluated.1 as nat) == definition::primitive_call(
             *primitive,
             call_map(**code, node as int),
+            node_origin(**code, node as int),
             environment_means(*environment),
             host_means(*host),
-            old(state).stack@,
             fuel as nat,
+            depth as nat,
         ),
         result_ok(evaluated.0, *host, final(state).dynamic),
     decreases fuel, 2nat, 0nat,
 {
+    let at = &code.nodes[node].origin;
     match primitive {
         Primitive::Binary { operation, left, right } => {
-            let (first, spent) = operand(*left, code, node, environment, host, state, fuel);
+            let (first, spent) = operand(*left, code, node, environment, host, state, fuel, depth);
             match first {
                 Outcome::Done(first) => {
                     let (second, more) = operand(
@@ -2549,10 +2719,11 @@ fn primitive_call(
                         host,
                         state,
                         fuel - spent,
+                        depth,
                     );
                     match second {
                         Outcome::Done(second) => (
-                            Outcome::Done(binary(operation, *left, &first, *right, &second)),
+                            Outcome::Done(binary(operation, at, *left, &first, *right, &second)),
                             spent + more,
                         ),
                         stopped => (stopped, spent + more),
@@ -2562,24 +2733,24 @@ fn primitive_call(
             }
         },
         Primitive::Unary { operation, operand: label } => {
-            let (value, spent) = operand(*label, code, node, environment, host, state, fuel);
+            let (value, spent) = operand(*label, code, node, environment, host, state, fuel, depth);
             match value {
-                Outcome::Done(value) => (Outcome::Done(unary(operation, *label, &value)), spent),
+                Outcome::Done(value) => (Outcome::Done(unary(operation, at, *label, &value)), spent),
                 stopped => (stopped, spent),
             }
         },
     }
 }
 
-/// A program evaluated with `fuel` against `host`'s definitions, exactly as
-/// `definition::evaluate` says: `None` when it calls a foreign function.
+/// A program, handed to an evaluation as its input, evaluated with `fuel`
+/// against `host`'s definitions, exactly as `definition::evaluate` says:
+/// `None` when it calls a foreign function.
 pub fn evaluate(expression: &ExecValue, host: &Vec<(u128, ExecDefinition)>, fuel: usize) -> (evaluation:
     Option<ExecEvaluation>)
     ensures
         match (evaluation, definition::evaluate(view(*expression), view_host(host@), fuel as nat)) {
-            (Some(evaluation), Some((result, remaining, completed))) => view(evaluation.result)
-                == result && evaluation.remaining_fuel as nat == remaining && evaluation.completed
-                == completed,
+            (Some(evaluation), Some((result, remaining, halt))) => view(evaluation.result) == result
+                && evaluation.remaining_fuel as nat == remaining && evaluation.halt == halt,
             (None, None) => true,
             _ => false,
         },
@@ -2589,7 +2760,8 @@ pub fn evaluate(expression: &ExecValue, host: &Vec<(u128, ExecDefinition)>, fuel
     let ghost keys = host_keys(view_host(host@));
     let ghost host_bound = bound@;
     let mut code = Code { nodes: Vec::new(), fields: Vec::new() };
-    let root = lower(expression, &index, &mut bound, &mut code);
+    let at = input();
+    let root = lower(expression, &at, &index, &mut bound, &mut code);
     proof {
         lemma_code_marked_grows(host_code, host_bound, bound@);
     }
@@ -2599,17 +2771,25 @@ pub fn evaluate(expression: &ExecValue, host: &Vec<(u128, ExecDefinition)>, fuel
         assert(host_means(prepared) =~= view_host(host@));
     }
     let code = Rc::new(code);
-    let mut state = State { stack: Vec::new(), dynamic: false };
-    let (outcome, spent) = eval(&code, root, &None, &prepared, &mut state, fuel);
-    proof {
-        assert(state.stack@ =~= Seq::<(u128, Reached)>::empty());
-    }
+    let mut state = State { dynamic: false };
+    let (outcome, spent) = eval(&code, root, &None, &prepared, &mut state, fuel, MAX_DEPTH);
     match outcome {
         Outcome::Done(value) => Some(
-            ExecEvaluation { result: materialize(&value), remaining_fuel: fuel - spent, completed: true },
+            ExecEvaluation { result: materialize(&value), remaining_fuel: fuel - spent, halt: None },
         ),
         Outcome::OutOfFuel => Some(
-            ExecEvaluation { result: exec_fuel_exhausted(), remaining_fuel: 0, completed: false },
+            ExecEvaluation {
+                result: exec_bare_absent(FUEL_EXHAUSTED),
+                remaining_fuel: 0,
+                halt: Some(Halt::FuelExhausted),
+            },
+        ),
+        Outcome::OutOfDepth => Some(
+            ExecEvaluation {
+                result: exec_bare_absent(DEPTH_EXHAUSTED),
+                remaining_fuel: fuel - spent,
+                halt: Some(Halt::DepthExhausted),
+            },
         ),
         Outcome::Beyond => None,
     }

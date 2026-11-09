@@ -10,6 +10,9 @@ use crate::definition;
 #[cfg(verus_only)]
 use crate::definition::Answer;
 use crate::definition::{BinaryOperation, Number, UnaryOperation};
+use crate::origin::At;
+#[cfg(verus_only)]
+use crate::origin::view_at;
 use crate::value::*;
 use std::rc::Rc;
 use verus_builtin_macros::verus;
@@ -123,7 +126,7 @@ pub(crate) fn not_a_number(number: Number, value: &ExecValue) -> (made: ExecValu
     if exec_is_absent(value) {
         copy(value)
     } else {
-        exec_absent(not_reason(number), ABSENT_VALUE, copy(value))
+        exec_with_detail(not_reason(number), ABSENT_VALUE, copy(value))
     }
 }
 
@@ -144,7 +147,7 @@ fn answer_value(number: Number, answer: ExecAnswer) -> (made: ExecValue)
                 },
             ),
         ),
-        ExecAnswer::Failure(reason) => exec_single(ABSENT, ExecValue::Cell(reason)),
+        ExecAnswer::Failure(reason) => exec_bare_absent(reason),
     }
 }
 
@@ -168,23 +171,33 @@ pub(crate) fn one_detail(label: u128, why: ExecValue) -> (details: Vec<(u128, Ex
 /// A binary operation on its operands' values, as `definition::binary` says.
 pub fn binary(
     operation: &BinaryOperation,
+    call: &At,
     first_label: u128,
     first: &ExecValue,
     second_label: u128,
     second: &ExecValue,
 ) -> (made: ExecValue)
     ensures
-        view(made) == definition::binary(*operation, first_label, view(*first), second_label, view(*second)),
+        view(made) == definition::binary(
+            *operation,
+            view_at(*call),
+            first_label,
+            view(*first),
+            second_label,
+            view(*second),
+        ),
 {
     let number = binary_number(operation);
     match (number_bytes(number, first), number_bytes(number, second)) {
         (Some(left), Some(right)) => answer_value(number, binary_answer(operation, left, right)),
         (Some(_), None) => caused_by_all(
             INVALID_ARGUMENTS,
+            call,
             &one_detail(second_label, not_a_number(number, second)),
         ),
         (None, Some(_)) => caused_by_all(
             INVALID_ARGUMENTS,
+            call,
             &one_detail(first_label, not_a_number(number, first)),
         ),
         (None, None) => {
@@ -200,20 +213,25 @@ pub fn binary(
                     (second_label, definition::not_a_number(number, view(*second))),
                 ]);
             }
-            caused_by_all(INVALID_ARGUMENTS, &details)
+            caused_by_all(INVALID_ARGUMENTS, call, &details)
         },
     }
 }
 
 /// A unary operation on its operand's value, as `definition::unary` says.
-pub fn unary(operation: &UnaryOperation, label: u128, value: &ExecValue) -> (made: ExecValue)
+pub fn unary(operation: &UnaryOperation, call: &At, label: u128, value: &ExecValue) -> (made:
+    ExecValue)
     ensures
-        view(made) == definition::unary(*operation, label, view(*value)),
+        view(made) == definition::unary(*operation, view_at(*call), label, view(*value)),
 {
     let number = Number::F64;
     match number_bytes(number, value) {
         Some(bytes) => answer_value(number, unary_answer(operation, bytes)),
-        None => caused_by_all(INVALID_ARGUMENTS, &one_detail(label, not_a_number(number, value))),
+        None => caused_by_all(
+            INVALID_ARGUMENTS,
+            call,
+            &one_detail(label, not_a_number(number, value)),
+        ),
     }
 }
 

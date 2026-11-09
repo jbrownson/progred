@@ -1,14 +1,15 @@
 //! Grap's evaluator against `grap-reference`, the definition of Grap's core:
-//! each program here must come to the same result, fuel left and completion
-//! under both, unless it calls a foreign function the definition leaves out.
-//! The number operations are registered as the numbers library registers
-//! them. Results are compared without the source origins closures record for
-//! click-to-source, which the core doesn't define yet.
+//! each program here must come to the same result, fuel left and halt under
+//! both, unless it calls a foreign function the definition leaves out. The
+//! number operations are registered as the numbers library registers them.
+//! Results are compared whole, with the origins closures and some absents
+//! carry, which the definition defines too.
 
 use super::*;
-use gid::new_cell_id;
+use gid::{Position, Record, Step, new_cell_id};
 use grap_reference::{self as reference, ExecDefinition, ExecValue};
 use primitive::{Binary, Unary};
+use vocabulary::kind;
 
 fn reference_cell(cell: CellId) -> u128 {
     u128::from_be_bytes(*cell.as_bytes())
@@ -45,28 +46,6 @@ fn from_reference(value: &ExecValue) -> Value {
     }
 }
 
-/// `value` without the body origins closures carry for click-to-source.
-fn without_origins(value: &Value) -> Value {
-    match value {
-        Value::List(elements) => Value::list(elements.values().map(without_origins)),
-        Value::Record(fields) => Value::record(fields.iter().map(|(field, value)| {
-            (
-                *field,
-                match (field, value) {
-                    (&vocabulary::CLOSURE, Value::Record(closure)) => Value::record(
-                        closure
-                            .iter()
-                            .filter(|(field, _)| *field != source::vocabulary::BODY_ORIGIN)
-                            .map(|(field, value)| (*field, without_origins(value))),
-                    ),
-                    _ => without_origins(value),
-                },
-            )
-        })),
-        _ => value.clone(),
-    }
-}
-
 /// `value` with every float NaN made the same NaN. Rust leaves a NaN
 /// result's sign and payload unspecified, even between two places that run
 /// the same operation, so Grap's evaluator and the reference can differ in
@@ -95,57 +74,108 @@ fn canonical_nans(value: &Value) -> Value {
     }
 }
 
-/// A host definition: Grap's own, a foreign function's description, or a
-/// number operation, with its description, as the definition names it and as
-/// Grap runs it.
+/// A host definition: a value with nothing implemented under its cell; a
+/// foreign function the definition leaves out, or a number operation, as it
+/// describes itself; or a value that isn't a foreign function under a cell
+/// the host implements anyway, which calling the cell evaluates.
 enum Defined {
     Grap(Value),
-    Foreign(Value),
-    Primitive(Value, reference::Primitive, primitive::Primitive),
+    Foreign(Record),
+    Primitive(Record, reference::Primitive, primitive::Primitive),
+    Shadowed(Value),
 }
 
-impl Defined {
-    fn grap(&self) -> Definition {
-        match self {
-            Self::Grap(value) => Definition::Value(value.clone()),
-            Self::Foreign(value) => Definition::Foreign(Rc::new(ForeignDefinition {
-                value: value.clone(),
-                implementation: ForeignFunction::new(|_, _, _| {
-                    Ok(RuntimeValue::from(Value::record([])))
-                }),
-            })),
-            Self::Primitive(description, _, primitive) => {
-                Definition::foreign(description.clone(), primitive.function())
+fn description(fields: impl IntoIterator<Item = (CellId, Value)>) -> Record {
+    fields.into_iter().collect()
+}
+
+/// A foreign function's code the definition leaves out.
+fn foreign_code() -> ForeignFunction<'static> {
+    ForeignFunction::new(|_, _, _| Ok(RuntimeValue::from(Value::record([]))))
+}
+
+/// Each cell's value and implementation, as Grap's host gives them.
+type Entries = Vec<(CellId, Value, Option<ForeignFunction<'static>>)>;
+
+fn entries(host: &[(CellId, Defined)]) -> Entries {
+    host.iter()
+        .map(|(cell, defined)| match defined {
+            Defined::Grap(value) => (*cell, value.clone(), None),
+            Defined::Foreign(description) => {
+                let code = foreign_code();
+                let definition = TestDefinition::foreign(*cell, description.clone(), code.clone());
+                (*cell, definition.value().clone(), Some(code))
             }
-        }
+            Defined::Primitive(description, _, operation) => {
+                let code = operation.function();
+                let definition = TestDefinition::foreign(*cell, description.clone(), code.clone());
+                (*cell, definition.value().clone(), Some(code))
+            }
+            Defined::Shadowed(value) => (*cell, value.clone(), Some(foreign_code())),
+        })
+        .collect()
+}
+
+/// The same host as the reference holds it.
+fn reference_host(host: &[(CellId, Defined)], entries: &Entries) -> Vec<(u128, ExecDefinition)> {
+    host.iter()
+        .zip(entries)
+        .map(|((cell, defined), (_, value, _))| {
+            let implementation = match defined {
+                Defined::Grap(_) => None,
+                Defined::Foreign(_) | Defined::Shadowed(_) => {
+                    Some(reference::Implementation::Foreign)
+                }
+                Defined::Primitive(_, named, _) => {
+                    Some(reference::Implementation::Primitive(*named))
+                }
+            };
+            (
+                reference_cell(*cell),
+                ExecDefinition {
+                    value: to_reference(value),
+                    implementation,
+                },
+            )
+        })
+        .collect()
+}
+
+/// A host answering with each cell's first entry, as the reference resolves
+/// a cell.
+struct ListedHost(Entries);
+
+impl Host for ListedHost {
+    fn definition(&self, cell: CellId) -> Option<Value> {
+        let (_, value, _) = self.0.iter().find(|(defined, _, _)| *defined == cell)?;
+        Some(value.clone())
     }
 
-    /// The reference's definition, describing itself as Grap's `definition`
-    /// does, with the parameters a function declares.
-    fn reference(&self, definition: &Definition) -> ExecDefinition {
-        let value = to_reference(definition.value());
-        match self {
-            Self::Grap(_) => ExecDefinition::Grap(value),
-            Self::Foreign(_) => ExecDefinition::Foreign(value),
-            Self::Primitive(_, primitive, _) => ExecDefinition::Primitive(value, *primitive),
-        }
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction<'static>> {
+        let (_, _, code) = self.0.iter().find(|(defined, _, _)| *defined == cell)?;
+        code.clone()
     }
 }
 
-/// Evaluates under both and checks they agree; `None` when the program
-/// calls a foreign function, so the definition says nothing about it.
-fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<Evaluation<Value>> {
-    let definitions: Vec<_> = host
-        .iter()
-        .map(|(cell, defined)| (*cell, defined.grap()))
-        .collect();
-    let reference_host: Vec<_> = host
-        .iter()
-        .zip(&definitions)
-        .map(|((cell, defined), (_, definition))| {
-            (reference_cell(*cell), defined.reference(definition))
-        })
-        .collect();
+fn halt(halt: reference::Halt) -> Halt {
+    match halt {
+        reference::Halt::FuelExhausted => Halt::FuelExhausted,
+        reference::Halt::DepthExhausted => Halt::DepthExhausted,
+    }
+}
+
+/// What a program came to under every evaluator.
+struct Agreed {
+    result: Value,
+    remaining_fuel: usize,
+    halt: Option<Halt>,
+}
+
+/// Evaluates under each and checks they agree; `None` when the program calls
+/// a foreign function, so the definition says nothing about it.
+fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<Agreed> {
+    let entries = entries(host);
+    let reference_host = reference_host(host, &entries);
     let expected = reference::evaluate(&to_reference(expression), &reference_host, fuel);
     let fast = reference::fast::evaluate(&to_reference(expression), &reference_host, fuel);
     match (&expected, &fast) {
@@ -156,9 +186,9 @@ fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<
                 "fast result of {expression:?} with fuel {fuel}"
             );
             assert_eq!(
-                (fast.remaining_fuel, fast.completed),
-                (expected.remaining_fuel, expected.completed),
-                "fast fuel and completion of {expression:?} with fuel {fuel}"
+                (fast.remaining_fuel, fast.halt),
+                (expected.remaining_fuel, expected.halt),
+                "fast fuel and halt of {expression:?} with fuel {fuel}"
             );
         }
         (None, None) => {}
@@ -167,16 +197,11 @@ fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<
         ),
     }
     let expected = expected?;
-    let resolver = TestHost(|cell| {
-        definitions
-            .iter()
-            .filter(|(defined_cell, _)| *defined_cell == cell)
-            .map(|(_, definition)| (Resolution::Document, definition.clone()))
-            .collect()
-    });
-    let actual = evaluate_value(expression, &resolver, fuel);
+    let host = ListedHost(entries);
+    let actual = Evaluator::new(&host, fuel).evaluate(expression);
+    let result = actual.result.into_value();
     assert_eq!(
-        canonical_nans(&without_origins(&actual.result)),
+        canonical_nans(&result),
         canonical_nans(&from_reference(&expected.result)),
         "result of {expression:?} with fuel {fuel}"
     );
@@ -185,10 +210,26 @@ fn agree(expression: &Value, host: &[(CellId, Defined)], fuel: usize) -> Option<
         "fuel left by {expression:?} with fuel {fuel}"
     );
     assert_eq!(
-        actual.completed, expected.completed,
-        "completion of {expression:?} with fuel {fuel}"
+        actual.halt,
+        expected.halt.map(halt),
+        "halt of {expression:?} with fuel {fuel}"
     );
-    Some(actual)
+    Some(Agreed {
+        result,
+        remaining_fuel: actual.remaining_fuel,
+        halt: actual.halt,
+    })
+}
+
+/// Runs `test` on a stack deep enough for the reference evaluators, which
+/// recurse further than Grap's for each evaluation nested.
+fn deep(test: impl FnOnce() + Send + 'static) {
+    std::thread::Builder::new()
+        .stack_size(1 << 28)
+        .spawn(test)
+        .unwrap()
+        .join()
+        .unwrap();
 }
 
 /// The numbers library's operations, registered as it registers them, under
@@ -306,7 +347,7 @@ impl Numbers {
             .map(|(cell, named, operation)| {
                 (
                     *cell,
-                    Defined::Primitive(Value::record([(*cell, blob("name"))]), *named, *operation),
+                    Defined::Primitive(description([(*cell, blob("name"))]), *named, *operation),
                 )
             })
             .collect()
@@ -398,12 +439,14 @@ fn number_operands() -> Vec<Value> {
                 (crate::u64::U64, Value::from(9u64.to_le_bytes().to_vec())),
                 (crate::f32::F32, Value::from(0.5f32.to_le_bytes().to_vec())),
             ]),
-            Value::record([
-                (absent::ABSENT, Value::from(absent::DECLINED)),
-                (crate::f64::F64, Value::from(4.0f64.to_le_bytes().to_vec())),
-                (crate::f32::F32, Value::from(4.0f32.to_le_bytes().to_vec())),
-                (crate::u64::U64, Value::from(4u64.to_le_bytes().to_vec())),
-            ]),
+            absent::absent(
+                absent::DECLINED,
+                [
+                    (crate::f64::F64, Value::from(4.0f64.to_le_bytes().to_vec())),
+                    (crate::f32::F32, Value::from(4.0f32.to_le_bytes().to_vec())),
+                    (crate::u64::U64, Value::from(4u64.to_le_bytes().to_vec())),
+                ],
+            ),
             absent::value(absent::DECLINED),
         ])
         .collect()
@@ -413,29 +456,55 @@ fn blob(text: &str) -> Value {
     Value::from(text.as_bytes().to_vec())
 }
 
+/// Where the input an evaluation was handed is.
+fn input() -> SourceOrigin {
+    SourceOrigin::Input(Vec::new())
+}
+
+/// `{isa: value wrapper, value}`.
+fn wrapped(value: Value) -> Value {
+    isa::record(kind::VALUE_WRAPPER, [(vocabulary::VALUE, value)])
+}
+
 #[test]
 fn the_reference_names_grap_cells() {
     let named = [
+        (reference::ISA, isa::ISA),
+        (reference::KIND_CALL, kind::CALL),
+        (reference::KIND_LAMBDA, kind::LAMBDA),
+        (reference::KIND_CLOSURE, kind::CLOSURE),
+        (reference::KIND_VALUE_WRAPPER, kind::VALUE_WRAPPER),
+        (reference::KIND_FOREIGN_FUNCTION, kind::FOREIGN_FUNCTION),
+        (reference::KIND_ABSENT, kind::ABSENT),
         (reference::FUNCTION, vocabulary::FUNCTION),
         (reference::PARAMS, vocabulary::PARAMS),
         (reference::BODY, vocabulary::BODY),
         (reference::VALUE, vocabulary::VALUE),
-        (reference::CLOSURE, vocabulary::CLOSURE),
+        (reference::LAMBDA, vocabulary::LAMBDA),
         (reference::ENVIRONMENT, vocabulary::ENVIRONMENT),
-        (reference::FFI, vocabulary::FFI),
+        (reference::IMPLEMENTATION, vocabulary::IMPLEMENTATION),
         (reference::BODY_ORIGIN, source::vocabulary::BODY_ORIGIN),
-        (reference::ABSENT, absent::ABSENT),
+        (reference::REASON, absent::REASON),
         (reference::ABSENT_CELL, absent::CELL),
         (reference::ABSENT_VALUE, absent::VALUE),
-        (reference::CYCLE, absent::CYCLE),
+        (reference::ABSENT_CALL, absent::CALL),
         (reference::FUEL_EXHAUSTED, absent::FUEL_EXHAUSTED),
+        (reference::DEPTH_EXHAUSTED, absent::DEPTH_EXHAUSTED),
         (reference::MISSING_CELL, absent::MISSING_CELL),
-        (reference::CELL_CYCLE, absent::CELL_CYCLE),
         (reference::MALFORMED_LAMBDA, absent::MALFORMED_LAMBDA),
         (reference::INVALID_PARAMETER, absent::INVALID_PARAMETER),
         (reference::NOT_CALLABLE, absent::NOT_CALLABLE),
         (reference::MISSING_ARGUMENT, absent::MISSING_ARGUMENT),
+        (reference::MISSING_FIELD, absent::MISSING_FIELD),
         (reference::INVALID_ARGUMENTS, absent::INVALID_ARGUMENTS),
+        (reference::ORIGIN_INPUT, source::vocabulary::INPUT),
+        (reference::ORIGIN_ROOT, source::vocabulary::ROOT),
+        (reference::ORIGIN_CELL, source::vocabulary::CELL),
+        (reference::ORIGIN_PATH, source::vocabulary::PATH),
+        (reference::STEP_KEY, path::vocabulary::KEY),
+        (reference::STEP_ELEMENT, path::vocabulary::ELEMENT),
+        (reference::STEP_FOLLOW, path::vocabulary::FOLLOW),
+        (reference::STEP_INDEXABLE, path::vocabulary::INDEXABLE),
         (reference::F64, crate::f64::F64),
         (reference::NOT_F64, crate::f64::NOT_F64),
         (reference::F32, crate::f32::F32),
@@ -450,6 +519,7 @@ fn the_reference_names_grap_cells() {
         assert_eq!(CellId::from_u128(reference), grap);
     }
     assert_eq!(reference::CHAIN_LIMIT, absent::CHAIN_LIMIT);
+    assert_eq!(reference::MAX_DEPTH, MAX_DEPTH);
 }
 
 /// The core cases of progred's `conformance.rs`, with their pinned results.
@@ -468,7 +538,7 @@ fn the_reference_reproduces_the_core_conformance_tuples() {
         super::lambda([foreign], Value::from(foreign)),
         [(foreign, blob("bound"))],
     );
-    let host = [(foreign, Defined::Foreign(Value::record([])))];
+    let host = [(foreign, Defined::Foreign(description([])))];
     let evaluation = agree(&shadowing, &host, 10).unwrap();
     assert_eq!(
         (evaluation.result, evaluation.remaining_fuel),
@@ -497,41 +567,238 @@ fn the_reference_reproduces_the_core_conformance_tuples() {
     );
 }
 
+/// A record is a form only when its `isa` says so; what a form lacks it
+/// answers why; and what closures and their absents carry.
+#[test]
+fn the_reference_agrees_on_what_records_say_they_are() {
+    let (x, y) = (new_cell_id(), new_cell_id());
+    let lambda = super::lambda([x], Value::from(x));
+    // Without `isa`, or with one that isn't a cell or names no form, a
+    // record is data, whatever its fields.
+    for data in [
+        Value::record([
+            (vocabulary::FUNCTION, lambda.clone()),
+            (x, blob("argument")),
+        ]),
+        Value::record([
+            (vocabulary::PARAMS, Value::list([Value::from(x)])),
+            (vocabulary::BODY, Value::from(x)),
+        ]),
+        Value::record([(vocabulary::VALUE, Value::from(x))]),
+        Value::record([
+            (isa::ISA, blob("call")),
+            (vocabulary::FUNCTION, lambda.clone()),
+        ]),
+        isa::record(kind::CLOSURE, [(vocabulary::LAMBDA, lambda.clone())]),
+        crate::foreign_function(x),
+        absent::value(absent::DECLINED),
+    ] {
+        let evaluation = agree(&data, &[], 10).unwrap();
+        assert_eq!((evaluation.result, evaluation.remaining_fuel), (data, 9));
+    }
+    // A form lacking a field its kind requires answers why where the field
+    // would be, which costs a unit as the field would.
+    let missing = |field| absent::missing_field(field);
+    let evaluation = agree(&isa::record(kind::CALL, [(x, blob("a"))]), &[], 10).unwrap();
+    assert_eq!(
+        (evaluation.result, evaluation.remaining_fuel),
+        (missing(vocabulary::FUNCTION), 8)
+    );
+    let evaluation = agree(&isa::record(kind::VALUE_WRAPPER, []), &[], 10).unwrap();
+    assert_eq!(
+        (evaluation.result, evaluation.remaining_fuel),
+        (missing(vocabulary::VALUE), 8)
+    );
+    let bodiless = isa::record(
+        kind::LAMBDA,
+        [(vocabulary::PARAMS, Value::list([Value::from(x)]))],
+    );
+    let evaluation = agree(&super::call(bodiless.clone(), []), &[], 10).unwrap();
+    assert_eq!(evaluation.result, missing(vocabulary::BODY));
+    // A lambda without a list of parameters, or with one that isn't a cell.
+    let paramless = isa::record(kind::LAMBDA, [(vocabulary::BODY, Value::from(x))]);
+    assert_eq!(
+        agree(&paramless, &[], 10).unwrap().result,
+        absent::with_detail(absent::MALFORMED_LAMBDA, absent::VALUE, paramless.clone())
+    );
+    let invalid = super::lambda([], Value::from(x));
+    let invalid = match invalid {
+        Value::Record(mut fields) => {
+            fields.set(vocabulary::PARAMS, Value::list([blob("not a cell")]));
+            Value::Record(fields)
+        }
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        agree(&invalid, &[], 10).unwrap().result,
+        absent::with_detail(absent::INVALID_PARAMETER, absent::VALUE, blob("not a cell"))
+    );
+    // A closure holds its lambda as written, with why its body is missing if
+    // it is, what it captured, and where its body was written.
+    let evaluation = agree(
+        &super::call(
+            super::lambda([y], bodiless.clone()),
+            [(y, blob("captured"))],
+        ),
+        &[],
+        10,
+    )
+    .unwrap();
+    let body_at = |path: Vec<Step>| source::value(&SourceOrigin::Input(path));
+    assert_eq!(
+        evaluation.result,
+        isa::record(
+            kind::CLOSURE,
+            [
+                (
+                    vocabulary::LAMBDA,
+                    isa::record(
+                        kind::LAMBDA,
+                        [
+                            (vocabulary::PARAMS, Value::list([Value::from(x)])),
+                            (vocabulary::BODY, missing(vocabulary::BODY)),
+                        ]
+                    ),
+                ),
+                (
+                    vocabulary::ENVIRONMENT,
+                    Value::record([(y, blob("captured"))])
+                ),
+                (
+                    source::vocabulary::BODY_ORIGIN,
+                    body_at(vec![
+                        Step::Key(vocabulary::FUNCTION),
+                        Step::Key(vocabulary::BODY),
+                        Step::Key(vocabulary::BODY),
+                    ])
+                ),
+            ]
+        )
+    );
+    // A missing argument names where its call was written, which a closure
+    // record whose body origin doesn't read as one doesn't know.
+    let inner = super::call(super::lambda([x], Value::from(x)), []);
+    let evaluation = agree(&super::call(super::lambda([], inner.clone()), []), &[], 20).unwrap();
+    assert_eq!(
+        evaluation.result,
+        absent::missing_argument(
+            x,
+            Some(&SourceOrigin::Input(vec![
+                Step::Key(vocabulary::FUNCTION),
+                Step::Key(vocabulary::BODY),
+            ]))
+        )
+    );
+    let record = |body_origin: Value| {
+        isa::record(
+            kind::CLOSURE,
+            [
+                (vocabulary::LAMBDA, super::lambda([], inner.clone())),
+                (vocabulary::ENVIRONMENT, Value::record([])),
+                (source::vocabulary::BODY_ORIGIN, body_origin),
+            ],
+        )
+    };
+    let unreadable = Value::record([
+        (source::vocabulary::INPUT, Value::list([])),
+        (source::vocabulary::ROOT, Value::list([])),
+    ]);
+    let evaluation = agree(&super::call(record(unreadable), []), &[], 20).unwrap();
+    assert_eq!(evaluation.result, absent::missing_argument(x, None));
+    let elsewhere = SourceOrigin::Cell {
+        cell: y,
+        path: vec![
+            Step::Element(Position::from_bytes(vec![0x80]).unwrap()),
+            Step::Follow,
+        ],
+    };
+    let evaluation = agree(&super::call(record(source::value(&elsewhere)), []), &[], 20).unwrap();
+    assert_eq!(
+        evaluation.result,
+        absent::missing_argument(x, Some(&elsewhere))
+    );
+}
+
 /// Cases the definition spells out because the evaluator's paths differ.
 #[test]
 fn the_reference_agrees_on_the_edges_it_spells_out() {
-    let (f, g, x) = (new_cell_id(), new_cell_id(), new_cell_id());
-    let missing = absent::with_detail(absent::MISSING_CELL, absent::CELL, x.into());
-    // Calling a cell whose definition is an absent answers that absent as it
-    // is; calling a binding to one answers that it isn't callable.
-    let host = [(f, Defined::Grap(Value::from(x)))];
-    let through_cell = agree(&super::call(Value::from(f), []), &host, 20).unwrap();
-    assert_eq!(through_cell.result, missing);
-    let through_binding = super::call(
-        super::lambda([g], super::call(Value::from(g), [])),
-        [(g, Value::from(x))],
-    );
-    let evaluation = agree(&through_binding, &[], 20).unwrap();
-    assert_eq!(
-        evaluation.result,
-        absent::with_detail(absent::NOT_CALLABLE, absent::VALUE, missing)
-    );
-    // A reference notices a cycle only through another reference; a call
-    // notices one through anything under resolution. So calling a cell
-    // defined as a reference to itself evaluates the definition twice
-    // before the reference notices.
-    let host = [(f, Defined::Grap(Value::from(f)))];
-    agree(&Value::from(f), &host, 20).unwrap();
-    let evaluation = agree(&super::call(Value::from(f), []), &host, 20).unwrap();
-    assert_eq!(evaluation.remaining_fuel, 16);
-    let host = [(f, Defined::Grap(super::call(Value::from(f), [])))];
-    agree(&super::call(Value::from(f), []), &host, 20).unwrap();
-    agree(&Value::from(f), &host, 20).unwrap();
-    // Every budget from nothing up, for a program that spends a few units.
-    let program = super::call(super::lambda([x], Value::from(x)), [(x, blob("bound"))]);
-    for fuel in 0..8 {
-        agree(&program, &[], fuel).unwrap();
-    }
+    deep(|| {
+        let (f, g, x) = (new_cell_id(), new_cell_id(), new_cell_id());
+        let missing = absent::with_detail(absent::MISSING_CELL, absent::CELL, x.into());
+        // Calling a cell whose definition is an absent, or a binding to one,
+        // answers that absent as it is.
+        let host = [(f, Defined::Grap(Value::from(x)))];
+        let through_cell = agree(&super::call(Value::from(f), []), &host, 20).unwrap();
+        assert_eq!(through_cell.result, missing);
+        let through_binding = super::call(
+            super::lambda([g], super::call(Value::from(g), [])),
+            [(g, Value::from(x))],
+        );
+        assert_eq!(agree(&through_binding, &[], 20).unwrap().result, missing);
+        // A definition that refers to itself runs until its fuel does, or
+        // until evaluations nest too deeply: each reference nests one, each
+        // spending a unit, so 257 run, the last halting.
+        let host = [(f, Defined::Grap(Value::from(f)))];
+        let evaluation = agree(&Value::from(f), &host, 20).unwrap();
+        assert_eq!(
+            (evaluation.halt, evaluation.remaining_fuel),
+            (Some(Halt::FuelExhausted), 0)
+        );
+        let evaluation = agree(&Value::from(f), &host, 1000).unwrap();
+        assert_eq!(
+            (
+                evaluation.result,
+                evaluation.halt,
+                evaluation.remaining_fuel
+            ),
+            (
+                absent::value(absent::DEPTH_EXHAUSTED),
+                Some(Halt::DepthExhausted),
+                1000 - (MAX_DEPTH + 1)
+            )
+        );
+        let host = [(f, Defined::Grap(super::call(Value::from(f), [])))];
+        agree(&super::call(Value::from(f), []), &host, 2000).unwrap();
+        agree(&Value::from(f), &host, 2000).unwrap();
+        // A foreign function without its implementation isn't callable; one
+        // implemented under another cell calls that cell; and a value under
+        // a cell the host implements is called as code unless it's a
+        // foreign function implemented there.
+        let host = [(f, Defined::Grap(crate::foreign_function(f)))];
+        assert_eq!(
+            agree(&super::call(Value::from(f), []), &host, 20)
+                .unwrap()
+                .result,
+            absent::with_detail(
+                absent::NOT_CALLABLE,
+                absent::VALUE,
+                crate::foreign_function(f)
+            )
+        );
+        let host = [
+            (f, Defined::Grap(crate::foreign_function(g))),
+            (g, Defined::Grap(super::lambda([], blob("g")))),
+        ];
+        let evaluation = agree(&super::call(Value::from(f), []), &host, 20).unwrap();
+        assert_eq!(
+            (evaluation.result, evaluation.remaining_fuel),
+            (blob("g"), 14)
+        );
+        let host = [(f, Defined::Shadowed(super::lambda([], blob("code"))))];
+        assert_eq!(
+            agree(&super::call(Value::from(f), []), &host, 20)
+                .unwrap()
+                .result,
+            blob("code")
+        );
+        let host = [(f, Defined::Foreign(description([])))];
+        assert!(agree(&super::call(Value::from(f), []), &host, 20).is_none());
+        // Every budget from nothing up, for a program that spends a few units.
+        let program = super::call(super::lambda([x], Value::from(x)), [(x, blob("bound"))]);
+        for fuel in 0..8 {
+            agree(&program, &[], fuel).unwrap();
+        }
+    });
 }
 
 /// Every number operation on every pair of operands from the spread, and the
@@ -638,11 +905,13 @@ fn the_reference_agrees_on_number_operations() {
         assert_eq!(agree(&call, &host, 20).unwrap().result, result);
     }
     // Why each operand couldn't be used, under its label: missing, not the
-    // operation's type, or already absent, passed on as it is.
-    let missing =
-        |label: CellId| absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, label.into());
-    let invalid =
-        |details: Vec<(CellId, Value)>| absent::caused_by_all(absent::INVALID_ARGUMENTS, details);
+    // operation's type, or already absent, passed on as it is; all naming
+    // where the call was written.
+    let at = input();
+    let missing = |label: CellId| absent::missing_argument(label, Some(&at));
+    let invalid = |details: Vec<(CellId, Value)>| {
+        absent::caused_by_all(absent::INVALID_ARGUMENTS, Some(&at), details)
+    };
     let evaluation = agree(&numbers.call(sum, []), &host, 20).unwrap();
     assert_eq!(
         (evaluation.result, evaluation.remaining_fuel),
@@ -675,13 +944,16 @@ fn the_reference_agrees_on_number_operations() {
     .unwrap();
     assert_eq!(
         evaluation.result,
-        Value::record([
-            (absent::ABSENT, Value::from(absent::INVALID_ARGUMENTS)),
-            (
-                left,
-                absent::with_detail(absent::MISSING_CELL, absent::CELL, undefined.into())
-            ),
-        ])
+        absent::absent(
+            absent::INVALID_ARGUMENTS,
+            [
+                (absent::CALL, source::value(&at)),
+                (
+                    left,
+                    absent::with_detail(absent::MISSING_CELL, absent::CELL, undefined.into())
+                ),
+            ]
+        )
     );
     // Failures nested deeper than the chain limit stop growing it.
     let mut nested = numbers.call(sum, []);
@@ -697,11 +969,10 @@ fn the_reference_agrees_on_number_operations() {
     // and of two as long, the later.
     let chain = |length: usize, tag: &str| {
         (1..length).fold(absent::value(absent::DECLINED), |cause, _| {
-            Value::record([
-                (absent::ABSENT, Value::from(absent::INVALID_ARGUMENTS)),
-                (left, cause),
-                (right, blob(tag)),
-            ])
+            absent::absent(
+                absent::INVALID_ARGUMENTS,
+                [(left, cause), (right, blob(tag))],
+            )
         })
     };
     for (first, second, expected) in [
@@ -718,9 +989,9 @@ fn the_reference_agrees_on_number_operations() {
         let evaluation = agree(&numbered(sum, first, second), &host, 20).unwrap();
         assert_eq!(evaluation.result, expected);
     }
-    // A primitive called through a binding to `{ffi: cell}`, through
-    // `{ffi: cell}` itself, and by reference to its cell, which evaluates its
-    // description.
+    // A primitive called through a binding to its foreign function, through
+    // the foreign function itself, and by reference to its cell, which
+    // evaluates its description.
     let f = new_cell_id();
     let operands = [
         (left, crate::f64::value(1.0)),
@@ -728,32 +999,63 @@ fn the_reference_agrees_on_number_operations() {
     ];
     let through_binding = super::call(
         super::lambda([f], super::call(Value::from(f), operands.clone())),
-        [(f, super::ffi(sum))],
+        [(f, crate::foreign_function(sum))],
     );
     let evaluation = agree(&through_binding, &host, 20).unwrap();
     assert_eq!(evaluation.result, crate::f64::value(3.0));
-    let through_ffi = super::call(super::ffi(sum), operands);
+    let through_foreign = super::call(crate::foreign_function(sum), operands);
     assert_eq!(
-        agree(&through_ffi, &host, 20).unwrap().result,
+        agree(&through_foreign, &host, 20).unwrap().result,
         crate::f64::value(3.0)
     );
     let described = agree(&Value::from(sum), &host, 20).unwrap();
     assert_eq!(
         described.result,
-        Value::record([
-            (sum, blob("name")),
-            (
-                vocabulary::PARAMS,
-                Value::list([Value::from(left), Value::from(right)])
-            ),
-        ])
+        isa::record(
+            kind::FOREIGN_FUNCTION,
+            [
+                (sum, blob("name")),
+                (vocabulary::IMPLEMENTATION, Value::from(sum)),
+                (
+                    vocabulary::PARAMS,
+                    Value::list([Value::from(left), Value::from(right)])
+                ),
+            ]
+        )
     );
+    // A number operand halts where evaluations nest too deeply, however it's
+    // read: here, a literal nested in wrappers to just past the limit.
+    deep(move || {
+        let numbers = Numbers::new();
+        let host = numbers.host();
+        let sum = numbers.binary(Named::F64Sum);
+        let (left, right) = (numbers.left, numbers.right);
+        for wrappers in [MAX_DEPTH - 2, MAX_DEPTH - 1, MAX_DEPTH] {
+            let mut program = numbers.call(
+                sum,
+                [
+                    (left, crate::f64::value(1.0)),
+                    (right, crate::f64::value(2.0)),
+                ],
+            );
+            for _ in 0..wrappers {
+                program = wrapped(program);
+            }
+            let evaluation = agree(&program, &host, 1000).unwrap();
+            assert_eq!(
+                evaluation.halt.is_some(),
+                wrappers >= MAX_DEPTH - 1,
+                "with {wrappers} wrappers"
+            );
+        }
+    });
 }
 
-/// Random core programs: lambdas with good and bad parameters, calls through
-/// lambdas, bindings, cells, closure records and `{ffi: cell}`, value
-/// wrappers, data, and definitions that refer to each other and themselves,
-/// with budgets small enough to run out.
+/// Random core programs: lambdas with good and bad parameters and missing
+/// fields, calls through lambdas, bindings, cells, closure records and
+/// foreign functions, value wrappers, records that only look like forms,
+/// data, and definitions that refer to each other and themselves, with
+/// budgets small enough to run out and large enough to nest too deeply.
 struct Programs {
     state: u64,
     variables: Vec<CellId>,
@@ -763,6 +1065,9 @@ struct Programs {
     /// The number operations programs call, and operands for them, when
     /// they use numbers.
     numbers: Option<(Numbers, Vec<Value>)>,
+    /// Whether definitions mostly call or refer to each other, so programs
+    /// that use them recurse.
+    recursive: bool,
 }
 
 impl Programs {
@@ -775,6 +1080,7 @@ impl Programs {
             foreign: cells(1),
             missing: cells(2),
             numbers: None,
+            recursive: false,
         }
     }
 
@@ -784,6 +1090,14 @@ impl Programs {
         Self {
             numbers: Some((Numbers::new(), number_operands())),
             ..Self::new(seed)
+        }
+    }
+
+    /// Programs over definitions that mostly recurse, using numbers too.
+    fn recursive(seed: u64) -> Self {
+        Self {
+            recursive: true,
+            ..Self::with_numbers(seed)
         }
     }
 
@@ -816,10 +1130,11 @@ impl Programs {
         if self.numbers.is_some() && self.below(3) == 0 {
             return self.number();
         }
-        match self.below(5) {
+        match self.below(6) {
             0 => blob(["a", "b", "c"][self.below(3)]),
             1 => Value::record([]),
             2 => Value::list([blob("item")]),
+            3 => absent::value(absent::DECLINED),
             _ => Value::from(self.cell()),
         }
     }
@@ -831,18 +1146,48 @@ impl Programs {
         if self.numbers.is_some() && self.below(3) == 0 {
             return self.operation_call(depth);
         }
-        match self.below(12) {
+        match self.below(14) {
             0 | 1 => self.leaf(),
             2 | 3 => self.lambda(depth),
             4..=7 => self.call(depth),
-            8 => Value::record([(vocabulary::VALUE, self.expression(depth - 1))]),
+            8 => {
+                if self.below(8) == 0 {
+                    isa::record(kind::VALUE_WRAPPER, [])
+                } else {
+                    wrapped(self.expression(depth - 1))
+                }
+            }
             9 => self.closure_record(depth),
-            10 => super::ffi(match self.below(2) {
+            10 => crate::foreign_function(match self.below(3) {
                 0 => self.pick(&self.defined.clone()),
+                1 => self.cell(),
                 _ => self.pick(&self.foreign.clone()),
             }),
-            _ => Value::list([self.expression(depth - 1), self.leaf()]),
+            11 => Value::list([self.expression(depth - 1), self.leaf()]),
+            _ => self.lookalike(depth),
         }
+    }
+
+    /// A record with a form's fields but not its kind: without `isa`, with
+    /// one that isn't a cell, or naming another kind.
+    fn lookalike(&mut self, depth: usize) -> Value {
+        let fields = [
+            (vocabulary::FUNCTION, self.expression(depth - 1)),
+            (vocabulary::PARAMS, self.parameters()),
+            (vocabulary::BODY, self.expression(depth - 1)),
+            (vocabulary::VALUE, self.leaf()),
+        ];
+        let named = match self.below(4) {
+            0 => None,
+            1 => Some(blob("call")),
+            2 => Some(Value::from(kind::ABSENT)),
+            _ => Some(Value::from(self.pick(&self.missing.clone()))),
+        };
+        Value::record(
+            fields
+                .into_iter()
+                .chain(named.map(|named| (isa::ISA, named))),
+        )
     }
 
     fn parameters(&mut self) -> Value {
@@ -857,10 +1202,13 @@ impl Programs {
     }
 
     fn lambda(&mut self, depth: usize) -> Value {
-        let mut fields = vec![
-            (vocabulary::PARAMS, self.parameters()),
-            (vocabulary::BODY, self.expression(depth - 1)),
-        ];
+        let mut fields = vec![(isa::ISA, Value::from(kind::LAMBDA))];
+        if self.below(12) != 0 {
+            fields.push((vocabulary::PARAMS, self.parameters()));
+        }
+        if self.below(10) != 0 {
+            fields.push((vocabulary::BODY, self.expression(depth - 1)));
+        }
         if self.below(4) == 0 {
             fields.push((self.pick(&self.missing.clone()), blob("named")));
         }
@@ -882,21 +1230,67 @@ impl Programs {
                 )
             })
             .collect();
-        super::call(function, arguments)
+        if self.below(16) == 0 {
+            isa::record(kind::CALL, arguments)
+        } else {
+            super::call(function, arguments)
+        }
+    }
+
+    /// Where a body was written, as GID data: legibly, or not.
+    fn origin(&mut self) -> Value {
+        let position = |byte: u8| Step::Element(Position::from_bytes(vec![0x40, byte]).unwrap());
+        let cell = self.pick(&self.missing.clone());
+        match self.below(7) {
+            0 => source::value(&SourceOrigin::Input(vec![Step::Key(cell)])),
+            1 => source::value(&SourceOrigin::Root(vec![position(0x80), Step::Follow])),
+            2 => source::value(&SourceOrigin::Cell {
+                cell,
+                path: vec![Step::Key(vocabulary::BODY), position(0x01)],
+            }),
+            3 => Value::record([
+                (source::vocabulary::INPUT, Value::list([])),
+                (source::vocabulary::ROOT, Value::list([])),
+            ]),
+            4 => Value::record([(
+                source::vocabulary::INPUT,
+                Value::list([Value::record([(
+                    path::vocabulary::ELEMENT,
+                    Value::record([(path::vocabulary::INDEXABLE, Value::from(vec![1u8, 0]))]),
+                )])]),
+            )]),
+            5 => Value::record([
+                (
+                    source::vocabulary::INPUT,
+                    Value::list([Value::record([(path::vocabulary::FOLLOW, blob("through"))])]),
+                ),
+                (cell, blob("more")),
+            ]),
+            _ => blob("nowhere"),
+        }
     }
 
     fn closure_record(&mut self, depth: usize) -> Value {
-        Value::record([(
-            vocabulary::CLOSURE,
-            Value::record([
-                (vocabulary::PARAMS, self.parameters()),
-                (vocabulary::BODY, self.expression(depth - 1)),
-                (
-                    vocabulary::ENVIRONMENT,
-                    Value::record([(self.pick(&self.variables.clone()), self.leaf())]),
-                ),
-            ]),
-        )])
+        let lambda = match self.below(8) {
+            0 => blob("not a lambda"),
+            _ => self.lambda(depth),
+        };
+        let mut fields = vec![
+            (isa::ISA, Value::from(kind::CLOSURE)),
+            (vocabulary::LAMBDA, lambda),
+        ];
+        match self.below(8) {
+            0 => {}
+            1 => fields.push((vocabulary::ENVIRONMENT, blob("not an environment"))),
+            _ => fields.push((
+                vocabulary::ENVIRONMENT,
+                Value::record([(self.pick(&self.variables.clone()), self.leaf())]),
+            )),
+        }
+        if self.below(2) == 0 {
+            fields.push((source::vocabulary::BODY_ORIGIN, self.origin()));
+        }
+        Value::record(fields)
     }
 
     fn operations(&self) -> Vec<(CellId, reference::Primitive)> {
@@ -917,10 +1311,7 @@ impl Programs {
             let length = 1 + self.below(12);
             let label = self.pick(&self.variables.clone());
             (1..length).fold(absent::value(absent::DECLINED), |cause, _| {
-                Value::record([
-                    (absent::ABSENT, Value::from(absent::INVALID_ARGUMENTS)),
-                    (label, cause),
-                ])
+                absent::absent(absent::INVALID_ARGUMENTS, [(label, cause)])
             })
         } else {
             let index = self.below(count);
@@ -928,8 +1319,8 @@ impl Programs {
         }
     }
 
-    /// A call to a number operation, by its cell, by another, or through
-    /// `{ffi: cell}`, with most of its operands and sometimes another. An
+    /// A call to a number operation, by its cell, by another, or through its
+    /// foreign function, with most of its operands and sometimes another. An
     /// operand can be another call even at the last level, so failures can
     /// nest past the chain limit; fewer than one such operand per call on
     /// average keeps the nesting finite.
@@ -938,7 +1329,7 @@ impl Programs {
         let (cell, operation) = operations[self.below(operations.len())];
         let labels = self.numbers.as_ref().unwrap().0.labels(&operation);
         let function = match self.below(8) {
-            0 => super::ffi(cell),
+            0 => crate::foreign_function(cell),
             1 => Value::from(self.cell()),
             _ => Value::from(cell),
         };
@@ -959,6 +1350,21 @@ impl Programs {
         super::call(function, arguments)
     }
 
+    /// A definition of `cell` that calls itself or another, and so can
+    /// recurse until fuel or depth runs out.
+    fn looping(&mut self, cell: CellId, depth: usize) -> Value {
+        let variable = self.pick(&self.variables.clone());
+        let callee = match self.below(2) {
+            0 => cell,
+            _ => self.pick(&self.defined.clone()),
+        };
+        let argument = self.expression(depth - 1);
+        super::lambda(
+            [variable],
+            super::call(Value::from(callee), [(variable, argument)]),
+        )
+    }
+
     fn host(&mut self) -> Vec<(CellId, Defined)> {
         let mut host: Vec<_> = self
             .defined
@@ -969,101 +1375,198 @@ impl Programs {
                     None
                 } else {
                     let depth = 1 + self.below(3);
-                    let definition = match self.below(3) {
-                        0 => self.lambda(depth),
-                        _ => self.expression(depth),
+                    let definition = if self.recursive && self.below(4) != 0 {
+                        self.looping(cell, depth)
+                    } else {
+                        match self.below(10) {
+                            0 | 1 => self.lambda(depth),
+                            2 => crate::foreign_function(match self.below(2) {
+                                0 => cell,
+                                _ => self.cell(),
+                            }),
+                            3 | 4 => self.looping(cell, depth),
+                            5 => Value::from(match self.below(2) {
+                                0 => cell,
+                                _ => self.pick(&self.defined.clone()),
+                            }),
+                            _ => self.expression(depth),
+                        }
                     };
-                    Some((cell, Defined::Grap(definition)))
+                    Some((
+                        cell,
+                        match self.below(8) {
+                            0 => Defined::Shadowed(definition),
+                            _ => Defined::Grap(definition),
+                        },
+                    ))
                 }
             })
             .collect();
-        host.extend(self.foreign.clone().into_iter().map(|cell| {
-            (
-                cell,
-                Defined::Foreign(Value::record([(cell, blob("name"))])),
-            )
-        }));
+        host.extend(
+            self.foreign
+                .clone()
+                .into_iter()
+                .map(|cell| (cell, Defined::Foreign(description([(cell, blob("name"))])))),
+        );
         if let Some((numbers, _)) = &self.numbers {
             host.extend(numbers.host());
         }
         host
     }
+
+    /// A budget: one small enough to run out, or one large enough for a
+    /// program that keeps calling to nest too deeply first.
+    fn fuel(&mut self, small: usize, usual: usize) -> usize {
+        match self.below(8) {
+            0 | 1 => self.below(small),
+            2 | 3 => 300 + self.below(5000),
+            _ => self.below(usual),
+        }
+    }
+}
+
+/// How many programs compared, and how many came to a value, ran out of
+/// fuel, and nested too deeply.
+#[derive(Default, Debug)]
+struct Tally {
+    compared: usize,
+    completed: usize,
+    fuel: usize,
+    depth: usize,
+}
+
+impl Tally {
+    fn count(&mut self, evaluation: &Agreed) {
+        self.compared += 1;
+        match evaluation.halt {
+            None => self.completed += 1,
+            Some(Halt::FuelExhausted) => self.fuel += 1,
+            Some(Halt::DepthExhausted) => self.depth += 1,
+        }
+    }
 }
 
 #[test]
 fn the_reference_agrees_on_random_core_programs() {
-    let mut programs = Programs::new(0x5eed_0f_9a5_cafe);
-    let mut compared = 0;
-    let mut completed = 0;
-    for _ in 0..20000 {
-        let host = programs.host();
-        let depth = 1 + programs.below(4);
-        let expression = programs.expression(depth);
-        let fuel = match programs.below(4) {
-            0 => programs.below(6),
-            _ => programs.below(80),
-        };
-        if let Some(evaluation) = agree(&expression, &host, fuel) {
-            compared += 1;
-            completed += usize::from(evaluation.completed);
+    deep(|| {
+        let mut programs = Programs::new(0x5eed_0f_9a5_cafe);
+        let mut tally = Tally::default();
+        for _ in 0..20000 {
+            let host = programs.host();
+            let depth = 1 + programs.below(4);
+            let expression = programs.expression(depth);
+            let fuel = programs.fuel(6, 80);
+            if let Some(evaluation) = agree(&expression, &host, fuel) {
+                tally.count(&evaluation);
+            }
         }
-    }
-    // Enough of both outcomes to mean something.
-    assert!(compared > 12000, "compared {compared}");
-    assert!(
-        completed > 6000 && compared - completed > 1000,
-        "completed {completed}"
-    );
+        // Enough of every outcome to mean something.
+        assert!(
+            tally.compared > 12000
+                && tally.completed > 6000
+                && tally.fuel > 1000
+                && tally.depth > 10,
+            "{tally:?}"
+        );
+    });
 }
 
 #[test]
 fn the_reference_agrees_on_random_number_programs() {
-    let mut programs = Programs::with_numbers(0x0dd_ba11_5eed);
-    let (mut compared, mut completed) = (0, 0);
-    let (mut numbers, mut invalid, mut limited) = (0, 0, 0);
-    for _ in 0..20000 {
-        let host = programs.host();
-        let depth = 1 + programs.below(4);
-        let expression = programs.expression(depth);
-        let fuel = match programs.below(4) {
-            0 => programs.below(8),
-            _ => programs.below(120),
-        };
-        if let Some(evaluation) = agree(&expression, &host, fuel) {
-            compared += 1;
-            completed += usize::from(evaluation.completed);
-            let result = &evaluation.result;
-            numbers += usize::from(
-                crate::f64::read(result).is_some()
-                    || crate::f32::read(result).is_some()
-                    || crate::u64::read(result).is_some()
-                    || crate::logic::read(result).is_some(),
-            );
-            invalid += usize::from(absent::reason(result) == Some(absent::INVALID_ARGUMENTS));
-            limited += usize::from(absent::chain_length(result) >= absent::CHAIN_LIMIT);
+    deep(|| {
+        let mut programs = Programs::with_numbers(0x0dd_ba11_5eed);
+        let mut tally = Tally::default();
+        let (mut numbers, mut invalid, mut limited) = (0, 0, 0);
+        for _ in 0..20000 {
+            let host = programs.host();
+            let depth = 1 + programs.below(4);
+            let expression = programs.expression(depth);
+            let fuel = programs.fuel(8, 120);
+            if let Some(evaluation) = agree(&expression, &host, fuel) {
+                tally.count(&evaluation);
+                let result = &evaluation.result;
+                numbers += usize::from(
+                    crate::f64::read(result).is_some()
+                        || crate::f32::read(result).is_some()
+                        || crate::u64::read(result).is_some()
+                        || crate::logic::read(result).is_some(),
+                );
+                invalid += usize::from(absent::reason(result) == Some(absent::INVALID_ARGUMENTS));
+                limited += usize::from(absent::chain_length(result) >= absent::CHAIN_LIMIT);
+            }
         }
-    }
-    // Enough of each outcome to mean something.
-    assert!(compared > 12000, "compared {compared}");
-    assert!(
-        completed > 6000 && compared - completed > 1000,
-        "completed {completed}"
-    );
-    assert!(
-        numbers > 500 && invalid > 2000 && limited > 300,
-        "numbers {numbers}, invalid arguments {invalid}, at the chain limit {limited}"
-    );
+        // Enough of every outcome to mean something.
+        assert!(
+            tally.compared > 12000
+                && tally.completed > 6000
+                && tally.fuel > 1000
+                && tally.depth > 10,
+            "{tally:?}"
+        );
+        assert!(
+            numbers > 500 && invalid > 2000 && limited > 300,
+            "numbers {numbers}, invalid arguments {invalid}, at the chain limit {limited}"
+        );
+    });
+}
+
+/// Programs that enter definitions calling or referring to each other, with
+/// budgets mostly large enough that evaluations nest too deeply first, which
+/// can happen anywhere: in an argument, a body, a definition or an operand.
+#[test]
+fn the_reference_agrees_on_random_recursive_programs() {
+    deep(|| {
+        let mut programs = Programs::recursive(0xdee9_5eed);
+        let mut tally = Tally::default();
+        for _ in 0..4000 {
+            let host = programs.host();
+            let depth = 1 + programs.below(3);
+            let defined = programs.pick(&programs.defined.clone());
+            let expression = match programs.below(4) {
+                0 => Value::from(defined),
+                1 => programs.expression(depth),
+                _ => {
+                    let variable = programs.pick(&programs.variables.clone());
+                    let argument = programs.expression(depth);
+                    super::call(Value::from(defined), [(variable, argument)])
+                }
+            };
+            let fuel = match programs.below(4) {
+                0 => programs.below(300),
+                _ => 300 + programs.below(5000),
+            };
+            if let Some(evaluation) = agree(&expression, &host, fuel) {
+                tally.count(&evaluation);
+            }
+        }
+        assert!(
+            tally.compared > 2500 && tally.completed > 300 && tally.fuel > 300 && tally.depth > 500,
+            "{tally:?}"
+        );
+    });
 }
 
 /// A host for timing that finds definitions as an editor's does, by hash,
 /// rather than by the tests' search.
-struct MapHost(std::collections::HashMap<CellId, Definition>);
+struct MapHost(std::collections::HashMap<CellId, (Value, Option<ForeignFunction<'static>>)>);
+
+impl MapHost {
+    fn new(entries: Entries) -> Self {
+        let mut map = std::collections::HashMap::new();
+        for (cell, value, code) in entries {
+            map.entry(cell).or_insert((value, code));
+        }
+        Self(map)
+    }
+}
 
 impl Host for MapHost {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
-        self.0
-            .get(&cell)
-            .map(|definition| (Resolution::Document, definition.clone()))
+    fn definition(&self, cell: CellId) -> Option<Value> {
+        self.0.get(&cell).map(|(value, _)| value.clone())
+    }
+
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction<'static>> {
+        self.0.get(&cell).and_then(|(_, code)| code.clone())
     }
 }
 
@@ -1208,10 +1711,10 @@ fn timing_programs(numbers: &Numbers) -> Vec<(&'static str, Value, Vec<(CellId, 
         )),
     ));
     programs.push((
-        "recursion: a cell calling itself until 3,000 fuel runs out",
+        "recursion: a cell calling itself until it nests too deeply",
         super::call(Value::from(looping), [(n, number(0.0))]),
         host,
-        3_000,
+        1_000_000,
     ));
     programs
 }
@@ -1247,22 +1750,13 @@ fn evaluator_speed() {
             "program", "grap µs", "reference", "fast"
         );
         for (name, expression, host, fuel) in timing_programs(&numbers) {
-            let definitions: Vec<_> = host
-                .iter()
-                .map(|(cell, defined)| (*cell, defined.grap()))
-                .collect();
-            let reference_host: Vec<_> = host
-                .iter()
-                .zip(&definitions)
-                .map(|((cell, defined), (_, definition))| {
-                    (reference_cell(*cell), defined.reference(definition))
-                })
-                .collect();
-            let grap_host = MapHost(definitions.into_iter().collect());
+            let entries = entries(&host);
+            let reference_host = reference_host(&host, &entries);
+            let grap_host = MapHost::new(entries);
             let reference_expression = to_reference(&expression);
             let expected = agree(&expression, &host, fuel).unwrap();
             let grap = median_micros(20, || {
-                std::hint::black_box(evaluate_value(&expression, &grap_host, fuel));
+                std::hint::black_box(Evaluator::new(&grap_host, fuel).evaluate(&expression));
             });
             let reference = median_micros(5, || {
                 std::hint::black_box(reference::evaluate(
@@ -1279,8 +1773,8 @@ fn evaluator_speed() {
                 ));
             });
             println!(
-                "{name:<60} {grap:>10.1} {reference:>10.1} {fast:>10.1}   (fuel left {}, completed {})",
-                expected.remaining_fuel, expected.completed
+                "{name:<60} {grap:>10.1} {reference:>10.1} {fast:>10.1}   (fuel left {}, halt {:?})",
+                expected.remaining_fuel, expected.halt
             );
         }
     };

@@ -31,30 +31,41 @@ its `ensures` what it guarantees. The rest is proof and the code itself.
 [`grap-reference`](../grap-reference/src/definition.rs) defines what Grap's core
 means: a slow, simple evaluator written as Verus specification functions, the
 law of how the core works. The core is what Grap's evaluator does itself:
-cells, lambdas, calls, value wrappers, closures, the absents those come to, and
-fuel, which is exact, one unit per expression evaluated as `Context::burn`
-documents; and the number operations it runs natively, which the numbers
-library registers as primitives. A program that calls any other foreign
-function leaves the core, and the definition says so rather than guessing, so
-the rest of the libraries' functions aren't defined yet.
+cells; the forms a record's `isa` makes it, calls, lambdas and value wrappers;
+the closures lambdas come to; the absents all of these come to; the origins
+closures and some absents carry, saying where code was written; fuel, which is
+exact, one unit per expression evaluated as `Context::burn` documents; and how
+deeply evaluations nest, past which evaluation halts. With it come the number
+operations Grap runs natively, which the numbers library registers as
+primitives. A program that calls any other foreign function leaves the core,
+and the definition says so rather than guessing, so the rest of the libraries'
+functions aren't defined yet.
 
 The definition reads GID values as they mean, not as they're stored: a record,
 and so an environment, maps cells to values, and a list is its elements in
-order, since positions don't take part in a value's equality. A closure is the
-record it materializes as, `{closure: {params, body, ..., environment}}`, so
-the definition never needs a second notion of value. Evaluation reports the
-fuel it spent, and callers pass on only what's left, which makes the
-definition's termination visible to Verus.
+order, since positions don't take part in a value's equality. A record is a
+form only when its `isa` names one, and any other record is data, whatever
+fields it has. A closure is the record it materializes as, `{isa: closure,
+lambda, environment, body origin}`, holding its lambda as written, so the
+definition never needs a second notion of value: calling a closure reads that
+record back, as calling one written as data does. A host gives each cell a
+value, which referencing the cell evaluates, and may implement a foreign
+function under it, which calling the cell runs when its value is a foreign
+function implemented under that cell. An origin is a path, as GID's path data
+writes one, from the input an evaluation was handed or from a cell's
+definition. Evaluation reports the fuel it spent, and callers pass on only
+what's left, which makes the definition's termination visible to Verus.
 
 The number operations are the library's: f64 and f32 arithmetic and
 comparisons, f64's `sin`, `cos`, `floor`, `ceil` and `is_finite`, and u64's
 arithmetic, which fails rather than wrapping. A call to one evaluates its
 operands in label order and reads each as a number of the operation's type, a
 record whose tag holds exactly that type's bytes, whatever else it holds. When
-one isn't, the call comes to "invalid arguments", carrying why under each label
-by the rule Grap's `absent::caused_by_all` follows: an absent the same as one
-before it isn't repeated, and when the longest chain of causes among them
-reaches the limit, that cause passes on as it is rather than growing.
+one isn't, the call comes to "invalid arguments", naming where the call was
+written and carrying why under each label, by the rule Grap's
+`absent::caused_by_all` follows: an absent the same as one before it isn't
+repeated, and when the longest chain of causes among them reaches the limit,
+that cause passes on as it is rather than growing.
 
 u64 arithmetic is defined exactly. The float operations are named rather than
 defined, as Rust computes them on the platform the evaluator runs on: IEEE 754
@@ -65,49 +76,67 @@ computes for them.
 
 [`evaluator.rs`](../grap-reference/src/evaluator.rs) is the same evaluator as
 code that runs, and Verus proves it computes exactly what the definition says
-for every program, host and budget: result, fuel left and completion.
-`value.rs` holds the model and the cells Grap's vocabulary names, and
-`absent.rs` and `number.rs` the evaluator's absents and numbers. `absent.rs`
-compares chains of causes without counting them, so no count overflows,
-however deep an absent a program writes.
+for every program, host and budget: result, fuel left and halt. `value.rs`
+holds the model and the cells Grap's vocabulary names, and `absent.rs`,
+`number.rs` and `origin.rs` the evaluators' absents, numbers and origins.
+`absent.rs` compares chains of causes without counting them, so no count
+overflows, however deep an absent a program writes.
 
 [`fast.rs`](../grap-reference/src/fast.rs) is a second evaluator, proven the
 same way, built the way a fast one is: expressions lowered once into nodes,
 closures and numbers held as runtime values rather than records, environments
 as shared frames rather than copies, host cells resolved when code is lowered,
-and a sorted set of every cell a lambda binds, so looking up any other cell
-skips the frames. Its proof relates each structure to what it means, a runtime
-value to the GID value it materializes as, frames to the environment they
-make, lowered code to the expressions it came from, and shows each step does
-what the definition's does to those meanings. On the timing programs in
-`grap/src/reference_tests.rs` it is faster than Grap's evaluator, which also
-does what the definition leaves out, such as tracking click-to-source origins;
+each node's origin shared with the code within it rather than copied, and a
+sorted set of every cell a lambda binds, so looking up any other cell skips
+the frames. Its proof relates each structure to what it means, a runtime value
+to the GID value it materializes as, frames to the environment they make,
+lowered code to the expressions it came from and where they were written, and
+shows each step does what the definition's does to those meanings. On the
+timing programs in `grap/src/tests/reference.rs` it is faster than Grap's
+evaluator on four and as fast on the fifth;
 [deferred work](deferred.md#a-reference-grap-and-derivative-mode) has the
 numbers.
 
-The definition is the part to read, and it records two behaviours the
-evaluator has that nothing else had written down:
+The definition is the part to read, and it records behaviours the evaluator
+has that nothing else had written down:
 
-- Calling a cell whose definition comes to an absent answers that absent as it
-  is, while calling a binding to one answers that it isn't callable.
-- A reference notices a cycle only through another reference to the same cell,
-  while a call notices one through anything under resolution, so calling a cell
-  defined as a reference to itself evaluates its definition twice first.
+- Calling a cell spends a unit before its definition is evaluated, and calling
+  a function bound in the environment spends one for the function, but
+  neither nests an evaluation, so neither halts where evaluations nest too
+  deeply; only the evaluations they lead to can.
+- A form lacking a field its kind requires is why it's missing where the field
+  would be: a call without a function, a value wrapper without a value and a
+  lambda without a body come to `{isa: absent, reason: missing field, cell}`,
+  for the unit evaluating the field would cost. A closure holds that absent
+  as its lambda's body.
+- A closure written as data whose body origin doesn't read as an origin is
+  called with its body written nowhere, so a call in its body names no call in
+  its absents; one whose origin reads is written back as it reads, in GID's
+  canonical form.
 
-Grap's own tests, in [`grap/src/reference_tests.rs`](../grap/src/reference_tests.rs),
-check its real evaluator against the proven ones: on the core cases of
-`conformance.rs`, with their pinned results and fuel, on the behaviours above,
-and on 20,000 generated programs, about 19,500 of which stay in the core. They
-register the number operations as the numbers library does, and check every
-one on every pair from a spread of operands, NaNs with payloads, infinities,
-zeros of both signs, subnormals, u64's limits and values of the wrong type or
-none, with the invalid-arguments rule's cases pinned, and on 20,000 more
-generated programs that call them, about 19,500 of which stay within the
-definition. The comparison leaves out the source origins closures carry for
-click-to-source, which the core doesn't define yet, and compares a float NaN as
-any NaN, since Rust leaves its sign and payload unspecified. When the evaluator
-changes what the core does, these tests fail, and either the definition changes
-with it, deliberately, or the evaluator is wrong.
+Writing the definition found one place Grap's evaluator didn't do what it
+documented: reading a number operand, it skipped evaluating a literal or bound
+f64 but also the depth check that evaluation makes, so an operand at the depth
+limit answered rather than halting. It now halts there, as
+`Context::eval_f64` says it matches `Context::eval`.
+
+Grap's own tests, in [`grap/src/tests/reference.rs`](../grap/src/tests/reference.rs),
+check its real evaluator against both proven ones: on the core cases of
+`conformance.rs`, with their pinned results and fuel; on what records say they
+are, what forms lacking fields come to, a closure's shape and the origins
+absents name; on the behaviours above; and on 20,000 generated programs, about
+19,700 of which stay in the core. They register the number operations as the
+numbers library does, and check every one on every pair from a spread of
+operands, NaNs with payloads, infinities, zeros of both signs, subnormals,
+u64's limits and values of the wrong type or none, with the invalid-arguments
+rule's cases pinned and an operand at the depth limit; on 20,000 more
+generated programs that call them, about 19,700 of which stay within the
+definition; and on 4,000 that enter definitions calling each other, most with
+budgets large enough to nest too deeply. They compare results whole, origins
+included, and a float NaN as any NaN, since Rust leaves its sign and payload
+unspecified. When the evaluator changes what the core does, these tests fail,
+and either the definition changes with it, deliberately, or the evaluator is
+wrong.
 
 ## What is trusted
 
@@ -156,7 +185,7 @@ Verus needs the toolchain its release was built with, named in
 that release from GitHub, about 450–490 MB, checks the archive against the
 SHA-256 digest recorded there for the platform, and unpacks it, about 1.6 GB,
 into `target/sandbox/verus`. It needs `curl` and `unzip`. Later runs are
-offline: `position.rs` takes about a second, `grap-reference` about fifteen. Arguments to Verus go in
+offline: `position.rs` takes about a second, `grap-reference` about twenty. Arguments to Verus go in
 `ARGS`, such as `make verify ARGS='--expand-errors'`, which explains a failed
 proof in more detail.
 
