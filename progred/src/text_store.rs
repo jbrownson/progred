@@ -62,4 +62,5 @@ fn replace_text(path: &Path, text: &str) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
+#[path = "tests/text_store.rs"]
 mod tests;

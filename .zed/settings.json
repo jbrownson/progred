@@ -1,0 +1,27 @@
+// rust-analyzer through the build sandbox: Cargo answers its metadata from the
+// sandbox's Cargo home, and build scripts, checks and procedural macros run in
+// the sandbox, in a target directory of their own. See docs/build-security.md.
+{
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "cargo": {
+          "extraEnv": { "CARGO_HOME": "target/sandbox/cargo-home" },
+          "buildScripts": {
+            "overrideCommand": [
+              "tools/rust-analyzer-cargo", "check", "--quiet", "--workspace", "--all-targets",
+              "--message-format=json", "--target-dir", "target/sandbox/rust-analyzer"
+            ]
+          }
+        },
+        "check": {
+          "overrideCommand": [
+            "tools/rust-analyzer-cargo", "check", "--quiet", "--workspace", "--all-targets",
+            "--message-format=json", "--target-dir", "target/sandbox/rust-analyzer"
+          ]
+        },
+        "procMacro": { "server": "tools/rust-analyzer-proc-macro-srv" }
+      }
+    }
+  }
+}

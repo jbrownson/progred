@@ -80,8 +80,8 @@ Grap uses ordinary calls to scoped `start at`, `line to`, `with tool`,
 generators. Emitters outside an installed output scope return `toolpath output
 required`. `map points` takes a callable under `mapping` and an unevaluated
 `expression`. For each emitted point, it calls the mapping with `x`, `y`, `z`;
-the mapping returns an ordinary record with those fields (the `point` function
-constructs one). Nested mappings run inside-out and restore the surrounding
+the mapping returns a point, `{isa: point, x, y, z}`, as the `point` function
+makes one. Nested mappings run inside-out and restore the surrounding
 mapping on exit, including on failure. Mapping functions are intended to
 compute coordinates, not emit more paths.
 
@@ -123,14 +123,13 @@ immediately.
 
 ## First example
 
-The example uses the presentation library's `outline` to organize its ordinary
-root fields: Cutting parameters, Geometry, Tools, Operations, Strategies, and Path
-combinators. The editable outline list sits at the top; clicking
-one of its field references toggles that section using ordinary view history.
-Several sections can be visible together. Panes stays outside the outline as a
-normal editable root field, initially hidden by its usual default fold. Unlisted
-fields follow in an ordinary record. Nothing is moved into a hidden workspace
-configuration or a separate CAM document model.
+The example's root is a row of its preview and its main record, which uses the
+presentation library's `outline` to organize its ordinary fields: Cutting
+parameters, Geometry, Tools, Operations, Strategies, and Path combinators. The
+editable outline list sits at the top; clicking one of its field references
+toggles that section using ordinary view history. Several sections can be
+visible together. Unlisted fields follow in an ordinary record. Nothing is moved
+into a hidden workspace configuration or a separate CAM document model.
 
 The example's Grap `diagonal passes` and `sample pass` functions follow
 `ToolPathHelpers.DiagonalUVs` in
@@ -355,7 +354,7 @@ uses ordinary numeric coordinates, not a unit-aware value type or machine setup.
 
 `preview paths` is an opt-in viewport function with `value` (a callable program),
 `width`, `height`, and optional `fuel` (otherwise Grap's default). It returns an
-ordinary preview declaration containing that program and these parameters. The
+ordinary paths preview, `{isa: paths preview, program, width, height, fuel}`. The
 native widget runs the program with this explicit budget. It fits a fixed
 isometric projection inside the assigned pane, with a 16-logical-unit margin,
 reduced in tiny panes.
@@ -365,7 +364,9 @@ All paths are green; there is no inferred cut/link classification.
 with `program` (a callable path generator). It also takes an explicit positive
 f64 `line radius` and opaque `color`, plus the same width, height, and bounds
 as Fidget's `preview 3d` and an optional path-evaluation `fuel` budget. Its result
-is an ordinary preview declaration, not an opaque native value.
+is an ordinary paths volume preview, not an opaque native value; `preview paths
+mesh` and `preview paths refined` likewise return a paths mesh or paths refined
+preview, each drawn as the toolpath library provides for its kind.
 
 The native sink constructs a capsule for each line and unions the segments of
 each continuous path into its own Fidget scene object. `start at` separates

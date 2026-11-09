@@ -18,7 +18,7 @@ pub mod vocabulary {
     pub const CONDITION_NOT_MET: CellId = CellId::from_u128(0x1d6c6b09f182a3a036e19eb06cdf1ffc);
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         vocabulary::REQUIRE,
         ForeignFunction::with_arguments([vocabulary::CONDITION], |_, (condition,): (bool,)| {
@@ -32,7 +32,7 @@ fn functions() -> ForeignFunctions {
                 )
             }
         })
-        .tracked(),
+        .cacheable(),
     )
 }
 
@@ -54,4 +54,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/logic.rs"]
 mod tests;

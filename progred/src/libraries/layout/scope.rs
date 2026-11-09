@@ -3,7 +3,7 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::editor::path;
-use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
+use ::grap::{Context, Evaluation, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;
 
@@ -12,6 +12,7 @@ const FUNCTIONS: &[CellId] = &[
     COL,
     PAD,
     CENTER,
+    BORDER,
     OVERLAY,
     ALTERNATIVES,
     BRACKET,
@@ -22,7 +23,7 @@ const FUNCTIONS: &[CellId] = &[
     DESCEND_PATH,
     JUMP,
     AT,
-    CANVAS,
+    DRAWING,
     SELECTABLE,
     HOVER_BLOCK,
     PICKABLE,
@@ -34,12 +35,15 @@ pub(super) fn program(
     call: &Expression,
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
-    match context.field(call, ::grap::vocabulary::EXPRESSION) {
+    match call.field(::grap::vocabulary::EXPRESSION) {
         Some(expression) => {
             let closure = context.closure([], expression, environment);
-            Ok(::grap::RuntimeValue::record([(LAYOUT_PROGRAM, closure)]))
+            Ok(::grap::isa::runtime(
+                kind::LAYOUT_PROGRAM,
+                [(PROGRAM, closure)],
+            ))
         }
-        None => Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
+        None => Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
     }
 }
 
@@ -62,7 +66,7 @@ impl From<Halt> for BuildError {
 /// value result alone. A halt or final absent drops the entire output.
 pub fn run<W: Host>(
     site: impl Fn() -> crate::editing::Site,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
+    evaluate: impl FnOnce(ForeignFunctions<'_>) -> Evaluation,
 ) -> (Evaluation, Option<Layout<W>>) {
     let output = RefCell::new(Vec::new());
     let unit = RuntimeValue::record([]);
@@ -83,9 +87,9 @@ pub fn run<W: Host>(
                 Err(BuildError::Halt(halt)) => Err(halt),
             }
         };
-    let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
+    let mut evaluation = evaluate(ForeignFunctions::shared(FUNCTIONS, &emit));
     let mut children = output.into_inner();
-    let layout = if !evaluation.completed || evaluation.result.absent_reason().is_some() {
+    let layout = if evaluation.result.absent_reason().is_some() {
         None
     } else if children.len() > 1 {
         evaluation.result = ::grap::absent::value(INVALID_PROGRAM).into();
@@ -99,20 +103,20 @@ pub fn run<W: Host>(
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let function = input.value?.field(LAYOUT_PROGRAM)?;
+    let function = input.value?.field(PROGRAM)?;
     let (evaluation, layout) = run(
         || input.site(),
-        |scope| input.env.apply_runtime_scoped(&function, &[], Some(scope)),
+        |scope| input.env.apply_runtime_scoped(&function, &[], scope),
     );
     Some(layout.unwrap_or_else(|| {
         crate::libraries::presentation::result_layout(
             if evaluation.result.absent_reason().is_some() {
                 evaluation.result
             } else {
-                RuntimeValue::record([
-                    (::grap::absent::ABSENT, Value::from(INVALID_PROGRAM).into()),
-                    (::grap::absent::VALUE, evaluation.result),
-                ])
+                ::grap::absent::runtime(
+                    INVALID_PROGRAM,
+                    [(::grap::absent::VALUE, evaluation.result)],
+                )
             },
         )
     }))
@@ -126,7 +130,7 @@ fn argument<T>(
     field: CellId,
     read: impl FnOnce(&RuntimeValue) -> Option<T>,
 ) -> Result<T, BuildError> {
-    match context.field(call, field) {
+    match call.field(field) {
         Some(expression) => {
             read(&context.eval(expression, environment)?).ok_or(BuildError::Invalid)
         }
@@ -143,7 +147,7 @@ fn number_argument(
     field: CellId,
     default: Option<f64>,
 ) -> Result<f64, BuildError> {
-    match context.field(call, field) {
+    match call.field(field) {
         Some(expression) => context
             .eval_f64(expression, environment)?
             .filter(|value| value.is_finite())
@@ -180,7 +184,7 @@ fn children<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Vec<Layout<W>>, BuildError> {
-    let body = context.field(call, CHILDREN).ok_or(BuildError::Invalid)?;
+    let body = call.field(CHILDREN).ok_or(BuildError::Invalid)?;
     emitted(context, body, environment, output)
 }
 
@@ -191,7 +195,7 @@ fn single_child<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Layout<W>, BuildError> {
-    let body = context.field(call, CHILD).ok_or(BuildError::Invalid)?;
+    let body = call.field(CHILD).ok_or(BuildError::Invalid)?;
     <[_; 1]>::try_from(emitted(context, body, environment, output)?)
         .map(|[child]| child)
         .map_err(|_| BuildError::Invalid)
@@ -210,6 +214,7 @@ fn operation<W: Host>(
         COL => col(context, call, environment, output),
         PAD => pad(context, call, environment, output),
         CENTER => single_child(context, call, environment, output).map(crate::display::center),
+        BORDER => single_child(context, call, environment, output).map(crate::display::border),
         OVERLAY => children(context, call, environment, output).map(layout_overlay),
         ALTERNATIVES => alternatives(context, call, environment, output),
         BRACKET => bracket(context, call, environment, output),
@@ -220,9 +225,10 @@ fn operation<W: Host>(
         DESCEND_PATH => descend_path(context, call, environment),
         JUMP => jump(context, call, environment),
         AT => at(context, call, environment),
-        CANVAS => canvas(context, call, environment),
-        SELECTABLE => single_child(context, call, environment, output)
-            .map(|child| activatable(child, &site())),
+        DRAWING => drawing(context, call, environment),
+        SELECTABLE => {
+            single_child(context, call, environment, output).map(|child| selectable(child, &site()))
+        }
         HOVER_BLOCK => single_child(context, call, environment, output).map(block_hover),
         PICKABLE => pickable(context, call, environment, output, site),
         ON_EVENT => on_event(context, call, environment, output),
@@ -238,7 +244,7 @@ fn row<W: Host>(
 ) -> Result<Layout<W>, BuildError> {
     let gap = number_argument(context, call, environment, GAP, Some(0.0))?;
     // A row given a baseline aligns tops, as a column does.
-    let baseline = match context.field(call, BASELINE) {
+    let baseline = match call.field(BASELINE) {
         Some(_) => Some(number_argument(context, call, environment, BASELINE, None)?),
         None => None,
     };
@@ -315,7 +321,7 @@ fn text<W: Host>(
     call: &Expression,
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
-    let paint = match context.field(call, PAINT) {
+    let paint = match call.field(PAINT) {
         Some(_) => argument(context, call, environment, PAINT, |value| {
             read_paint(value.as_value())
         })?,
@@ -358,7 +364,12 @@ fn jump<W: Host>(
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
     let document = argument(context, call, environment, DOCUMENT_PATH, read_steps)?;
-    Ok(crate::display::jump(steps, document))
+    Ok(crate::display::jump(
+        steps,
+        crate::location::Location::root(document),
+        None,
+        None,
+    ))
 }
 
 fn at<W: Host>(
@@ -367,11 +378,16 @@ fn at<W: Host>(
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
-    let value = context.field(call, VALUE).ok_or(BuildError::Invalid)?;
-    Ok(crate::display::at(steps, context.eval(value, environment)?))
+    let value = call.field(VALUE).ok_or(BuildError::Invalid)?;
+    Ok(crate::display::at(
+        steps,
+        context.eval(value, environment)?,
+        None,
+        None,
+    ))
 }
 
-fn canvas<W: Host>(
+fn drawing<W: Host>(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
@@ -391,10 +407,10 @@ fn canvas<W: Host>(
         call,
         environment,
         FUEL,
-        Some(::grap::DEFAULT_FUEL as f64),
+        Some(crate::sources::DEFAULT_FUEL as f64),
     )?)
     .ok_or(BuildError::Invalid)?;
-    let program = context.field(call, PROGRAM).ok_or(BuildError::Invalid)?;
+    let program = call.field(PROGRAM).ok_or(BuildError::Invalid)?;
     let program = context.eval(program, environment)?;
     // An evaluated program has no stored location.
     Ok(super::drawing::program(extent, fuel, None, program))
@@ -407,7 +423,7 @@ fn pickable<W: Host>(
     output: &RefCell<Vec<Layout<W>>>,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Result<Layout<W>, BuildError> {
-    let value = context.field(call, VALUE).ok_or(BuildError::Invalid)?;
+    let value = call.field(VALUE).ok_or(BuildError::Invalid)?;
     let value = context.eval(value, environment)?;
     single_child(context, call, environment, output)
         .map(|child| crate::display::pickable(child, W::Hover::from(site().hover()), value))
@@ -419,10 +435,11 @@ fn on_event<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Layout<W>, BuildError> {
-    let handler = context.field(call, HANDLER).ok_or(BuildError::Invalid)?;
+    let handler = call.field(HANDLER).ok_or(BuildError::Invalid)?;
     let handler = context.eval(handler, environment)?;
     single_child(context, call, environment, output).map(|child| super::on_event(child, handler))
 }
 
 #[cfg(test)]
+#[path = "tests/scope.rs"]
 mod tests;

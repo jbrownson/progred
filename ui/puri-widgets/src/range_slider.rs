@@ -148,4 +148,5 @@ impl RangeSlider {
 }
 
 #[cfg(test)]
+#[path = "tests/range_slider.rs"]
 mod tests;

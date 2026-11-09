@@ -71,14 +71,19 @@ recorded run:
 - **machine**: the hardware, which decides what is comparable, with the
   processor's family, model and stepping on a virtual machine;
 - **gpu**: the adapter Fidget's implicit previews select;
-- **environment**: the OS version, power source on macOS, Rust version, and
-  any Cargo features the build enabled;
+- **environment**: the OS version, the power source on a laptop, low power
+  mode on macOS or the power profile on Linux, the Rust version, and any Cargo
+  features the build enabled;
 - **median_ms** and **p95_ms**, the measured **samples** per round, the
   **rounds**, and their **spread_pct**;
 - a **note** on what changed or why the run was recorded.
 
 Compare runs only on the same machine and adapter, and keep the environment in
-mind: a different power state, OS, or compiler can account for a change. Even on
+mind: a different power state, OS, or compiler can account for a change, and
+`make perf` names the last record's conditions when they differ. In November
+2026 the Linux laptop's power-saver profile, which holds its cores near 1.3 GHz,
+ran the CAM canaries at about a third of their recorded speed although their
+code ran fewer instructions than when recorded. Even on
 one Mac, three default runs in October 2026, on battery, on AC power after two
 release builds, and on AC power idle, spread by up to 18% on the heavy
 workloads, so a smaller difference on a stock or Fidget workload is drift, not a
@@ -109,7 +114,13 @@ The tool runs the test executables directly, outside the build sandbox, so on a
 Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
 offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure
 it, not the CPU fallback. The two GPU compositor canaries run only on a hardware
-adapter, or with `--gpu`. Implicit rasterization in software uses Fidget's VM on
+adapter, or with `--gpu`. On the Linux laptop's Intel Arc B390 under Mesa
+26.2.5, `editor_compositor_profile` fails its pixel check because Vello's MSAA
+renders vary from run to run there, as
+[deferred work](deferred.md#report-msaa-renders-that-vary-on-intel-arc)
+describes; until that's fixed,
+`make perf ARGS='--only "^(?!shell_tests::compositor::editor_compositor)"'`
+runs the rest. Implicit rasterization in software uses Fidget's VM on
 every platform. A run with features compares with earlier runs with the same
 features, or with the default build until there is one.
 
@@ -169,10 +180,10 @@ These are a smoke check of the checked-in example, not a performance guarantee.
 
 ## Frame timing
 
-The opt-in tests in `progred/src/perf/frames.rs`, and the layout library's FFI
+The opt-in tests in `progred/src/tests/perf/frames.rs`, and the layout library's FFI
 canary, share one headless frame harness,
-`progred/src/projection/test_support.rs`, which binds frames and sizes windows
-by the frame's own rules in `progred/src/frame/test_support.rs`. They are not
+`progred/src/tests/projection/test_support.rs`, which binds frames and sizes windows
+by the frame's own rules in `progred/src/tests/frame/test_support.rs`. They are not
 assertions about interactive frame rate, and ordinary builds and launches
 contain none of this instrumentation.
 
@@ -212,7 +223,7 @@ The first alternates the two variants each pair: 20 two-text rows built by Grap
 as GID layout descriptions versus scoped layout-emitting FFIs. Both use the
 same explicit fuel budget, library stack, fonts, text cache, geometry, and draw
 endpoint. A normal regression test compares their complete paint commands and
-extents, with and without the existing border combinator. No timing assertion
+extents, with and without a border around the column. No timing assertion
 is a correctness test.
 
 The workload was reduced from 100 to 20 rows on 2026-09-23: the returned layout
@@ -236,14 +247,18 @@ are phase totals, not attributed back to each originating widget. In particular,
 The same instrumented harness also accepts `color_picker_form_profile` to
 measure an open RGBA picker; `_form_profile` runs both workloads.
 
-`BenchFrame` takes a document, source-qualified root path, selection,
+`BenchFrame` takes a document, root path, selection,
 annotations, available width, placement origin, clipping rectangle, and pointer.
 `BenchContext` retains the library stack, fonts, layout context, text shaping,
-and caller-owned computation graph. A `ProfileView` configures logical size and display scale, using zero
-padding for viewport declarations and the editor's normal margin for a document
-view. The `profile` combinator takes a frame-producing closure and an output
-check. Other documents and state sequences can reuse it without changes to the
-libraries or runtime.
+and caller-owned computation graph. A `ProfileView` configures logical size and
+display scale, and shows the whole document or one part of it alone, as the
+part's pane does: a viewport declaration fills the window, and anything else,
+such as an example's source beside its viewport, draws inside the editor's
+normal margin. The examples' roots are rows of parts, and a row projected whole
+draws its parts side by side, its viewport included, so a source canary shows
+its source part rather than the root. The `profile` combinator takes a
+frame-producing closure and an output check. Other documents and state
+sequences can reuse it without changes to the libraries or runtime.
 
 Each iteration rebuilds the projected view, measures and places it, and runs its
 paint continuations into a headless `DrawList`. The report separates:
@@ -268,7 +283,7 @@ before/after runs when evaluating small changes.
 | Workload | Logical size | Scale | Input sequence |
 | --- | --- | --- | --- |
 | IoP picture | 500 × 500 | 1 | Rebuild the declared viewport |
-| IoP source | 1400 × 900 | 1 | Project the document's top clipped viewport |
+| IoP source | 1400 × 900 | 1 | Project the source part's top clipped viewport |
 | RGBA picker | 600 × 400 | 2 | Project a selected color with its picker open |
 | Fidget orbit | 400 × 600 | 2 | Advance yaw by 2° per frame; pitch 60°, zoom 1 |
 | Torus orbit | 400 × 600 | 2 | Same camera sequence |
@@ -317,7 +332,7 @@ paints; keep the interactive orbit/scroll check as a separate test of smoothness
 Blob storage has a separate opt-in microbenchmark:
 
 ```sh
-./tools/sandbox-cargo test --release -p gid --test blob_profile -- \
+./tools/sandbox-cargo test --release -p gid --lib blob_profile -- \
   --ignored --nocapture --test-threads=1
 ```
 

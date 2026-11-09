@@ -123,10 +123,10 @@ fn spelling(color: Encoded) -> String {
 
 fn replace_color(current: &Value, color: Encoded) -> Option<Value> {
     let mut fields = current.as_record()?.clone();
-    fields.remove(&vocabulary::RGB);
-    fields.remove(&vocabulary::RGBA);
+    fields.set(vocabulary::RGB, None);
+    fields.set(vocabulary::RGBA, None);
     let (field, value) = encoded_field(color);
-    fields.insert(field, value);
+    fields.set(field, value);
     Some(Value::Record(fields))
 }
 
@@ -207,7 +207,7 @@ fn without_picker(selection: Option<&Value>) -> Value {
         .and_then(Value::as_record)
         .cloned()
         .unwrap_or_default();
-    fields.remove(&vocabulary::PICKER);
+    fields.set(vocabulary::PICKER, None);
     Value::Record(fields)
 }
 
@@ -374,7 +374,7 @@ fn present<W: Host>(
         swatch
     };
     let spelling = crate::display::line_edit(hex_editor(encoded));
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == vocabulary::RGB || key == vocabulary::RGBA || key == name::vocabulary::NAME,
         name::with_name(input, centered_row(4.0, [swatch, spelling])),
@@ -388,6 +388,7 @@ fn hex_editor(color: Encoded) -> crate::display::LineEdit {
         prefix: "#".into(),
         suffix: String::new(),
         family: TextFamily::Monospace,
+        placeholder: None,
     }
 }
 
@@ -409,4 +410,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/color.rs"]
 pub(crate) mod tests;

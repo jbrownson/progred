@@ -325,4 +325,5 @@ impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
 pub mod test_support;
 
 #[cfg(test)]
+#[path = "tests/handler.rs"]
 mod tests;

@@ -5,7 +5,6 @@
 
 use crate::{CellId, Value};
 use imbl::HashMap;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Cells {
@@ -39,25 +38,6 @@ impl Cells {
     }
 }
 
-impl Serialize for Cells {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let proxy: std::collections::BTreeMap<CellId, Value> = self
-            .data
-            .iter()
-            .map(|(cell, value)| (*cell, value.clone()))
-            .collect();
-        proxy.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Cells {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let proxy = std::collections::HashMap::<CellId, Value>::deserialize(deserializer)?;
-        Ok(Cells {
-            data: proxy.into_iter().collect(),
-        })
-    }
-}
-
 #[cfg(test)]
+#[path = "tests/cells.rs"]
 mod tests;

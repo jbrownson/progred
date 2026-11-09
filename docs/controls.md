@@ -2,8 +2,9 @@
 
 The `controls` library supplies `with controls`, a viewport composition function.
 It takes `controls` (a callable receiving `control state` and `update`), `view` (a
-callable), `value`, `width`, and `height`, and returns an ordinary GID
-declaration. Its partial:
+callable), `value`, `width`, and `height`, and returns a view with controls,
+`{isa: view with controls, controls, view, value, width, height}`, a record of
+those arguments. Its kind's projection:
 
 1. During layout preparation, runs `controls` with evaluation-local control capabilities.
 2. Measures the emitted native widgets.
@@ -185,10 +186,10 @@ The controls function, view function, and preview projection all run again on
 each projected frame; controls do not cache emitted widgets. The memo behind
 `tree program cursor` ([trees](trees.md#editor-collection)) takes no viewport
 dimensions or control state, so resizing rebuilds presentation without
-collecting the tree or recording its paths again. A surrounding `render` declaration
+collecting the tree or recording its paths again. A surrounding render
 can also reuse pure evaluation.
-The `with controls` constructor declares its reads tracked;
-it only evaluates arguments and returns data. Effects or untracked reads in
+The `with controls` constructor is declared cacheable;
+it only evaluates arguments and returns data. Effects or uncacheable calls in
 those arguments still prevent reuse. The view's expensive geometry also uses
 that system.
 Controls do not reduce the view's assigned size. Their bottom alignment comes

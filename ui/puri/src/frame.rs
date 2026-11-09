@@ -56,4 +56,5 @@ pub fn render(renders: Vec<Render>, canvas: &mut dyn CanvasSink) {
 }
 
 #[cfg(test)]
+#[path = "tests/frame.rs"]
 mod tests;

@@ -121,8 +121,8 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         let content = self.build.take(content.0);
         let scale = self.context.toolkit.styles().scale;
         self.push(ChoiceLayout::attach(base, content, move |base, content| {
-            widget::container::floating(base, content, move |placement, extent| {
-                position(scale, placement, extent)
+            widget::container::floating(base, content, move |placement, extent, bounds| {
+                position(scale, placement, extent, bounds)
             })
         }))
     }
@@ -141,4 +141,5 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
 }
 
 #[cfg(test)]
+#[path = "tests/measure.rs"]
 mod tests;

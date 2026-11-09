@@ -1,5 +1,5 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
-use super::{HoverPass, source::Secondary, view::Root};
+use super::{HoverPass, source::Secondary, view::Area};
 use crate::occurrence::Trail;
 use kurbo::Rect;
 use measured::Measured;
@@ -28,41 +28,8 @@ pub(crate) fn arrival<W: crate::display::Host>(site: crate::editing::Site) -> Se
     Rc::new(move |world: &mut W, _| select(&mut world.session()))
 }
 
-/// A native control supplies its entry without introducing child routing.
-pub fn stop<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-) -> crate::display::Layout<W, H> {
-    super::before(
-        child,
-        Rc::new(|context| {
-            let path = context.path().clone();
-            let selected = context.toolkit.selected();
-            Box::new(move |output, _| output.navigation_stop(path, selected))
-        }),
-    )
-}
-
-pub fn group<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-) -> crate::display::Layout<W, H> {
-    super::around(
-        child,
-        Rc::new(move |context| {
-            let path = context.path().clone();
-            let selected = context.toolkit.selected();
-            Box::new(move |child| {
-                measured::around_into(child, move |_, inner, pass| {
-                    pass.navigation.begin_container(path, selected);
-                    inner.place_into(pass);
-                    pass.navigation.end_container();
-                })
-            })
-        }),
-    )
-}
-
 pub struct Landmark<World> {
-    pub root: Option<Root>,
+    pub area: Option<Area>,
     pub path: Trail,
     pub rect: Rect,
     pub select: Select<World>,
@@ -78,7 +45,7 @@ pub struct Landmark<World> {
 impl<World> Clone for Landmark<World> {
     fn clone(&self) -> Self {
         Self {
-            root: self.root.clone(),
+            area: self.area.clone(),
             path: self.path.clone(),
             rect: self.rect,
             select: self.select.clone(),
@@ -89,10 +56,10 @@ impl<World> Clone for Landmark<World> {
     }
 }
 
-/// The landmark drawn at `path` in the view `root`.
+/// The landmark drawn at `path` in the area `area`.
 pub(crate) fn landmark_at<'a, World, P: ?Sized>(
     landmarks: &'a [Landmark<World>],
-    root: Option<&Root>,
+    area: Option<&Area>,
     path: &P,
 ) -> Option<&'a Landmark<World>>
 where
@@ -100,7 +67,7 @@ where
 {
     landmarks
         .iter()
-        .find(|landmark| landmark.root.as_ref() == root && landmark.path == *path)
+        .find(|landmark| landmark.area.as_ref() == area && landmark.path == *path)
 }
 
 /// What the selected occurrence shares with the projections that carry the
@@ -112,13 +79,55 @@ pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Second
         .find_map(|landmark| landmark.secondary.clone())
 }
 
+/// `child` drawn as part of the occurrence around it, as [`landmark`] but
+/// with no stop of its own, so arrows pass from what's around it to what's
+/// inside. A control drawn for it, such as the line of a definition yet to
+/// be written, still declares its stop there, and then it's reached and
+/// revealed as a landmark is.
+pub(crate) fn part_landmark<World: 'static, H: 'static>(
+    child: Measured<HoverPass<World, H>>,
+    path: Trail,
+    select: Select<World>,
+    selected: bool,
+) -> Measured<HoverPass<World, H>> {
+    measured::around_into(child, move |placement, inner, pass| {
+        pass.scope(
+            |pass| inner.place_into(pass),
+            move |mut output| {
+                let arrival = match output.landmark_select.take() {
+                    Some((at, arrive)) if at == path => Some(arrive),
+                    stray => {
+                        debug_assert!(stray.is_none(), "arrival override at another occurrence");
+                        None
+                    }
+                };
+                let tab_stop = output.tab_stop.take().is_some_and(|at| at == path);
+                if arrival.is_some() || tab_stop {
+                    output.landmarks.push(Landmark {
+                        area: None,
+                        path,
+                        rect: placement.rect,
+                        select: arrival.unwrap_or(select),
+                        secondary: None,
+                        selected,
+                        tab_stop,
+                    });
+                }
+                output
+            },
+        );
+    })
+}
+
 /// `child` registered as the landmark of the occurrence at `path`: what
 /// keyboard navigation reaches and reveals, over its full bounds. It claims
 /// no clicks: pointer selection belongs to the targets the view registers
 /// (heads, delimiters, rows), so a click on structural whitespace (gutters,
 /// gaps between rows, the dead space inside a box) falls through to the
 /// background's deselect. Arriving selects through `select` unless the child
-/// names its own arrival.
+/// names its own arrival. Every occurrence drawn is an arrow stop: where a
+/// control drawn for it declares its stop, there, and otherwise before what's
+/// drawn inside it.
 pub(crate) fn landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     path: Trail,
@@ -127,8 +136,13 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
     selected: bool,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
+        let stop = path.clone();
         pass.scope(
-            |pass| inner.place_into(pass),
+            |pass| {
+                pass.navigation.begin_landmark(stop, selected);
+                inner.place_into(pass);
+                pass.navigation.end_landmark();
+            },
             move |mut output| {
                 let select = match output.landmark_select.take() {
                     Some((at, arrive)) if at == path => arrive,
@@ -145,7 +159,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     None => false,
                 };
                 output.landmarks.push(Landmark {
-                    root: None,
+                    area: None,
                     path,
                     rect: placement.rect,
                     select,

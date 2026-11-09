@@ -1,16 +1,16 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
-use super::vocabulary::OUTLINE;
-use crate::display::group;
-use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use super::vocabulary::{SECTIONS, kind};
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self as d, col};
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
 fn sections(value: &Value) -> Option<Vec<CellId>> {
-    value
-        .as_record()?
-        .get(&OUTLINE)?
+    let fields = value.as_record()?;
+    (::grap::isa::of(fields)? == kind::OUTLINE).then_some(())?;
+    fields
+        .get(&SECTIONS)?
         .as_list()?
         .values()
         .map(Value::as_cell)
@@ -22,9 +22,15 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
     let fields = input.value?.as_record()?.clone();
     let value = ::grap::RuntimeValue::from(input.value?.clone());
     let runtime_input = input.with_value(Some(&value));
-    let footer =
-        d::structure::extra_fields(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
-    let label = d::structure::record_label(&runtime_input, OUTLINE);
+    let footer = d::structure::Fields::default().rest(&runtime_input, |key| {
+        key == ::grap::isa::ISA || key == SECTIONS || keys.contains(&key)
+    });
+    let label = d::structure::field_label(
+        &runtime_input,
+        SECTIONS,
+        d::structure::field_name(input.env, SECTIONS),
+        true,
+    );
     Some(Layout::program(Rc::new(move |context, build| {
         let here = context.site();
         let entries = d::runtime_partial({
@@ -35,20 +41,13 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 let heading = d::runtime_partial(heading);
                 d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
                     match elements.list_element(&position).and_then(|v| v.as_cell()) {
-                        Some(key) => section(
-                            position,
-                            key,
-                            heading,
-                            &here,
-                            &fields,
-                            &input.default_projection,
-                        ),
+                        Some(key) => section(input, position, key, heading, &here, &fields),
                         None => heading,
                     }
                 })
             }
         });
-        group(col(
+        col(
             0,
             24.0,
             [d::col(
@@ -56,12 +55,12 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 8.0,
                 [
                     label.clone(),
-                    d::descend([Step::Key(OUTLINE)], Some(entries), None),
+                    d::descend([Step::Key(SECTIONS)], Some(entries), None),
                 ],
             )]
             .into_iter()
             .chain(footer.clone()),
-        ))
+        )
         .measure(context, build)
     })))
 }
@@ -69,28 +68,26 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
 /// A section whose body is the outline's field `key`, drawn where the
 /// outline is stored and edited there.
 fn section<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     position: gid::Position,
     key: CellId,
     heading: Layout<W>,
     outline: &crate::editing::Site,
     fields: &gid::Record,
-    default_projection: &Partial<W>,
 ) -> Layout<W> {
     let steps = [Step::Element(position), Step::Key(key)];
-    let body_projection = Some(d::compose_partials([
-        d::structure::list_column(16.0, None),
-        default_projection.clone(),
-    ]));
+    // A body is a column of its items, which the projections it inherits draw.
+    let body_projection = d::first(input, d::structure::list_column(16.0, None));
     let unstored = match fields.get(&key) {
-        Some(value) => d::at_with_projection(steps.clone(), value, body_projection.clone(), None),
+        Some(value) => d::at(steps.clone(), value, Some(body_projection.clone()), None),
         None => d::slot(),
     };
-    let body = d::jump_to(
-        steps.clone(),
-        outline.below(&[Step::Key(key)]),
-        body_projection,
-        unstored,
-    );
+    // The body stored there is edited there, along with what's stored below
+    // it; one with nowhere stored draws as it is.
+    let body = match outline.below(&[Step::Key(key)]).location() {
+        Some(stored) => d::jump(steps.clone(), stored, Some(body_projection), None),
+        None => unstored,
+    };
     Layout::program(Rc::new(move |context, build| {
         let visible = open(context.viewing(), &steps);
         col(
@@ -116,7 +113,7 @@ const CLOSED: bool = false;
 fn heading<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let key = input.value?.as_cell()?;
     let site = input.site();
-    crate::libraries::grap::shallow_cell_with(input, move |label| {
+    crate::libraries::name::shallow_cell_with(input, move |label| {
         Layout::program(Rc::new(move |context, build| {
             let visible = open(context.viewing(), &[Step::Key(key)]);
             let section = context.site().below(&[Step::Key(key)]);
@@ -139,4 +136,5 @@ fn heading<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
 }
 
 #[cfg(test)]
+#[path = "tests/outline/mod.rs"]
 mod tests;

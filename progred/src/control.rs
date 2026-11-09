@@ -221,15 +221,16 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
             doc.root
                 .as_ref()
                 .map(|root| {
-                    ::grap::evaluate_value(
-                        root,
+                    ::grap::Evaluator::new(
                         &Sources {
                             doc: &doc,
                             libraries,
                         },
-                        ::grap::DEFAULT_FUEL,
+                        crate::sources::DEFAULT_FUEL,
                     )
+                    .evaluate(root)
                     .result
+                    .into_value()
                 })
                 .ok_or_else(|| "a request's root is the expression to evaluate".to_owned())
         })
@@ -387,4 +388,5 @@ pub fn main() {
 }
 
 #[cfg(test)]
+#[path = "tests/control.rs"]
 mod tests;

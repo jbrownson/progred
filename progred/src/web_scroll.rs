@@ -49,4 +49,5 @@ fn captures(probes: &[Probe], scale: f64, x: f64, y: f64, dx: f64, dy: f64, mode
 }
 
 #[cfg(test)]
+#[path = "tests/web_scroll.rs"]
 mod tests;

@@ -10,3 +10,4 @@ gid.workspace = true
 [dev-dependencies]
 # The definition of Grap's core, which the evaluator is tested against.
 grap-reference.workspace = true
+proptest.workspace = true

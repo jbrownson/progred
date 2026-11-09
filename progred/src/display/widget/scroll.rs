@@ -99,4 +99,5 @@ pub fn scroll<World: 'static, Hover: 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/scroll.rs"]
 mod tests;

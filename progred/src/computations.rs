@@ -12,12 +12,12 @@ use web_time::Instant;
 pub(crate) mod memo;
 
 #[derive(Clone)]
-pub(crate) struct Snapshot {
+pub struct Snapshot {
     doc: Rc<Document>,
     libraries: Libraries,
 }
 
-pub(crate) struct Computations {
+pub struct Computations {
     pub runtime: Runtime,
     /// Jobs run off the editor's thread, when the host has somewhere to run
     /// them: a browser page without shared memory has nowhere.
@@ -56,13 +56,14 @@ impl Computations {
             libraries: Libraries::default(),
         });
         let definitions = Source::new(snapshot.clone(), |snapshot: &Snapshot, cell| {
-            memo::Resolved(Host::resolve(
-                &Sources {
-                    doc: &snapshot.doc,
-                    libraries: &snapshot.libraries,
-                },
-                *cell,
-            ))
+            let sources = Sources {
+                doc: &snapshot.doc,
+                libraries: &snapshot.libraries,
+            };
+            memo::Resolved {
+                value: sources.definition(*cell),
+                implementation: sources.implementation(*cell),
+            }
         });
         Self {
             pointer_pressed: runtime.input(false),
@@ -117,7 +118,7 @@ impl Computations {
             (expression.clone(), origin, fuel),
             |a, b| a.0.same_result(&b.0) && a.1 == b.1 && a.2 == b.2,
             |(expression, origin, fuel), host| {
-                grap::evaluate_runtime_at(expression, origin.clone(), host, *fuel)
+                grap::Evaluator::new(host, *fuel).evaluate_runtime(expression, origin.clone())
             },
         )
     }
@@ -134,15 +135,61 @@ impl Computations {
             (function.clone(), arguments.to_vec(), fuel),
             PartialEq::eq,
             |(function, arguments, fuel), host| {
-                grap::apply_expression(
+                grap::Evaluator::new(host, *fuel).apply_expression(
                     &function.into(),
                     arguments.iter().map(|(k, v)| (*k, v.into())),
-                    host,
-                    None,
-                    *fuel,
                 )
             },
         )
+    }
+
+    /// The calls under which a call at `call` answered `value` in
+    /// `evaluated`, itself first, found by running it again with an observer,
+    /// kept for the occurrence at `path` as its own evaluation is.
+    pub fn answering(
+        &self,
+        path: &Trail,
+        evaluated: &crate::display::Evaluated,
+        call: &grap::SourceOrigin,
+        value: &Value,
+    ) -> Option<Vec<grap::SourceOrigin>> {
+        type Question = (crate::display::Evaluated, grap::SourceOrigin, Value);
+        struct Answering {
+            question: Input<Question>,
+            answer: incremental::Memo<Option<Vec<grap::SourceOrigin>>>,
+        }
+        let question: Question = (evaluated.clone(), call.clone(), value.clone());
+        let answering = self.at(path, || {
+            let question = self.runtime.input(question.clone());
+            let answer = self.runtime.memo_by(
+                {
+                    let question = question.clone();
+                    let definitions = self.definitions.clone();
+                    move |read| {
+                        let question = question.read(read);
+                        let (evaluated, call, value) = &*question;
+                        let answering = grap::Answering::new(call.clone(), value.clone());
+                        memo::run(&definitions, read, |host| {
+                            grap::Evaluator::new(host, evaluated.fuel)
+                                .observer(&answering)
+                                .evaluate_runtime(&evaluated.expression, evaluated.origin.clone())
+                        });
+                        Ok(answering
+                            .found()
+                            .map(|trace| trace.origins().cloned().collect()))
+                    }
+                },
+                PartialEq::eq,
+            );
+            Answering { question, answer }
+        });
+        answering
+            .question
+            .set_by(question, |a, b| a.0.same(&b.0) && a.1 == b.1 && a.2 == b.2);
+        self.runtime
+            .read(&answering.answer)
+            .ok()
+            .and_then(|answer| (*answer).clone())
     }
 
     /// `run` over `input`, kept for the occurrence at `path`: it
@@ -183,11 +230,11 @@ impl Computations {
     }
 }
 
-fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
-    a.completed == b.completed
-        && a.remaining_fuel == b.remaining_fuel
-        && a.result.same_result(&b.result)
+/// Whether two evaluations ended alike: halt, fuel and result.
+pub(crate) fn same_evaluation(a: &grap::Evaluation, b: &grap::Evaluation) -> bool {
+    a.halt == b.halt && a.remaining_fuel == b.remaining_fuel && a.result.same_result(&b.result)
 }
 
 #[cfg(test)]
+#[path = "tests/computations.rs"]
 mod tests;

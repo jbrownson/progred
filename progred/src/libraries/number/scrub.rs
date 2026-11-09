@@ -115,4 +115,5 @@ impl Gesture for Scrub {
 }
 
 #[cfg(test)]
+#[path = "tests/scrub.rs"]
 mod tests;

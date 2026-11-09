@@ -118,7 +118,9 @@ content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
 The display builder's `floating` operation supplies only two boxes and a
-positioning function. The ordinary [popover widget](../progred/src/display/widget/popover.rs)
+positioning function, which gets the anchor's placement and the bounds floats
+may use: the whole frame, so a card opened in a pane can extend over the pane
+beside it. The ordinary [popover widget](../progred/src/display/widget/popover.rs)
 composes its padding, panel ink, and input blocking explicitly; the layout
 interpreter does not add these to a floating box.
 
@@ -135,7 +137,7 @@ interpreter-local slots, consumed by parent operations; they are not persistent
 identities or paths. Shared children use an explicit sharing key and prepare
 only once per frame. The selected graph invokes its leaves directly, and opaque
 wrappers receive a child's extent and placement callback once choices have
-settled. [`recording`](../progred/src/display/recording.rs) is a test-only
+settled. [`recording`](../progred/src/tests/display/recording/mod.rs) is a test-only
 implementation of the same calls that retains structure for inspection without
 executing opaque widget programs; production has no layout enum. Layout
 programs are reusable closures, so their captures and the choice graph still
@@ -226,8 +228,9 @@ clipping and floater attachment. Hover callbacks compose input handlers through
 immediately in painting order; only floating placements are queued, running
 afterward, outside ancestor clips.
 
-The [navigation combinators](../progred/src/display/widget/navigation.rs) supply
-selectable leaf and whole-value stops. Progred consumes the box engine's
+Every drawn occurrence's [landmark](../progred/src/display/widget/navigation.rs)
+is a stop: a control's own, where a line edit or picker declares one, or a
+whole-value stop before its contents. Progred consumes the box engine's
 `ObserveLayout` traversal, folding each child into line summaries as it finishes:
 columns concatenate, while rows align the declared logical baselines. After
 placement only the selected occurrence's four destinations remain, in one
@@ -239,11 +242,10 @@ Puri does not know this policy; it still receives ordinary events and handlers.
 [Navigation](navigation.md) covers how whole values and multiline blocks join
 lines, dispatch, the arrow policy, and arrival.
 
-The [projection helpers](../progred/src/display/mod.rs) beside `row` and `col`
-only declare whole-value and leaf stops and compose common inline-or-indented
-head/body layouts. They use the ordinary layout functions, with no
-navigation-specific row/column wrappers. `group(content)` uses the generic
-`widget::around` placement boundary, not a layout opcode.
+The [projection helpers](../progred/src/display.rs) beside `row` and `col`
+compose common inline-or-indented head/body layouts. They use the ordinary
+layout functions; projections declare nothing for navigation, so there are no
+navigation-specific wrappers.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,
@@ -581,7 +583,7 @@ too, not event-specific special cases.
 
 Cross-frame reuse consists of caller-threaded text shaping and the explicit
 caller-owned [computation graph](incremental.md), which holds
-`{render: expression}` evaluations, viewport preparation, tree preparation,
+renders' evaluations, viewport preparation, tree preparation,
 preview interaction state, and CAM geometry.
 Visible Grap canvas programs record once per frame, sharing commands and
 source hits between hit-testing and painting. This within-frame sharing and

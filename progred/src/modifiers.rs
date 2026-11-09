@@ -35,4 +35,5 @@ pub(crate) fn at_most_shift(modifiers: &Modifiers) -> bool {
 }
 
 #[cfg(test)]
+#[path = "tests/modifiers.rs"]
 mod tests;

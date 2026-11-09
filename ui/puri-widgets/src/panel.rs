@@ -24,4 +24,5 @@ impl Panel {
 }
 
 #[cfg(test)]
+#[path = "tests/panel.rs"]
 mod tests;

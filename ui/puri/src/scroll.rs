@@ -94,4 +94,5 @@ impl Units {
 }
 
 #[cfg(test)]
+#[path = "tests/scroll.rs"]
 mod tests;

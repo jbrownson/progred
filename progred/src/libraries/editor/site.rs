@@ -11,4 +11,5 @@ pub mod vocabulary {
 }
 
 #[cfg(test)]
+#[path = "tests/site.rs"]
 mod tests;

@@ -77,4 +77,5 @@ pub fn on_event<W: Host>(child: Layout<W>, function: impl Into<::grap::RuntimeVa
 }
 
 #[cfg(test)]
+#[path = "tests/events.rs"]
 mod tests;

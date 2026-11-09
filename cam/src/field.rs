@@ -55,4 +55,5 @@ pub fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, InvalidPat
 }
 
 #[cfg(test)]
+#[path = "tests/field.rs"]
 mod tests;

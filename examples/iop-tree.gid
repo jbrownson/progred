@@ -1,14 +1,17 @@
 {
   "binders": {
-    "absent": d9c0a7145a38859a245640d3469cbcd4,
+    "absent": 6509cd9921ab4cf28657ac75a9976d71,
     "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
     "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "blossom_colors": 2a5109ec22acf09a33b63836c01ea058,
     "blossom_index": 3000d79cfc62262635d95ceaad339453,
+    "blossom_key": 4f70f63cfa9d9aa5aa012a4479800fe0,
     "blossom_points": 242e77282d28e5266df1da8bc40ea4cb,
     "blossoms": 8e6f78c4ab9b8bef8a26643b2a6203b2,
     "blossoms_per_branch": 02a022e127aba280fa54bfc9876ab42e,
@@ -16,12 +19,15 @@
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "branch_item": 36b771a86bf3f81e62ddd3b7bfeb2485,
     "branch_items": 6de2b6ac6cdfb49f75c7a323152eb700,
+    "branch_key": a0c348e3016a838f1dca16571c6fb62c,
     "branch_length": d219d7e20342e9423e3bc5f319d8f4fe,
     "branch_points": 8ae688f06bec51bfbb2d207dfa9f6761,
     "branch_width": abe1635b2cd83f005071c5d7a6bbb40c,
     "branches": e303be811c2209c2f87bc861e22bc4d0,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "canvas_height": 274d0b51bc6c8033eb55de7d825eca01,
     "canvas_width": 957105218c1fd308ab76b51fd4e368cb,
+    "case": 7ebb4ced7047479caafcd90b14499697,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "child_depth": ee142e9d6e06eb62da5db5dcf242700d,
     "child_width": aaa4e1f70b7edac5317b9fbbd23c7e55,
@@ -35,7 +41,7 @@
     "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "dx": c96dfbe500e6a701033d92bc6c527398,
     "dy": 89d9b403fe0eba053af7048e29bf2f16,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
@@ -60,10 +66,14 @@
     "half_width": be2613d7fe73e7f6c393a2f08cf2ae02,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
     "index": 15db24ee6ff0354d94c0628fc412d64f,
+    "index_2": b71da70705ea6085786117b5c47525e7,
     "initial": 24d55aeab9383d53899091958de88d21,
     "initial_y": bd4e962b430257524294181aaa2f18af,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "item": 67bdfe4ec7d3bafc14407235618840aa,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
+    "key": 78727d568538f936fcb3e28c5961d0ca,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_angle": 46c6cebbd94b017d68e355e57d6fffb0,
     "length": fb16faf9e37d6a0489205c28afcf55c1,
@@ -76,7 +86,6 @@
     "list_at": e56c968fe11bbf17b2033d12f5af5472,
     "list_length": 6882dc6ab06d393217abe6f888585499,
     "list_tail": b5664e4ebf6aef871a4a02b0aa26d036,
-    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "match": b3f6a62e4926889bcfcd338025f4a6f9,
     "maximum": 4be40301b427aeed939ef079ab63cf92,
     "minimum": 61213005b01abca2d4fb351cc4fe4d98,
@@ -93,9 +102,8 @@
     "offset": dfd07a562aafe45ae556fea89958a59e,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
-    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
-    "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
+    "parts": 4abd6fa4c21d4ba19bfc7c2893b52d69,
     "path": fbcf1931c6e050d62c4caf5cccba2ce8,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
@@ -105,7 +113,9 @@
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
     "random_between": e8a99ada91800bca33709da0db80c29f,
+    "random_key": f623f74deb375d0c1476ed4baed4bd3c,
     "random_scale": 1bc6faa0c835d0636606db22ffdfa935,
+    "reason": c2a01958bce64151beb2b3992017de4c,
     "rect": bb5e62c1b300b1e8c2484a0f4879a1fe,
     "rest": 27866faf05bcd734dcd453d70a16b581,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
@@ -113,17 +123,20 @@
     "right": 4f53ff25390f58472d31a6142644dec2,
     "right_angle": 74d076eff44a24482f9f06b433664388,
     "rotate": 2500213d415930c6b40f15d633cc04a4,
+    "row": f93143d539ec4ab2865709b80a7f395d,
     "scaled_length": b6de540458c5b666fee2f2f8d5eaaacd,
-    "seed": 208c3026e79e44fdbe405992c6cdea79,
     "segment_count": 19a4df8c5983adbf4fdb3b206d6fdf69,
     "segment_index": e1cdb8af848f7be1babc5eb79af4e21e,
+    "segment_key": 193e183e2701c22e5f1e2dd17dfbea68,
     "shape": fcaaadef14980397cce95363fc5a54f9,
     "sin": 9f62e0f56d92be74f6ae36378d889262,
+    "sized_value": cc9c98621a79466f8c9f928d8ba09198,
     "sky": b3a0b18dbf3876ac6b9b9622bd36b9bb,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_value": 5afff5ae637f50cadd813f2c213c306e,
     "state": 3775735ae4c156144c110ba819cb1e39,
     "step": 569e33fee165d346791e05c0e9cfea8e,
+    "step_key": 25cb37d90c1c710086a95ee514afaaea,
     "stops": 5d4211d5e7184a41fe1ffaa2cd5865c9,
     "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
     "sum": 201af445eb7e2c270bb5ead10b781fc1,
@@ -141,11 +154,11 @@
     "u64": fc77282178c2fa31b80aed2b8b6f7888,
     "unfold": b71c173bae05b26bfdca3b5bc79b2b09,
     "unquote": da48703c290e3b35d7353c38110bc953,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
     "width": f33c672fef9d0d4561102410fd64129f,
-    "with_random": f47ef735130ecf7a72105ac58f30075a,
     "x": 415def0fa0a9ac40dfba5fca4d0f8876,
     "x0": 882baf61dc20dc2b3b6e66a4944ee3f9,
     "x1": ff0eee8dd1b9f0f3ef1124f88040ff6c,
@@ -167,6 +180,9 @@
     blossom_index: {
       name: "blossom index",
     },
+    blossom_key: {
+      name: "blossom key",
+    },
     blossom_points: {
       name: "blossom points",
     },
@@ -174,6 +190,7 @@
       name: "blossoms",
       params: [
         0x80: blossom_points,
+        0xc0: key,
       ],
       body: {
         function: where,
@@ -188,6 +205,7 @@
                 f64: 0x0000000000000000,
               },
             },
+            isa: call,
           },
           step: {
             params: [
@@ -200,6 +218,7 @@
                   right: segment_count,
                   function: less,
                   left: segment_index,
+                  isa: call,
                 },
                 function: match,
                 cases: [
@@ -214,21 +233,26 @@
                           0x55: {
                             function: fill,
                             paint: paint,
+                            isa: call,
                             shape: {
                               function: quote,
                               expression: {
                                 circle: {
                                   x: {
                                     unquote: x,
+                                    isa: unquote_2,
                                   },
                                   y: {
                                     unquote: y,
+                                    isa: unquote_2,
                                   },
                                   radius: {
                                     unquote: radius,
+                                    isa: unquote_2,
                                   },
                                 },
                               },
+                              isa: call,
                             },
                           },
                           0xaa: {
@@ -236,36 +260,67 @@
                             expression: {
                               blossom_index: {
                                 unquote: next_blossom,
+                                isa: unquote_2,
                               },
                               segment_index: {
                                 unquote: next_segment,
+                                isa: unquote_2,
                               },
                             },
+                            isa: call,
                           },
                         ],
                         function: do,
+                        isa: call,
                       },
+                      isa: call,
                       bindings: [
+                        0x08: {
+                          value: {
+                            function: random_key,
+                            key: key,
+                            index_2: segment_index,
+                            isa: call,
+                          },
+                          bind: segment_key,
+                          isa: binding,
+                        },
+                        0x0c: {
+                          value: {
+                            function: random_key,
+                            key: segment_key,
+                            index_2: blossom_index,
+                            isa: call,
+                          },
+                          bind: blossom_key,
+                          isa: binding,
+                        },
                         0x12: {
                           value: {
                             index: segment_index,
                             list: blossom_points,
                             function: list_at,
+                            isa: call,
                           },
                           pattern: [
                             0x33: {
                               bind: x0,
+                              isa: binder,
                             },
                             0x66: {
                               bind: y0,
+                              isa: binder,
                             },
                             0x99: {
                               bind: x1,
+                              isa: binder,
                             },
                             0xcc: {
                               bind: y1,
+                              isa: binder,
                             },
                           ],
+                          isa: binding,
                         },
                         0x24: {
                           value: {
@@ -276,8 +331,14 @@
                               f64: 0x0000000000000000,
                             },
                             function: random_between,
+                            key: blossom_key,
+                            index_2: {
+                              f64: 0x0000000000000000,
+                            },
+                            isa: call,
                           },
                           bind: x_amount,
+                          isa: binding,
                         },
                         0x36: {
                           value: {
@@ -288,8 +349,14 @@
                               f64: 0x00000000000024c0,
                             },
                             function: random_between,
+                            key: blossom_key,
+                            index_2: {
+                              f64: 0x000000000000f03f,
+                            },
+                            isa: call,
                           },
                           bind: x_jitter,
+                          isa: binding,
                         },
                         0x49: {
                           value: {
@@ -300,8 +367,14 @@
                               f64: 0x0000000000000000,
                             },
                             function: random_between,
+                            key: blossom_key,
+                            index_2: {
+                              f64: 0x0000000000000040,
+                            },
+                            isa: call,
                           },
                           bind: y_amount,
+                          isa: binding,
                         },
                         0x5b: {
                           value: {
@@ -312,21 +385,34 @@
                               f64: 0x00000000000024c0,
                             },
                             function: random_between,
+                            key: blossom_key,
+                            index_2: {
+                              f64: 0x0000000000000840,
+                            },
+                            isa: call,
                           },
                           bind: y_jitter,
+                          isa: binding,
                         },
                         0x6d: {
                           value: {
                             maximum: {
                               list: blossom_colors,
                               function: list_length,
+                              isa: call,
                             },
                             minimum: {
                               f64: 0x0000000000000000,
                             },
                             function: random_between,
+                            key: blossom_key,
+                            index_2: {
+                              f64: 0x0000000000001040,
+                            },
+                            isa: call,
                           },
                           bind: color_pick,
+                          isa: binding,
                         },
                         0x80: {
                           value: {
@@ -337,8 +423,14 @@
                               f64: 0x0000000000000040,
                             },
                             function: random_between,
+                            key: blossom_key,
+                            index_2: {
+                              f64: 0x0000000000001440,
+                            },
+                            isa: call,
                           },
                           bind: radius,
+                          isa: binding,
                         },
                         0x92: {
                           value: {
@@ -349,9 +441,12 @@
                               start: x0,
                               amount: x_amount,
                               function: lerp,
+                              isa: call,
                             },
+                            isa: call,
                           },
                           bind: x,
+                          isa: binding,
                         },
                         0xa4: {
                           value: {
@@ -362,24 +457,31 @@
                               start: y0,
                               amount: y_amount,
                               function: lerp,
+                              isa: call,
                             },
+                            isa: call,
                           },
                           bind: y,
+                          isa: binding,
                         },
                         0xb6: {
                           value: {
                             operand: color_pick,
                             function: floor,
+                            isa: call,
                           },
                           bind: color_index,
+                          isa: binding,
                         },
                         0xc9: {
                           value: {
                             index: color_index,
                             list: blossom_colors,
                             function: list_at,
+                            isa: call,
                           },
                           bind: paint,
+                          isa: binding,
                         },
                         0xdb: {
                           value: {
@@ -388,8 +490,10 @@
                             },
                             function: sum,
                             left: blossom_index,
+                            isa: call,
                           },
                           bind: next_blossom,
+                          isa: binding,
                         },
                         0xed: {
                           value: {
@@ -397,6 +501,7 @@
                               right: blossoms_per_branch,
                               function: less,
                               left: next_blossom,
+                              isa: call,
                             },
                             function: match,
                             cases: [
@@ -409,16 +514,21 @@
                                   expression: {
                                     blossom_index: {
                                       unquote: next_blossom,
+                                      isa: unquote_2,
                                     },
                                     segment_index: {
                                       unquote: segment_index,
+                                      isa: unquote_2,
                                     },
                                   },
+                                  isa: call,
                                 },
+                                isa: case,
                               },
                               0xaa: {
                                 pattern: {
                                   bind: value,
+                                  isa: binder,
                                 },
                                 expression: {
                                   function: quote,
@@ -433,59 +543,80 @@
                                         },
                                         function: sum,
                                         left: segment_index,
+                                        isa: call,
                                       },
+                                      isa: unquote_2,
                                     },
                                   },
+                                  isa: call,
                                 },
+                                isa: case,
                               },
                             ],
+                            isa: call,
                           },
                           pattern: {
                             blossom_index: {
                               bind: next_blossom,
+                              isa: binder,
                             },
                             segment_index: {
                               bind: next_segment,
+                              isa: binder,
                             },
                           },
+                          isa: binding,
                         },
                       ],
                     },
+                    isa: case,
                   },
                   0xaa: {
                     pattern: {
                       bool: false,
                     },
                     expression: {
-                      absent: finished,
+                      reason: finished,
+                      isa: absent,
                     },
+                    isa: case,
                   },
                 ],
+                isa: call,
               },
+              isa: call,
               bindings: [
                 0x55: {
                   value: state,
                   pattern: {
                     blossom_index: {
                       bind: blossom_index,
+                      isa: binder,
                     },
                     segment_index: {
                       bind: segment_index,
+                      isa: binder,
                     },
                   },
+                  isa: binding,
                 },
                 0xaa: {
                   value: {
                     list: blossom_points,
                     function: list_length,
+                    isa: call,
                   },
                   bind: segment_count,
+                  isa: binding,
                 },
               ],
             },
+            isa: lambda,
           },
           function: iterate,
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x55: {
             value: [
@@ -503,15 +634,18 @@
               },
             ],
             bind: blossom_colors,
+            isa: binding,
           },
           0xaa: {
             value: {
               f64: 0x0000000000003040,
             },
             bind: blossoms_per_branch,
+            isa: binding,
           },
         ],
       },
+      isa: lambda,
     },
     blossoms_per_branch: {
       name: "blossoms per branch",
@@ -521,6 +655,9 @@
     },
     branch_items: {
       name: "branch items",
+    },
+    branch_key: {
+      name: "branch key",
     },
     branch_length: {
       name: "branch length",
@@ -536,6 +673,7 @@
       params: [
         0x55: canvas_width,
         0xaa: canvas_height,
+        0xd5: key,
       ],
       body: {
         function: where,
@@ -551,22 +689,28 @@
               right: item,
               function: concat,
               left: accumulator,
+              isa: call,
             },
+            isa: lambda,
           },
           function: fold,
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x40: {
             value: {
               f64: 0x0000000000004e40,
             },
             bind: branch_length,
+            isa: binding,
           },
           0x80: {
             value: {
               f64: 0x0000000000405840,
             },
             bind: trunk_length,
+            isa: binding,
           },
           0xc0: {
             value: {
@@ -590,8 +734,11 @@
                             left: {
                               f64: 0x0000000000000000,
                             },
+                            isa: call,
                           },
+                          isa: call,
                         },
+                        isa: unquote_2,
                       },
                       0x80: {
                         unquote: {
@@ -600,17 +747,25 @@
                           },
                           function: divide,
                           left: canvas_width,
+                          isa: call,
                         },
+                        isa: unquote_2,
                       },
                       0xaa: {
                         unquote: canvas_height,
+                        isa: unquote_2,
                       },
                       0xd5: {
                         f64: 0x0000000000003e40,
                       },
+                      0xea: {
+                        unquote: key,
+                        isa: unquote_2,
+                      },
                     ],
                   ],
                 },
+                isa: call,
               },
               step: {
                 params: [
@@ -625,10 +780,12 @@
                         frontier: [],
                       },
                       expression: {},
+                      isa: case,
                     },
                     0xaa: {
                       pattern: {
                         bind: value,
+                        isa: binder,
                       },
                       expression: {
                         function: let,
@@ -638,21 +795,27 @@
                             state: {
                               frontier: {
                                 unquote: new_frontier,
+                                isa: unquote_2,
                               },
                             },
                             item: {
                               unquote: branch_item,
+                              isa: unquote_2,
                             },
                           },
+                          isa: call,
                         },
+                        isa: call,
                         bindings: [
                           0x10: {
                             value: state,
                             pattern: {
                               frontier: {
                                 bind: frontier,
+                                isa: binder,
                               },
                             },
+                            isa: binding,
                           },
                           0x20: {
                             value: {
@@ -661,31 +824,44 @@
                               },
                               list: frontier,
                               function: list_at,
+                              isa: call,
                             },
                             pattern: [
                               0x2a: {
                                 bind: depth,
+                                isa: binder,
                               },
                               0x55: {
                                 bind: angle,
+                                isa: binder,
                               },
                               0x80: {
                                 bind: x,
+                                isa: binder,
                               },
                               0xaa: {
                                 bind: y,
+                                isa: binder,
                               },
                               0xd5: {
                                 bind: branch_width,
+                                isa: binder,
+                              },
+                              0xea: {
+                                bind: branch_key,
+                                isa: binder,
                               },
                             ],
+                            isa: binding,
                           },
                           0x30: {
                             value: {
                               list: frontier,
                               function: list_tail,
+                              isa: call,
                             },
                             bind: rest,
+                            isa: binding,
                           },
                           0x40: {
                             value: {
@@ -696,8 +872,14 @@
                                 f64: 0x666666666666e63f,
                               },
                               function: random_between,
+                              key: branch_key,
+                              index_2: {
+                                f64: 0x0000000000000000,
+                              },
+                              isa: call,
                             },
                             bind: random_scale,
+                            isa: binding,
                           },
                           0x50: {
                             value: {
@@ -716,9 +898,12 @@
                                 end_value: {
                                   f64: 0x0000000000000840,
                                 },
+                                isa: call,
                               },
+                              isa: call,
                             },
                             bind: scaled_length,
+                            isa: binding,
                           },
                           0x60: {
                             value: {
@@ -728,6 +913,7 @@
                                 },
                                 function: equal,
                                 left: depth,
+                                isa: call,
                               },
                               function: match,
                               cases: [
@@ -736,16 +922,21 @@
                                     bool: true,
                                   },
                                   expression: trunk_length,
+                                  isa: case,
                                 },
                                 0xaa: {
                                   pattern: {
                                     bind: value,
+                                    isa: binder,
                                   },
                                   expression: scaled_length,
+                                  isa: case,
                                 },
                               ],
+                              isa: call,
                             },
                             bind: length,
+                            isa: binding,
                           },
                           0x70: {
                             value: {
@@ -754,16 +945,20 @@
                               },
                               function: divide,
                               left: branch_width,
+                              isa: call,
                             },
                             bind: half_width,
+                            isa: binding,
                           },
                           0x80: {
                             value: {
                               right: half_width,
                               function: subtract,
                               left: length,
+                              isa: call,
                             },
                             bind: tip_distance,
+                            isa: binding,
                           },
                           0x90: {
                             value: {
@@ -771,14 +966,18 @@
                                 right: {
                                   operand: angle,
                                   function: cos,
+                                  isa: call,
                                 },
                                 function: multiply,
                                 left: tip_distance,
+                                isa: call,
                               },
                               function: sum,
                               left: x,
+                              isa: call,
                             },
                             bind: tip_x,
+                            isa: binding,
                           },
                           0xa0: {
                             value: {
@@ -786,14 +985,18 @@
                                 right: {
                                   operand: angle,
                                   function: sin,
+                                  isa: call,
                                 },
                                 function: multiply,
                                 left: tip_distance,
+                                isa: call,
                               },
                               function: sum,
                               left: y,
+                              isa: call,
                             },
                             bind: tip_y,
+                            isa: binding,
                           },
                           0xb0: {
                             value: {
@@ -802,8 +1005,10 @@
                               },
                               function: sum,
                               left: depth,
+                              isa: call,
                             },
                             bind: child_depth,
+                            isa: binding,
                           },
                           0xc0: {
                             value: {
@@ -812,8 +1017,10 @@
                               },
                               function: multiply,
                               left: branch_width,
+                              isa: call,
                             },
                             bind: child_width,
+                            isa: binding,
                           },
                           0xd0: {
                             value: {
@@ -823,6 +1030,7 @@
                                 },
                                 function: less,
                                 left: depth,
+                                isa: call,
                               },
                               function: match,
                               cases: [
@@ -833,6 +1041,7 @@
                                   expression: {
                                     function: let,
                                     expression: new_frontier,
+                                    isa: call,
                                     bindings: [
                                       0x2a: {
                                         value: {
@@ -843,8 +1052,14 @@
                                             f64: 0x333333333333c3bf,
                                           },
                                           function: random_between,
+                                          key: branch_key,
+                                          index_2: {
+                                            f64: 0x000000000000f03f,
+                                          },
+                                          isa: call,
                                         },
                                         bind: turn_left,
+                                        isa: binding,
                                       },
                                       0x55: {
                                         value: {
@@ -855,8 +1070,14 @@
                                             f64: 0x333333333333c33f,
                                           },
                                           function: random_between,
+                                          key: branch_key,
+                                          index_2: {
+                                            f64: 0x0000000000000040,
+                                          },
+                                          isa: call,
                                         },
                                         bind: turn_right,
+                                        isa: binding,
                                       },
                                       0x80: {
                                         value: {
@@ -864,11 +1085,14 @@
                                             right: pi,
                                             function: multiply,
                                             left: turn_left,
+                                            isa: call,
                                           },
                                           function: sum,
                                           left: angle,
+                                          isa: call,
                                         },
                                         bind: left_angle,
+                                        isa: binding,
                                       },
                                       0xaa: {
                                         value: {
@@ -876,11 +1100,14 @@
                                             right: pi,
                                             function: multiply,
                                             left: turn_right,
+                                            isa: call,
                                           },
                                           function: sum,
                                           left: angle,
+                                          isa: call,
                                         },
                                         bind: right_angle,
+                                        isa: binding,
                                       },
                                       0xd5: {
                                         value: {
@@ -892,48 +1119,85 @@
                                               0x55: [
                                                 0x2a: {
                                                   unquote: child_depth,
+                                                  isa: unquote_2,
                                                 },
                                                 0x55: {
                                                   unquote: left_angle,
+                                                  isa: unquote_2,
                                                 },
                                                 0x80: {
                                                   unquote: tip_x,
+                                                  isa: unquote_2,
                                                 },
                                                 0xaa: {
                                                   unquote: tip_y,
+                                                  isa: unquote_2,
                                                 },
                                                 0xd5: {
                                                   unquote: child_width,
+                                                  isa: unquote_2,
+                                                },
+                                                0xea: {
+                                                  unquote: {
+                                                    function: random_key,
+                                                    key: branch_key,
+                                                    index_2: {
+                                                      f64: 0x0000000000000000,
+                                                    },
+                                                    isa: call,
+                                                  },
+                                                  isa: unquote_2,
                                                 },
                                               ],
                                               0xaa: [
                                                 0x2a: {
                                                   unquote: child_depth,
+                                                  isa: unquote_2,
                                                 },
                                                 0x55: {
                                                   unquote: right_angle,
+                                                  isa: unquote_2,
                                                 },
                                                 0x80: {
                                                   unquote: tip_x,
+                                                  isa: unquote_2,
                                                 },
                                                 0xaa: {
                                                   unquote: tip_y,
+                                                  isa: unquote_2,
                                                 },
                                                 0xd5: {
                                                   unquote: child_width,
+                                                  isa: unquote_2,
+                                                },
+                                                0xea: {
+                                                  unquote: {
+                                                    function: random_key,
+                                                    key: branch_key,
+                                                    index_2: {
+                                                      f64: 0x000000000000f03f,
+                                                    },
+                                                    isa: call,
+                                                  },
+                                                  isa: unquote_2,
                                                 },
                                               ],
                                             ],
+                                            isa: call,
                                           },
+                                          isa: call,
                                         },
                                         bind: new_frontier,
+                                        isa: binding,
                                       },
                                     ],
                                   },
+                                  isa: case,
                                 },
                                 0xaa: {
                                   pattern: {
                                     bind: value,
+                                    isa: binder,
                                   },
                                   expression: {
                                     value: {
@@ -942,6 +1206,7 @@
                                       },
                                       function: less,
                                       left: depth,
+                                      isa: call,
                                     },
                                     function: match,
                                     cases: [
@@ -952,6 +1217,7 @@
                                         expression: {
                                           function: let,
                                           expression: new_frontier,
+                                          isa: call,
                                           bindings: [
                                             0x40: {
                                               value: {
@@ -962,8 +1228,14 @@
                                                   f64: 0x000000000000d03f,
                                                 },
                                                 function: random_between,
+                                                key: branch_key,
+                                                index_2: {
+                                                  f64: 0x000000000000f03f,
+                                                },
+                                                isa: call,
                                               },
                                               bind: turn_left,
+                                              isa: binding,
                                             },
                                             0x80: {
                                               value: {
@@ -971,11 +1243,14 @@
                                                   right: pi,
                                                   function: multiply,
                                                   left: turn_left,
+                                                  isa: call,
                                                 },
                                                 function: sum,
                                                 left: angle,
+                                                isa: call,
                                               },
                                               bind: left_angle,
+                                              isa: binding,
                                             },
                                             0xc0: {
                                               value: {
@@ -985,40 +1260,66 @@
                                                   expression: [
                                                     0x2a: {
                                                       unquote: child_depth,
+                                                      isa: unquote_2,
                                                     },
                                                     0x55: {
                                                       unquote: left_angle,
+                                                      isa: unquote_2,
                                                     },
                                                     0x80: {
                                                       unquote: tip_x,
+                                                      isa: unquote_2,
                                                     },
                                                     0xaa: {
                                                       unquote: tip_y,
+                                                      isa: unquote_2,
                                                     },
                                                     0xd5: {
                                                       unquote: child_width,
+                                                      isa: unquote_2,
+                                                    },
+                                                    0xea: {
+                                                      unquote: {
+                                                        function: random_key,
+                                                        key: branch_key,
+                                                        index_2: {
+                                                          f64: 0x0000000000000000,
+                                                        },
+                                                        isa: call,
+                                                      },
+                                                      isa: unquote_2,
                                                     },
                                                   ],
+                                                  isa: call,
                                                 },
                                                 function: prepend,
+                                                isa: call,
                                               },
                                               bind: new_frontier,
+                                              isa: binding,
                                             },
                                           ],
                                         },
+                                        isa: case,
                                       },
                                       0xaa: {
                                         pattern: {
                                           bind: value,
+                                          isa: binder,
                                         },
                                         expression: rest,
+                                        isa: case,
                                       },
                                     ],
+                                    isa: call,
                                   },
+                                  isa: case,
                                 },
                               ],
+                              isa: call,
                             },
                             bind: new_frontier,
+                            isa: binding,
                           },
                           0xe0: {
                             value: {
@@ -1028,6 +1329,7 @@
                                 left: {
                                   f64: 0x0000000000001040,
                                 },
+                                isa: call,
                               },
                               function: match,
                               cases: [
@@ -1041,29 +1343,39 @@
                                       0x80: [
                                         0x33: {
                                           unquote: x,
+                                          isa: unquote_2,
                                         },
                                         0x66: {
                                           unquote: y,
+                                          isa: unquote_2,
                                         },
                                         0x99: {
                                           unquote: tip_x,
+                                          isa: unquote_2,
                                         },
                                         0xcc: {
                                           unquote: tip_y,
+                                          isa: unquote_2,
                                         },
                                       ],
                                     ],
+                                    isa: call,
                                   },
+                                  isa: case,
                                 },
                                 0xaa: {
                                   pattern: {
                                     bind: value,
+                                    isa: binder,
                                   },
                                   expression: [],
+                                  isa: case,
                                 },
                               ],
+                              isa: call,
                             },
                             bind: branch_points,
+                            isa: binding,
                           },
                           0xf0: {
                             value: {
@@ -1076,23 +1388,28 @@
                                         translate: {
                                           x: {
                                             unquote: x,
+                                            isa: unquote_2,
                                           },
                                           y: {
                                             unquote: y,
+                                            isa: unquote_2,
                                           },
                                         },
                                       },
                                       0xaa: {
                                         rotate: {
                                           unquote: angle,
+                                          isa: unquote_2,
                                         },
                                       },
                                     ],
+                                    isa: call,
                                   },
                                   function: fill,
                                   paint: {
                                     rgb: 0x000000,
                                   },
+                                  isa: call,
                                   shape: {
                                     function: quote,
                                     expression: {
@@ -1107,40 +1424,54 @@
                                             left: {
                                               f64: 0x0000000000000000,
                                             },
+                                            isa: call,
                                           },
+                                          isa: unquote_2,
                                         },
                                         height: {
                                           unquote: branch_width,
+                                          isa: unquote_2,
                                         },
                                         width: {
                                           unquote: length,
+                                          isa: unquote_2,
                                         },
                                       },
                                     },
+                                    isa: call,
                                   },
                                 },
                                 0xaa: branch_points,
                               ],
                               function: do,
+                              isa: call,
                             },
                             bind: branch_item,
+                            isa: binding,
                           },
                         ],
                       },
+                      isa: case,
                     },
                   ],
+                  isa: call,
                 },
+                isa: lambda,
               },
               function: unfold,
+              isa: call,
             },
             pattern: {
               list: {
                 bind: branch_items,
+                isa: binder,
               },
             },
+            isa: binding,
           },
         ],
       },
+      isa: lambda,
     },
     child_depth: {
       name: "child depth",
@@ -1173,25 +1504,22 @@
         0xaa: canvas_height,
       ],
       body: {
-        seed: {
-          u64: 0x0000000000000000,
-        },
-        function: with_random,
-        expression: {
-          blossom_points: {
-            seed: {
-              u64: 0x0000000000000000,
-            },
-            function: with_random,
-            expression: {
-              canvas_height: canvas_height,
-              function: branches,
-              canvas_width: canvas_width,
-            },
+        blossom_points: {
+          canvas_height: canvas_height,
+          function: branches,
+          key: {
+            u64: 0x0000000000000000,
           },
-          function: blossoms,
+          canvas_width: canvas_width,
+          isa: call,
         },
+        function: blossoms,
+        key: {
+          u64: 0x0100000000000000,
+        },
+        isa: call,
       },
+      isa: lambda,
     },
     frontier: {
       name: "frontier",
@@ -1218,6 +1546,7 @@
         0x66: canvas_height,
         0x99: offset,
         0xcc: paint,
+        0xe6: key,
       ],
       body: {
         function: where,
@@ -1225,6 +1554,7 @@
           expressions: [
             0x20: {
               function: path,
+              isa: call,
             },
             0x40: {
               x: {
@@ -1232,6 +1562,7 @@
               },
               y: initial_y,
               function: move_to,
+              isa: call,
             },
             0x60: {
               initial: {
@@ -1242,8 +1573,10 @@
                   },
                   y: {
                     unquote: initial_y,
+                    isa: unquote_2,
                   },
                 },
+                isa: call,
               },
               step: {
                 params: [
@@ -1256,6 +1589,7 @@
                       right: canvas_width,
                       function: less,
                       left: x,
+                      isa: call,
                     },
                     function: match,
                     cases: [
@@ -1271,22 +1605,38 @@
                                 x: next_x,
                                 y: next_y,
                                 function: line_to,
+                                isa: call,
                               },
                               0xaa: {
                                 function: quote,
                                 expression: {
                                   x: {
                                     unquote: next_x,
+                                    isa: unquote_2,
                                   },
                                   y: {
                                     unquote: next_y,
+                                    isa: unquote_2,
                                   },
                                 },
+                                isa: call,
                               },
                             ],
                             function: do,
+                            isa: call,
                           },
+                          isa: call,
                           bindings: [
+                            0x1a: {
+                              value: {
+                                function: random_key,
+                                key: key,
+                                index_2: x,
+                                isa: call,
+                              },
+                              bind: step_key,
+                              isa: binding,
+                            },
                             0x33: {
                               value: {
                                 maximum: {
@@ -1296,8 +1646,14 @@
                                   f64: 0x0000000000000040,
                                 },
                                 function: random_between,
+                                key: step_key,
+                                index_2: {
+                                  f64: 0x0000000000000000,
+                                },
+                                isa: call,
                               },
                               bind: dx,
+                              isa: binding,
                             },
                             0x66: {
                               value: {
@@ -1308,59 +1664,80 @@
                                   f64: 0x00000000000010c0,
                                 },
                                 function: random_between,
+                                key: step_key,
+                                index_2: {
+                                  f64: 0x000000000000f03f,
+                                },
+                                isa: call,
                               },
                               bind: dy,
+                              isa: binding,
                             },
                             0x99: {
                               value: {
                                 right: dx,
                                 function: sum,
                                 left: x,
+                                isa: call,
                               },
                               bind: next_x,
+                              isa: binding,
                             },
                             0xcc: {
                               value: {
                                 right: dy,
                                 function: sum,
                                 left: y,
+                                isa: call,
                               },
                               bind: next_y,
+                              isa: binding,
                             },
                           ],
                         },
+                        isa: case,
                       },
                       0xaa: {
                         pattern: {
                           bool: false,
                         },
                         expression: {
-                          absent: finished,
+                          reason: finished,
+                          isa: absent,
                         },
+                        isa: case,
                       },
                     ],
+                    isa: call,
                   },
+                  isa: call,
                   bindings: [
                     0x80: {
                       value: state,
                       pattern: {
                         x: {
                           bind: x,
+                          isa: binder,
                         },
                         y: {
                           bind: y,
+                          isa: binder,
                         },
                       },
+                      isa: binding,
                     },
                   ],
                 },
+                isa: lambda,
               },
               function: iterate,
+              isa: call,
             },
             0x80: {
               x: canvas_width,
               y: canvas_height,
               function: line_to,
+              isa: call,
             },
             0xa0: {
               x: {
@@ -1368,28 +1745,36 @@
               },
               y: canvas_height,
               function: line_to,
+              isa: call,
             },
             0xc0: {
               function: close,
+              isa: call,
             },
             0xe0: {
               function: fill,
               paint: paint,
+              isa: call,
             },
           ],
           function: do,
+          isa: call,
         },
+        isa: call,
         bindings: [
           0x80: {
             value: {
               right: offset,
               function: subtract,
               left: canvas_height,
+              isa: call,
             },
             bind: initial_y,
+            isa: binding,
           },
         ],
       },
+      isa: lambda,
     },
     mountains: {
       name: "mountains",
@@ -1398,38 +1783,42 @@
         0xaa: canvas_height,
       ],
       body: {
-        seed: {
-          u64: 0x0000000000000000,
-        },
-        function: with_random,
-        expression: {
-          expressions: [
-            0x55: {
-              canvas_height: canvas_height,
-              function: mountain,
-              canvas_width: canvas_width,
-              paint: {
-                rgb: 0x8bb2bb,
-              },
-              offset: {
-                f64: 0x0000000000406040,
-              },
+        expressions: [
+          0x55: {
+            canvas_height: canvas_height,
+            function: mountain,
+            key: {
+              u64: 0x0000000000000000,
             },
-            0xaa: {
-              canvas_height: canvas_height,
-              function: mountain,
-              canvas_width: canvas_width,
-              paint: {
-                rgb: 0x618087,
-              },
-              offset: {
-                f64: 0x0000000000004940,
-              },
+            canvas_width: canvas_width,
+            paint: {
+              rgb: 0x8bb2bb,
             },
-          ],
-          function: do,
-        },
+            isa: call,
+            offset: {
+              f64: 0x0000000000406040,
+            },
+          },
+          0xaa: {
+            canvas_height: canvas_height,
+            function: mountain,
+            key: {
+              u64: 0x0100000000000000,
+            },
+            canvas_width: canvas_width,
+            paint: {
+              rgb: 0x618087,
+            },
+            isa: call,
+            offset: {
+              f64: 0x0000000000004940,
+            },
+          },
+        ],
+        function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     new_frontier: {
       name: "new frontier",
@@ -1467,6 +1856,9 @@
     segment_index: {
       name: "segment index",
     },
+    segment_key: {
+      name: "segment key",
+    },
     sky: {
       name: "sky",
       params: [
@@ -1503,6 +1895,7 @@
                 },
                 y: {
                   unquote: canvas_height,
+                  isa: unquote_2,
                 },
               },
               gradient_start: {
@@ -1515,7 +1908,9 @@
               },
             },
           },
+          isa: call,
         },
+        isa: call,
         shape: {
           function: quote,
           expression: {
@@ -1528,17 +1923,24 @@
               },
               height: {
                 unquote: canvas_height,
+                isa: unquote_2,
               },
               width: {
                 unquote: canvas_width,
+                isa: unquote_2,
               },
             },
           },
+          isa: call,
         },
       },
+      isa: lambda,
     },
     start_value: {
       name: "start value",
+    },
+    step_key: {
+      name: "step key",
     },
     tip_distance: {
       name: "tip distance",
@@ -1561,20 +1963,25 @@
             canvas_height: canvas_height,
             function: sky,
             canvas_width: canvas_width,
+            isa: call,
           },
           0x80: {
             canvas_height: canvas_height,
             function: mountains,
             canvas_width: canvas_width,
+            isa: call,
           },
           0xc0: {
             canvas_height: canvas_height,
             function: flowering_tree,
             canvas_width: canvas_width,
+            isa: call,
           },
         ],
         function: do,
+        isa: call,
       },
+      isa: lambda,
     },
     trunk_length: {
       name: "trunk length",
@@ -1602,16 +2009,21 @@
             right: start,
             function: subtract,
             left: end,
+            isa: call,
           },
           function: divide,
           left: {
             right: start,
             function: subtract,
             left: value,
+            isa: call,
           },
+          isa: call,
         },
         function: lerp,
+        isa: call,
       },
+      isa: lambda,
     },
     canvas_width: {
       name: "width",
@@ -1642,61 +2054,68 @@
     },
   },
   "root": {
-    main: {
-      grap: [
-        0x1c: tree_scene,
-        0x38: sky,
-        0x55: mountains,
-        0x71: mountain,
-        0x8e: flowering_tree,
-        0xaa: branches,
-        0xc7: blossoms,
-        0xe3: tween,
-      ],
-    },
-    panes: {
-      pane_left: [
-        0x80: {
-          viewport: {
-            params: [
-              0x40: projection_value,
-              0x80: width,
-              0xc0: height,
-            ],
-            body: {
-              function: quote,
-              expression: {
-                drawing: {
-                  descent: {
-                    unquote: height,
-                  },
-                  fuel: {
-                    f64: 0x0000000080843e41,
-                  },
-                  ascent: {
-                    f64: 0x0000000000000000,
-                  },
-                  program: {
-                    canvas_height: {
-                      unquote: height,
-                    },
-                    function: {
-                      unquote: projection_value,
-                    },
-                    canvas_width: {
-                      unquote: width,
-                    },
-                  },
-                  width: {
-                    unquote: width,
-                  },
+    parts: [
+      0x55: {
+        viewport: {
+          params: [
+            0x40: projection_value,
+            0x80: width,
+            0xc0: height,
+          ],
+          body: {
+            function: quote,
+            expression: {
+              descent: {
+                unquote: height,
+                isa: unquote_2,
+              },
+              fuel: {
+                f64: 0x0000000080843e41,
+              },
+              ascent: {
+                f64: 0x0000000000000000,
+              },
+              program: {
+                canvas_height: {
+                  unquote: height,
+                  isa: unquote_2,
                 },
+                function: {
+                  unquote: projection_value,
+                  isa: unquote_2,
+                },
+                canvas_width: {
+                  unquote: width,
+                  isa: unquote_2,
+                },
+                isa: call,
+              },
+              isa: drawing,
+              width: {
+                unquote: width,
+                isa: unquote_2,
               },
             },
+            isa: call,
           },
-          projection_value: tree_scene,
+          isa: lambda,
         },
-      ],
-    },
+        projection_value: tree_scene,
+        isa: sized_value,
+      },
+      0xaa: {
+        grap: [
+          0x1c: tree_scene,
+          0x38: sky,
+          0x55: mountains,
+          0x71: mountain,
+          0x8e: flowering_tree,
+          0xaa: branches,
+          0xc7: blossoms,
+          0xe3: tween,
+        ],
+      },
+    ],
+    isa: row,
   },
 }

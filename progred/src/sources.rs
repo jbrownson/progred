@@ -1,24 +1,24 @@
 //! The reading context: a document followed by an ordered set of
-//! libraries. Ordinary lookup selects the document, then the first
-//! library definition. A stored Follow step still names its source.
+//! libraries. Lookup selects the document's definition, then the first
+//! library's; reads, follows and evaluation all go through it.
 
 use crate::display::ResolvedCell;
 use crate::library::Libraries;
 use crate::location::{Location, Start};
-use gid::{CellId, Document, Resolution, Step, Value};
+use gid::{CellId, Document, Step, Value};
 
 /// One source's definition of a cell.
 #[derive(Clone, Copy)]
 enum Contribution<'a> {
     Document(&'a Value),
-    Library(&'a grap::Definition),
+    Library(CellId, &'a Value),
 }
 
 impl<'a> Contribution<'a> {
     fn value(self) -> &'a Value {
         match self {
             Self::Document(value) => value,
-            Self::Library(definition) => definition.value(),
+            Self::Library(_, value) => value,
         }
     }
 }
@@ -29,20 +29,18 @@ pub struct Sources<'a> {
     pub libraries: &'a Libraries,
 }
 
+/// How much work an evaluation may do when nothing else sets its fuel.
+pub const DEFAULT_FUEL: usize = 1_024;
+
 impl crate::display::Env for Sources<'_> {
     fn apply_expression_runtime(
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
     ) -> grap::RuntimeValue {
-        grap::apply_expression(
-            function,
-            arguments.iter().cloned(),
-            self,
-            None,
-            grap::DEFAULT_FUEL,
-        )
-        .result
+        grap::Evaluator::new(self, crate::sources::DEFAULT_FUEL)
+            .apply_expression(function, arguments.iter().cloned())
+            .result
     }
     fn evaluate_runtime(
         &self,
@@ -50,13 +48,9 @@ impl crate::display::Env for Sources<'_> {
         fuel: usize,
         _steps: &[Step],
     ) -> grap::RuntimeValue {
-        grap::evaluate_runtime_at(
-            expression,
-            Some(grap::SourceOrigin::Input(vec![])),
-            self,
-            fuel,
-        )
-        .result
+        grap::Evaluator::new(self, fuel)
+            .evaluate_runtime(expression, Some(grap::SourceOrigin::Input(vec![])))
+            .result
     }
     fn evaluate_runtime_memo(
         &self,
@@ -70,15 +64,11 @@ impl crate::display::Env for Sources<'_> {
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
+        functions: grap::ForeignFunctions<'_>,
     ) -> grap::Evaluation {
-        grap::apply(
-            function,
-            arguments.iter().cloned(),
-            self,
-            scope,
-            grap::DEFAULT_FUEL,
-        )
+        grap::Evaluator::new(self, crate::sources::DEFAULT_FUEL)
+            .functions(functions)
+            .apply(function, arguments.iter().cloned())
     }
     fn apply_runtime_memo(
         &self,
@@ -86,14 +76,12 @@ impl crate::display::Env for Sources<'_> {
         arguments: &[(CellId, Value)],
         fuel: usize,
     ) -> grap::RuntimeValue {
-        grap::apply_expression(
-            &function.into(),
-            arguments.iter().map(|(k, v)| (*k, v.into())),
-            self,
-            None,
-            fuel,
-        )
-        .result
+        grap::Evaluator::new(self, fuel)
+            .apply_expression(
+                &function.into(),
+                arguments.iter().map(|(k, v)| (*k, v.into())),
+            )
+            .result
     }
 
     fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
@@ -102,44 +90,34 @@ impl crate::display::Env for Sources<'_> {
 }
 
 impl<'a> Sources<'a> {
-    /// Every definition of `cell` in lookup order: the document's, then each
-    /// library's in load order. Ordinary lookup takes the first.
-    fn definitions(&self, cell: CellId) -> impl Iterator<Item = (Resolution, Contribution<'a>)> {
-        let libraries = self.libraries;
+    /// The definition lookup selects: the document's, else the first
+    /// library's in load order.
+    fn contribution(&self, cell: CellId) -> Option<Contribution<'a>> {
         self.doc
             .cells
             .value(cell)
-            .map(|value| (Resolution::Document, Contribution::Document(value)))
-            .into_iter()
-            .chain(libraries.definitions(cell).map(|(library, definition)| {
-                (
-                    Resolution::Library(library),
-                    Contribution::Library(definition),
-                )
-            }))
-    }
-
-    pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
-        self.values(cell)
-            .find(|value| &value.resolution == resolution)
-            .map(|value| value.value)
-    }
-
-    pub fn values(&self, cell: CellId) -> impl Iterator<Item = ResolvedCell<'a>> {
-        self.definitions(cell)
-            .map(|(resolution, contribution)| ResolvedCell {
-                resolution,
-                value: contribution.value(),
-                native: matches!(
-                    contribution,
-                    Contribution::Library(grap::Definition::Foreign(_))
-                ),
+            .map(Contribution::Document)
+            .or_else(|| {
+                self.libraries
+                    .first_definition(cell)
+                    .map(|(library, value)| Contribution::Library(library, value))
             })
     }
 
-    /// The definition ordinary lookup selects.
+    /// The value of the definition lookup selects.
+    pub fn value(&self, cell: CellId) -> Option<&'a Value> {
+        self.contribution(cell).map(Contribution::value)
+    }
+
+    /// The definition lookup selects.
     pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
-        self.values(cell).next()
+        self.contribution(cell).map(|contribution| ResolvedCell {
+            value: contribution.value(),
+            library: match contribution {
+                Contribution::Document(_) => None,
+                Contribution::Library(library, _) => Some(library),
+            },
+        })
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -147,6 +125,7 @@ impl<'a> Sources<'a> {
     }
 
     /// The value at `path` from the document's root.
+    #[cfg(test)]
     pub fn resolve_path(&self, path: &[Step]) -> Option<&'a Value> {
         self.read_from(Start::Root, path)
     }
@@ -164,7 +143,7 @@ impl<'a> Sources<'a> {
         path.iter().try_fold(
             match start {
                 Start::Root => self.root(),
-                Start::Cell { cell, resolution } => self.value(cell, &resolution),
+                Start::Cell(cell) => self.value(cell),
             }?,
             |value, step| self.step(value, step),
         )
@@ -173,7 +152,7 @@ impl<'a> Sources<'a> {
     /// The value `step` reaches from `value`.
     pub fn step(&self, value: &'a Value, step: &Step) -> Option<&'a Value> {
         match step {
-            Step::Follow(resolution) => self.value(value.as_cell()?, resolution),
+            Step::Follow => self.value(value.as_cell()?),
             Step::Key(label) => value.as_record()?.get(label),
             Step::Element(position) => value.as_list()?.get(position),
         }
@@ -195,26 +174,21 @@ impl<'a> Sources<'a> {
     /// The library is authoritative only when it supplies the value
     /// and the document does not. A bare cell remains writable.
     pub fn external(&self, cell: CellId) -> bool {
-        matches!(
-            self.definitions(cell).next(),
-            Some((Resolution::Library(_), _))
-        )
+        matches!(self.contribution(cell), Some(Contribution::Library(..)))
     }
 }
 
 impl grap::Host for Sources<'_> {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, grap::Definition)> {
-        self.definitions(cell).next().map(|(source, contribution)| {
-            (
-                source,
-                match contribution {
-                    Contribution::Document(value) => grap::Definition::Value(value.clone()),
-                    Contribution::Library(definition) => definition.clone(),
-                },
-            )
-        })
+    fn definition(&self, cell: CellId) -> Option<Value> {
+        self.value(cell).cloned()
+    }
+
+    /// Only the libraries have native code.
+    fn implementation(&self, cell: CellId) -> Option<grap::ForeignFunction<'static>> {
+        self.libraries.implementation(cell).cloned()
     }
 }
 
 #[cfg(test)]
+#[path = "tests/sources.rs"]
 mod tests;

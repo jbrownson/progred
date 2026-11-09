@@ -42,8 +42,12 @@ fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModi
 }
 
 /// The fixed menus, then `Projections`: the presets, and an entry for each
-/// library an area can switch off.
-pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Menu> {
+/// library an area can switch off; then `Libraries`, an entry for each
+/// loaded library, when there are any.
+pub fn definition(
+    projections: impl IntoIterator<Item = gid::CellId>,
+    libraries: impl IntoIterator<Item = gid::CellId>,
+) -> Vec<Menu> {
     use crate::stack::Preset;
     use crate::workspace::{Move, Side};
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
@@ -77,7 +81,15 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
         Entry::Command(C::Doc(D::ZoomIn)),
         Entry::Command(C::Doc(D::ZoomOut)),
     ];
-    vec![
+    let libraries: Vec<_> = libraries
+        .into_iter()
+        .map(|library| Entry::Command(C::Doc(D::OpenLibrary(library))))
+        .collect();
+    let libraries = (!libraries.is_empty()).then_some(Menu {
+        label: "Libraries",
+        entries: libraries,
+    });
+    [
         Menu {
             label: "File",
             entries: file_entries,
@@ -102,7 +114,6 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 Entry::Command(C::Doc(D::OpenPane(Side::Left))),
                 Entry::Command(C::Doc(D::OpenPane(Side::Right))),
                 Entry::Command(C::Doc(D::ClosePane)),
-                Entry::Command(C::Doc(D::ShowPanes)),
                 Entry::Separator,
                 Entry::Command(C::Doc(D::MovePane(Move::Up))),
                 Entry::Command(C::Doc(D::MovePane(Move::Down))),
@@ -127,12 +138,21 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 .collect(),
         },
     ]
+    .into_iter()
+    .chain(libraries)
+    .chain([Menu {
+        label: "Help",
+        entries: vec![Entry::Command(C::Doc(D::CopyVersion))],
+    }])
+    .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hover {
     Heading(usize),
     Item(Command),
+    /// The version at the bar's far end, which a click copies.
+    Stage,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -299,7 +319,7 @@ pub fn shortcut(
     event: &KeyboardEvent,
     command: puri::keyboard::CommandModifier,
 ) -> Option<Command> {
-    command::shortcut(event, command, commands(&definition([])))
+    command::shortcut(event, command, commands(&definition([], [])))
 }
 
 mod view {
@@ -328,6 +348,8 @@ mod view {
         /// Each library that brings a projection, with the name its
         /// Projections entry shows.
         pub projections: Vec<(gid::CellId, String)>,
+        /// Each loaded library, with the name its Libraries entry shows.
+        pub libraries: Vec<(gid::CellId, String)>,
         pub scale: f64,
         pub width: f64,
     }
@@ -488,14 +510,19 @@ mod view {
         } else {
             &styles.disabled
         };
-        let name = match command {
-            Command::Doc(crate::command::DocCommand::Projection(library)) => description
-                .projections
-                .iter()
-                .find(|(id, _)| *id == library)
-                .map(|(_, name)| name.as_str()),
-            _ => None,
+        let (libraries, library) = match command {
+            Command::Doc(crate::command::DocCommand::Projection(library)) => {
+                (description.projections.as_slice(), Some(library))
+            }
+            Command::Doc(crate::command::DocCommand::OpenLibrary(library)) => {
+                (description.libraries.as_slice(), Some(library))
+            }
+            _ => (&[][..], None),
         };
+        let name = libraries
+            .iter()
+            .find(|(id, _)| Some(*id) == library)
+            .map(|(_, name)| name.as_str());
         let label = placed::text(tcx, name.unwrap_or(spec.label), style);
         let shortcut = placed::text(
             tcx,
@@ -649,7 +676,10 @@ mod view {
     pub fn view(tcx: &mut TextCtx, description: Description) -> View<HoverPass<Editor>> {
         let palette = description.palette;
         let styles = styles(palette);
-        let definition = definition(description.projections.iter().map(|(library, _)| *library));
+        let definition = definition(
+            description.projections.iter().map(|(library, _)| *library),
+            description.libraries.iter().map(|(library, _)| *library),
+        );
         let headings = definition
             .iter()
             .enumerate()
@@ -674,14 +704,37 @@ mod view {
                 .map(|node| node.extent.width)
                 .sum()
         });
-        // How finished Progred is, at the bar's far end: a note, not a menu.
+        // How finished Progred is, at the bar's far end: a note, not a menu,
+        // which a click copies.
         let stage = {
+            let scale = description.scale;
             let text = placed::text(tcx, &crate::editor::stage(), &styles.dim);
-            let vertical = ((bar_height(description.scale) - text.extent.height()) / 2.0).max(0.0);
-            let horizontal = 10.0 * description.scale;
-            measured::pad(
-                Insets::new(horizontal, vertical, horizontal, vertical),
-                text,
+            let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
+            let horizontal = 10.0 * scale;
+            let content = placed::decorate(
+                measured::pad(
+                    Insets::new(horizontal, vertical, horizontal, vertical),
+                    text,
+                ),
+                move |p, rect| {
+                    p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
+                        if hover.hovered.as_ref() == Some(&Hovered::Menu(Hover::Stage)) {
+                            cv.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
+                        }
+                    });
+                },
+            );
+            interactive(
+                Hover::Stage,
+                content,
+                |_| {},
+                move |app, input| {
+                    app.choose_menu(
+                        Command::Doc(crate::command::DocCommand::CopyVersion),
+                        input.geometry(scale),
+                    );
+                    true
+                },
             )
         };
         let spacer = placed::leaf(
@@ -737,7 +790,9 @@ mod view {
 pub use view::{Description, bar_height, view};
 
 #[cfg(test)]
+#[path = "tests/menu/interaction_tests.rs"]
 mod interaction_tests;
 
 #[cfg(test)]
+#[path = "tests/menu.rs"]
 mod tests;

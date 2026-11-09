@@ -10,17 +10,21 @@ use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
-use crate::display::structure::{field_label, field_order};
+use crate::display::hug;
+use crate::display::structure::record_form;
 use crate::display::{
-    Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
-    activatable, alternatives, col, descend_local, dim, faced, indent, picker, ranked,
-    record_fragment_with, row, selectable_bracket, shared,
+    Completion, CompletionKind, Delim, Face, Name, Pending, Picker, ResolvedCell, alternatives,
+    col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
-use crate::display::{group, group_hug};
-use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
+use ::grap::source::vocabulary::BODY_ORIGIN;
+use ::grap::vocabulary::{
+    BODY, ENVIRONMENT, FUNCTION, IMPLEMENTATION, LAMBDA, PARAMS, VALUE, kind,
+};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use puri::text::Script;
 
 pub mod control;
+pub mod notebook;
 pub mod numbers;
 mod suggestions;
 
@@ -28,7 +32,7 @@ pub(crate) fn expression<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     match input.value {
-        Some(_) => shallow_cell(input),
+        Some(_) => reference(input),
         None => (input.default_projection)(input).or_else(|| {
             Some(picker(Picker::new(
                 CompletionKind::Value,
@@ -38,127 +42,334 @@ pub(crate) fn expression<W: Host>(
     }
 }
 
+/// A reference reads as its cell's name. A parameter with no name of its
+/// own reads, grey, as what its list calls it, found by walking out from
+/// the reference, as a slot's offers find what's in scope.
+fn reference<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    name::shallow_cell(input).or_else(|| {
+        let cell = input.value?.as_cell()?;
+        let computed = scope_around(input)?.remove(&cell)?.computed?;
+        Some(name::shallow_reference(
+            input,
+            crate::display::named(&computed, Face::Dim),
+        ))
+    })
+}
+
+/// The bindings in scope where `input` occurs: walking out through where
+/// it's stored, or through the computed value it lies in, as a closure in a
+/// result does.
+fn scope_around<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<std::collections::BTreeMap<CellId, suggestions::Binding>> {
+    let path = input
+        .env
+        .occurrence()
+        .map_or_else(Vec::new, crate::occurrence::Trail::to_vec);
+    let value_of = |cell| input.env.resolve(cell).map(|definition| definition.value);
+    let (scope, _) = match crate::occurrence::location(&path) {
+        Some(location) => suggestions::scope(
+            &location.path,
+            &|steps| input.env.read_from(location.start, steps),
+            &value_of,
+        ),
+        None => suggestions::scope(
+            &crate::occurrence::within_computed(&path)?,
+            &|steps| input.env.read_computed(steps),
+            &value_of,
+        ),
+    };
+    Some(scope)
+}
+
+/// What a parameter list calls its parameters with no name of their own: in
+/// order, the first of a, b, c… that none of its named parameters uses.
+/// Computed wherever it's shown, never stored.
+pub(crate) fn unnamed_parameters<'a>(
+    params: &[CellId],
+    value_of: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> std::collections::BTreeMap<CellId, Name<'static>> {
+    computed_names(
+        params,
+        value_of,
+        (0..).map(|index| Name::Formatted([(letters(index), Script::Normal)].into())),
+    )
+}
+
+/// What a closure's environment calls the bindings it holds with no name of
+/// their own: in its order, the first of e₀, e₁, e₂… that none of its named
+/// bindings uses. The parameter list that named them isn't in the closure.
+pub(crate) fn unnamed_bindings<'a>(
+    bindings: &[CellId],
+    value_of: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> std::collections::BTreeMap<CellId, Name<'static>> {
+    computed_names(
+        bindings,
+        value_of,
+        (0..).map(|index| {
+            Name::Formatted(
+                [
+                    ("e".to_owned(), Script::Normal),
+                    (index.to_string(), Script::Subscript),
+                ]
+                .into(),
+            )
+        }),
+    )
+}
+
+/// `cells` with no name of their own, each called the next of `names` that
+/// none of the named ones uses.
+fn computed_names<'a>(
+    cells: &[CellId],
+    value_of: &dyn Fn(CellId) -> Option<&'a Value>,
+    names: impl Iterator<Item = Name<'static>>,
+) -> std::collections::BTreeMap<CellId, Name<'static>> {
+    let named: Vec<_> = cells
+        .iter()
+        .filter_map(|cell| name::of_cell(value_of, *cell))
+        .map(|name| name.spelling().into_owned())
+        .collect();
+    let mut free = names.filter(|name| !named.contains(&name.spelling().into_owned()));
+    let mut computed = std::collections::BTreeMap::new();
+    for cell in cells {
+        if name::of_cell(value_of, *cell).is_none() && !computed.contains_key(cell) {
+            computed.insert(*cell, free.next().expect("names never run out"));
+        }
+    }
+    computed
+}
+
+/// The `index`th of a…z, aa…az, ba…, as a spreadsheet's columns go.
+fn letters(index: usize) -> String {
+    let mut digits = Vec::new();
+    let mut rest = index + 1;
+    while rest > 0 {
+        rest -= 1;
+        digits.push(b'a' + (rest % 26) as u8);
+        rest /= 26;
+    }
+    digits
+        .iter()
+        .rev()
+        .map(|digit| char::from(*digit))
+        .collect()
+}
+
 pub mod vocabulary {
     use gid::CellId;
 
     /// Source whose contents belong to the Grap domain. This is an
     /// ordinary field and requests no evaluation.
     pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
+
+    /// The kinds of the Grap library's own records, as their `isa` names
+    /// them.
+    pub mod kind {
+        use gid::CellId;
+
+        /// An expression shown with its result: `{isa: evaluation,
+        /// expression}`.
+        pub const EVALUATION: CellId = CellId::from_u128(0x549dd85073474d6296d773c8df9c0526);
+    }
 }
 
-/// A named cell as a reference, otherwise leave its definition visible.
-/// Contextual projections use this for expression and callable references.
-fn shallow_cell<W: Host>(
+/// `expression` shown with its result.
+#[cfg(test)]
+pub fn evaluation(expression: Value) -> Value {
+    ::grap::isa::record(
+        vocabulary::kind::EVALUATION,
+        [(::grap::vocabulary::EXPRESSION, expression)],
+    )
+}
+
+/// A parameter is a cell, with no name of its own called what its list
+/// calls it, among `computed`. An empty slot offers only a new one, named as
+/// typed, or with nothing typed, named next.
+fn parameter<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    computed: &std::collections::BTreeMap<CellId, Name<'static>>,
 ) -> Option<Layout<W>> {
-    shallow_cell_with(input, |label| label)
-}
-
-pub(crate) fn shallow_cell_with<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    decorate: impl FnOnce(Layout<W>) -> Layout<W>,
-) -> Option<Layout<W>> {
-    let cell = input.value?.as_cell()?;
-    let name = input.env.name(cell)?;
-    let site = input.site();
-    Some(crate::display::stop(activatable(
-        decorate(crate::display::named(&name, Face::Name)),
-        &site,
-    )))
-}
-
-/// A parameter is a cell. An empty slot offers only a new one, named as
-/// typed.
-fn parameter<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     match input.value {
-        Some(_) => declaration_cell(input),
+        Some(value) => declaration_cell(
+            input,
+            value
+                .as_cell()
+                .and_then(|cell| computed.get(&cell))
+                .map(|name| name.spelling().into_owned()),
+        ),
         None => Some(picker(Picker::new(
             CompletionKind::Value,
             ranked(std::rc::Rc::new(|request| {
-                let spelling = request.query.trim().to_owned();
-                Some(
-                    (!spelling.is_empty())
-                        .then(|| {
-                            Completion::new(
-                                crate::display::CompletionText::Literal(spelling.clone()),
-                                move |session| {
-                                    if let Some(picking) = session.pending() {
-                                        picking.commit_new_cell(
-                                            name::record(&spelling, []),
-                                            Some(crate::selection::at(
-                                                &[],
-                                                crate::selection::payload::edge(),
-                                            )),
-                                        );
-                                    }
-                                },
-                            )
-                            .with_detail("new parameter")
-                        })
-                        .into_iter()
-                        .collect(),
-                )
+                Some(vec![new_parameter(request.query.trim().to_owned())])
             })),
         ))),
     }
 }
 
-fn declaration_cell<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Layout<W>> {
-    let cell = input.value?.as_cell()?;
-    let definition = input.env.resolve(cell)?;
-    Some(group(selectable_bracket(
-        Delim::Paren,
-        descend_local(
-            [Step::Follow(definition.resolution)],
-            crate::display::partial(declaration_name),
-            &input.default_projection,
-        ),
-    )))
+/// A new parameter named `spelling`, then selected; with no spelling, it
+/// has no name, and its name is picked next.
+fn new_parameter(spelling: String) -> Completion {
+    let named = !spelling.is_empty();
+    let then = if named {
+        crate::selection::at(&[], crate::selection::payload::edge())
+    } else {
+        crate::selection::pending_at(&[Step::Follow, Step::Key(name::vocabulary::NAME)])
+    };
+    let display = if named {
+        spelling.clone()
+    } else {
+        "new parameter".to_owned()
+    };
+    let offer = Completion::new(display, move |session| {
+        if let Some(picking) = session.pending() {
+            let definition = if spelling.is_empty() {
+                Value::record([])
+            } else {
+                name::record(&spelling, [])
+            };
+            picking.commit_new_cell(definition, Some(then.clone()));
+        }
+    });
+    if named {
+        offer.with_detail("new parameter")
+    } else {
+        offer
+    }
 }
 
-fn declaration_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
-    input.pending.is_none().then_some(())?;
-    name::read(input.value?)?;
-    Some(descend_local(
-        [Step::Key(name::vocabulary::NAME)],
-        name::projection(),
-        &input.default_projection,
+/// A declaration's cell in parentheses, one thing with its definition, its
+/// name a stop inside editable there; an empty name shows `computed` grey in
+/// its editor until a name is typed.
+pub(crate) fn declaration_cell<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    computed: Option<String>,
+) -> Option<Layout<W>> {
+    input.value?.as_cell()?;
+    // A cell with no definition yet gets one in the document, where typing
+    // its name writes it.
+    Some(selectable_bracket(
+        Delim::Paren,
+        crate::display::part(
+            [Step::Follow],
+            Some(crate::display::first(
+                input,
+                crate::display::runtime_partial(move |input| {
+                    declaration_name(input, computed.as_deref())
+                }),
+            )),
+            None,
+        ),
+    ))
+}
+
+/// A declaration's definition as its name, there or not; its other fields
+/// follow. The definition is part of its cell's stop, the name a stop
+/// inside. A name that isn't text declines.
+fn declaration_name<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    computed: Option<&str>,
+) -> Option<Layout<W>> {
+    match input.value {
+        None => Some(definition_hole()),
+        Some(_) => record_form(input, [name::vocabulary::NAME], |[spelled]| {
+            if let Some(spelled) = spelled {
+                crate::libraries::text::read(spelled.as_value())?;
+            }
+            Some(descend(
+                [Step::Key(name::vocabulary::NAME)],
+                Some(crate::display::first(
+                    input,
+                    name::projection(computed.map(str::to_owned)),
+                )),
+                None,
+            ))
+        }),
+    }
+}
+
+/// Where a declaration has no definition: a hole, unlike a definition with
+/// no name, which shows its computed name grey. Its one offer is the name
+/// typed, which defines the declaration; with nothing typed, the name is
+/// picked next.
+fn definition_hole<W: Host>() -> Layout<W> {
+    picker(Picker::new(
+        CompletionKind::Value,
+        ranked(std::rc::Rc::new(|request| {
+            let spelling = request.query.trim().to_owned();
+            let named = !spelling.is_empty();
+            let display = if named {
+                spelling.clone()
+            } else {
+                "no name".to_owned()
+            };
+            Some(vec![
+                Completion::new(display, move |session| {
+                    if let Some(picking) = session.pending() {
+                        let (definition, then) = if named {
+                            (
+                                name::record(&spelling, []),
+                                crate::selection::at(
+                                    &[Step::Key(name::vocabulary::NAME)],
+                                    crate::selection::payload::edge(),
+                                ),
+                            )
+                        } else {
+                            (
+                                Value::record([]),
+                                crate::selection::pending_at(&[Step::Key(name::vocabulary::NAME)]),
+                            )
+                        };
+                        picking.commit(definition, Some(then));
+                    }
+                })
+                .with_detail("name"),
+            ])
+        })),
     ))
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
-        // Naming an anonymous lambda is clickable, not an arrow-navigation
-        // stop; selected, it's an empty name to type into.
-        None if input.selection.is_some() => name::hole(),
+        // The missing name's place; selected, it's an empty name to type
+        // into.
+        None if input.selection.is_some() => crate::display::line_edit(name::line(None)?),
         None => {
             let site = input.site();
-            activatable(faced("λ", Face::Name), &site)
+            selectable(faced("λ", Face::Name), &site)
         }
     })
 }
 
-pub fn shallow_path<W: Host>(
+pub fn shallow_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
     steps: impl AsRef<[Step]> + 'static,
-    default: &Partial<W>,
 ) -> Layout<W> {
-    descend_local(
+    descend(
         steps,
-        crate::display::runtime_partial(shallow_cell),
-        default,
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(name::shallow_cell),
+        )),
+        None,
     )
 }
 
 /// A named direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
-pub(crate) fn expression_path<W: Host>(
+pub(crate) fn expression_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
     steps: impl AsRef<[Step]> + 'static,
-    default: &Partial<W>,
 ) -> Layout<W> {
-    descend_local(steps, crate::display::runtime_partial(expression), default)
+    descend(
+        steps,
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(expression),
+        )),
+        None,
+    )
 }
 
 /// A record naming a Grap program: the program its `grap` field names is
@@ -168,36 +379,33 @@ fn program_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     input.value?.field(vocabulary::GRAP)?;
-    crate::display::structure::record_layout(input, |key| {
-        (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program))
-    })
+    crate::display::structure::Fields::default()
+        .child(|key| (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program)))
+        .record(input)
 }
 
 /// The program's cell keeps its parentheses; what fills it is an expression.
 fn program<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let cell = input.value?.as_cell()?;
-    let source = input
-        .env
-        .resolve(cell)
-        .map_or(gid::Resolution::Document, |definition| {
-            definition.resolution
-        });
-    Some(group(selectable_bracket(
+    input.value?.as_cell()?;
+    Some(selectable_bracket(
         Delim::Paren,
-        expression_path([Step::Follow(source)], &input.default_projection),
-    )))
+        expression_path(input, [Step::Follow]),
+    ))
 }
 
 /// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
-pub(crate) fn declaration_path<W: Host>(
+pub(crate) fn declaration_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
     steps: impl AsRef<[Step]> + 'static,
-    default: &Partial<W>,
 ) -> Layout<W> {
-    descend_local(
+    descend(
         steps,
-        crate::display::runtime_partial(declaration_cell),
-        default,
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(|input| declaration_cell(input, None)),
+        )),
+        None,
     )
 }
 
@@ -223,7 +431,7 @@ fn parameters_past<'a>(
         Some(cell) => {
             (!followed.contains(&cell)).then_some(())?;
             let definition = resolve(cell)?;
-            if definition.native {
+            if is_foreign(definition.value) {
                 definition
                     .value
                     .as_record()?
@@ -241,6 +449,11 @@ fn parameters_past<'a>(
             }
         }
     }
+}
+
+/// Whether `value` is a foreign function, which lists its own parameters.
+fn is_foreign(value: &Value) -> bool {
+    value.as_record().and_then(::grap::isa::of) == Some(kind::FOREIGN_FUNCTION)
 }
 
 /// Construct a call and focus its first declared parameter, when known.
@@ -261,6 +474,20 @@ fn call_completion<'a>(
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
+/// A call, drawn as its function provides, else as a call.
+fn call_projection<W: Host>() -> Partial<W> {
+    let call = crate::display::fold::folding(crate::display::runtime_partial(call_display));
+    crate::display::runtime_partial(move |input| {
+        input
+            .value?
+            .field(FUNCTION)
+            .and_then(|function| function.as_cell())
+            .and_then(|function| input.projection_for(function))
+            .and_then(|projection| projection(input))
+            .or_else(|| call(input))
+    })
+}
+
 fn call_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -272,102 +499,158 @@ pub(crate) fn call_with_function<W: Host>(
     function_projection: Option<Partial<W>>,
 ) -> Option<Layout<W>> {
     // A call's arguments are its parameters, so it takes no new field from
-    // Enter; one being added some other way shows in the plain record view,
-    // as for the other compact forms.
+    // Enter; one being added some other way shows in the plain record view.
     (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
-    let function = fields.field(FUNCTION)?;
-    let parameters = function_parameters(&function, &|cell| input.env.resolve(cell));
-    let mut parameter_positions = std::collections::BTreeMap::new();
-    for (position, parameter) in parameters.iter().flatten().enumerate() {
-        parameter_positions.entry(*parameter).or_insert(position);
-    }
-    let argument = |field| {
-        let site = input.site().below(&[Step::Key(field)]);
-        RecordField {
-            label: crate::display::field_label_at(
-                field_label(input.env, field),
-                &site,
-                field,
-                true,
-            ),
-            value: expression_path([Step::Key(field)], &input.default_projection),
-        }
-    };
-    let trailing = match &input.pending {
-        Some(Pending::Child(Step::Key(field)))
-            if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
-        {
-            vec![argument(*field)]
-        }
-        _ => Vec::new(),
-    };
-    let function = descend_local(
+    // It's a call while its function is still to be picked.
+    (fields.kind() == Some(kind::CALL)).then_some(())?;
+    let parameters = fields
+        .field(FUNCTION)
+        .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)))
+        .unwrap_or_default();
+    let function = descend(
         [Step::Key(FUNCTION)],
-        function_projection.unwrap_or_else(|| crate::display::runtime_partial(shallow_cell)),
-        &input.default_projection,
+        Some(crate::display::first(
+            input,
+            function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
+        )),
+        None,
     );
-    let arguments = record_fragment_with(
-        fields
-            .record_keys()?
-            .into_iter()
-            .filter(|field| *field != FUNCTION)
-            .map(|field| (field, ()))
-            .chain(
-                parameter_positions
-                    .keys()
-                    .filter(|field| !fields.contains_field(**field))
-                    .map(|field| (*field, ())),
+    // Its arguments are its function's parameters, in their order, each a
+    // slot until it's given, then any others.
+    Some(
+        crate::display::structure::Fields::default()
+            .leading(parameters.clone())
+            .slots(parameters)
+            .child(|_| Some(crate::display::runtime_partial(expression)))
+            .shown_empty()
+            .after(
+                input,
+                |key| key == FUNCTION || key == ::grap::isa::ISA,
+                function,
             ),
-        |left, right| match (
-            parameter_positions.get(left),
-            parameter_positions.get(right),
-        ) {
-            (Some(left), Some(right)) => left.cmp(right),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => field_order(input.env, left, right),
-        },
-        |field, _| argument(field),
-        trailing,
-    );
-    Some(group_hug(function, arguments, 0.0))
+    )
 }
 
 /// A stored lambda exposes its parameter declarations deeply and
-/// projects its body as an expression.
+/// projects its body as an expression; its name and body may be missing,
+/// drawn as holes.
 fn lambda_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?;
-    matches!(
-        &input.pending,
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY)))
+    crate::display::structure::kind_form(
+        input,
+        kind::LAMBDA,
+        [name::vocabulary::NAME, PARAMS, BODY],
+        |[_, params, _]| {
+            let params = parameters(input, &params?)?;
+            let body_site = input.site().below(&[Step::Key(BODY)]);
+            let lambda = descend(
+                [Step::Key(name::vocabulary::NAME)],
+                Some(crate::display::first(
+                    input,
+                    crate::display::partial(lambda_name),
+                )),
+                None,
+            );
+            let arrow = selectable(crate::display::arrow(), &body_site);
+            let head = row(3.0, [lambda, params, arrow]);
+            Some(hug(head, expression_path(input, [Step::Key(BODY)]), 6.0))
+        },
     )
-    .then_some(())?;
-    let params = fields.field(PARAMS)?;
-    params
+}
+
+/// A function's `params`, each a parameter cell, as a lambda's head lists
+/// them.
+fn parameters<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    params: &::grap::RuntimeValue,
+) -> Option<Layout<W>> {
+    let cells = params
         .list_values()?
-        .all(|param| param.as_cell().is_some())
-        .then_some(())?;
-    let params = descend_local(
+        .map(|param| param.as_cell())
+        .collect::<Option<Vec<_>>>()?;
+    let computed = unnamed_parameters(&cells, &|cell| {
+        input.env.resolve(cell).map(|definition| definition.value)
+    });
+    Some(descend(
         [Step::Key(PARAMS)],
-        crate::display::structure::list(Some(crate::display::runtime_partial(parameter))),
-        &input.default_projection,
-    );
-    let body_site = input.site().below(&[Step::Key(BODY)]);
-    let lambda = descend_local(
-        [Step::Key(name::vocabulary::NAME)],
-        crate::display::partial(lambda_name),
-        &input.default_projection,
-    );
-    let arrow = activatable(crate::display::arrow(), &body_site);
-    let head = row(3.0, [lambda, params, arrow]);
-    Some(group_hug(
-        head,
-        expression_path([Step::Key(BODY)], &input.default_projection),
-        6.0,
+        Some(crate::display::first(
+            input,
+            crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
+                parameter(input, &computed)
+            }))),
+        )),
+        None,
     ))
+}
+
+/// A foreign function reads as a lambda's head does, with no body to show:
+/// its implementation's cell, by its name, which its own `name` gives where
+/// it's that cell's definition, then its parameters.
+fn foreign_function_display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    crate::display::structure::kind_form(
+        input,
+        kind::FOREIGN_FUNCTION,
+        [IMPLEMENTATION, name::vocabulary::NAME, PARAMS],
+        |[implementation, _, params]| {
+            implementation?.as_cell()?;
+            let implementation = shallow_path(input, [Step::Key(IMPLEMENTATION)]);
+            let params = match params {
+                Some(params) => Some(parameters(input, &params)?),
+                None => None,
+            };
+            Some(row(3.0, std::iter::once(implementation).chain(params)))
+        },
+    )
+}
+
+/// A closure reads as the record it is: its lambda, drawn as a lambda is,
+/// then the environment it closes over, then where its body came from, as a
+/// record shut until it's opened.
+fn closure_display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    (input.value?.kind() == Some(kind::CLOSURE)).then_some(())?;
+    crate::display::structure::Fields::default()
+        .leading([::grap::isa::ISA, LAMBDA, ENVIRONMENT, BODY_ORIGIN])
+        .child(|key| match key {
+            ENVIRONMENT => Some(crate::display::runtime_partial(environment)),
+            BODY_ORIGIN => Some(crate::display::runtime_partial(|input| {
+                let open = (input.default_projection)(input)
+                    .or_else(|| crate::display::structure::Fields::default().record(input))?;
+                Some(crate::display::fold::foldable(
+                    Delim::Brace,
+                    None,
+                    |_| true,
+                    open,
+                ))
+            })),
+            _ => None,
+        })
+        .record(input)
+}
+
+/// A closure's environment, its bindings with no name of their own read as
+/// it calls them, as its lambda's references to them do.
+fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    let bindings = input.value?.record_keys()?;
+    let computed = unnamed_bindings(&bindings, &|cell| {
+        input.env.resolve(cell).map(|definition| definition.value)
+    });
+    let open = crate::display::structure::Fields::default()
+        .label(move |key| {
+            computed
+                .get(&key)
+                .map(|name| crate::display::named(name, Face::Dim))
+        })
+        .record(input)?;
+    Some(match bindings.is_empty() {
+        true => open,
+        false => crate::display::fold::foldable(Delim::Brace, None, |_| false, open),
+    })
 }
 
 /// A named expression, not a lexical binding. The name slot is always
@@ -375,60 +658,60 @@ fn lambda_display<W: Host>(
 fn value_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?;
-    fields.field(VALUE)?;
-    matches!(
-        &input.pending,
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | VALUE)))
+    crate::display::structure::kind_form(
+        input,
+        kind::VALUE_WRAPPER,
+        [name::vocabulary::NAME, VALUE],
+        |_| {
+            let name = descend(
+                [Step::Key(name::vocabulary::NAME)],
+                Some(crate::display::first(
+                    input,
+                    crate::display::partial(|input| {
+                        name::editor(input.value?).map(crate::display::line_edit)
+                    }),
+                )),
+                None,
+            );
+            let site = input.site().below(&[Step::Key(VALUE)]);
+            Some(hug(
+                row(3.0, [name, selectable(dim("="), &site)]),
+                expression_path(input, [Step::Key(VALUE)]),
+                6.0,
+            ))
+        },
     )
-    .then_some(())?;
-    let name = descend_local(
-        [Step::Key(name::vocabulary::NAME)],
-        crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
-        &input.default_projection,
-    );
-    let site = input.site().below(&[Step::Key(VALUE)]);
-    Some(group_hug(
-        row(3.0, [name, activatable(dim("="), &site)]),
-        expression_path([Step::Key(VALUE)], &input.default_projection),
-        6.0,
-    ))
 }
 
-/// Foreignness is an evaluator implementation detail. In source, an
-/// FFI callable projects exactly like the cell it names.
-fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let ffi = input.value?.field(FFI)?;
-    ffi.as_cell()?;
-    Some(group(shallow_path(
-        [Step::Key(FFI)],
-        &input.default_projection,
-    )))
-}
-
-fn evaluate_display<W: Host>(
+/// An expression and its result, beside it when they fit, else below it.
+fn evaluation_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let expression = input.value?.field(EVALUATE)?;
-    let result =
-        input
-            .env
-            .evaluate_runtime(&expression, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
-    let expression = shared(expression_path(
-        [Step::Key(EVALUATE)],
-        &input.default_projection,
-    ));
-    let shaft_site = input.site();
-    let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
-    let result = shared(crate::libraries::presentation::result_layout(&result));
-    Some(group(alternatives([
-        row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
-        col(
-            0,
-            2.0,
-            [row(6.0, [expression, shaft]), indent(20.0, result)],
-        ),
-    ])))
+    use ::grap::vocabulary::EXPRESSION;
+    crate::display::structure::kind_form(
+        input,
+        vocabulary::kind::EVALUATION,
+        [EXPRESSION],
+        |[expression]| {
+            let result = input.env.evaluate_runtime(
+                &expression?,
+                crate::sources::DEFAULT_FUEL,
+                &[Step::Key(EXPRESSION)],
+            );
+            let expression = shared(expression_path(input, [Step::Key(EXPRESSION)]));
+            let shaft_site = input.site();
+            let shaft = shared(selectable(crate::display::arrow(), &shaft_site));
+            let result = shared(crate::libraries::presentation::result_layout(&result));
+            Some(alternatives([
+                row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
+                col(
+                    0,
+                    2.0,
+                    [row(6.0, [expression, shaft]), indent(20.0, result)],
+                ),
+            ]))
+        },
+    )
 }
 
 fn evaluate_foreign(
@@ -436,11 +719,11 @@ fn evaluate_foreign(
     call: &Expression,
     calling_environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
+    let Some(expression) = call.field(::grap::vocabulary::EXPRESSION) else {
+        return Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
     };
-    let Some(environment) = context.field(call, ::grap::vocabulary::ENVIRONMENT) else {
-        return Ok(context.missing_runtime_argument(::grap::vocabulary::ENVIRONMENT));
+    let Some(environment) = call.field(::grap::vocabulary::ENVIRONMENT) else {
+        return Ok(call.missing_runtime_argument(::grap::vocabulary::ENVIRONMENT));
     };
     let environment = context.eval_to_value(environment, calling_environment)?;
     match context.environment(&environment) {
@@ -454,7 +737,7 @@ fn evaluate_foreign(
     }
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
         ForeignFunction::new(evaluate_foreign)
@@ -462,13 +745,13 @@ fn functions() -> ForeignFunctions {
                 ::grap::vocabulary::EXPRESSION,
                 ::grap::vocabulary::ENVIRONMENT,
             ])
-            .tracked(),
+            .cacheable(),
     )
 }
 
 pub fn library<W: Host>() -> Library<W> {
     let (control_names, control_functions, control) = control::contribution();
-    let (number_names, number_functions, numbers) = numbers::contribution();
+    let (number_names, number_functions, operators, numbers) = numbers::contribution();
     name::library_named(
         ID,
         "grap",
@@ -477,19 +760,27 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::vocabulary::PARAMS, "params"),
             (::grap::vocabulary::BODY, "body"),
             (::grap::vocabulary::VALUE, "value"),
-            (::grap::vocabulary::CLOSURE, "closure"),
+            (::grap::vocabulary::LAMBDA, "lambda"),
+            (kind::CALL, "call"),
+            (kind::LAMBDA, "lambda"),
+            (kind::CLOSURE, "closure"),
+            (kind::FOREIGN_FUNCTION, "foreign function"),
+            (IMPLEMENTATION, "implementation"),
+            (kind::VALUE_WRAPPER, "value wrapper"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
-            (::grap::vocabulary::FFI, "ffi"),
             (::grap::vocabulary::EVALUATE, "evaluate"),
+            (vocabulary::kind::EVALUATION, "evaluation"),
             (::grap::vocabulary::EXPRESSION, "expression"),
             (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
             (::grap::source::vocabulary::INPUT, "input source"),
-            (::grap::source::vocabulary::STORED, "document source"),
+            (::grap::source::vocabulary::ROOT, "root source"),
             (::grap::source::vocabulary::CELL, "source cell"),
             (::grap::source::vocabulary::PATH, "source path"),
-            (::grap::source::vocabulary::SOURCE, "definition source"),
             (vocabulary::GRAP, "grap"),
+            (notebook::vocabulary::kind::NOTEBOOK, "notebook"),
+            (notebook::vocabulary::ENTRIES, "entries"),
             (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
+            (::grap::absent::DEPTH_EXHAUSTED, "nesting too deep"),
             (memo::CYCLE, "computation cycle"),
             (memo::INPUTS_CHANGED, "inputs changed during computation"),
             (
@@ -497,16 +788,12 @@ pub fn library<W: Host>() -> Library<W> {
                 "computation belongs to another runtime",
             ),
             (memo::CANCELLED, "computation cancelled"),
-            (
-                ::grap::absent::EFFECTFUL_DECLINE,
-                "declined after an effect",
-            ),
             (::grap::absent::MISSING_CELL, "missing cell"),
-            (::grap::absent::CELL_CYCLE, "cell cycle"),
             (::grap::absent::MALFORMED_LAMBDA, "malformed lambda"),
             (::grap::absent::INVALID_PARAMETER, "invalid parameter"),
             (::grap::absent::NOT_CALLABLE, "not callable"),
             (::grap::absent::MISSING_ARGUMENT, "missing argument"),
+            (::grap::absent::MISSING_FIELD, "missing field"),
             (::grap::absent::INVALID_ENVIRONMENT, "invalid environment"),
         ]
         .into_iter()
@@ -515,75 +802,100 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(number_names),
         functions().merge(control_functions).merge(number_functions),
     )
+    // Grap's kinds draw as they provide, a call as its function does, else
+    // as a call: control's forms and the operators provide theirs.
+    .with_projections_for(
+        [
+            (kind::CALL, call_projection()),
+            (
+                kind::LAMBDA,
+                crate::display::runtime_partial(lambda_display),
+            ),
+            (
+                kind::CLOSURE,
+                crate::display::runtime_partial(closure_display),
+            ),
+            (
+                kind::FOREIGN_FUNCTION,
+                crate::display::runtime_partial(foreign_function_display),
+            ),
+            (
+                kind::VALUE_WRAPPER,
+                crate::display::runtime_partial(value_display),
+            ),
+            (
+                vocabulary::kind::EVALUATION,
+                crate::display::runtime_partial(evaluation_display),
+            ),
+            (
+                notebook::vocabulary::kind::NOTEBOOK,
+                crate::display::runtime_partial(notebook::display),
+            ),
+        ]
+        .into_iter()
+        .chain(control)
+        .chain(operators),
+    )
     .with_projection(
-        // Calls, lambdas, and value wrappers follow evaluator precedence,
-        // but ordinary partial failures still try the next projection.
-        // Control and arithmetic read as themselves before calls in
-        // general, and a number takes its operators as typing.
+        // A number takes its operators as typing.
         crate::display::compose_partials([
-            control,
             numbers,
-            crate::display::runtime_partial(evaluate_display),
-            crate::display::fold::folding(crate::display::runtime_partial(call_display)),
-            crate::display::runtime_partial(lambda_display),
-            crate::display::runtime_partial(value_display),
-            crate::display::runtime_partial(ffi_display),
             crate::display::runtime_partial(program_display),
         ]),
     )
     .with_completions(completions)
 }
 
+/// An empty document can start as a program in a pane, or as a notebook.
+/// Grap's other offers are its slots' own.
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
-    use crate::display::CompletionScope;
-    (request.kind == CompletionKind::Value).then_some(())?;
-    match request.scope {
-        // An empty document can start as a program in a pane.
-        CompletionScope::Start => Some(vec![new_program()]),
-        CompletionScope::Everything => Some(
-            std::iter::once(
-                crate::libraries::completion::insert(
-                    "new lambda",
-                    Value::record([(PARAMS, Value::list([]))]),
-                    Some(crate::selection::at(
-                        &[Step::Key(BODY)],
-                        crate::selection::payload::edge(),
-                    )),
-                )
-                .with_aliases(["lambda", "λ"])
-                .with_detail(ID),
-            )
-            .chain(
-                (!request.query.trim().is_empty())
-                    .then(|| call_completions(request))
-                    .into_iter()
-                    .flatten(),
-            )
-            .collect(),
-        ),
-        CompletionScope::Literal => None,
-    }
+    (request.kind == CompletionKind::Value
+        && request.scope == crate::display::CompletionScope::Start)
+        .then(|| vec![new_program(), notebook::starter()])
+}
+
+/// What Grap builds in a slot that names no function: a lambda, its first
+/// parameter picked next, and a call, its function picked next: a binding,
+/// a function, or anything else that evaluates to one.
+fn constructs() -> [Completion; 2] {
+    [
+        crate::libraries::completion::insert(
+            "new lambda",
+            ::grap::isa::record(kind::LAMBDA, [(PARAMS, Value::list([]))]),
+            Some(crate::selection::pending_at(&[
+                Step::Key(PARAMS),
+                Step::Element(gid::position::between(None, None).expect("an empty list has room")),
+            ])),
+        )
+        .with_aliases(["lambda", "λ"])
+        .with_detail(ID),
+        crate::libraries::completion::insert(
+            "new call",
+            ::grap::isa::record(kind::CALL, []),
+            Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
+        )
+        .with_detail(ID),
+    ]
 }
 
 fn new_program() -> Completion {
     crate::libraries::completion::starter(vocabulary::GRAP, |cell| {
-        Value::record([(
-            crate::libraries::presentation::vocabulary::RENDER,
-            cell.into(),
-        )])
+        crate::libraries::presentation::render(cell.into())
     })
     .with_detail(ID)
 }
 
-/// Where a call offer's function comes from: the document, or a library by name.
-fn call_detail(
+/// What an offer is, `call` or `function`, and where its function comes
+/// from: the document, or a library by name.
+fn function_detail(
     request: &crate::display::CompletionRequest<'_>,
-    resolution: gid::Resolution,
+    what: &str,
+    library: Option<CellId>,
 ) -> String {
-    match resolution {
-        gid::Resolution::Document => "call".to_owned(),
-        gid::Resolution::Library(library) => format!(
-            "call · {}",
+    match library {
+        None => what.to_owned(),
+        Some(library) => format!(
+            "{what} · {}",
             crate::identity::name_or_short_id(
                 (request.resolve)(library).and_then(|definition| name::read(definition.value)),
                 library,
@@ -592,39 +904,75 @@ fn call_detail(
     }
 }
 
-fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Completion> {
-    if matches!(request.path.last(), Some(Step::Key(field)) if *field == FUNCTION || *field == FFI)
-    {
-        Vec::new()
-    } else {
-        let mut offers: Vec<_> = (request.cells)()
-            .into_iter()
-            .filter_map(|cell| {
-                let definition = (request.resolve)(cell)?;
-                let name = name::of_cell(
-                    &|cell| (request.resolve)(cell).map(|definition| definition.value),
-                    cell,
-                )?
-                .spelling();
-                (definition.native
-                    || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
-                .then(|| {
-                    let offer = call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(call_detail(request, definition.resolution));
-                    (
-                        matches!(definition.resolution, gid::Resolution::Library(_)),
-                        name,
-                        offer,
-                    )
-                })
+/// The functions in reach by name, the document's before the libraries'. A
+/// call's function slot offers each as itself; any other slot, a call of
+/// it. Quote, offered as its mark, and the cells `bound` says are bindings,
+/// offered by name already, are left out.
+fn function_offers(
+    request: &crate::display::CompletionRequest<'_>,
+    bound: &dyn Fn(CellId) -> bool,
+) -> Vec<Completion> {
+    let as_function = match request.path.last() {
+        Some(Step::Key(field)) => *field == FUNCTION,
+        _ => false,
+    };
+    let mut offers: Vec<_> = (request.cells)()
+        .into_iter()
+        .filter(|&cell| cell != control::vocabulary::QUOTE && !bound(cell))
+        .filter_map(|cell| {
+            let definition = (request.resolve)(cell)?;
+            let name = name::of_cell(
+                &|cell| (request.resolve)(cell).map(|definition| definition.value),
+                cell,
+            )?
+            .spelling();
+            (is_foreign(definition.value)
+                || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
+            .then(|| {
+                let offer = if as_function {
+                    function_completion(cell, request.resolve).with_detail(function_detail(
+                        request,
+                        "function",
+                        definition.library,
+                    ))
+                } else {
+                    call_completion(cell.into(), cell, request.resolve)
+                        .with_detail(function_detail(request, "call", definition.library))
+                };
+                (definition.library.is_some(), name, offer)
             })
-            .collect();
-        offers.sort_by_cached_key(|(external, name, _)| {
-            (*external, name.to_lowercase(), name.clone())
-        });
-        offers.into_iter().map(|(_, _, offer)| offer).collect()
-    }
+        })
+        .collect();
+    offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), name.clone()));
+    offers.into_iter().map(|(_, _, offer)| offer).collect()
+}
+
+/// `function` picked for the call whose function slot this is: the call's
+/// first declared parameter is picked next, as a call picked whole opens it.
+fn function_completion<'a>(
+    function: CellId,
+    resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+) -> Completion {
+    let first = function_parameters(&Value::from(function).into(), resolve)
+        .and_then(|parameters| parameters.first().copied());
+    let then = match first {
+        Some(parameter) => crate::selection::pending_at(&[Step::Key(parameter)]),
+        None => crate::selection::at(&[], crate::selection::payload::edge()),
+    };
+    // The call is where its function slot is.
+    let continuation: crate::site::Continuation = std::rc::Rc::new(move |read, slot, staged| {
+        slot.split_last()
+            .is_some_and(|(_, call)| then(read, call, staged))
+    });
+    crate::libraries::completion::insert(function, function.into(), Some(continuation))
+}
+
+/// What a Grap slot offers, for tests that read its list without a picker.
+#[cfg(test)]
+pub(crate) fn slot_offers() -> crate::display::CompletionProvider {
+    std::rc::Rc::new(suggestions::offers)
 }
 
 #[cfg(test)]
+#[path = "tests/grap/mod.rs"]
 mod tests;

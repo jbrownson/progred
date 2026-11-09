@@ -1,0 +1,595 @@
+//! Calls: closures, cell and foreign function calls, and prepared callables.
+
+use crate::environment::{CellIndex, CellIndices, Environment, binding_index};
+use crate::eval::{missing_cell, unbox};
+use crate::foreign::{
+    ForeignFunction, ForeignFunctions, ForeignImplementation, Prepare, Stage, implementation_cell,
+};
+use crate::lower::{OriginId, runtime_call};
+use crate::runtime::{Closure, RuntimeValue, RuntimeValueKind};
+use crate::{
+    Context, Expression, Halt, SourceOrigin, absent, arguments, isa, primitive, source, vocabulary,
+};
+use gid::{CellId, Value};
+use std::cell::RefCell;
+use std::rc::Rc;
+/// An evaluated callable retained in its compact runtime form. This
+/// lets a controlling FFI invoke the same Grap function repeatedly
+/// without reifying and reparsing a closure Value between calls.
+#[derive(Clone)]
+pub struct PreparedCallable {
+    pub(crate) value: RuntimeValue,
+    environment: Environment,
+}
+
+/// A call node's memory of its last callee: the parameters slice (held
+/// so its identity stays valid) and the argument expression this call
+/// supplies for each parameter, in declaration order.
+pub(crate) struct CallPlan {
+    params: Rc<[CellId]>,
+    arguments: Rc<[arguments::Argument]>,
+    /// The parameters' indices in `table`, the callee environment's, so a
+    /// call binds them without looking each one up.
+    table: CellIndices,
+    indices: Rc<[CellIndex]>,
+}
+
+pub(crate) struct PreparedCallTarget {
+    kind: PreparedCallTargetKind,
+    plan: RefCell<Option<CallPlan>>,
+    stages: RefCell<Option<(Prepare, Stage)>>,
+}
+
+enum PreparedCallTargetKind {
+    Foreign(ForeignFunction<'static>),
+    /// A primitive with this call site's operands, run directly.
+    Primitive(primitive::Primitive, primitive::Operands),
+    Value(Expression),
+    Absent(RuntimeValue),
+}
+
+impl<'a> Context<'a> {
+    pub fn closure(
+        &self,
+        params: impl IntoIterator<Item = CellId>,
+        body: Expression,
+        environment: &Environment,
+    ) -> RuntimeValue {
+        let params: Rc<[CellId]> = params.into_iter().collect();
+        let fields = [
+            (isa::ISA, Value::from(vocabulary::kind::LAMBDA)),
+            (
+                vocabulary::PARAMS,
+                Value::list(params.iter().copied().map(Value::from)),
+            ),
+            (vocabulary::BODY, body.value().clone()),
+        ]
+        .into_iter()
+        .collect();
+        RuntimeValue::new(RuntimeValueKind::Closure(Closure {
+            fields,
+            params,
+            body,
+            environment: environment.clone(),
+        }))
+    }
+
+    pub fn closure_value(
+        &mut self,
+        params: impl IntoIterator<Item = CellId>,
+        body: Value,
+        environment: &Environment,
+    ) -> RuntimeValue {
+        let body = self.lower_unattributed_source(&body);
+        self.closure(params, body, environment)
+    }
+
+    pub(crate) fn call_cell(
+        &mut self,
+        cell: CellId,
+        call: &Expression,
+        environment: &Environment,
+        cache: Option<&RefCell<Option<Rc<PreparedCallTarget>>>>,
+    ) -> Result<RuntimeValue, Halt> {
+        self.burn()?;
+        let cached = cache.and_then(|cache| cache.borrow().clone());
+        let target = match cached {
+            Some(target) => target,
+            None => {
+                let kind = match self.host.definition(cell) {
+                    Some(value) => match self.own_implementation(cell, &value) {
+                        Some(Ok(implementation)) => match &implementation.primitive {
+                            Some(primitive) => PreparedCallTargetKind::Primitive(
+                                **primitive,
+                                primitive.operands(call),
+                            ),
+                            None => PreparedCallTargetKind::Foreign(implementation),
+                        },
+                        Some(Err(absent)) => PreparedCallTargetKind::Absent(absent),
+                        None => PreparedCallTargetKind::Value(self.lowered_cell(cell, &value)),
+                    },
+                    None => PreparedCallTargetKind::Absent(missing_cell(cell)),
+                };
+                let target = Rc::new(PreparedCallTarget {
+                    kind,
+                    plan: RefCell::new(None),
+                    stages: RefCell::new(None),
+                });
+                if let Some(cache) = cache {
+                    *cache.borrow_mut() = Some(target.clone());
+                }
+                target
+            }
+        };
+        match &target.kind {
+            PreparedCallTargetKind::Foreign(function) => {
+                self.call_foreign_staged(function, call, environment, Some(&target.stages))
+            }
+            PreparedCallTargetKind::Value(expression) => {
+                let callable = self.eval(expression.clone(), environment)?;
+                if callable.absent_reason().is_some() {
+                    Ok(callable)
+                } else {
+                    self.try_call_callable(
+                        callable.clone(),
+                        call,
+                        environment,
+                        &target.plan,
+                        &target.stages,
+                    )
+                    .unwrap_or_else(|| Ok(not_callable(&callable)))
+                }
+            }
+            PreparedCallTargetKind::Primitive(primitive, operands) => {
+                primitive.run(self, call, operands, environment)
+            }
+            PreparedCallTargetKind::Absent(absent) => Ok(absent.clone()),
+        }
+    }
+
+    /// What a call of `cell` runs when its definition, `value`, is a foreign
+    /// function implemented under `cell` itself: the host's code there, or
+    /// without any, why it can't be called. Its callers have already asked
+    /// the evaluation's own functions for `cell`.
+    fn own_implementation(
+        &self,
+        cell: CellId,
+        value: &Value,
+    ) -> Option<Result<ForeignFunction<'static>, RuntimeValue>> {
+        (implementation_cell(value)? == cell).then(|| {
+            self.host
+                .implementation(cell)
+                .ok_or_else(|| not_callable(&RuntimeValue::from(value.clone())))
+        })
+    }
+
+    pub(crate) fn try_call_callable(
+        &mut self,
+        callable: RuntimeValue,
+        call: &Expression,
+        environment: &Environment,
+        plan: &RefCell<Option<CallPlan>>,
+        stages: &RefCell<Option<(Prepare, Stage)>>,
+    ) -> Option<Result<RuntimeValue, Halt>> {
+        match &callable.0 {
+            RuntimeValueKind::Closure(closure) => {
+                Some(self.eval_grap_call(closure.clone(), call, environment, plan))
+            }
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => match self.runtime_closure(&callable) {
+                Some(closure) => Some(self.eval_grap_call(closure, call, environment, plan)),
+                None => callee_cell(&callable).map(|cell| {
+                    match self.foreign_target_cell(cell).cloned() {
+                        Some(foreign) => {
+                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
+                        }
+                        None => self.call_cell(cell, call, environment, None),
+                    }
+                }),
+            },
+            RuntimeValueKind::List(_) => None,
+        }
+    }
+
+    /// The evaluation's own function for `cell`, if it has one: the last
+    /// pushed that does.
+    pub(crate) fn foreign_target_cell(&self, cell: CellId) -> Option<&ForeignFunction<'a>> {
+        self.functions
+            .iter()
+            .rev()
+            .find_map(|functions| functions.get(cell))
+    }
+
+    fn call_foreign(
+        &mut self,
+        foreign: &ForeignFunction,
+        call: &Expression,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
+        self.call_foreign_staged(foreign, call, environment, None)
+    }
+
+    /// Call `foreign` with evaluated arguments, which it receives as the
+    /// fields of a call to `callable`.
+    fn apply_foreign(
+        &mut self,
+        foreign: &ForeignFunction,
+        callable: RuntimeValue,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
+        let call = self.lower_runtime_code(&RuntimeValue::record(
+            [
+                (
+                    isa::ISA,
+                    RuntimeValue::from(Value::from(vocabulary::kind::CALL)),
+                ),
+                (vocabulary::FUNCTION, callable),
+            ]
+            .into_iter()
+            .chain(arguments),
+        ));
+        self.call_foreign(foreign, &call, environment)
+    }
+
+    fn call_foreign_staged(
+        &mut self,
+        foreign: &ForeignFunction,
+        call: &Expression,
+        environment: &Environment,
+        stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
+    ) -> Result<RuntimeValue, Halt> {
+        if !foreign.cacheable {
+            self.host.uncacheable();
+        }
+        let value = match &foreign.implementation {
+            ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),
+            ForeignImplementation::Staged(prepare) => {
+                let cached = stages.and_then(|slot| {
+                    slot.borrow().as_ref().and_then(|(cached_prepare, stage)| {
+                        Rc::ptr_eq(cached_prepare, prepare).then(|| stage.clone())
+                    })
+                });
+                let stage = match cached {
+                    Some(stage) => stage,
+                    None => {
+                        let stage = prepare(call);
+                        if let Some(slot) = stages {
+                            *slot.borrow_mut() = Some((prepare.clone(), stage.clone()));
+                        }
+                        stage
+                    }
+                };
+                stage(self, environment)
+            }
+        }?;
+        Ok(unbox(value))
+    }
+
+    pub fn apply(
+        &mut self,
+        function: &RuntimeValue,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    ) -> Result<RuntimeValue, Halt> {
+        let callable = self.prepare_runtime_callable(function.clone(), &self.empty_environment());
+        self.call_prepared(&callable, arguments)
+    }
+
+    /// Run with more foreign functions, answering calls to their cells
+    /// before the evaluation's others and the host's while `run` runs.
+    pub fn with_foreign_functions<T>(
+        &mut self,
+        functions: ForeignFunctions<'a>,
+        run: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        self.functions.push(functions);
+        let result = run(self);
+        self.functions.pop();
+        result
+    }
+
+    pub fn prepare_callable(
+        &mut self,
+        expression: Expression,
+        environment: &Environment,
+    ) -> Result<PreparedCallable, Halt> {
+        let callable = self.eval(expression, environment)?;
+        Ok(self.prepare_runtime_callable(callable, environment))
+    }
+
+    /// Prepare an already evaluated callable without reifying its closure or
+    /// evaluating the value a second time. It owns its retained code and captures.
+    pub fn prepare_runtime_callable(
+        &mut self,
+        callable: RuntimeValue,
+        environment: &Environment,
+    ) -> PreparedCallable {
+        let callable = match &callable.0 {
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => self
+                .runtime_closure(&callable)
+                .map(|closure| RuntimeValue::new(RuntimeValueKind::Closure(closure)))
+                .unwrap_or(callable),
+            _ => callable,
+        };
+        PreparedCallable {
+            value: callable,
+            environment: environment.clone(),
+        }
+    }
+
+    pub fn call_prepared(
+        &mut self,
+        callable: &PreparedCallable,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    ) -> Result<RuntimeValue, Halt> {
+        self.burn()?;
+        self.burn()?;
+        let arguments: Vec<_> = arguments.into_iter().collect();
+        match &callable.value.0 {
+            RuntimeValueKind::Closure(closure) => {
+                self.call_closure(closure.clone(), &callable.value, &arguments)
+            }
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => {
+                let value = &callable.value;
+                match callee_cell(value) {
+                    Some(cell) => {
+                        let call = runtime_call(value.clone(), arguments);
+                        match self.foreign_target_cell(cell).cloned() {
+                            Some(foreign) => {
+                                self.call_foreign(&foreign, &call, &callable.environment)
+                            }
+                            None => self.call_cell(cell, &call, &callable.environment, None),
+                        }
+                    }
+                    None => Ok(not_callable(value)),
+                }
+            }
+            RuntimeValueKind::List(_) => Ok(not_callable(&callable.value)),
+        }
+    }
+
+    /// Apply runtime-held callable syntax. Grap parameters receive values;
+    /// foreign functions receive argument expressions to interpret. Use
+    /// `apply` when arguments must remain already-evaluated values for FFIs too.
+    pub fn apply_expression(
+        &mut self,
+        function: &RuntimeValue,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+    ) -> Result<RuntimeValue, Halt> {
+        // The call itself, as a call expression would charge it.
+        self.burn()?;
+        let arguments = arguments.into_iter().collect();
+        let environment = self.empty_environment();
+        if let Some(cell) = function.as_cell()
+            && self.foreign_target_cell(cell).is_none()
+        {
+            self.apply_cell(cell, function.clone(), arguments, &environment)
+        } else {
+            let callable = if function.as_cell().is_some() {
+                self.burn()?;
+                function.clone()
+            } else {
+                let function = match &function.0 {
+                    RuntimeValueKind::Data(value) => {
+                        self.lower_source(value, SourceOrigin::Input(Vec::new()))
+                    }
+                    _ => self.lower_runtime_code(function),
+                };
+                self.eval(function, &environment)?
+            };
+            match self.try_apply_callable(callable.clone(), &arguments, &environment) {
+                Some(result) => result,
+                None => Ok(not_callable(&callable)),
+            }
+        }
+    }
+
+    fn apply_cell(
+        &mut self,
+        cell: CellId,
+        callable: RuntimeValue,
+        arguments: Vec<(CellId, RuntimeValue)>,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
+        self.burn()?;
+        let Some(value) = self.host.definition(cell) else {
+            return Ok(missing_cell(cell));
+        };
+        match self.own_implementation(cell, &value) {
+            Some(Ok(implementation)) => {
+                self.apply_foreign(&implementation, callable, arguments, environment)
+            }
+            Some(Err(absent)) => Ok(absent),
+            None => {
+                // Lowered once per evaluation, as a call of the cell is.
+                let expression = self.lowered_cell(cell, &value);
+                let callable = self.eval(expression, environment)?;
+                if callable.absent_reason().is_some() {
+                    Ok(callable)
+                } else {
+                    self.try_apply_callable(callable.clone(), &arguments, environment)
+                        .unwrap_or_else(|| Ok(not_callable(&callable)))
+                }
+            }
+        }
+    }
+
+    /// Host calls bind argument values as a call expression binds its
+    /// evaluated arguments: one step each, with a `function` parameter
+    /// receiving the callee itself. A missing argument binds its absence
+    /// without a step, naming no call: a host call has no source.
+    fn call_closure(
+        &mut self,
+        closure: Closure,
+        callable: &RuntimeValue,
+        arguments: &[(CellId, RuntimeValue)],
+    ) -> Result<RuntimeValue, Halt> {
+        let bound = closure.params.iter().try_fold(
+            Vec::with_capacity(closure.params.len()),
+            |mut bound, &parameter| {
+                let value = if parameter == vocabulary::FUNCTION {
+                    Some(callable.clone())
+                } else {
+                    arguments
+                        .iter()
+                        .find(|(cell, _)| *cell == parameter)
+                        .map(|(_, value)| unbox(value.clone()))
+                };
+                bound.push((
+                    parameter,
+                    match value {
+                        Some(value) => {
+                            self.burn()?;
+                            value
+                        }
+                        None => absent::missing_argument(parameter, None).into(),
+                    },
+                ));
+                Ok::<_, Halt>(bound)
+            },
+        )?;
+        self.eval(closure.body, &closure.environment.extended_runtime(bound))
+    }
+
+    fn try_apply_callable(
+        &mut self,
+        callable: RuntimeValue,
+        arguments: &[(CellId, RuntimeValue)],
+        environment: &Environment,
+    ) -> Option<Result<RuntimeValue, Halt>> {
+        match self.runtime_closure(&callable) {
+            Some(closure) => Some(self.call_closure(closure, &callable, arguments)),
+            None => match callable.0 {
+                RuntimeValueKind::Data(_)
+                | RuntimeValueKind::Unboxed(_)
+                | RuntimeValueKind::Record(_) => callee_cell(&callable).map(|cell| {
+                    match self.foreign_target_cell(cell).cloned() {
+                        Some(foreign) => self.apply_foreign(
+                            &foreign,
+                            callable,
+                            arguments.iter().cloned(),
+                            environment,
+                        ),
+                        None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
+                    }
+                }),
+                RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+            },
+        }
+    }
+
+    fn eval_grap_call(
+        &mut self,
+        closure: Closure,
+        call: &Expression,
+        calling_environment: &Environment,
+        plan: &RefCell<Option<CallPlan>>,
+    ) -> Result<RuntimeValue, Halt> {
+        let cached = plan.borrow().as_ref().and_then(|cached| {
+            (Rc::ptr_eq(&cached.params, &closure.params)
+                && Rc::ptr_eq(&cached.table, &closure.environment.indices))
+            .then(|| (cached.arguments.clone(), cached.indices.clone()))
+        });
+        let (arguments_plan, indices) = match cached {
+            Some(cached) => cached,
+            None => {
+                let arguments: Rc<[arguments::Argument]> = closure
+                    .params
+                    .iter()
+                    .map(|&parameter| call.argument(parameter))
+                    .collect();
+                let table = closure.environment.indices.clone();
+                let indices: Rc<[CellIndex]> = closure
+                    .params
+                    .iter()
+                    .map(|&parameter| binding_index(&table, parameter))
+                    .collect();
+                *plan.borrow_mut() = Some(CallPlan {
+                    params: closure.params.clone(),
+                    arguments: arguments.clone(),
+                    table,
+                    indices: indices.clone(),
+                });
+                (arguments, indices)
+            }
+        };
+        // A missing argument binds its parameter to its absence, which
+        // answers wherever the body uses it, so a body that doesn't still
+        // has its value.
+        let arguments = arguments_plan.iter().zip(indices.iter()).try_fold(
+            Vec::with_capacity(closure.params.len()),
+            |mut arguments, (argument, &index)| {
+                arguments.push((
+                    index,
+                    match argument {
+                        Ok(expression) => self.eval(expression.clone(), calling_environment)?,
+                        Err(missing) => missing.clone(),
+                    },
+                ));
+                Ok::<_, Halt>(arguments)
+            },
+        )?;
+        self.eval(
+            closure.body,
+            &closure.environment.extended_indexed(arguments),
+        )
+    }
+
+    pub(crate) fn runtime_closure(&mut self, value: &RuntimeValue) -> Option<Closure> {
+        match &value.0 {
+            RuntimeValueKind::Closure(closure) => Some(closure.clone()),
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => {
+                (value.kind()? == vocabulary::kind::CLOSURE).then_some(())?;
+                let lambda = value.field(vocabulary::LAMBDA)?;
+                let params = lambda
+                    .field(vocabulary::PARAMS)?
+                    .list_values()?
+                    .map(|value| value.as_cell())
+                    .collect::<Option<Rc<[_]>>>()?;
+                let origin = value
+                    .field(source::vocabulary::BODY_ORIGIN)
+                    .and_then(|value| source::read(value.as_value()))
+                    .map(OriginId::start);
+                let body = self.lower_runtime_code_at(&lambda.field(vocabulary::BODY)?, origin);
+                let captured = value.field(vocabulary::ENVIRONMENT)?;
+                let environment = match &captured.0 {
+                    RuntimeValueKind::Data(value) => self.environment(value),
+                    RuntimeValueKind::Record(fields) => Some(
+                        self.empty_environment()
+                            .extended_runtime(fields.iter().cloned()),
+                    ),
+                    _ => None,
+                }?;
+                Some(Closure {
+                    params,
+                    body,
+                    environment,
+                    fields: lambda.as_value().as_record()?.clone(),
+                })
+            }
+            RuntimeValueKind::List(_) => None,
+        }
+    }
+}
+
+/// The cell calling `callable` calls: the cell it is, or the one a foreign
+/// function is implemented under.
+fn callee_cell(callable: &RuntimeValue) -> Option<CellId> {
+    callable.as_cell().or_else(|| {
+        (callable.kind()? == vocabulary::kind::FOREIGN_FUNCTION)
+            .then(|| callable.field(vocabulary::IMPLEMENTATION)?.as_cell())?
+    })
+}
+
+/// The absence a call answers when `callable` can't be called: an absent
+/// `callable` as it is, since what failed before it is the reason.
+pub(crate) fn not_callable(callable: &RuntimeValue) -> RuntimeValue {
+    arguments::not(absent::NOT_CALLABLE, callable.clone())
+}

@@ -102,7 +102,7 @@ pub(super) fn preview(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Error> {
-    let program = argument(context, call, presentation::vocabulary::VALUE)?;
+    let program = argument(call, presentation::vocabulary::VALUE)?;
     let program = context.eval(program, environment)?;
     let width = number(context, call, environment, layout::vocabulary::WIDTH)?;
     let height = number(context, call, environment, layout::vocabulary::HEIGHT)?;
@@ -110,22 +110,22 @@ pub(super) fn preview(
         Err(invalid())
     } else {
         let fuel = fuel(context, call, environment)?;
-        Ok(RuntimeValue::record([(
-            PREVIEW,
-            RuntimeValue::record([
+        Ok(::grap::isa::runtime(
+            kind::PATHS_PREVIEW,
+            [
                 (PROGRAM, program),
                 (layout::vocabulary::WIDTH, RuntimeValue::f64(width)),
                 (layout::vocabulary::HEIGHT, RuntimeValue::f64(height)),
                 (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
-            ]),
-        )]))
+            ],
+        ))
     }
 }
 
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?.field(PREVIEW)?;
+    let fields = input.value?;
     let program = fields.field(PROGRAM)?;
     let width = fields.field(layout::vocabulary::WIDTH)?.as_f64()?;
     let height = fields.field(layout::vocabulary::HEIGHT)?.as_f64()?;
@@ -137,9 +137,11 @@ pub(super) fn display<W: Host>(
         Some(Layout::program(Rc::new(move |context, build| {
             let mut lines = projected();
             let evaluation = run(&mut lines, |scope| {
-                ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
+                ::grap::Evaluator::new(context.viewing().host(), fuel)
+                    .functions(scope)
+                    .apply_expression(&program, [])
             });
-            if !evaluation.completed || evaluation.result.absent_reason().is_some() {
+            if evaluation.result.absent_reason().is_some() {
                 presentation::result_layout(&evaluation.result).measure(context, build)
             } else if let Some(path) = fitted(lines.sink, size) {
                 let scale = context.viewing().scale();
@@ -174,4 +176,5 @@ pub(super) fn display<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/preview/mod.rs"]
 mod tests;

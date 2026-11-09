@@ -12,7 +12,7 @@ lambda/application, value wrappers, environments, callable representations, fuel
 origins, and stable evaluator absence reasons. It has no editor, geometry,
 window, or file services.
 
-Progred's [libraries module](../progred/src/libraries/mod.rs) contains
+Progred's [libraries module](../progred/src/libraries.rs) contains
 conceptual libraries as modules alongside their editor-facing widgets, each a
 contribution through the [library interface](../progred/src/library.rs): names,
 text, f64, Grap, presentation, layout, and other domains. The built-in
@@ -20,11 +20,12 @@ text, f64, Grap, presentation, layout, and other domains. The built-in
 function, its evaluation control and arithmetic, and Grap's projection; CAD
 concepts remain separate libraries. Nothing in this representation requires Rust FFIs, which leaves room
 for [editor-authored libraries](deferred.md#editor-authored-libraries). A
-`Library` carries definitions and one partial projection. A library with several
-forms composes them with
+`Library` carries definitions, one partial projection, and the projections its
+cells provide: a kind's for the records that say they're of it, a function's for
+calls of it. A library with several forms composes them with
 `compose_partials`: first success wins, and the empty composition declines. The
 editor composes these library projections in load order above its one total
-structural fallback. `Libraries` keeps an insertion-ordered unique map keyed by
+structural fallback, after the projections kinds provide. `Libraries` keeps an insertion-ordered unique map keyed by
 stable random library identities supplied externally; the identity is not a
 field inside the library. Loaded libraries are read-only. Repeating a library
 identity replaces its entire contribution in place before composition. Loading
@@ -35,8 +36,9 @@ Each library stores one sorted definition table. An entry is either an ordinary
 implementation. Reading uses the description; calling uses the implementation.
 The built-in builders join their data and function declarations once, when
 constructing this table; they are not separate lookup registries. A repeated
-definition replaces the prior entry. An unnamed native definition has an empty
-record as its description. A native implementation declares the arguments it
+definition replaces the prior entry. A native definition's description says
+it's a foreign function implemented under its own cell; an unnamed one says
+only that. A native implementation declares the arguments it
 requires, and its description lists them under `params`, as a lambda's does, so
 calls to either open their first argument and show slots for missing ones.
 Arguments with defaults stay undeclared. The library's own name record is an ordinary
@@ -57,8 +59,8 @@ ordinary reachable data; configuration is never discovered through a reserved
 cell address or other data outside ordinary root reachability.
 
 A document declares its own libraries under the root's `libraries` field, which
-the editor library names beside `panes`, and the editor reads it only at the
-root. Each entry, or the cell it names, is a record of the `keys` the library
+the editor library names beside `row` and `column`, and the editor reads it
+only at the root. Each entry, or the cell it names, is a record of the `keys` the library
 owns and the `projection` that draws a record carrying any of them: a function
 of `value`, the same convention a pane's projection uses. One built-in library,
 "document libraries", loaded after all the others, tries the declared libraries
@@ -96,7 +98,7 @@ around f64) can defer to that facet.
 Explicit Rust memo boundaries can run whole Grap evaluations through the
 [dependency-tracking adapter](incremental.md#grap-and-foreign-calls).
 Ordinary projection/evaluation remains uncached. Foreign functions opt into
-tracked reads; unknown calls and unrecorded effects prevent reuse.
+being cacheable; other calls and unrecorded effects prevent reuse.
 
 Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial checks its preconditions and fails
@@ -106,7 +108,7 @@ alone, in the same `Layout` language, with no library's offers or names. It
 declines only at a missing location, draws a cell as its definition between
 parentheses, and shows labels as short ids. Raw and Plain are sets of
 libraries an area shows, as any other set is: Raw shows none, and Plain shows
-the name, text, absent and number libraries, so those read as
+the name, isa, text, absent and number libraries, so those read as
 themselves and the rest as Raw draws it. Arithmetic is Grap's, not the number
 libraries', so in Plain it stays the call records it is.
 One list in stack.rs defines Plain for the editor and the tutorial page alike.
@@ -114,23 +116,39 @@ The Projections menu leads with All, Plain and Raw, then a checkbox for each
 library an area can switch off, one bringing a projection or offers; a set
 matching no preset is a custom one. Choosing the preset an area already shows
 goes back to every library. Specific
-domain projections precede general ones. Libraries contribute these functions
-explicitly; composition does not depend on registering them under a shared cell
-identity. The current host partials are Rust callbacks,
-while presentation declarations can apply ordinary Grap callables.
+domain projections precede general ones.
+
+A record that says what kind of thing it is draws first as its kind provides,
+ahead of every library's partial: the stack's first partial reads the record's
+`isa` and applies the projection its libraries registered under that kind's cell,
+composed in load order, or declines where the kind provides none or the record
+says no kind, and the libraries' partials are tried in load order. Projection
+inputs carry the provided projections, so a projection can ask another cell for
+its own: Grap's call kind draws a call as its function provides, else as a
+call. Grap's calls, lambdas, closures and value wrappers provide theirs;
+control's `match`, `let`, `where`, `do`, `all` and `quote` and the infix
+operators of Grap's numbers provide theirs for calls of them, and the unquote
+kind for unquotes; each of Fidget's node kinds provides its own. An area that
+switches a library off leaves its cells' projections off, so with Grap off an
+operator call is a record again.
+Measured on 22 October 2026, this took the IoP source form's projection scope
+from 2.44 ms to 2.23 ms a frame and its allocations from about 35,000 to 30,700;
+the frame canaries moved within their noise. The current host partials are Rust
+callbacks, while presentation declarations can apply ordinary Grap callables.
 
 Recognition checks the fields a partial uses, not the absence of unrelated
-fields. Extra metadata may remain unshown in a compact projection; Raw exposes
-the stored record. Missing or malformed required contents decline normally,
+fields. A compact form shows the fields it doesn't draw after it, as a trailing
+record, so it hides nothing: `structure::record_form` takes the fields the form
+draws, handing their values to the drawing in order, and appends the rest. Missing or malformed required contents decline normally,
 without reserving the record or blocking later partials. A convention whose
 tags are mutually exclusive settles a record carrying several of them its own
 way: layout decoding takes the first tag in a fixed precedence and ignores the
-rest, while Fidget shapes decline. Records are identified by required positive
+rest. Records are identified by required positive
 evidence and stay open unless a domain explicitly defines a closed shape.
 Active field insertion can use the general presentation to keep its picker
 visible.
 
-[`ProjectionInput`](../progred/src/display/mod.rs) supplies the environment, value,
+[`ProjectionInput`](../progred/src/display.rs) supplies the environment, value,
 scale, writeability, local selection/annotation data, pending state, and a
 lazily built `Site` for its occurrence. Its `default_projection` is one composed
 partial function, passed explicitly through recursion rather than buried in
@@ -144,25 +162,32 @@ extent plus a one-shot placement function, never a second container tree.
 Structural recording is a separate interpreter used only by tests. There is no
 parallel Progred drawing language.
 
-`descend` and `at_with_projection` accept independent optional replacements
-for the projection at their target and the default passed to descendants;
-`jump_to` accepts one for its target only, and `at` and `jump` take neither.
-Omitting either inherits it; supplying one replaces it without implicit
-composition. The total structural fallback still handles a declined result.
-`descend_local` composes a custom partial before the default only at the
-target. `descend_scoped` passes that composition both here and below. These are
-ordinary preparation functions, not path-bearing layout opcodes.
+A projection draws three kinds of step: `descend` into what's stored, `at` a
+computed value, and `jump` to another location. The root is seeded with the
+editor's projection stack, and each projection hands it down; a walk can change
+it on the way. Each walk takes two optional projections: `overriding` draws the
+value the walk reaches, and `default` is handed down to draw what's inside that
+value. Where either is none, the inherited projection stands, as the engine has
+it: a pane's entry, which lets its value present itself, included. A projection
+reads the one it inherits as its input's `default_projection` (the stack without
+that entry), so it builds a change in the open: `first(input, p)` tries `p`
+before the inherited one, and `p` alone replaces it. Most walks override only
+the value they reach; a pattern sets both to its binders' projection, so the
+binders of patterns nested in it are drawn as binders too. A walk's new
+default applies below the value, not to the value itself. The total structural
+fallback still handles a declined result. These are ordinary preparation
+functions, not path-bearing layout opcodes.
 
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
-`jump(steps, document)` extends the occurrence path by `steps` and a jump
-step to an absolute, source-qualified document path, which it reads from. Its
+`jump(steps, location, overriding, default)` extends the occurrence path by `steps` and
+a jump step to a location, which it reads from: a document path from the root,
+or one within a cell's definition, which keeps that location's start. Its
 descendants' paths continue from that jump, for both projection reads and later
-edits; no inverse is required. `jump_to` reads from wherever a site is stored instead, such as
-within a cell's definition, and keeps that location's start.
+edits; no inverse is required.
 
-`at(steps, value)` instead projects the supplied value with no document source,
+`at(steps, value, …)` instead projects the supplied value with no document source,
 extending the path by `steps` and a computed step, which gives no location,
 including for ordinary descendants. A cell followed
 inside it still starts a location at its definition, which is stored data, and
@@ -209,17 +234,58 @@ projections retain their quotes.
 Library completion providers compose separately, so multiple libraries
 can contribute offers to one picker.
 
-Grap answers `Everything` with a `new lambda` value completion (aliases `lambda`
-and `λ`), which Grap's expression slots list. It inserts `{params: []}` and
-selects the missing body.
-The lambda projection accepts that unfinished shape and descends into the body
+Grap's expression slots offer a `new lambda` value completion (aliases `lambda`
+and `λ`). It inserts `{isa: lambda, params: []}` and
+opens its first parameter, whose slot offers a new one; Tab goes on to the
+missing body.
+The lambda projection draws that unfinished lambda and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
-An empty parameter slot offers only `x — new parameter` for whatever is typed: a
-new document cell named `x`.
+Beside it Grap offers `new call`, which inserts `{isa: call}` and opens its
+`function` field. It's a call before its function is picked, and stays one if
+it's left unfinished or its function is deleted, so the call projection draws
+its function slot open, an expression slot like any other: a binding, a
+lambda, or another call. A call drawn in a form of
+its own (an operator's, `let`'s, `match`'s) draws its function slot the same
+way, so typing over its function offers the others. There the functions in
+reach are offered as themselves, and picking one opens the call's first
+argument, as picking its call whole does elsewhere. Once the function is
+callable (a lambda needs its body), its parameters show as the call's argument
+slots, which Tab visits next.
+An empty parameter slot offers only a new parameter, a new document cell: for
+whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
+parameter`, which has no name yet, and whose name is picked next.
+
+A parameter with no name of its own, or an empty one, is called what its list
+calls it: in order, the first of a, b, c… that none of the list's named
+parameters uses. The name is computed wherever it's shown and never stored, and
+it's drawn grey: in the declaration as the placeholder in its name's editor,
+which typing replaces, in references to the parameter, and in offers. A
+declaration draws its name with the same line editor whether it has one or not,
+so a missing name and an empty one look alike. A line drawn where its value is missing is
+that place's hole too, a Tab stop with no offers: its first edit writes the
+value, and the selection stays on it at its edge, typing going on in its line
+from the same caret, the write and the rest of the typing one undo step; Enter
+with nothing typed writes the empty string, which names nothing. A line's
+placeholder (`LineEdit::placeholder`) shows dim where its text goes while
+there's none, the caret before it; with nothing to show and no placeholder, a
+line shows an empty frame. A
+reference finds its list by walking out from where it's stored, the same walk a
+slot's offers make to find what's in scope, so each list names its own; an
+inner lambda's first unnamed parameter is `a` too. In a computed value, such as
+a closure in a result, the walk goes out through that value instead, which the
+projection keeps for what it draws inside (`Env::read_computed`), so the
+closure's lambda reads as it does in its source. A closure's environment holds
+parameters of the lambda that made it without the list that named them, so it
+calls its own: its bindings with no name of their own are e₀, e₁, e₂…, the
+numeral a subscript, in its order, skipping what its named ones use, grey in
+its labels and in its lambda's references to them. A computed name is a `Name`,
+so it can carry subscripts, and an offer shows one as it's drawn
+(`CompletionText::Named`). Anywhere else, an unnamed parameter shows its short ID.
 
 The expression-use partial also handles missing values with a focused completion
-provider. It lists statically visible bindings, the libraries' `Everything`
-offers, callable cells, Raw's constructors, quote, and what's typed read as a value.
+provider. It lists statically visible bindings, Grap's new lambda and new call,
+the functions in reach as calls, the other libraries' `Everything` offers, Raw's
+constructors, quote, and what's typed read as a value.
 Only explicit expression children use this provider, not quoted data, parameter
 declarations, or ordinary structural containers. Provider composition is lazy:
 only an active picker reads the loaded libraries' provider, from the toolkit.
@@ -231,10 +297,14 @@ The shared `structure::list(Some(child_projection))` combinator explicitly
 applies a partial at each immediate element. Standard lists use the same
 renderer with `None`. Lambda parameters, match cases, let/where bindings, and
 do expressions each supply their element projection this way.
-`structure::record_layout` takes a function from each field identity to an
-optional child partial. Standard records use the same renderer with no field overrides.
-Record layouts, through `record_heads`, and ordered call arguments, through
-`record_fragment`, share `record_forms` geometry.
+A record's fields read through one `structure::Fields` spec: which come first,
+which show as slots to fill even where the record lacks them (a call's
+parameters), how a field's name reads (a closure's unnamed bindings), and a
+partial for a field's value. A field being added is drawn among them, where it
+will stay. The spec draws a whole record (`Fields::record`), or the fields after
+what a projection draws of the record itself (`Fields::form`, `Fields::after`):
+a call's arguments after its function, a form's other fields after the form.
+Standard records use it with nothing set. Both share `record_braces` geometry.
 Patterns establish an explicit binder-projection scope. Ordinary container
 recursion then finds nested binders while text and numeric facets keep their
 normal projections; no duplicate pattern-specific structural walk is needed.
@@ -269,11 +339,18 @@ explicit composition rather than teaching the raw structural fallback about
 Grap. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
 a text name projects as `(name)`: the usual cell parentheses surround an
-unquoted line editor at the real `Follow` → `name` path. This contextual
-projection is not in the default stack. Unrelated definition fields do not
-block it; malformed or missing names and active field insertion decline to the
-ordinary projection. Ordinary cells and quoted data are unchanged; named use
-sites remain shallow references.
+unquoted line editor at the real `Follow` → `name` path. The cell and its
+definition are one thing: the walk to the definition is a `part`, so the
+definition is no stop of its own and arrows go from the cell to its name.
+Backspace empties the name, then removes the name field, the parameter
+unnamed but still defined; once more lands on the parameter, and again removes
+it. A cell with no definition draws as a hole whose one offer is the name
+typed, which defines it. This contextual projection is not in the default
+stack. The definition's other fields, and one being added, follow the name as
+a trailing record. A name that isn't text declines to the ordinary projection;
+a missing one is its line editor with nothing in it.
+Ordinary cells and quoted data are unchanged; named use sites remain shallow
+references.
 Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
 extra fields. Missing declared arguments appear as ordinary editable empty slots
@@ -281,7 +358,7 @@ at their real field paths; they remain absent from the document until edited.
 An active missing argument stays in its declared position rather than gaining a
 second trailing row. This is a raw definition lookup, not evaluation of the
 callable: a native function named by its cell uses the `params` its description
-lists, and computed callables and `{ffi: cell}` references use the ordinary order.
+lists, and computed callables use the ordinary order.
 A number operation's name carries the same representation subscript used by
 literals: it is a formatted name, `["+", {subscript: <the f64 cell>}]`, so a
 call's function reference and the picker's offer both draw it from the
@@ -307,8 +384,8 @@ off, Raw among those, every field is unnamed, so order is by identity.
 Grap's `{name: text, value: expression}` wrapper projects as `name = expression`.
 The name slot is always present: a missing name uses Raw's ordinary empty
 picker, where what's typed reads as text. The expression uses the local
-shallow-reference projection. Other metadata does not block recognition, and
-both editors retain their stored field paths. This is a named expression, not a
+shallow-reference projection. Other metadata does not block recognition and
+follows as a trailing record, and both editors retain their stored field paths. This is a named expression, not a
 `let` binding; the evaluator ignores its name. Named numeric facets remain
 independent of this Grap-specific wrapper.
 
@@ -317,20 +394,26 @@ precedence order. Each remains an ordinary partial: malformed contents decline
 just like a missing required field, allowing the next partial to try. Recognition
 does not reserve a record or force structural fallback.
 
-The Fidget library projects field arithmetic as infix expressions, other scalar
-operations as named argument groups, and coordinates as shallow references.
+A Fidget field is Fidget's data: each node says its kind (`{isa: subtract, left,
+right}`, `{isa: sqrt, operand}`, `{isa: axis, axis: x}`, `{isa: translate,
+field, x, y, z}`) with Fidget's own kind cells and operand fields, and each kind
+provides its projection. The Fidget library projects field arithmetic as infix
+expressions, other scalar operations as named argument groups, and coordinates
+as shallow references.
 Grouping preserves the expression tree, including right-nested operations of
 equal precedence; it never reassociates floating-point arithmetic. Names come
 from ordinary definitions. Operands retain their stored paths and stock editing
 controls, while an operator targets its whole expression. Named fields expose
 their editable name beside the formula. Unrelated fields on an operation or its
-operand record do not block notation or change grouping. Incomplete forms and
-conflicting operation tags decline; translation keeps its explicit named
-parameters. These are source projections only, independent of the opt-in
+operand record do not block notation or change grouping. Incomplete forms
+decline; translation keeps its explicit named parameters, each offset none when
+left out. Fidget has no Grap functions for its nodes: a field is written as
+data, and Grap assembles one procedurally with `quote`, unquoting what it
+computes. Its previews remain Grap functions, the viewports presentation calls. These are source projections only, independent of the opt-in
 rendered viewport.
 
-Grap calls of arithmetic and comparison, a number type's or Fidget's, read
-infix as well, the operator tagged with its representation. f64, f32 and u64
+Grap calls of a number type's arithmetic and comparison read infix as well, the
+operator tagged with its representation. f64, f32 and u64
 are only numbers: how each is stored, read, spelled and drawn. Their
 operations, the Rust functions that run them and the infix drawing are the
 Grap library's ([`grap/numbers.rs`](../progred/src/libraries/grap/numbers.rs)),
@@ -340,17 +423,22 @@ moment the operator is chosen: a missing operand is an empty slot whose picker
 opens in place, and other fields, including one being added, follow in a
 record. A line too narrow for the expression wraps before its operator.
 
-`{evaluate: expression}` is a Grap-library value partial, not evaluator syntax
-or a field hook in the structural walk. The evaluator never observes the field;
-a host that never loads the projection never sees it. It shows the stored
-expression at its real `…/evaluate` path, a dim `→` that selects the whole
-record, and the returned value from its own read-only `at` occurrence, all in
+An evaluation, `{isa: evaluation, expression}`, is a Grap-library kind whose
+projection shows an expression's result, not evaluator syntax or a field hook
+in the structural walk. The evaluator never observes it; a host that never
+loads the projection never sees it. It shows the stored expression at its real
+`…/expression` path, a dim `→` that selects the whole record, and the returned value from its own read-only `at` occurrence, all in
 one group. When wrapped, the arrow stays with the stored
 expression and the result is indented underneath. Result children are ordinary
 navigation stops and can be copied and folded independently. An absent result
 projects like any other computed value. Recognition is open like text and f64:
-other fields do not block it, and an earlier partial in the composition wins if
-several match. Raw shows only the stored record. A result containing
+other fields do not block it and follow as a trailing record, and an earlier
+partial in the composition wins if several match. Raw shows only the stored
+record.
+
+A closure, as a result shows one, reads as the record it is, its fields in a
+fixed order: its lambda, drawn as a lambda is, then the environment it closes
+over, then its body origin, shut until it's opened, then any others. A result containing
 another `evaluate` field can invoke that projection again with an ordinary fresh
 evaluation allowance. Ordinary call-shaped values elsewhere, including returned
 ones, remain editable data until explicitly evaluated.
@@ -362,8 +450,28 @@ and draws the program `grap` names as an expression slot: the cell keeps its
 parentheses, and an empty program offers Grap's suggestions rather than the
 whole vocabulary.
 
-The presentation library offers an opt-in interpreter for
-`{value: source, projection: function}`. Pane views try it only at entry,
+Grap's other root template is a notebook, `{isa: notebook, entries}`, whose
+entries are cells. The record and its list are one thing, the notebook, marked by a
+bar down its side that selects it; its entries are stops inside, numbered in
+its margin, a number selecting its entry. Each entry draws as its cell's
+expression, an arrow, and what it evaluates to, beside it or below it where
+there's no room. An entry whose cell has no definition yet draws its expression
+and arrow, with no result, so a new entry shows no error.
+Each entry evaluates at its own occurrence, so its result is memoized like a
+pane's and recomputes when a cell it reads changes, and an error in it opens to
+its callers. Entries refer to one another the standard ways: Cmd-clicking,
+copying, or naming. The entries are drawn as a list, with a list's editing:
+clicking between two inserts a place for one there, and deleting one leaves its
+place to fill. Such a place offers "new entry", a fresh cell whose expression
+starts from what was typed. Enter on an entry, once its own handlers decline
+it, starts a new entry after it, or with Shift before it, going straight to its
+expression. An empty notebook draws a "new entry" that starts its first. An
+element that isn't a cell draws as plain data. The arrow selects the entry
+itself rather than its expression.
+
+The presentation library offers an opt-in interpreter for a projected value,
+`{isa: projected value, value: source, projection: function}`. Pane views try it
+only at entry, as its kind says,
 following cells through their ordinary definition paths. The document view
 leaves the declaration as editable data. It applies the function to the source
 as data and projects the result with `at` using the normal
@@ -373,21 +481,26 @@ panes and computed results. Entry intentionally follows cells to the first
 non-cell; this entry policy is separate from explicit projection scopes.
 The workspace does not interpret this
 wrapper. Raw exposes its stored fields in either view.
-Explicit `{render: expression}` values evaluate and project their result. They
-request an observed evaluation memo at their current view/path; hosts without a
+A render, `{isa: render, expression, fuel?}`, is the other thing a pane's entry
+presents: it evaluates its expression, with its own fuel when it gives one, and
+projects the result. Like a declaration, it isn't part of the ordinary
+projection, so anywhere but a pane's entry it's the record it is, its
+expression editable; a tutorial slot, a pane of its own, presents one too.
+A render requests an observed evaluation memo at its current view/path; hosts without a
 computation runtime evaluate directly. The existing Grap observer tracks cell
-definitions (including missing ones) and native observations. Untracked foreign
-reads, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel
+definitions (including missing ones) and native observations. Uncacheable foreign
+calls, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel
 are explicit inputs. This memo retains only the computed Value, never widgets,
 handlers, or rendered output.
 
 The presentation library also offers an opt-in record outline:
-`{outline: [field-a, field-b], field-a: ..., field-b: ...}`. The list orders
-field references, not copies of their contents. The ordinary `outline:` field
-label selects the list and reads its displayed name from the current definition.
+`{isa: outline, sections: [field-a, field-b], field-a: ..., field-b: ...}`,
+drawn as its kind provides. The list orders field references, not copies of
+their contents. The ordinary `sections:` field label selects the list and reads
+its displayed name from the current definition.
 The list sits below the label without another indent, giving record and list
 selections distinct bounds even without extra fields. Select-all still reaches
-the root; deleting the outline field leaves the remaining record in its ordinary
+the root; deleting the `isa` field leaves the remaining record in its ordinary
 presentation. The list uses a vertical, unbracketed presentation with a local
 element partial for the field's name and
 disclosure heading. An item-composition callback adds the indented body outside
@@ -401,35 +514,34 @@ columns retain an ordinary empty-list handle.
 
 A heading selects the real list element, so navigation, insertion, deletion,
 and picking remain list operations. Removing an entry removes only the reference,
-not the source field. The body uses `jump_to` at `outline / element / field`,
-drawing the source record's field where it is stored, whatever jumps led to
-the outline. Repeated entries
+not the source field. The body jumps at `sections / element / field` to where the
+source record's field is stored, whatever jumps led to the outline. Repeated entries
 therefore share document edits but have independent selection and fold state.
 Section lists use the same unbracketed column with spacing between items.
-A computed outline is stored nowhere, so `jump_to` falls back to
-`at_with_projection` for its bodies: copy and folding remain
-available without inventing a document source.
+A computed outline is stored nowhere, so its bodies are drawn with `at`
+instead: copy and folding remain available without inventing a document
+source.
 
 Visibility uses the existing undoable fold annotation at each body occurrence,
 without document edits or a separate state store. Clicking a heading folds its
 body and selects the heading, keeping selection out of hidden content. The
-outline has no outer braces. Only unlisted fields appear in an ordinary record
-footer, omitted when there are no extras or pending field insertion. Its braces
+outline has no outer braces. Only unlisted fields, other than `isa`, appear in
+an ordinary record footer, omitted when there are no extras or pending field insertion. Its braces
 select the whole record; it has no separate fold state or control. A missing
 referenced source field gets its ordinary empty picker. A malformed outline
 declines to the normal projection.
 This is a library presentation available at any record, not a special root or
 workspace model. Raw still projects the underlying record normally.
 
-Assigned-size panes instead use `{value: source, viewport: function}`. The editor
-recognizes this contract at pane entry and passes the settled logical `width`
+Assigned-size panes instead use a sized value, `{isa: sized value, value:
+source, viewport: function}`. The editor recognizes this kind at pane entry and passes the settled logical `width`
 and `height` along with the unevaluated `value` as data. An optional `prepare`
 function runs first, receiving only `value`; its result replaces that argument
 to the viewport function. Preparation uses the ordinary dependency-tracked
 application memo at the declaration's occurrence. Its inputs are the callable,
 source data, and optional `fuel` (defaulting to Grap's usual allowance), plus
 observed definitions. Dimensions are deliberately not inputs. Effects or
-untracked reads prevent reuse, just as for other observed Grap evaluations.
+uncacheable calls prevent reuse, just as for other observed Grap evaluations.
 This lets a pane construct a program independently of its size without
 changing the contract of existing declarations. A preparation absent exposes
 the stored source without calling the viewport function.
@@ -445,7 +557,7 @@ back to normal projection.
 
 ## Lowering and interaction
 
-The [projection runtime](../progred/src/projection/mod.rs) resolves document
+The [projection runtime](../progred/src/projection.rs) resolves document
 locations and supplies borrowed widget inputs. The
 [box interpreter](../progred/src/display/measure.rs) composes measurements without
 interpreting document traversal or control requests. A value no projection
@@ -464,8 +576,8 @@ The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 
 Grap's `descend`, `descend path`, `jump`, and `at` forms decode through the
 [path convention](../progred/src/libraries/editor/path.rs), also used by site and
-selection capabilities. Field keys, list positions, and source-qualified definition
-follows have one encoder/decoder. They produce ordinary preparation functions
+selection capabilities. Field keys, list positions, and definition follows have
+one encoder/decoder. They produce ordinary preparation functions
 using an explicit projection scope; layout has no parallel path vocabulary or
 traversal opcodes. Preparation interleaves descendant projection and measurement
 before choices resolve. Shared children prepare once per frame, and only chosen
@@ -540,8 +652,9 @@ value.
 
 ## Controls and state
 
-The controls library's `with controls` projection runs a controls lambda with
-`control state` and `update` arguments. State is an arbitrary GID value held under
+The projection of a view with controls, which `with controls` returns, runs a
+controls lambda with `control state` and `update` arguments. State is an
+arbitrary GID value held under
 the occurrence's control-state annotation field; a missing field supplies the
 explicit `no control state` absent. Defaults belong to Grap code, not to this
 container. The controls lambda emits widgets and returns ordinary parameters,
@@ -562,10 +675,12 @@ interface.
 ## Scoped layout programs
 
 The layout library's `layout program` function takes a raw `expression` and
-returns `{layout program: closure}`. This is an ordinary Grap closure with its
-lexical environment, not an opaque native value. The normal partial recognizes
-that record and runs the closure with a borrowed `ForeignOverlay` capturing a
-Rust layout output buffer. It adds no evaluator types or syntax.
+returns `{isa: layout program, program: closure}`. The closure is an ordinary
+Grap closure with its lexical environment, not an opaque native value. The
+library's projection for that kind runs the closure with foreign functions
+borrowing a Rust layout output buffer; a record of the kind
+can carry the data its program descends into beside it. It adds no evaluator
+types or syntax.
 
 Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
 `children` expression. They evaluate it once into a fresh child buffer, then
@@ -573,8 +688,8 @@ emit the corresponding native layout. `do`, ordinary function calls, and loops
 can produce that sequence; a list of expressions remains inert unless a control
 function evaluates it. A row aligns its children's baselines; given a
 `baseline`, it aligns their tops instead and keeps that child's baseline, as a
-column does. `pad`, `center`, `bracket`, and interaction wrappers take
-a raw `child` expression that must emit exactly one child. `selectable` makes its
+column does. `pad`, `center`, `border`, `bracket`, and interaction wrappers
+take a raw `child` expression that must emit exactly one child. `selectable` makes its
 child select the value being drawn: it claims the hover there, and a click selects
 that value; whatever the child descends into keeps its own target. No buffer borrow is held
 while evaluating a body. Successful operations return the ordinary empty record;
@@ -588,10 +703,15 @@ measurement in Grap. `descend` takes `step`; `descend path` takes
 `steps`; `jump` takes `steps` and `document path`; `at` takes `steps` and `value`.
 All paths use the path convention, with no opaque editor or scope value in Grap.
 The Grap-facing jump provides the standard document-path interpretation.
-`canvas` accepts width/ascent/descent and a drawing-program value;
-it does not construct a list of draw commands. Its optional fuel argument
-configures the later drawing evaluation, as with the stored drawing convention;
-omitting it uses the evaluator's ordinary default, not the layout call's remainder.
+`drawing` accepts width/ascent/descent and a drawing-program value, as the
+stored drawing node does; it does not construct a list of draw commands. Its
+optional fuel argument configures the later drawing evaluation, as the stored
+node's does; omitting it uses the evaluator's ordinary default, not the layout
+call's remainder. Every construct is in both forms under one name and the same
+fields: a node of the stored form, `{isa: row, gap, children}` say, is a
+function of the same name in a layout program, and a wrapper's content is its
+`child` field in both. The node's kind and the function are separate cells
+sharing that name.
 Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
 and text paint to the ink face. Other required inputs are validated. Invalid
 builder calls return absents; containers propagate a failed child computation
@@ -601,9 +721,11 @@ Grap recovery. An intentionally empty layout can emit an empty row or column
 with `{}` as its child computation; an empty `do` is not a successful computation.
 
 The explicit boundary matters for composition: pane/viewport projection
-functions return ordinary values. The `border` combinator wraps
-a layout-program record like any other result. Neither it nor other
-value-returning functions changes meaning inside a secretly installed scope.
+functions return ordinary values, and no function changes meaning inside a
+secretly installed scope. A layout function such as `drawing` or `border` is
+one only within a layout program; in ordinary evaluation it is no function at
+all. The stored form's nodes are data of their kinds, which the layout library
+draws as each kind provides.
 Grap can also return stored layout descriptions; a layout program avoids building
 and decoding them per node, but still allocates the chosen Rust
 layout representation and evaluates Grap code. It is not a cache or a guarantee
@@ -615,19 +737,31 @@ of improved speed for arbitrary programs.
 forms below mean, and Grap's tests check this evaluator against it; see
 [verification](verification.md#graps-core).
 
-Grap recognizes these shapes through its vocabulary cells:
+Grap recognizes these forms through its vocabulary cells:
 
 ```text
-{params: [parameter-cells...], body: expression}
-{function: callable-expression, parameter-cell: argument-expression, ...}
-{value: expression, ...}
-{closure: {params: [...], body: expression, environment: {...}}}
-{ffi: function-cell}
+{isa: lambda, params: [parameter-cells...], body: expression}
+{isa: call, function: callable-expression, parameter-cell: argument-expression, ...}
+{isa: value wrapper, value: expression, ...}
+{isa: closure, lambda: {isa: lambda, params: [...], body: expression}, environment: {...}, body origin: ...}
 ```
 
-Evaluating an untagged `{params, body}` lambda captures its lexical environment
-in a callable value; materialized, it is `{closure: {params, body, environment}}`
-with the environment as an ordinary GID record. Grap-defined calls are strict,
+A record is a call, a lambda, a value wrapper or a closure only when its `isa`
+says so (the shared kind convention, which the `isa` library owns): without
+one, a record with a `function` or `params` is data. Each kind is a cell of its
+own (`grap::vocabulary::kind`), not the field that shares its name, such as a
+closure's `lambda`. So an unfinished one stays what it is, and a field its kind
+requires that's missing answers a missing-field absent naming it, where it's
+used: a call with no function when it's called, a lambda with no body when
+it's applied. A lambda has its parameters, so a call of it its argument slots,
+before its body is written.
+
+Evaluating a lambda captures its lexical environment
+in a callable value, a closure. Materialized, it is `{lambda, environment, body
+origin}`: the lambda as written, the environment as an ordinary GID record of
+its bindings, and, when the body has a source, where it came from, so errors
+and traces inside a closure called later still point at it. A closure is a
+value: as code it matches no form, so evaluating it again gives itself. Grap-defined calls are strict,
 evaluating every declared argument before the body. A missing argument binds
 its parameter to the missing-argument absent, which answers only where the
 body uses it. Effects are explicit
@@ -645,7 +779,7 @@ bind-once semantics and separate `value` field identity; they do not own or
 discover wrappers. As with calls, wrappers inside inert data or returned by a
 function remain data until explicitly evaluated.
 
-Cell evaluation checks lexical bindings first, then asks `grap::Host::resolve`
+Cell evaluation checks lexical bindings first, then asks `grap::Host::definition`
 for one definition: the document's value, otherwise the first loaded library
 definition.
 Duplicate definitions are tolerated, not merged, composed, or overloaded. Names
@@ -656,51 +790,51 @@ ordinal into the loaded stack, so loading or reordering libraries cannot
 silently retarget editor state. With no definition,
 evaluation returns missing-cell absent. A cell is transparent: its definition is
 evaluated where it is referenced, using the bindings in scope there, so a cell
-defined for a function body can be referenced in several places within it. A native definition's descriptive value
-is evaluated without invoking its implementation. A named foreign function
-therefore evaluates to its ordinary name record. Scoped capabilities participate
-only in calls, never ordinary reads.
+defined for a function body can be referenced in several places within it. A
+foreign function's value is its definition, `{isa: foreign function,
+implementation: <cell>, name, params}`, the cell the one the host implements it
+under, which is its own: a reference to one evaluates to that data without
+invoking anything. Calling one reaches the implementation under that cell, a
+scope's first, as a call of the cell does. A scope supplies only
+implementations, so a function it lends with no library definition reads as a
+missing cell; each library defines its lent functions, with implementations
+that answer outside the scope.
+The Grap library draws one as a lambda's head: its implementation's name, then
+its parameters.
 
 Direct calls retain the same `{function: cell, ...arguments}` syntax for Rust
-and Grap implementations. To pass a callable reference through an evaluated
-argument, use the existing inert `{ffi: cell}` representation; passing a bare
-cell evaluates its data. This reference still dispatches in the receiving host
-context. It contains neither a native function pointer nor an extra cell definition.
-The Fidget example uses such a reference for its viewport function.
+and Grap implementations. Passing a foreign function through an evaluated
+argument passes that record, which still dispatches in the receiving host
+context by its cell; it holds no native function pointer. The Fidget examples
+name their viewport function this way.
 
 A direct call uses the same resolver. A native definition invokes its Rust
 implementation; an ordinary value is evaluated as the callable.
-Every result is definitive, including `{absent: declined}`. A non-callable value
+Every result is definitive, including the `declined` absent. A non-callable value
 returns a not-callable absent with the offending value; it does not search other
-sources for an implementation. Scoped capability functions can override this
-lookup. Higher-level operations own any deliberate dispatch or composition.
+sources for an implementation. An absent callable is its own reason, so a call
+of one answers it unchanged, as an absent argument passes on. An evaluation's
+own foreign functions can override this lookup. Higher-level operations own any deliberate dispatch or composition.
 Projection environments expose one borrowed resolution containing the selected
-definition's value, source, and whether it has a native implementation. Call
-projections and completion providers can inspect this metadata without evaluating
-the callable or mistaking a native function's description for a Grap lambda.
+definition's value and source. Call projections and completion providers can
+inspect it without evaluating the callable, and tell a foreign function from a
+Grap lambda by its kind.
 
 Hosts keep effects in evaluation-local data. Rust capability implementations
-wrap selection, annotation, drawing/path writes, and deterministic random
-advancement in `context.effect(|| operation)`. The combinator marks the effect,
-runs the operation, and returns its result. Arguments and applicability checks
-stay outside the closure, so declining before a write remains possible. Reads
-do not mark an effect. The context owns one effect counter; each call remembers
-its starting count. This includes effects in strict arguments and nested calls,
-but excludes effects performed before that call began.
-
-A function must explicitly decline before performing effects. A decline after
-an effect halts evaluation with `{absent: effectful-decline, value: cause}`.
-This contract remains useful to explicit compositions
-and event handlers, independently of cell resolution. It applies to Grap and Rust
-functions alike. Other absents remain ordinary results, including a non-callable
-result. Effect-only commands, including selection and site-state setters, return
+wrap selection, annotation, and drawing/path writes in
+`context.effect(|| operation)`. The combinator marks the effect,
+runs the operation, and returns its result, telling the host so a reused result
+can't leave a write out. Reads do not mark an effect. A decline, like any other
+absent, is an ordinary result: the host that asked for the evaluation decides
+what its writes come to, and the editor's handlers, drawings and controls drop
+a declined evaluation's output. Effect-only commands, including selection and site-state setters, return
 `{}` on success, including when clearing state. Getters return specific absents
 when the requested state is missing.
 
 There are no per-call snapshots or rollback operations. The host stages the
 whole editor operation or drawing recording and discards that temporary output
-when evaluation halts. Drawing uses local vectors, and the random stream uses
-local scalar state. The interpreter does not mutate the live editor. Rust FFIs
+when evaluation halts. Drawing uses local vectors. The interpreter does not
+mutate the live editor. Rust FFIs
 must mark their observable writes and keep their effects local; external I/O
 is not reversible through this facility. Fuel is never restored.
 
@@ -720,9 +854,12 @@ its arguments with `ForeignFunction::with_arguments`: each is found under its
 label once per call site, as a primitive's operands are, then evaluated on each
 call and parsed into the Rust type the function works with (`Parse`), and the
 function's body runs only when every one parses. Otherwise the call returns
-"invalid arguments", carrying under each label why that argument couldn't be used: a
-missing argument, its type's reason carrying the value, or the absent it
-already was, passed on unchanged as the cause. Each type owns its reason, so a
+"invalid arguments", naming under `call` the origin of the call, where it has
+one, and carrying under each label why that argument couldn't be used: a
+missing argument, naming its parameter and, under `call`, the origin of the
+call it's missing from, where the call has one; its type's reason carrying the
+value; or the absent it already was, passed on unchanged as the cause. A call
+site's missing arguments are found with the call, once. Each type owns its reason, so a
 function taking several types reports each correctly, and a library's own
 type, such as a list or a PNG, carries its own reason. So `*` with neither
 operand is "invalid arguments" carrying "missing argument" under both `left`
@@ -769,6 +906,22 @@ actual evaluator halts still halt rather than invoking the fallback.
 The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
+An absent's `call` reads as the call itself, drawn where it is: the same place
+as the call in its code. The field holds where the call is, which matters only
+for what it leads to, so it's drawn as a part of the absent
+(`Fields::parts`) and the call is the stop; the callers below are drawn the
+same way. Inside a result that can be run again, such as a
+pane's render, an absent about a call also has its callers below it, shut: a
+"called from" toggle. Opened, they're found by running the result's evaluation
+again with an observer (`grap::Answering`) that watches for the call at that
+place answering that absent, and each caller is drawn where it is, outermost
+last. The run is memoised like the result's own evaluation, and a shut toggle
+runs nothing. A result drawn by `crate::display::at_evaluated` carries the
+evaluation it came from, so what's drawn inside it can ask. A missing argument reads as its reason and its parameter, drawn as a shallow
+reference, then the hole for the argument: a jump to the call's origin and the
+parameter's field there, so the error's hole and the call's are one place.
+Selecting either marks the other, and filling either fills the call. A call
+with no origin, such as one a host makes, has no hole to show.
 
 `do` evaluates its expressions in order, returning the first absent unchanged
 or the last successful value. It short-circuits that sequence, not the evaluator:
@@ -785,7 +938,7 @@ absent, makes it "invalid arguments" as for any function. This is an ordinary
 guard used in `do`, not evaluator syntax or a configurable bind mechanism.
 
 The list library's `iterate` finishes only when a step returns
-`{absent: iteration-finished}`, and then returns the previous state. An
+an `iteration-finished` absent, and then returns the previous state. An
 `unfold` step returns `{item, state}`: its item, if it has one, joins the list,
 and a step without a `state` is the last, so `{}` ends it. It returns the
 accumulated `list` and the last `state` it was given; a step that isn't a
@@ -809,56 +962,66 @@ the next; an absent action result stops it, otherwise completion returns `{}`.
 `collect {items}` explicitly materializes a GID list. Consumers retain the
 current callable and obey ordinary evaluator fuel limits. An empty range is a
 callable that immediately returns `{}`.
+
+The random library's numbers are pure functions of a key, a `u64`, as
+counter-based generators make them. `random between {key, index, minimum,
+maximum}` draws a number from `minimum` up to `maximum`; the same key and index
+always draw the same number. `random key {key, index}` derives another key, so
+each part of a computation draws from its own: the IoP tree gives each branch a
+key derived from its parent's, and each step of a loop one derived from its
+index. Nothing is threaded or hidden, so drawing one number changes no other,
+and editing one branch leaves the rest of the tree as it was.
 Grap-authored producers can use the same record/callable protocol; there is no
 new evaluator syntax, hidden stream handle, or precomputed list of indices.
 
 Grap's [control module](../progred/src/libraries/grap/control.rs) supplies structural matching
 and quote/unquote as ordinary Rust functions using that evaluator interface.
-`match` evaluates its subject once, then tries ordered cases. Record patterns
-are open; list patterns are exact and ordered; `{bind: cell}` captures a value.
+`match` evaluates its subject once, then tries ordered cases, each
+`{isa: case, pattern, expression}`. Record patterns are open; list patterns are
+exact and ordered; `{isa: binder, bind: cell}` captures a value.
 Repeated binders require equal captures, and a final binder is the ordinary
 catch-all. Only the selected expression runs,
 in the caller's environment extended by captures. Its absent result is final,
 not a request to try another case. There is no implicit match-subject binding.
 
-Case lists and `let`/`where` binding lists supplied by another expression are
-evaluated once and inspected as runtime containers. Selected expressions and
-binding right-hand sides use `Context::eval_runtime_code` in the appropriate
-environment; they are not serialized back to GID first. Embedded native closures
-therefore retain their original code origins and captures. Patterns still use
-the GID-oriented structural matcher, converting only the individual pattern.
-Literal clause lists keep their existing prepared-expression path.
+A `match`'s cases and a `let`/`where`'s bindings, each
+`{isa: binding, bind | pattern, value}`, are the form's own syntax, read where
+they're written and never evaluated, like `do`'s expressions. A clause list
+that isn't written in place, such as a reference to a cell holding one,
+answers invalid cases or invalid bindings, and a clause that doesn't say its
+kind is an invalid case or binding. A record in a pattern is a binder only
+when it says so; any other record there is a record pattern.
 
-`quote` walks the original raw structure, replacing `{unquote: expression}`
+`quote` walks the original raw structure, replacing `{isa: unquote, unquote: expression}`
 leaves by evaluating their expressions in the caller's environment. It never
-revisits a spliced result. Outside that traversal, an unquote-shaped record is
+revisits a spliced result. Outside that traversal, an unquote record is
 ordinary data. There is no evaluator-level quote/literal form.
 
 The normal projection shows a compact quote call with a double-quote prefix,
-and an `{unquote: expression}` record with a backtick prefix. The
+and an `{isa: unquote, unquote: expression}` record with a backtick prefix. The
 unquote prefix selects the whole unquote record; its body remains independently
 selectable at the stored field path. The expression
 uses Grap's local shallow-reference projection, while quoted data keeps its
 ordinary projection. Unrelated fields do not block either compact projection;
-Raw still exposes them. Active field insertion falls back to the full record/call
-display. These markers
+they follow it as a trailing record, as does a field being added. These markers
 are display notation only, not new evaluator or text-bridge syntax.
 
 Grap likewise projects a `match` call with a subject and a
-case list as ordered `pattern → expression` cases, and projects `{bind: cell}`
-distinctly within patterns. Each arrow targets its expression the way a field
+case list as ordered `pattern → expression` cases, and projects
+`{isa: binder, bind: cell}` distinctly within patterns. Each arrow targets its expression the way a field
 head targets its value. A malformed call declines to the general Grap-call or
 structural projection; a malformed case declines to the ordinary element
 projection, so every value stays exposed.
 
-Semantic failure is an open GID record:
+Semantic failure is an open GID record of the absent kind:
 
 ```text
-{absent: reason-cell, ...occurrence-details...}
+{isa: absent, reason: reason-cell, ...occurrence-details...}
 ```
 
+The projection stack draws one as the absent library provides for its kind.
 The reason cell supplies names and other static metadata. Occurrence fields
-can identify a missing cell, invalid value, or cycle. Code inspects identities,
+can identify a missing cell or invalid value. Code inspects identities,
 not human-readable diagnostic text. Hosts and tests inspect the returned value;
 there is no parallel Rust diagnostics list that can reject a successful result.
 There is no unspecified reason or zero-argument absence constructor. Each
@@ -866,18 +1029,26 @@ producer chooses a reason, reusing library reasons and adding occurrence details
 where useful. Failed atomic-editor conversions include the invalid input.
 
 An unmatched `match` preserves one mismatch unchanged or combines several as
-`{absent: no-alternative, causes: [...]}`. This is an ordinary absent, not an
+`{isa: absent, reason: no-alternative, causes: [...]}`. This is an ordinary absent, not an
 implicit request to try another function definition. A handler using `match`
 can explicitly decline with a final catch-all case. A selected expression's
 result remains definitive within that match. Absence composition belongs only
 to such explicit ordered-choice operations, not to cell lookup; the evaluator
 accumulates no ambient failure trace.
 
-Fuel exhaustion halts immediately; at the public boundary it is still an absent
-value, with `Evaluation.completed` recording that execution did not finish.
-An effectful decline also halts rather than returning normally.
+Fuel exhaustion halts immediately, as does nesting deeper than
+`grap::MAX_DEPTH` (256) evaluations, which keeps deep recursion from
+overflowing the native stack; at the public boundary either is still an absent
+value, with `Evaluation.halt` saying why execution did not finish.
 Returning that same value normally still counts as completed execution.
 Drawing-source origins are separate from failures.
+
+The evaluator keeps no call stack of its own. An evaluation can be given an
+observer (`grap::Observer`), told of each call it enters and leaves. A drawing's
+record step gives it a
+`grap::Tracer`, which keeps the calls a fill is drawn under and captures the
+source-bearing ones as a call trace, sharing prefixes between captures. An
+evaluation nobody observes pays one branch per call.
 
 ## Equivalent host representations
 
@@ -894,10 +1065,9 @@ Privileged knowledge of a library convention is an accelerator only, never a
 capability: each such library must remain expressible externally, evaluating
 correctly at reduced speed, and reads to Grap as an ordinary library. An
 enriched source number or text retains its original value so a pass-through
-preserves unrelated fields. Public `evaluate` and `apply` return
-`Evaluation<RuntimeValue>`. `RuntimeValue::into_value` (or
-`Evaluation::into_value`) explicitly materializes GID; the `*_value` entry
-points adapt callers that still need that representation.
+preserves unrelated fields. Every public entry point returns an `Evaluation`
+whose result is a `RuntimeValue`; `RuntimeValue::into_value`, `to_value` or
+`as_value` materializes GID where a caller needs it.
 
 Expressions own shared lowered code and source locations. A returned closure
 keeps its body and lexical environment alive, not its creating evaluator,
@@ -907,13 +1077,13 @@ retain a cell identity and resolve its implementation in that receiving
 evaluation. Code origins survive; a closure's creation-time call stack is not
 part of its invocation-time call stack.
 
-Closure GID records also retain an optional `body origin` field beside `body`
-and `environment`. It describes the body's source, not the call that created
+Closure GID records also retain an optional `body origin` field beside
+`lambda` and `environment`. It describes the body's source, not the call that created
 the closure. The ordinary record forms are:
 
 ```text
-{document source: path}
-{source cell: cell, definition source: document | {library: id}, source path: path}
+{root source: path}
+{source cell: cell, source path: path}
 {input source: path}
 ```
 
@@ -964,7 +1134,7 @@ argument syntax to interpret. This is distinct from `apply`, whose callable and
 arguments are already evaluated.
 
 Inline code retained by the editor is anchored to its original document
-occurrence before evaluation; cell code retains its definition source and path.
+occurrence before evaluation; cell code retains its cell and path.
 Later invocation does not rebase those locations onto the drawing program.
 Cmd-hover chooses the innermost call with an available projected occurrence.
 Memo input and result comparisons conservatively include native closure
@@ -987,8 +1157,7 @@ and `RuntimeValue` containers, leaving conversion to a real GID boundary.
 Environment lookups and structural matching operate on these equivalent host
 representations. Unboxing must be transparent to Grap behavior, including
 when a value comes through a cell or a constructed container. Origin metadata
-preserves both the definition source and the relative path; it cannot identify
-a definition by cell alone. See [source identity](model.md#occurrences-definitions-and-views).
+preserves the cell and the path relative to its definition. See [source identity](model.md#occurrences-definitions-and-views).
 
 ## Examples
 

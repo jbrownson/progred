@@ -5,6 +5,7 @@ use crate::history;
 use crate::occurrence::Step;
 use crate::selection;
 use crate::workspace;
+use crate::workspace::View;
 use gid::Document;
 use std::rc::Rc;
 
@@ -20,7 +21,8 @@ pub(crate) struct Model {
 
 pub(crate) struct Snapshot {
     doc: Rc<Document>,
-    selection: Option<crate::occurrence::Path>,
+    /// The selection's view and path.
+    selection: Option<(Rc<View>, crate::occurrence::Path)>,
     folds: workspace::Folds,
 }
 
@@ -60,15 +62,18 @@ impl Model {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             doc: self.doc.clone(),
-            selection: self
-                .selection
-                .as_ref()
-                .and_then(|selection| selection.history_path().map(<[Step]>::to_vec)),
+            selection: self.selection.as_ref().and_then(|selection| {
+                selection
+                    .history_path()
+                    .map(|path| (selection.view().clone(), path.to_vec()))
+            }),
             folds: self.workspace.folds(),
         }
     }
 
-    pub fn step_history(&mut self, back: bool) -> bool {
+    /// Steps back or forward through the history, its panes reconciled
+    /// with the document as it was, over `libraries`.
+    pub fn step_history(&mut self, back: bool, libraries: &crate::library::Libraries) -> bool {
         let current = self.snapshot();
         let restored = if back {
             self.history.undo(current)
@@ -77,10 +82,14 @@ impl Model {
         };
         if let Some(restored) = restored {
             self.doc = restored.doc;
-            self.workspace
-                .sync_declared(&workspace::declarations(self.doc.root.as_ref()));
+            self.workspace.sync(&crate::sources::Sources {
+                doc: &self.doc,
+                libraries,
+            });
             self.workspace.restore_folds(restored.folds);
-            self.selection = restored.selection.map(selection::Selection::edge);
+            self.selection = restored
+                .selection
+                .map(|(view, path)| selection::Selection::edge(&view, path));
             true
         } else {
             false
@@ -89,18 +98,19 @@ impl Model {
 
     pub(crate) fn set_folded(
         &mut self,
+        view: &Rc<View>,
         path: &[Step],
         default: bool,
         closed: Option<bool>,
     ) -> bool {
         let before = self.snapshot();
-        let changed = self.workspace.view_at_mut(path).is_some_and(|view| {
-            let previous = crate::annotations::folded(view.annotations.at(path), default);
+        let changed = self.workspace.pane_at_mut(view, path).is_some_and(|pane| {
+            let previous = crate::annotations::folded(pane.annotations.at(path), default);
             let next = closed.unwrap_or(!previous);
             if previous == next {
                 false
             } else {
-                crate::annotations::set_folded(&mut view.annotations, path, default, next);
+                crate::annotations::set_folded(&mut pane.annotations, path, default, next);
                 true
             }
         });
@@ -113,4 +123,5 @@ impl Model {
 }
 
 #[cfg(test)]
+#[path = "tests/model.rs"]
 mod tests;

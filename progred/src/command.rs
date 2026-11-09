@@ -130,13 +130,11 @@ pub enum DocCommand {
     SaveAs,
     Undo,
     Redo,
-    /// Open the selected value in a pane on that side.
+    /// Open the selected value in a pane at that end of the editor's row.
     OpenPane(Side),
     /// Close the selected pane, leaving what it showed in place.
     ClosePane,
-    /// Show the panes declaration in a pane.
-    ShowPanes,
-    /// Move the selected pane.
+    /// Move the selected pane along its row or column.
     MovePane(Move),
     /// Show a preset's libraries in the selected area, or every library if
     /// it shows them already.
@@ -144,6 +142,9 @@ pub enum DocCommand {
     /// Switch one library off, or back on, in the selected area. Menus label
     /// it with the library's name.
     Projection(gid::CellId),
+    /// Show a loaded library in a pane, read-only. Menus label it with the
+    /// library's name.
+    OpenLibrary(gid::CellId),
     // On the web, the browser's page zoom does this.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     ActualSize,
@@ -151,6 +152,8 @@ pub enum DocCommand {
     ZoomIn,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     ZoomOut,
+    /// Copy the version the menu bar and window titles show, for a report.
+    CopyVersion,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -321,7 +324,6 @@ pub fn spec(command: Command) -> Spec {
             Some(Shortcut::shifted(ShortcutKey::P)),
         ),
         Command::Doc(DocCommand::ClosePane) => item("Close Pane", None),
-        Command::Doc(DocCommand::ShowPanes) => item("Show Panes", None),
         Command::Doc(DocCommand::MovePane(Move::Up)) => item("Move Pane Up", None),
         Command::Doc(DocCommand::MovePane(Move::Down)) => item("Move Pane Down", None),
         Command::Doc(DocCommand::MovePane(Move::Left)) => item("Move Pane Left", None),
@@ -332,6 +334,7 @@ pub fn spec(command: Command) -> Spec {
             toggle("Raw", Some(Shortcut::plain(ShortcutKey::R)))
         }
         Command::Doc(DocCommand::Projection(_)) => toggle("Projection", None),
+        Command::Doc(DocCommand::OpenLibrary(_)) => item("Library", None),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::ActualSize) => {
             item("Actual Size", Some(Shortcut::plain(ShortcutKey::Digit0)))
@@ -344,6 +347,7 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::ZoomOut) => {
             item("Zoom Out", Some(Shortcut::plain(ShortcutKey::Minus)))
         }
+        Command::Doc(DocCommand::CopyVersion) => item("Copy Version", None),
     }
 }
 
@@ -357,7 +361,6 @@ pub struct Availability {
     pub redo: bool,
     pub open_pane: bool,
     pub close_pane: bool,
-    pub show_panes: bool,
     pub move_up: bool,
     pub move_down: bool,
     pub move_left: bool,
@@ -381,18 +384,18 @@ impl Availability {
             DocCommand::Redo => self.redo,
             DocCommand::OpenPane(_) => self.open_pane,
             DocCommand::ClosePane => self.close_pane,
-            DocCommand::ShowPanes => self.show_panes,
             DocCommand::MovePane(Move::Up) => self.move_up,
             DocCommand::MovePane(Move::Down) => self.move_down,
             DocCommand::MovePane(Move::Left) => self.move_left,
             DocCommand::MovePane(Move::Right) => self.move_right,
-            DocCommand::Preset(_) | DocCommand::Projection(_) => true,
+            DocCommand::Preset(_) | DocCommand::Projection(_) | DocCommand::OpenLibrary(_) => true,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.actual_size,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ZoomIn => self.zoom_in,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ZoomOut => self.zoom_out,
+            DocCommand::CopyVersion => true,
         }
     }
 
@@ -425,4 +428,5 @@ impl Toggles {
 }
 
 #[cfg(test)]
+#[path = "tests/command.rs"]
 mod tests;

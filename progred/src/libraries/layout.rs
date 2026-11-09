@@ -1,36 +1,35 @@
 //! Grap-facing layout: scoped emitting programs, and stored descriptions.
-//! A `layout program` returns an ordinary closure run by [`scope`] with
-//! Rust-owned output. In the stored description form, each node is a
-//! record under a single marker key, strings ride the text convention
-//! and numbers the f64 convention. Interaction either attaches
+//! A `layout program` returns a layout program, its ordinary closure run by
+//! [`scope`] with Rust-owned output. In the stored description form, each
+//! node is a record of its kind, each drawing command and shape a record
+//! under its tag, strings ride the text convention and numbers the f64
+//! convention. Interaction either attaches
 //! host-provided editor intents or a Grap handler to generic event
-//! data. Event dispatch supplies a capability overlay closed over the
+//! data. Event dispatch supplies foreign functions closed over the
 //! projection site. Traversal uses the path step convention.
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
+use crate::libraries::{Library, color, f64 as f64_convention, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
-    Delim, Face, Paint, RowAlignment, activatable, alternatives, block_hover, border, bracket,
-    descend, leaf, overlay as layout_overlay, pickable, slot,
+    Delim, Face, Paint, RowAlignment, alternatives, block_hover, border, bracket, descend, leaf,
+    overlay as layout_overlay, pickable, selectable, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke};
 use peniko::{Brush, ColorStop, Gradient};
 use puri::draw::{Command, Drawing, Leaf, Shape};
 
-const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
-const CAPTURED_BORDER_PROJECTION: CellId = CellId::from_u128(0x79e405aaf432422ca572617eb6d98fa3);
-
 mod drawing;
 mod events;
 pub use events::on_event;
 pub mod scope;
 #[cfg(test)]
+#[path = "tests/layout/test_support.rs"]
 pub(crate) mod test_support;
 
 pub mod vocabulary {
@@ -61,7 +60,6 @@ pub mod vocabulary {
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
     /// A line across the width its container offers.
     pub const RULE: CellId = CellId::from_u128(0xf8a0697c10a7a18e750e3fb32a57bcf2);
-    pub const CANVAS: CellId = CellId::from_u128(0xb33eff2d53a88f77c431b7c728a49f0f);
     pub const LAYOUT_PROGRAM: CellId = CellId::from_u128(0x120660d976130c8ba722d26b1a28c975);
     pub const INVALID_PROGRAM: CellId = CellId::from_u128(0xd0f97606bf2fe368cb9645e4bad8b977);
     pub const INVALID_DRAWING: CellId = CellId::from_u128(0x3ff5ffa7414309b0ed4ed3f17ba5d5cd);
@@ -137,86 +135,55 @@ pub mod vocabulary {
     pub const PAREN: CellId = CellId::from_u128(0x0af59c27b1e4d68318f4a06c9d7325eb);
     pub const SQUARE: CellId = CellId::from_u128(0x9e61d40b7f3ca258745c1e9b02d8f6a3);
     pub const CURLY: CellId = CellId::from_u128(0x63b8f5a2c90e17d4e12489d5b6a0c73f);
-}
 
-/// `drawing` is both the display-language marker and its ordinary
-/// unary constructor/projection function. Calling it with `value`
-/// produces the same data form that can also be written literally.
-fn drawing_projection(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
-    };
-    Ok(::grap::RuntimeValue::record([(
-        vocabulary::DRAWING,
-        context.eval(value, environment)?,
-    )]))
-}
+    /// The kinds of stored layout nodes and of a layout program, each a cell
+    /// of its own, apart from the scoped function of the same name.
+    pub mod kind {
+        use gid::CellId;
 
-/// Turn an ordinary projection into one whose projected result is
-/// redispatched inside the standard border layout.
-fn border_projection(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
-    };
-    let projection = context.eval(projection, environment)?;
-    let captured = environment.extended_runtime([(CAPTURED_BORDER_PROJECTION, projection)]);
-    let body = ::grap::call(
-        Value::from(APPLY_BORDER_PROJECTION),
-        [
-            (
-                presentation::vocabulary::PROJECTION,
-                Value::from(CAPTURED_BORDER_PROJECTION),
-            ),
-            (
-                presentation::vocabulary::VALUE,
-                Value::from(presentation::vocabulary::VALUE),
-            ),
-        ],
-    );
-    Ok(context.closure_value([presentation::vocabulary::VALUE], body, &captured))
-}
-
-fn apply_border_projection(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
-    };
-    let projection = context.eval(projection, environment)?;
-    let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
-    };
-    let value = context.eval(value, environment)?;
-    let projected =
-        context.apply_expression(&projection, [(presentation::vocabulary::VALUE, value)])?;
-    Ok(::grap::RuntimeValue::record([(
-        vocabulary::BORDER,
-        at([Step::Key(presentation::vocabulary::RESULT)], projected),
-    )]))
-}
-
-fn at(steps: impl IntoIterator<Item = Step>, value: ::grap::RuntimeValue) -> ::grap::RuntimeValue {
-    ::grap::RuntimeValue::record([(
-        vocabulary::AT,
-        ::grap::RuntimeValue::record([
-            (vocabulary::VALUE, value),
-            (
-                vocabulary::STEPS,
-                crate::libraries::editor::path::value(&steps.into_iter().collect::<Vec<_>>())
-                    .into(),
-            ),
-        ]),
-    )])
+        /// Children side by side: `{isa: row, gap, children, baseline?}`.
+        pub const ROW: CellId = CellId::from_u128(0x4843d61b088a4e569fafe00f7a617c6a);
+        /// Children one under another: `{isa: col, baseline, gap, children}`.
+        pub const COL: CellId = CellId::from_u128(0x167741552b1a4d7cbffecb45d1326970);
+        /// A child with room around it: `{isa: pad, left, top, right, bottom, child}`.
+        pub const PAD: CellId = CellId::from_u128(0x426095b35fa14ed0a452d15a18d40f53);
+        /// A child in the middle of the width its container offers: `{isa: center, child}`.
+        pub const CENTER: CellId = CellId::from_u128(0xeae2886e51e142708d37a537a61ad05b);
+        /// A child framed: `{isa: border, child}`.
+        pub const BORDER: CellId = CellId::from_u128(0x876d14ee7d5a4b70aa9709cd55135649);
+        /// Children drawn over one another: `{isa: overlay, children}`.
+        pub const OVERLAY: CellId = CellId::from_u128(0xad61b87d4b3e4a3a800c5cd805b58c28);
+        /// A child between delimiters: `{isa: bracket, delim, child}`.
+        pub const BRACKET: CellId = CellId::from_u128(0x1a35405498e843ca9bd091aa1e0983eb);
+        /// The first of its children that fits: `{isa: alternatives, children}`.
+        pub const ALTERNATIVES: CellId = CellId::from_u128(0x117dc122744f4b0aa69014e4cbe7b76a);
+        /// The value one step down, as the projection draws it: `{isa: descend, step}`.
+        pub const DESCEND: CellId = CellId::from_u128(0x5d75597b17544d90b66f74bac4201423);
+        /// The value some steps down: `{isa: descend path, steps}`.
+        pub const DESCEND_PATH: CellId = CellId::from_u128(0x9a2529c646d648b3a1e4e50a9515d660);
+        /// A stored value elsewhere, drawn here: `{isa: jump, steps, document path}`.
+        pub const JUMP: CellId = CellId::from_u128(0xa0ddfad49b4c4e1e9a9923dcaaae7188);
+        /// A computed value, drawn here: `{isa: at, steps, value}`.
+        pub const AT: CellId = CellId::from_u128(0xa67e18ce34834e5aa470045a50640b4f);
+        /// Text: `{isa: text, content, paint}`.
+        pub const TEXT: CellId = CellId::from_u128(0xfd00dc28f7f24065bc76a528fc941c66);
+        /// Drawn commands or a drawing program: `{isa: drawing, width, ascent, descent, commands | program, fuel}`.
+        pub const DRAWING: CellId = CellId::from_u128(0x0f42d484547d4e61b0f5dae119911117);
+        /// An empty slot: `{isa: slot}`.
+        pub const SLOT: CellId = CellId::from_u128(0xd03a133d0b6e4fbc9f2d108701348a16);
+        /// A horizontal rule: `{isa: rule}`.
+        pub const RULE: CellId = CellId::from_u128(0x25647a81e7104009b228bf59411722c2);
+        /// A child that selects the value drawn: `{isa: selectable, child}`.
+        pub const SELECTABLE: CellId = CellId::from_u128(0x5ef1270bffc74529bf66fc7dbe667bbd);
+        /// A child that picks a value: `{isa: pickable, child, value}`.
+        pub const PICKABLE: CellId = CellId::from_u128(0xd57345940fae43a0b1fec1f4302b66fc);
+        /// A child whose hover stops at it: `{isa: hover block, child}`.
+        pub const HOVER_BLOCK: CellId = CellId::from_u128(0xa7dd5e84882c47f5ba86c3b27444727b);
+        /// A child whose events a Grap handler gets: `{isa: on event, child, handler}`.
+        pub const ON_EVENT: CellId = CellId::from_u128(0xb8eafe383f924449a980d74faea1996b);
+        /// A layout program, run to emit its layout: `{isa: layout program, program}`.
+        pub const LAYOUT_PROGRAM: CellId = CellId::from_u128(0xe8d550f504354ddba74b2960bcda2d84);
+    }
 }
 
 /// Which child's baseline a column, or a row aligning tops, keeps. A
@@ -225,27 +192,29 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
     ::grap::f64::to_usize(baseline).filter(|index| children == 0 || *index < children)
 }
 
-/// The stored form's node markers, in the precedence that settles a record
-/// carrying several.
-const MARKERS: [CellId; 18] = [
-    vocabulary::ROW,
-    vocabulary::COL,
-    vocabulary::OVERLAY,
-    vocabulary::PAD,
-    vocabulary::BORDER,
-    vocabulary::BRACKET,
-    vocabulary::ALTERNATIVES,
-    vocabulary::DESCEND,
-    vocabulary::DESCEND_PATH,
-    vocabulary::JUMP,
-    vocabulary::AT,
-    vocabulary::TEXT,
-    vocabulary::DRAWING,
-    vocabulary::SLOT,
-    vocabulary::SELECTABLE,
-    vocabulary::PICKABLE,
-    vocabulary::HOVER_BLOCK,
-    vocabulary::ON_EVENT,
+/// The kinds of the stored form's nodes, each drawn as [`decode_with`]
+/// reads it.
+const NODES: [CellId; 20] = [
+    vocabulary::kind::ROW,
+    vocabulary::kind::COL,
+    vocabulary::kind::OVERLAY,
+    vocabulary::kind::PAD,
+    vocabulary::kind::CENTER,
+    vocabulary::kind::BORDER,
+    vocabulary::kind::BRACKET,
+    vocabulary::kind::ALTERNATIVES,
+    vocabulary::kind::DESCEND,
+    vocabulary::kind::DESCEND_PATH,
+    vocabulary::kind::JUMP,
+    vocabulary::kind::AT,
+    vocabulary::kind::TEXT,
+    vocabulary::kind::DRAWING,
+    vocabulary::kind::SLOT,
+    vocabulary::kind::RULE,
+    vocabulary::kind::SELECTABLE,
+    vocabulary::kind::PICKABLE,
+    vocabulary::kind::HOVER_BLOCK,
+    vocabulary::kind::ON_EVENT,
 ];
 
 /// Where a stored node sits in the value being decoded, kept as decoding
@@ -284,22 +253,21 @@ fn decode_with<W: Host>(
 ) -> Option<Layout<W>> {
     use crate::libraries::editor::path;
     use vocabulary::*;
-    let (marker, content) = MARKERS
-        .into_iter()
-        .find_map(|marker| Some((marker, value.field(marker)?)))?;
-    let place = Place::Field(place, marker);
-    let number = |field| read_number(content.field(field)?.as_value());
-    let nonnegative = |field| read_nonnegative(content.field(field)?.as_value());
-    let child = || decode_with(&content.field(CHILD)?, &Place::Field(&place, CHILD), site);
-    match marker {
-        ROW => {
+    let number = |field| read_number(value.field(field)?.as_value());
+    let nonnegative = |field| read_nonnegative(value.field(field)?.as_value());
+    let child = || decode_with(&value.field(CHILD)?, &Place::Field(place, CHILD), site);
+    let children_field = || {
+        children(
+            &value.field(CHILDREN)?,
+            &Place::Field(place, CHILDREN),
+            site,
+        )
+    };
+    match value.kind()? {
+        kind::ROW => {
             let gap = number(GAP)?;
-            let children = children(
-                &content.field(CHILDREN)?,
-                &Place::Field(&place, CHILDREN),
-                site,
-            )?;
-            Some(match content.field(BASELINE) {
+            let children = children_field()?;
+            Some(match value.field(BASELINE) {
                 None => crate::display::row(gap, children),
                 Some(baseline) => crate::display::aligned_row(
                     RowAlignment::Top {
@@ -313,64 +281,69 @@ fn decode_with<W: Host>(
                 ),
             })
         }
-        COL => {
+        kind::COL => {
             let baseline = number(BASELINE)?;
-            let children = children(
-                &content.field(CHILDREN)?,
-                &Place::Field(&place, CHILDREN),
-                site,
-            )?;
+            let children = children_field()?;
             Some(crate::display::col(
                 baseline_index(baseline, children.len())?,
                 number(GAP)?,
                 children,
             ))
         }
-        OVERLAY => Some(layout_overlay(children(&content, &place, site)?)),
-        PAD => Some(crate::display::padding(
+        kind::OVERLAY => Some(layout_overlay(children_field()?)),
+        kind::PAD => Some(crate::display::padding(
             (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
             child()?,
         )),
-        BORDER => Some(border(decode_with(&content, &place, site)?)),
-        BRACKET => Some(bracket(read_delim(&content.field(DELIM)?)?, child()?)),
-        ALTERNATIVES => Some(alternatives(children(&content, &place, site)?)),
-        DESCEND => Some(descend(
-            [path::read_step(content.field(STEP)?.as_value())?],
+        kind::CENTER => Some(crate::display::center(child()?)),
+        kind::BORDER => Some(border(child()?)),
+        kind::BRACKET => Some(bracket(read_delim(&value.field(DELIM)?)?, child()?)),
+        kind::ALTERNATIVES => Some(alternatives(children_field()?)),
+        kind::DESCEND => Some(descend(
+            [path::read_step(value.field(STEP)?.as_value())?],
             None,
             None,
         )),
-        DESCEND_PATH => Some(descend(path::read(content.as_value())?, None, None)),
-        JUMP => Some(crate::display::jump(
-            path::read(content.field(STEPS)?.as_value())?,
-            path::read(content.field(DOCUMENT_PATH)?.as_value())?,
+        kind::DESCEND_PATH => Some(descend(
+            path::read(value.field(STEPS)?.as_value())?,
+            None,
+            None,
         )),
-        AT => Some(crate::display::at(
-            path::read(content.field(STEPS)?.as_value())?,
-            content.field(VALUE)?,
+        kind::JUMP => Some(crate::display::jump(
+            path::read(value.field(STEPS)?.as_value())?,
+            crate::location::Location::root(path::read(value.field(DOCUMENT_PATH)?.as_value())?),
+            None,
+            None,
         )),
-        TEXT => Some(leaf(Leaf::Text {
-            text: content.field(CONTENT)?.as_text()?.to_string(),
-            paint: Paint::Face(read_face(content.field(PAINT)?.as_value())?),
+        kind::AT => Some(crate::display::at(
+            path::read(value.field(STEPS)?.as_value())?,
+            value.field(VALUE)?,
+            None,
+            None,
+        )),
+        kind::TEXT => Some(leaf(Leaf::Text {
+            text: value.field(CONTENT)?.as_text()?.to_string(),
+            paint: Paint::Face(read_face(value.field(PAINT)?.as_value())?),
             script: puri::text::Script::Normal,
         })),
-        DRAWING => {
+        kind::DRAWING => {
             let extent = crate::display::widget::Extent {
                 width: nonnegative(WIDTH)?,
                 ascent: nonnegative(ASCENT)?,
                 descent: nonnegative(DESCENT)?,
             };
-            Some(match content.field(PROGRAM) {
+            Some(match value.field(PROGRAM) {
                 Some(program) => drawing::program(
                     extent,
                     ::grap::f64::to_usize(number(FUEL)?)?,
-                    Place::Field(&place, PROGRAM).steps(),
+                    Place::Field(place, PROGRAM).steps(),
                     program,
                 ),
                 None => leaf(Leaf::Drawing(Drawing {
                     width: extent.width,
                     ascent: extent.ascent,
                     descent: extent.descent,
-                    commands: content
+                    commands: value
                         .field(COMMANDS)?
                         .list_values()?
                         .map(|command| read_command(command.as_value()))
@@ -378,16 +351,17 @@ fn decode_with<W: Host>(
                 })),
             })
         }
-        SLOT => Some(slot()),
-        SELECTABLE => Some(activatable(decode_with(&content, &place, site)?, &site())),
-        PICKABLE => Some(pickable(
+        kind::SLOT => Some(slot()),
+        kind::RULE => Some(crate::display::rule()),
+        kind::SELECTABLE => Some(selectable(child()?, &site())),
+        kind::PICKABLE => Some(pickable(
             child()?,
             W::Hover::from(site().hover()),
-            content.field(VALUE)?,
+            value.field(VALUE)?,
         )),
-        HOVER_BLOCK => Some(block_hover(decode_with(&content, &place, site)?)),
-        ON_EVENT => Some(on_event(child()?, content.field(HANDLER)?)),
-        // A marker MARKERS lists without an arm here declines, as a
+        kind::HOVER_BLOCK => Some(block_hover(child()?)),
+        kind::ON_EVENT => Some(on_event(child()?, value.field(HANDLER)?)),
+        // Any other kind isn't a layout node, so it declines, as a
         // malformed node does.
         _ => None,
     }
@@ -614,9 +588,7 @@ fn read_path_element(value: &Value) -> Option<PathEl> {
             ),
         ))
     } else {
-        fields
-            .contains_key(&vocabulary::CLOSE)
-            .then_some(PathEl::ClosePath)
+        fields.get(&vocabulary::CLOSE).map(|_| PathEl::ClosePath)
     }
 }
 
@@ -628,8 +600,9 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    scope::display(input).or_else(|| decode_with(input.value?, &Place::Root, &|| input.site()))
+/// A stored node, drawn as [`decode_with`] reads it.
+fn node<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    decode_with(input.value?, &Place::Root, &|| input.site())
 }
 
 pub fn library<W: Host>() -> Library<W> {
@@ -655,8 +628,28 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::DRAWING, "drawing"),
             (vocabulary::PROGRAM, "program"),
             (vocabulary::SLOT, "slot"),
-            (vocabulary::CANVAS, "canvas"),
             (vocabulary::LAYOUT_PROGRAM, "layout program"),
+            (vocabulary::kind::LAYOUT_PROGRAM, "layout program"),
+            (vocabulary::kind::ROW, "row"),
+            (vocabulary::kind::COL, "col"),
+            (vocabulary::kind::PAD, "pad"),
+            (vocabulary::kind::CENTER, "center"),
+            (vocabulary::kind::BORDER, "border"),
+            (vocabulary::kind::OVERLAY, "overlay"),
+            (vocabulary::kind::BRACKET, "bracket"),
+            (vocabulary::kind::ALTERNATIVES, "alternatives"),
+            (vocabulary::kind::DESCEND, "descend"),
+            (vocabulary::kind::DESCEND_PATH, "descend path"),
+            (vocabulary::kind::JUMP, "jump"),
+            (vocabulary::kind::AT, "at"),
+            (vocabulary::kind::TEXT, "text"),
+            (vocabulary::kind::DRAWING, "drawing"),
+            (vocabulary::kind::SLOT, "slot"),
+            (vocabulary::kind::RULE, "rule"),
+            (vocabulary::kind::SELECTABLE, "selectable"),
+            (vocabulary::kind::PICKABLE, "pickable"),
+            (vocabulary::kind::HOVER_BLOCK, "hover block"),
+            (vocabulary::kind::ON_EVENT, "on event"),
             (vocabulary::INVALID_PROGRAM, "invalid layout program"),
             (vocabulary::INVALID_DRAWING, "invalid drawing arguments"),
             (vocabulary::SELECTABLE, "selectable"),
@@ -763,37 +756,24 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::SQUARE, "square"),
             (vocabulary::CURLY, "curly"),
         ],
-        ForeignFunctions::default()
-            .register(
-                vocabulary::LAYOUT_PROGRAM,
-                ForeignFunction::new(scope::program)
-                    .parameters([::grap::vocabulary::EXPRESSION])
-                    .tracked(),
-            )
-            .register(
-                vocabulary::DRAWING,
-                ForeignFunction::new(drawing_projection)
-                    .parameters([presentation::vocabulary::VALUE])
-                    .tracked(),
-            )
-            .register(
-                vocabulary::BORDER,
-                ForeignFunction::new(border_projection)
-                    .parameters([presentation::vocabulary::PROJECTION])
-                    .tracked(),
-            )
-            .register(
-                APPLY_BORDER_PROJECTION,
-                ForeignFunction::new(apply_border_projection)
-                    .parameters([
-                        presentation::vocabulary::PROJECTION,
-                        presentation::vocabulary::VALUE,
-                    ])
-                    .tracked(),
-            ),
+        ForeignFunctions::default().register(
+            vocabulary::LAYOUT_PROGRAM,
+            ForeignFunction::new(scope::program)
+                .parameters([::grap::vocabulary::EXPRESSION])
+                .cacheable(),
+        ),
     )
-    .with_projection(crate::display::runtime_partial(display))
+    .with_projections_for(
+        NODES
+            .into_iter()
+            .map(|kind| (kind, crate::display::runtime_partial(node)))
+            .chain([(
+                vocabulary::kind::LAYOUT_PROGRAM,
+                crate::display::runtime_partial(scope::display),
+            )]),
+    )
 }
 
 #[cfg(test)]
+#[path = "tests/layout/mod.rs"]
 mod tests;

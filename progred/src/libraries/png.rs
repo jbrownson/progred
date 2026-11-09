@@ -123,7 +123,7 @@ fn shown_size(width: u32, height: u32) -> Size {
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let bytes = input.value?.field(vocabulary::PNG)?;
     let image = decode(bytes.as_blob()?)?;
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == vocabulary::PNG,
         crate::display::widget::image::image(shown_size(image.width, image.height), image),
@@ -150,17 +150,17 @@ impl Parse for Png {
     }
 }
 
-fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
+fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction<'static> {
     ForeignFunction::with_arguments([vocabulary::IMAGE], move |_, (image,): (Png,)| {
         size(image.bytes()).map_or_else(
             || ::grap::absent::value(vocabulary::INVALID_PNG),
             |size| crate::libraries::f64::value(f64::from(pick(size))),
         )
     })
-    .tracked()
+    .cacheable()
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(vocabulary::WIDTH, dimension(|(width, _)| width))
         .register(vocabulary::HEIGHT, dimension(|(_, height)| height))
@@ -184,4 +184,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/png.rs"]
 mod tests;

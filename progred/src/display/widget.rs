@@ -17,6 +17,7 @@ pub mod delimiter;
 pub mod drawing;
 pub mod frame;
 pub mod gesture;
+pub mod handle;
 pub mod hover;
 pub mod image;
 pub mod interaction;
@@ -176,38 +177,26 @@ pub fn ground<World: 'static, Hover: 'static>(
     )
 }
 
-pub fn selectable<W: Host>(
-    context: &Context<'_, '_, W, W::Hover>,
-) -> impl FnOnce(Measured<HoverPass<W, W::Hover>>) -> Measured<HoverPass<W, W::Hover>> + 'static {
-    let site = context.site();
-    let target = W::Hover::from(site.hover());
-    let select = navigation::selecting(site);
-    let value = context.value.cloned();
-    move |child| {
+/// `widget`, which claims the hover of the value it's drawn for and selects it
+/// when clicked; a Cmd+click is the value's own, as anywhere it's drawn.
+pub fn selectable_widget<W: Host>(widget: Widget<W, W::Hover>) -> Widget<W, W::Hover> {
+    Rc::new(move |context| {
+        let site = context.site();
+        let target = W::Hover::from(site.hover());
+        let select = navigation::selecting(site);
         before_place(
-            child,
+            widget(context),
             move |placement, output: &mut HoverContext<'_, W, W::Hover>| {
                 if !placement.clipped_out() {
                     output.claim(Probe::retaining(placement, target.clone()));
                     output.on_press(
                         target,
                         move |world, _| select(&mut world.session()),
-                        move |world, _| {
-                            value
-                                .as_ref()
-                                .is_some_and(|value| interaction::pick(world, value))
-                        },
+                        |_, _| false,
                     );
                 }
             },
         )
-    }
-}
-
-pub fn selectable_widget<W: Host>(widget: Widget<W, W::Hover>) -> Widget<W, W::Hover> {
-    Rc::new(move |context| {
-        let decorate = selectable(context);
-        decorate(widget(context))
     })
 }
 
@@ -294,4 +283,5 @@ pub fn after_place<W: 'static, H: 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/widget.rs"]
 mod tests;

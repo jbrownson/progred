@@ -20,14 +20,19 @@ pub(super) fn program<W: Host>(
     stored: Option<Vec<Step>>,
     program: grap::RuntimeValue,
 ) -> crate::display::host::Layout<W> {
-    crate::display::widget::recorded::recorded(extent, stored, record(program, fuel))
+    // A stored program's calls have origins below where it's stored.
+    let origin = stored
+        .is_some()
+        .then(|| grap::SourceOrigin::Input(Vec::new()));
+    crate::display::widget::recorded::recorded(extent, stored, record(program, origin, fuel))
 }
 
 /// Runs `program` with the drawing functions installed, filling into the
-/// recorder.
-fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
+/// recorder, each fill with the calls it was drawn under.
+fn record(program: grap::RuntimeValue, origin: Option<grap::SourceOrigin>, fuel: usize) -> Record {
     Rc::new(move |host, recorder: &mut Recorder| {
         let recorder = RefCell::new(recorder);
+        let tracer = grap::Tracer::default();
         let path = RefCell::new(BezPath::new());
         let unit = Value::record([]);
         let functions = [
@@ -47,11 +52,11 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     unit.clone()
                 })),
                 vocabulary::MOVE_TO | vocabulary::LINE_TO => {
-                    let Some(x) = context.field(call, vocabulary::X) else {
-                        return Ok(context.missing_argument(vocabulary::X));
+                    let Some(x) = call.field(vocabulary::X) else {
+                        return Ok(call.missing_argument(vocabulary::X));
                     };
-                    let Some(y) = context.field(call, vocabulary::Y) else {
-                        return Ok(context.missing_argument(vocabulary::Y));
+                    let Some(y) = call.field(vocabulary::Y) else {
+                        return Ok(call.missing_argument(vocabulary::Y));
                     };
                     Ok(
                         match (
@@ -66,7 +71,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                                 }
                                 unit.clone()
                             }),
-                            _ => invalid_drawing(context, call),
+                            _ => invalid_drawing(call),
                         },
                     )
                 }
@@ -78,13 +83,13 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     let Some(paint) =
                         evaluated_field(context, call, environment, vocabulary::PAINT)?
                     else {
-                        return Ok(context.missing_argument(vocabulary::PAINT));
+                        return Ok(call.missing_argument(vocabulary::PAINT));
                     };
-                    let shape = match context.field(call, vocabulary::SHAPE) {
+                    let shape = match call.field(vocabulary::SHAPE) {
                         Some(shape) => evaluated_shape(&context.eval(shape, environment)?),
                         None => Some(puri::draw::Shape::Path(path.borrow().clone())),
                     };
-                    let transform = match context.field(call, vocabulary::TRANSFORM) {
+                    let transform = match call.field(vocabulary::TRANSFORM) {
                         Some(transform) => {
                             evaluated_transform(&context.eval(transform, environment)?)
                         }
@@ -92,30 +97,32 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     };
                     Ok(match (shape, read_paint(&paint), transform) {
                         (Some(shape), Some(paint), Some(transform)) => {
-                            let calls = context.call_trace();
+                            let calls = tracer.trace();
                             context.effect(|| {
                                 recorder.borrow_mut().fill(shape, paint, transform, calls);
                                 unit.clone()
                             })
                         }
-                        _ => invalid_drawing(context, call),
+                        _ => invalid_drawing(call),
                     })
                 }
-                _ => unreachable!("the overlay only advertises drawing functions"),
+                _ => unreachable!("only the drawing functions are installed"),
             }
         };
-        let overlay = grap::ForeignOverlay::from_value(&functions, &draw);
-        let evaluation = grap::evaluate_runtime_scoped(&program, host, &overlay, fuel);
-        evaluation.completed && !evaluation.result.declines()
+        let evaluation = grap::Evaluator::new(host, fuel)
+            .functions(grap::ForeignFunctions::shared(&functions, &draw))
+            .observer(&tracer)
+            .evaluate_runtime(&program, origin.clone());
+        evaluation.halt.is_none() && !evaluation.result.declines()
     })
 }
 
 /// An absent naming `call`, a drawing call with an argument it can't read.
-fn invalid_drawing(context: &grap::Context, call: &grap::Expression) -> Value {
+fn invalid_drawing(call: &grap::Expression) -> Value {
     ::grap::absent::with_detail(
         vocabulary::INVALID_DRAWING,
         ::grap::absent::VALUE,
-        context.value(call).clone(),
+        call.value().clone(),
     )
 }
 
@@ -125,8 +132,7 @@ fn evaluated_field(
     environment: &grap::Environment,
     field: CellId,
 ) -> Result<Option<Value>, grap::Halt> {
-    context
-        .field(call, field)
+    call.field(field)
         .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }
@@ -191,4 +197,5 @@ fn coordinate(value: &grap::RuntimeValue, key: CellId) -> Option<f64> {
 }
 
 #[cfg(test)]
+#[path = "tests/drawing.rs"]
 mod tests;

@@ -259,4 +259,5 @@ pub fn draw_layout(
 }
 
 #[cfg(test)]
+#[path = "tests/text.rs"]
 mod tests;

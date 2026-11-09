@@ -87,22 +87,6 @@ impl Annotations {
         self.node_at(path)?.value()
     }
 
-    /// The same annotations, each at its path under `prefix`.
-    pub fn under(&self, prefix: &[Step]) -> Self {
-        Self {
-            root: prefix.iter().rev().fold(self.root.clone(), |below, step| {
-                if below.is_empty() {
-                    below
-                } else {
-                    Rc::new(Node {
-                        value: None,
-                        children: HashMap::from([(step.clone(), below)]),
-                    })
-                }
-            }),
-        }
-    }
-
     /// Replace or clear the whole value at a path. Empty records prune.
     pub fn set(&mut self, path: &[Step], value: Option<Value>) {
         let value =
@@ -120,14 +104,7 @@ impl Annotations {
             .and_then(Value::as_record)
             .cloned()
             .unwrap_or_default();
-        match value {
-            Some(value) => {
-                fields.insert(key, value);
-            }
-            None => {
-                fields.remove(&key);
-            }
-        }
+        fields.set(key, value);
         self.set(path, (!fields.is_empty()).then_some(Value::Record(fields)));
     }
 
@@ -138,7 +115,8 @@ impl Annotations {
             .filter(|(_, value)| {
                 value
                     .as_record()
-                    .is_some_and(|fields| fields.contains_key(&key))
+                    .and_then(|fields| fields.get(&key))
+                    .is_some()
             })
             .map(|(path, _)| path)
             .collect();
@@ -182,4 +160,5 @@ pub fn set_folded(annotations: &mut Annotations, path: &[Step], default: bool, n
 }
 
 #[cfg(test)]
+#[path = "tests/annotations.rs"]
 mod tests;

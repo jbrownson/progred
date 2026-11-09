@@ -1,10 +1,10 @@
 //! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::view::Area;
 use crate::location::{Location, Start};
 use crate::{Editor, selection::Stage};
 use ::grap::path;
-use gid::{Document, Resolution, Step, Value};
+use gid::{Document, Step, Value};
 use std::rc::Rc;
 
 pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack, String> {
@@ -16,9 +16,9 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack, String
             } else {
                 ids.split(',')
                     .map(|id| {
-                        id.trim()
-                            .parse::<gid::CellId>()
-                            .map_err(|error| format!("Invalid library ID {id:?}: {error}"))
+                        gid::CellId::read(id.trim()).ok_or_else(|| {
+                            format!("Invalid library ID {id:?}: a cell id is 32 hex digits")
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()
             }?;
@@ -54,16 +54,17 @@ pub(crate) fn peeled(
     Ok(stack)
 }
 
-/// The document view's content height in CSS pixels from the top of the
-/// editor. The first frame is built before winit has measured the canvas, in
+/// The content height of the document's whole area, `document`, in CSS
+/// pixels from the top of the editor. The first frame is built before winit has measured the canvas, in
 /// an empty window, so its layout says nothing and reports none.
 pub(crate) fn content_height(
     regions: &[crate::display::widget::frame::ViewRegion],
+    document: &Area,
     scale: f64,
 ) -> Option<f64> {
     regions.iter().find_map(|region| {
         let content = region.content?;
-        (matches!(region.root.target(), Target::Document) && region.rect.area() > 0.0)
+        (region.area == *document && region.rect.area() > 0.0)
             .then(|| (region.rect.y0 / scale + content.y).ceil())
     })
 }
@@ -147,9 +148,9 @@ pub(crate) fn tutorial_slots(
                             return Err(format!("Unknown tutorial slot level {level:?}"));
                         }
                     };
-                    id.parse::<gid::CellId>()
-                        .map(|id| (id, level))
-                        .map_err(|error| format!("Invalid tutorial slot {id:?}: {error}"))
+                    gid::CellId::read(id).map(|id| (id, level)).ok_or_else(|| {
+                        format!("Invalid tutorial slot {id:?}: a cell id is 32 hex digits")
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             if slots
@@ -181,6 +182,17 @@ pub(crate) fn tutorial_slots(
                 projection.partial().clone(),
                 crate::display::runtime_partial(named_reference),
             ]);
+            // A slot is a pane of its own, so with the presentation library
+            // loaded it presents a render or declaration there, as a pane does.
+            let full_entry = libraries
+                .iter()
+                .any(|(id, _)| id == crate::libraries::presentation::ID)
+                .then(|| {
+                    crate::display::compose_partials([
+                        crate::display::runtime_partial(crate::libraries::presentation::pane_entry),
+                        projection.partial().clone(),
+                    ])
+                });
             let captioned = slots.windows(2).any(|pair| pair[0].1 != pair[1].1);
             let captions = [false, true].map(|same| {
                 [Level::Full, Level::Plain, Level::Raw].map(|level| level.caption(libraries, same))
@@ -188,14 +200,14 @@ pub(crate) fn tutorial_slots(
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
                     let same = same_as_above(&slots, input.value);
-                    crate::display::group(crate::display::col(
+                    crate::display::col(
                         0,
                         16.0,
                         slots.iter().zip(same).map(|((key, level), same)| {
                             let view = match level {
                                 Level::Full => crate::display::descend(
                                     [Step::Key(*key)],
-                                    None,
+                                    full_entry.clone(),
                                     Some(full_inside.clone()),
                                 ),
                                 Level::Plain => crate::display::descend(
@@ -224,7 +236,7 @@ pub(crate) fn tutorial_slots(
                                 view
                             }
                         }),
-                    ))
+                    )
                 })
             })))
         }
@@ -241,35 +253,63 @@ fn named_reference(
         ::grap::RuntimeValue,
     >,
 ) -> Option<crate::display::Layout<Editor, crate::frame::Hovered>> {
-    crate::libraries::grap::shallow_cell_with(input, |name| {
+    crate::libraries::name::shallow_cell_with(input, |name| {
         crate::display::selectable_bracket(crate::display::Delim::Paren, name)
     })
 }
 
 #[derive(PartialEq, Eq)]
 struct Selection {
-    root: Root,
+    /// Whether it's in the document's view rather than one the editor
+    /// opened.
+    document: bool,
     path: crate::occurrence::Path,
     /// Where the selected data is stored.
     source: Option<Location<'static>>,
     stage: Stage,
 }
 
-/// A stored location as JSON: the cell whose definition it starts in, and the
-/// library defining that cell when the document doesn't, then the path from
-/// there.
+/// A stored location as JSON: the cell whose definition it starts in, if
+/// any, then the path from there.
 fn source(location: &Location) -> serde_json::Value {
     match location.start {
-        Start::Root => serde_json::json!({"path": path::value(&location.path)}),
-        Start::Cell { cell, resolution } => serde_json::json!({
-            "cell": cell,
-            "library": match resolution {
-                Resolution::Document => None,
-                Resolution::Library(library) => Some(library),
-            },
-            "path": path::value(&location.path),
+        Start::Root => serde_json::json!({"path": value_json(&path::value(&location.path))}),
+        Start::Cell(cell) => serde_json::json!({
+            "cell": cell.to_string(),
+            "path": value_json(&path::value(&location.path)),
         }),
     }
+}
+
+/// A value as JSON: `{"cell": id}`, `{"blob": hex}`, `{"list": [value, …]}`
+/// without positions, or `{"record": [[label, value], …]}` in label order.
+fn value_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Cell(cell) => serde_json::json!({"cell": cell.to_string()}),
+        Value::Blob(bytes) => serde_json::json!({"blob": gid::hex_string(bytes)}),
+        Value::List(list) => {
+            serde_json::json!({"list": list.values().map(value_json).collect::<Vec<_>>()})
+        }
+        Value::Record(record) => serde_json::json!({
+            "record": record
+                .iter()
+                .map(|(label, value)| serde_json::json!([label.to_string(), value_json(value)]))
+                .collect::<Vec<_>>(),
+        }),
+    }
+}
+
+/// A document as JSON: its root value or null, and its cells as
+/// `{id: value, …}`.
+fn document_json(document: &Document) -> serde_json::Value {
+    serde_json::json!({
+        "root": document.root.as_ref().map(value_json),
+        "cells": document
+            .cells
+            .iter()
+            .map(|(cell, value)| (cell.to_string(), value_json(value)))
+            .collect::<serde_json::Map<_, _>>(),
+    })
 }
 
 #[derive(Default)]
@@ -280,7 +320,7 @@ struct Changes {
 impl Changes {
     fn sample(&mut self, editor: &Editor) -> Option<String> {
         let selection = editor.model.selection.as_ref().map(|selected| Selection {
-            root: selected.root().clone(),
+            document: *selected.view() == editor.model.workspace.document,
             path: selected.path().to_vec(),
             source: selected
                 .location()
@@ -301,20 +341,17 @@ impl Changes {
                 .as_ref()
                 .and_then(|selected| selected.value(&sources));
             let state = serde_json::json!({
-                "document": &*editor.model.doc,
+                "document": document_json(&editor.model.doc),
                 "selection": selection.as_ref().map(|selected| serde_json::json!({
-                    "view": match selected.root.target() {
-                        Target::Document => serde_json::json!("document"),
-                        Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
-                    },
-                    "path": crate::occurrence::value(&selected.path),
+                    "view": if selected.document { "document" } else { "opened" },
+                    "path": value_json(&crate::occurrence::value(&selected.path)),
                     "source": selected.source.as_ref().map(source),
                     "stage": match selected.stage {
                         Stage::Edge => "value",
                         Stage::Pending => "pending",
                         Stage::Label => "label",
                     },
-                    "value": value,
+                    "value": value.map(value_json),
                 })),
             });
             self.previous = Some((editor.model.doc.clone(), selection));
@@ -350,4 +387,5 @@ impl Observer {
 }
 
 #[cfg(test)]
+#[path = "tests/web_embed/mod.rs"]
 mod tests;

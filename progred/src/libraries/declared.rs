@@ -25,7 +25,7 @@ thread_local! {
     /// so its view can show the value's ordinary projection inside itself,
     /// in place or as a result.
     static DRAWING: std::cell::RefCell<
-        Vec<(crate::occurrence::Trail, ::grap::RuntimeValue)>,
+        Vec<(Option<crate::occurrence::Trail>, ::grap::RuntimeValue)>,
     > =
         const { std::cell::RefCell::new(Vec::new()) };
 }
@@ -37,7 +37,7 @@ const NESTING: usize = 64;
 struct Drawing;
 
 impl Drawing {
-    fn at(occurrence: crate::occurrence::Trail, value: ::grap::RuntimeValue) -> Self {
+    fn at(occurrence: Option<crate::occurrence::Trail>, value: ::grap::RuntimeValue) -> Self {
         DRAWING.with(|drawing| drawing.borrow_mut().push((occurrence, value)));
         Self
     }
@@ -57,7 +57,7 @@ impl Drop for Drawing {
 fn projection<W: Host>() -> Partial<W> {
     crate::display::runtime_partial(|input| {
         let value = input.value?;
-        let occurrence = input.env.occurrence().clone();
+        let occurrence = input.env.occurrence().cloned();
         DRAWING
             .with(|drawing| {
                 let drawing = drawing.borrow();
@@ -80,27 +80,22 @@ fn projection<W: Host>() -> Partial<W> {
                         input.env.apply_runtime_scoped(
                             &projection,
                             &[(vocabulary::VALUE, value.clone())],
-                            Some(scope),
+                            scope,
                         )
                     },
                 );
                 match layout {
                     // The view chose what to show; only a field being added
                     // follows it.
-                    Some(layout) => Some(crate::display::structure::with_extra_fields(
+                    Some(layout) => Some(crate::display::structure::Fields::default().after(
                         input,
                         |_| true,
                         layout,
                     )),
                     None => Some(evaluation.result)
-                        .filter(|result| evaluation.completed && result.absent_reason().is_none())
+                        .filter(|result| result.absent_reason().is_none())
                         .map(|result| {
-                            crate::display::at_with_projection(
-                                [Step::Key(vocabulary::RESULT)],
-                                result,
-                                Some(input.default_projection.clone()),
-                                Some(input.default_projection.clone()),
-                            )
+                            crate::display::at([Step::Key(vocabulary::RESULT)], result, None, None)
                         }),
                 }
                 .map(|layout| {

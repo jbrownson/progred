@@ -203,4 +203,5 @@ fn rail_marker(position: f64, canvas: &mut dyn CanvasSink, transform: Affine) {
 }
 
 #[cfg(test)]
+#[path = "tests/color_picker.rs"]
 mod tests;

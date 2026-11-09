@@ -16,6 +16,7 @@ use winit::event::{
 use winit::keyboard::ModifiersState;
 
 #[cfg(test)]
+#[path = "tests/driver/inspect.rs"]
 mod inspect;
 
 /// `page` is whatever a test knows about where the editor is embedded.

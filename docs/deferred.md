@@ -18,13 +18,13 @@ it is not a general fallback policy for arbitrary facets such as line editors.
 
 ## Discoverability of expression definitions
 
-Keep Grap expression references shallow, including the source shown by
-`{evaluate: expression}`. The toolpath example places an ordinary reference to
+Keep Grap expression references shallow, including the source an evaluation
+shows. The toolpath example places an ordinary reference to
 the ball-tool cell immediately before its evaluation so the normal projection
 exposes its editable contents. Both occurrences reference the same definition;
 neither is a special declaration. Revisit navigation or expansion affordances
 if finding these definitions becomes a recurring problem, rather than changing
-`evaluate`'s projection now.
+the evaluation's projection now.
 
 ## Selection destinations and history
 
@@ -47,8 +47,7 @@ which stages input until commit.
 Normal lookup selects the document definition, otherwise the first library
 definition in load order. Duplicate definitions are tolerated, not an intended
 composition mechanism. Later we may show an indicator and an inspector for the
-other sources; no such UI is implemented now. Explicit source-qualified paths
-remain available internally.
+other sources; no such UI is implemented now.
 
 ## Editor-authored libraries
 
@@ -107,7 +106,7 @@ data with names: `"{circle: {x: x, y: 50}}`. It waits on two idioms that rely on
 bare references staying data, both workarounds worth removing first:
 
 - The CAM example writes deferred passes as closures in their stored form,
-  `"{closure: {params, body, environment}}`, whose `body` refers to variables
+  `"{lambda: {params, body}, environment}`, whose `body` refers to variables
   that `environment` captures through `unquote`. A lambda would capture its
   whole lexical environment. The original reason, not retaining recursive
   list-mapping accumulators, went away with scoped tree emission. Lambdas that
@@ -128,6 +127,67 @@ variables and 76 are computed expressions, so `unquote` stays common in either
 design. Independently of the semantics, the picker could offer in-scope variables
 inside a template and insert them as holes.
 
+## Observing evaluation
+
+Grap captures provenance ahead of time, each consumer in its own way: a
+drawing's fills each keep a call trace, a closure keeps its body's origin, and
+an absent about a call names where the call is. The first step is in: the
+evaluator keeps no call stack, offering each call it enters and leaves to an
+observer a host lends it, and a drawing's record step attaches a tracer that
+keeps every fill's trace as before. What remains is observers that answer
+only the questions asked, where that pays.
+
+- An observer could also be told of effects, and could stop the run once it
+  has its answer. A generic no-op observer, threading its type through compiled
+  code and every foreign function, would save the one branch per call an
+  unobserved evaluation pays; measure before reaching for it.
+- An observer goes on whichever run comes next. A question known before an
+  evaluation runs rides on that run; one that comes up afterwards needs a
+  replay, the same evaluation run again with the same fuel, which only a pure
+  evaluation allows. Either way the answer is a computation keyed by the
+  evaluation and the question.
+- A drawing could ask only the frame's questions instead of tracing every
+  fill: the hovered fill's stack, and which fills were drawn under the
+  selected or hovered source. But within one frame they aren't all known
+  before the run. Which fills to mark for a hovered fill depends on that
+  fill's source, which comes out of the same run, so it would take two runs or
+  answers a frame late, which could leave a stale mark until the next event.
+  The tracer it would save costs about 0.7% of the forest hover canary's
+  instructions (October 2026), so drawings keep tracing for now.
+- An absent's callers are found by replay when they're opened, and cost
+  nothing shut ([projections](projections.md)). Only a render's result offers
+  them so far: a result has to say which evaluation it came from, and
+  `evaluate` wrappers, viewports and scoped applications don't yet. A
+  standalone missing argument doesn't offer them either. Recognizing the
+  absent uses its own `call`; whether absents keep `call` once observers
+  exist is open.
+- Effects can't be replayed, so a handler's questions must be known before
+  it runs: a debug mode attaches a logging observer to the real run, with a UI
+  for what it logs to be designed.
+- Grap gets observers too, so tracing isn't only Rust's: `evaluate` takes an
+  observer as a fold over the run's events, an initial state and a step from
+  state and event to state, and returns the result with the final state. The
+  events are GID records (a call entered, with its origin; a call left; an
+  effect performed), and a step can answer "stop". Each `evaluate` observes
+  only its own run. A Grap observer is one more implementation of the
+  evaluator's hooks, as a Grap function is of a callable; the hooks the
+  editor needs fast stay in Rust. The canvas differs in kind: it's handed to
+  the program as functions it calls, where an observer sees what the evaluator
+  does without being called.
+
+## A missing argument under its own label
+
+`(□ * □)` reads `invalid arguments {left: missing argument left □, …}`: the
+parameter's name repeats the label it's filed under. It should drop the
+parameter's name there, keeping "missing argument", but only when the entry is
+that call's own missing argument. In `x + 1` inside a lambda called without
+`x`, the sum's entry is `left: missing argument x □`, and the name is the
+information. Telling the two apart from the data's shape isn't honest: the
+argument construct files a missing argument it made for its own call the same
+way as an absent it was handed. A fix would have the data say which, for
+example `invalid arguments` carrying its call and listing the parameters it got
+nothing for, apart from the keyed causes of arguments it was given.
+
 ## Lexical parameter lookup
 
 A call binds a missing argument to the missing-argument absent, so a body
@@ -142,11 +202,56 @@ absent of its own rather than the parameter's name.
 ## Where an absent came from
 
 An absent says why a value is missing, and its chain says what caused that
-(see [projections](projections.md)), but not where: which call made it, under
-which bindings. For debugging, each absent could carry the stack and
-environment it was made in, or in a debug mode a whole evaluation trace, so
-an absent shown in the editor leads back to the code that produced it. The
-display for this isn't designed yet.
+(see [projections](projections.md)). One about a call now says which call,
+and opens to the calls it was made under, found by replay (see *Observing
+evaluation*). The bindings it was made under aren't shown yet: an observer
+could capture the environment at the answering call the same way, for a
+display still to be designed.
+
+## Kinds
+
+Grap's calls, lambdas, closures, value wrappers, unquotes, cases, bindings,
+binders, absents, evaluations and notebooks say their kind (`isa`) since 22
+October 2026 (see [model](model.md#data-and-resolution));
+before, a stored hole kept a shape's identifying field present, which recorded
+what the kind required when it was written. Open beside it:
+
+- **Kinds everywhere, and dispatch on them.** The owner's direction: use the
+  isa generally, not by a clever rule about where it's needed. Values encoded
+  under one tag, the tag naming what the value is (numbers, text, booleans,
+  colors, path steps), keep their tags so far; whether they should say a kind
+  too is open. The projection stack draws a record as its kind
+  provides first (see [projections](projections.md#projection-composition)),
+  and evaluation dispatches on Grap's kinds. Fidget's previews and scenes,
+  toolpath's previews, tools and points, layout's stored nodes and programs,
+  presentation's outlines, renders and the projected and sized values a pane
+  presents, locations, and the views `with controls` returns say theirs too. Still told by their fields, each a question for the owner:
+  - `{grap: cell}` and `{fidget: [...]}`, which mark what a workspace's main
+    value holds so an empty one gets that library's offers; `{grap: cell}`
+    is to go, which needs another way for an empty main cell to get them.
+  - the color picker's records.
+  - Tagged variants: drawing commands, shapes and path elements, a cutter
+    section's `cutting` or `non-cutting`. These are values under one tag,
+    like a boolean, so they kept their tags with the rest of those.
+  - Plain records read by functions, such as playback settings. These are
+    data a function reads, not values with a kind of their own, so they stay
+    as they are.
+
+  Declining partials allocate while they probe, about 4,300 times a frame in
+  the IoP source form, so the remaining probing has a cost to find.
+- **A kind's own description.** A kind's cell could be described by a record
+  that says it's a kind, `{isa: kind, name, …}`, as a field's could by
+  `{isa: field, name, …}`, and `kind` by itself. A document's kinds would keep
+  their projections there; built-in kinds register theirs in Rust under the
+  cell. A function might provide one the same way, and binary functions could
+  share one, which needs definitions that turn into functions.
+- **Declared kinds.** A kind's cell could hold its definition, the fields it
+  has and which it requires, so forms and offers read it instead of each
+  projection listing its own; that's the structural type system the owner has
+  in mind.
+- **Documents from before.** A call or lambda saved without an `isa` loads as
+  data. The checked-in documents were migrated by a one-off tool; a user's
+  saved document isn't, and there's no upgrade on load.
 
 ## Context for an absent from below
 
@@ -164,22 +269,22 @@ came from*.
 
 ## Address lifetime
 
-Paths and source traces already preserve definition source. A future identity
-review should specify what survives list moves, deletion/undo, definition
-replacement, and transient-root changes. A cell has meaning in a resolution
-context; neither a path nor a cell-relative trace is a global address.
-Keep occurrence identity, cell identity, definition source, and view identity
-distinct while answering those questions.
+A future identity review should specify what survives list moves,
+deletion/undo, definition replacement, loading or reordering libraries, and
+transient-root changes. A cell has meaning in a lookup context; neither a path
+nor a cell-relative trace is a global address. Keep occurrence identity, cell
+identity, and view identity distinct while answering those questions.
 
 ## Virtual steps for projections
 
-An occurrence path's steps are the document's own plus the editor's jump,
-computed and pane steps, and each says where its data is. A projection with a
+An occurrence path's steps are the document's own plus the editor's jump and
+computed steps, and each says where its data is. A projection with a
 mini-interface that doesn't map cleanly onto its data might still want to hold
 selections and state at places inside it: virtual steps it names itself, which
 it maps onto data however it likes, as the old conjects let every projection
-do. Nothing needs this yet. On 21 October 2026 the owner chose a pane step
-over bringing conjects back, until a projection does.
+do. Nothing needs this yet. In October 2026 the owner chose a pane step over
+bringing conjects back, then replaced it with the view kept beside the path, a
+tier above it, until a projection needs virtual steps.
 
 ## List positions
 
@@ -208,6 +313,33 @@ list survives a reload. Left for later:
   image it writes, dropping it, so the bytes would have to go under the
   platform's PNG type directly.
 
+## Fields on lists
+
+Only a record holds fields, so a list can't carry metadata: a parameter list's
+type, a drawing's name, who made something. The owner's direction, from 21
+October 2026, for when that's needed: let a list have fields beside its
+elements. Folding lists into records keyed by fractional positions would give
+the same, but it would merge `[]` and `{}`, and every place that tells a list
+from a record would have to decide what a mix of keys means. With fields beside
+the elements, lists keep their positions and what ignores fields keeps working.
+It touches GID's list with its equality and hashing, the text bridge's list
+syntax, a `Key` step into a list, Raw's list view (the fields following, as a
+form's extra fields do), the Grap runtime's list, and an open question: whether
+evaluating a list evaluates its fields, as a record's are, or carries them as
+data. Not a blocker as of that date.
+
+## Metadata fields
+
+A custom projection shows the fields it doesn't draw after it, as a trailing
+record, metadata such as who made something and when included. The owner's
+direction, from 21 October 2026: rather than each projection listing what to
+hide, tag the field's own definition, its label cell, with a field saying it's
+metadata, so every projection treats it alike and a new metadata field needs
+no projection changed. A library tags its labels and a document its own. Raw and Plain would
+still show everything, and a view could offer to. Nothing is metadata yet;
+when the first metadata field comes, `structure::record_form` leaves tagged
+fields out of its trailing record, and the rule in AGENTS.md says so.
+
 ## Native GID storage
 
 GID's native binary representation isn't designed yet; see [GID](gid.md). The
@@ -231,12 +363,18 @@ names and is what the picker's query filters and ranks; a match query in
 place of that filter, and names projected rather than read, remain. The `.gid`
 printer still binds only plain-text names, and only plain names have an editor.
 
+Nothing yet lets someone type a subscript, or any other formatted part. A name's
+editor, there or missing, writes plain text, so the subscripts a
+computed name draws, a closure environment's e₀ and e₁, can't be typed into a
+name of one's own; a formatted name is stored only by writing its GID. How
+typing one should work is undecided, set aside on 21 October 2026.
+
 ## Completion ranking
 
 Revisit how library-provided offers rank alongside built-in constructors and
 interpretations of the query. Grap's slots list the libraries' offers together,
-so `new lambda` sits among them in library order rather than with the editor's
-constructors. Providers cannot express that it belongs with other constructors.
+so `new lambda` and `new call` sit among them in library order rather than
+with the editor's constructors. Providers cannot express that it belongs with other constructors.
 Design that distinction through the completion interface rather than
 special-casing lambda or particular libraries. This is deferred UX design, not a
 priority for the current cleanup.
@@ -299,9 +437,8 @@ removed, so it isn't lost:
   that ask the libraries for them offer them, as Grap's slots do.
 - **Typed values for an empty query.** An empty query offered zero in each
   numeric representation, the empty string, and a new label with no name. Now
-  it offers none of them; the empty string takes a `"`. A hole that expects a
-  number or text, drawn by its own projection, could offer one for an empty
-  query again.
+  it offers no number, since an empty query isn't one, and no new label, but
+  still the empty string, which is text.
 
 Directions this surfaced:
 
@@ -342,7 +479,8 @@ Directions this surfaced:
 Where offers come from, as of 20 October 2026, with the owner's view of each:
 
 - **Starting points** (`CompletionScope::Start`): what a document starts as,
-  Grap's new program and Fidget's new scene, for an empty root's hole. These
+  Grap's new program and notebook and Fidget's new scene, for an empty root's
+  hole. These
   stay a category of their own: they are how a document gets into a custom
   projection, whose holes then offer its own. They may not need to be
   root-only; that's undecided.
@@ -351,14 +489,14 @@ Where offers come from, as of 20 October 2026, with the owner's view of each:
   as typed. Raw's holes ask every shown library for them. The owner doesn't
   want this as a category of its own: any offer could instead be contingent on
   what's typed.
-- **Offers for anywhere** (`Everything`): color's new color, and Grap's new
-  lambda and calls by name. Only Grap's slots ask for them, and new color is
-  the only answer from outside Grap, so dropping the category would leave
-  color no way into a Grap slot. The owner considers the category the wrong
+- **Offers for anywhere** (`Everything`): color's new color. Only Grap's slots
+  ask for them, after their own, and new color is the only answer, so dropping
+  the category would leave color no way into a Grap slot. The owner considers the category the wrong
   answer to a real problem, and would rather leave it as it is than patch it,
   to be rethought here.
 - **A projection's own**: Raw's new cell, list and record; Grap's bindings in
-  scope and quote and unquote. Grap knowing control's binding forms and quote is
+  scope, new lambda and new call, the functions in reach, and quote and
+  unquote. Grap knowing control's binding forms and quote is
   fine: they are Grap's macros, which don't follow the parameter lists offers
   are otherwise computed from. Declaring such forms instead of coding them can
   come later.
@@ -375,29 +513,46 @@ strings and numbers.
 
 A document's empty root offers the libraries' starting points, then Raw's
 offers. There should be one for every direction a person might want to go, each
-landing on something that works. Today's two, Grap's new program and Fidget's
-new scene, each lead somewhere awkward; Grap's opens with a missing-cell error
-in its pane until the program is written (that error's hole does take the
-program now). A Grap notebook in the style of a REPL should be a starting point
-of its own beside Grap's; see [Notebook and REPL](#notebook-and-repl).
+landing on something that works. Of today's three, Grap's new program and
+Fidget's new scene each lead somewhere awkward; Grap's opens with a missing-cell
+error in its pane until the program is written (that error's hole does take the
+program now). Grap's notebook opens on its first entry's expression, with
+nothing in error; see [Notebook and REPL](#notebook-and-repl) for what it
+lacks.
 
-## Workspace documents
+## Rows and columns
 
-A document whose root has a `panes` field is a workspace, and the editor
-swallows it: it shows the panes, and a view of the workspace record starts at
-its `main` value ([the model](model.md#panes)). Plain
-and Raw, or turning the editor library off, show the whole record. A document
-is wrapped only once something adds a workspace field, such as opening a pane.
-Starting points that open a pane and the examples use this shape. What's left,
-discussed in October 2026:
+A view whose root value is a row or column splits its part of the window into
+its parts, and the editor lays out its views, the document's and those it
+opened, in a tree of its own that the document doesn't keep
+([the model](model.md#panes)). Deeper in a value a row or column draws as its
+parts, side by side or stacked, so rows compose anywhere. This replaced
+October 2026's workspace record, `{main, panes: {left, right}}`, which only
+meant anything at the root and saved every pane, browsing included, into the
+document. Kept simple to start; what's left:
 
-- **Recursion.** A pane showing a workspace record already draws its main value;
-  drawing that workspace's own panes too suggests making the pane layout a
-  projection.
-- **Tabs or splits.** A main value holding several things, such as a Grap
-  program and a Fidget scene, could draw as tabs or splits. That's a projection
-  of a record of several things, wherever one appears, not part of the
-  workspace convention.
+- **The editor's layout as data.** It's Rust state, not a value, so it can't
+  be opened or edited as one, and it isn't remembered with the file. A command
+  to keep an opened view by moving it into the document would turn looking
+  around into part of the work.
+- **Documents as a monoid.** The owner's thought, on 23 October 2026: rows
+  compose anywhere now, and a document could too, one value among others
+  that a larger one lays out, the editor's layout included. Not pursued; views
+  and their layout stay concrete.
+- **Moving between rows.** Move Pane moves a part along its own row or column
+  only; nothing moves one into a neighbouring column, or an opened view into
+  the document.
+- **A location at a row.** A part that names a place holding a row draws the
+  row inside its pane rather than splitting the pane.
+- **A view's whole area.** While a view's root splits, its whole area isn't
+  drawn, so View commands reach the document's only with nothing selected, as
+  when switching it to Raw to see the row whole.
+- **Sizes inside content.** A sized value inside a row or column draws at 256
+  points square; nothing yet lets the row or the value say otherwise.
+- **Shares.** Parts start equal, so a starting point's preview takes half the
+  window where it took a third beside the workspace's main value.
+- **The root's libraries.** A document still declares its own libraries in a
+  root field, which also means something only at the root.
 
 ## Islands in the document
 
@@ -452,10 +607,10 @@ An audit on 16 October 2026 ([the evidence](history/codebase-audit-2026-10-16.md
 found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
-files. projection/tests is still under projection/. It held 20.8k lines that
-mostly test the frame and the whole editor, and is down to 6.3k as suites move
-to their own modules (item 4). The private items it reaches point at misplaced
-code, not at internals the tests should see. A follow-up
+files. projection's tests, in `progred/src/tests/projection/`, held 20.8k lines
+that mostly test the frame and the whole editor, and are down to 6.3k as suites
+move to their own modules (item 4). The private items they reach point at
+misplaced code, not at internals the tests should see. A follow-up
 [crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
 that blocks a split and the steps that break it. The rest, most worthwhile
 first:
@@ -582,9 +737,9 @@ first:
      2026: the hover types and the picker's commit refer only to the core,
      and display reaches the runtime only through `Project`. The per-view bag
      stays the runtime's, which display reads through `Toolkit`.
-4. Move projection/tests' frame- and editor-level suites to where they belong,
-   leaving only the runtime's own tests; nothing stays anywhere for historical
-   reasons, and nothing became visible just for tests. The
+4. Move the frame- and editor-level suites in projection's tests to where they
+   belong, leaving only the runtime's own tests; nothing stays anywhere for
+   historical reasons, and nothing became visible just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
    1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
@@ -613,7 +768,7 @@ first:
       a paint, which the driver always does.
    6. Rewrite 30 tests that drive the whole editor but check one system. The
       event encoding has moved to the layout library. What's left is mostly
-      two groups. Nine write-through tests in projection/tests/editing.rs
+      two groups. Nine write-through tests in tests/projection/editing.rs
       get their editing selection by projecting a frame and pressing End;
       targeted, each would build it from its library's own line editor,
       mounted with `Selection::edit_line_mut`, before `editing::commit_line`.
@@ -810,10 +965,19 @@ through memory rather than registers, which covers most of the evaluator's.
   carry.
 - Putting the closure variant behind a pointer, taking the value to about 40
   bytes, read slightly slower when tried.
+- Moving the GID-form cache into the variants that need it would take the value
+  to 56 bytes: `Data` needs none, records and lists could keep it behind the
+  pointer they already hold, and an unboxed number has room inline. The inline
+  closure has none, so its cache would share an allocation it already has, such
+  as its parameters'.
 - Putting a halt's value behind a pointer would bring small results (`()`, an
   f64, a bool) to 16 bytes or less, in registers. The sizes are measured, the
   gain isn't.
-- Finding an argument by label (`Context::field`, a binary search over 16-byte
+- Unboxing each value once as it's bound, instead of on every read of a
+  variable, ran 1% more instructions on the IoP canaries in October 2026 and
+  was reverted: a read of an already unboxed value costs only a tag check
+  inlined, while binding unboxed values that were never read.
+- Finding an argument by label (`Expression::field`, a binary search over 16-byte
   cell IDs plus a handle clone) cost about 84 instructions a lookup, 4% of the
   IoP tree canary, until `ForeignFunction::with_arguments` found the ported
   functions' arguments once per call site. Its other callers, such as `quote`,
@@ -822,6 +986,108 @@ through memory rather than registers, which covers most of the evaluator's.
 - The generic parsing costs more per call than the hand-written reads it
   replaced; staging more than made up for it, leaving the IoP tree canary 1.07%
   below its count before the construct, from 1.92% above.
+
+## Recursion deeper than the native stack
+
+Grap's evaluation nests as native calls, so `grap::MAX_DEPTH` (256) halts a
+recursion before it overflows the stack. Measured in October 2026, as the
+deepest nesting that still halted cleanly:
+
+| Recursion | Build | 1 MB stack | 2 MB stack |
+| --- | --- | --- | --- |
+| Grap function calling itself | native release | 448 | 896 |
+| Chain of cells | native release | 1,064 | 2,128 |
+| Grap function calling itself | browser (wasm, Node) | 920 | |
+| Grap function through `+` | native dev | 428 | 856 |
+| Grap function through `do` | native dev | 344 | 688 |
+
+That's up to about 3 KB of stack per level. The smallest stacks Grap runs on
+are the browser's 1 MB, on the main thread and each worker (wasm-bindgen's
+default). Native computation threads have Rust's 2 MB, and the native main
+thread 8 MB. The deepest test or canary nested 63 levels. Ways to allow
+deeper recursion:
+
+- **Bigger stacks.** Native threads take a size when spawned. The browser's
+  stack in linear memory takes a linker flag on the main thread
+  (`-zstack-size`) and `thread_stack_size` when workers start. The engine's
+  own stack, which holds wasm frames, can't be raised from a page. Under
+  Node the 1 MB linear-memory stack ran out first, so the engine's limit is
+  somewhere above 920 levels.
+- **Smaller frames.** 2.3 KB per level of plain Grap recursion is large.
+  Finding which frames take it, such as with `-Z emit-stack-sizes`, might
+  raise the limit without any other change.
+- **Trampolined tail calls.** A call in tail position would return to a loop
+  instead of nesting, so tail-recursive loops would run in constant stack.
+  Recursion that isn't in tail position, such as walking a tree, still nests,
+  and the observer's enter and leave notices assume a call returns.
+- **Growing the stack on demand**, as the `stacker` crate does: native only,
+  since wasm can't switch stacks.
+- **An explicit-stack evaluator**, keeping its frames on the heap. Each
+  expression compiles to a Rust closure that calls its subexpressions'
+  closures directly, so this replaces that design throughout: compiling,
+  calls, argument parsing and staging, most of `eval.rs`, `call.rs`,
+  `lower.rs` and `arguments.rs` (about 1,800 lines). Every foreign function
+  that evaluates code (17 files in Progred) would either become a state
+  machine resumable between evaluations or keep nesting natively, under a
+  depth limit as now. Direct closure calls are likely faster than a frame
+  loop; unmeasured.
+
+## A lowered in-memory document
+
+The document in memory could be a lowered form, with `gid::Value` kept only for
+loading and saving. GID's plain model stays the base; a lowered GID above it
+holds native numbers, booleans and text, each keeping its record's other fields,
+and Grap's layer adds lowered code and closures. Each view is built the first
+time something asks for it and kept; values are immutable, so nothing is ever
+invalidated. It belongs beneath Grap's evaluator, in Grap or a crate between GID
+and Grap, since the evaluator builds on it and Grap can't depend on Progred.
+
+Measured on 2026-10-28 with callgrind, as instructions per frame from the
+difference of two frame counts:
+
+| Canary | Lowering and compiling | Unboxing | To GID | Decoding numbers and text |
+| --- | --- | --- | --- | --- |
+| `forest_slider` | 10.3% | 0.25% | 0.06% | 0.09% |
+| `forest_source_hover` | 9.7% | 0.24% | 0.06% | 0.09% |
+| `cam_controls` | 12.3% | 0.13% | 2.2% | 0.02% |
+| `grap_layout_ffi` | 11.5% | 0.20% | 1.5% | 0.21% |
+| `iop_tree` | 0.22% | 1.4% | 0% | 0% |
+| `cam_source_scroll` | 0.84% | 0.01% | 0.14% | 0.15% |
+
+Each step was kept out of line to be counted, so one that's small and called
+millions of times reads higher than it costs inlined: unboxing on the IoP
+canaries is mostly a tag check. Nearly all the lowering is cell definitions lowered again in every evaluation
+although they didn't change; compiling is about a tenth of it. Deferred because
+it's about 10% of re-evaluation, not a multiple. The cheapest piece keeps each
+cell's lowering across evaluations, reused while its definition is the same
+shared value: the cell table is a persistent map, so untouched cells keep the
+same value. Each entry holds that value, so a freed value's address can't fake
+a hit. Compiled code stays per evaluation, since it reads the evaluation's cell
+index table.
+
+The full design has more to settle:
+
+- **Place.** A node can sit in two places, and origins and call-site caches
+  belong to a place, so a handle carries the place over a shared node.
+- **Threads.** Lowered code uses `Rc`, and document values cross threads.
+- **Equality.** No view may change a value's equality, field reads or GID form.
+- **A `Code` value.** A runtime value made from an `Expression` would let
+  evaluating runtime code reuse its lowering, and let quote return a template's
+  untouched parts with their lowering and origins, so errors in spliced code
+  point back at the template.
+- **Lazy children.** A list's elements need lowering only when a foreign
+  function walks them as code, and a record's fields one at a time.
+- **Native functions.** A runtime value holding a foreign function's code,
+  as a closure holds its body, saved as its `{isa: foreign function, …}`
+  record. The host would answer a library function's cell with it, so
+  `Host::implementation` goes, and calling a saved record resolves its
+  implementation cell to it, as calling a saved closure parses it. A call
+  still asks the evaluation's own functions for that cell before running
+  the code it holds. It's for tidiness, not speed: on 2026-10-28 no canary called
+  a foreign function held as a value outside a scope, and direct calls
+  already cache their target per call site (IoP picture: about 175,000 calls
+  a frame from 108 preparations), so it would save only the second host
+  lookup when a call site is prepared, at most about 100 a frame.
 
 ## Decoding PNGs once while visible
 
@@ -866,6 +1132,34 @@ report has been filed. The owner prefers avoiding local Vello patches. The
 atlas for native draw-image operations, with per-window upload ownership and
 headless fidelity, resize, lifetime, and performance checks. Image brushes still
 use Vello's atlas.
+
+## Report MSAA renders that vary on Intel Arc
+
+On the Linux laptop's Intel Arc B390 (Panther Lake) under Mesa 26.2.5, Vello
+0.11's MSAA renders of one scene differ from run to run, on antialiased edges,
+while its area antialiasing gives the same pixels every time. A 1024 × 1024
+scene of 20,000 small circles varies at about 14,000 pixels with eight samples
+and 17,500 with sixteen. The compositor draws with sixteen, so
+`editor_compositor_profile`'s pixel check fails there, at the last recorded
+commit too, and a redraw can change edge pixels slightly.
+[`msaa_repro`](../ui/puri-vello/examples/msaa_repro.rs) shows it with only Vello
+and pollster:
+
+```sh
+./tools/linux-cargo build --release -p puri-vello --features capture --example msaa_repro
+target/sandbox/build/release/examples/msaa_repro [CIRCLES [RADIUS_SCALE]]
+```
+
+Measured on 2 November 2026, the evidence points at the driver more than at
+Vello. One circle never varies, and more circles vary more. Forcing compute
+SIMD16 with `INTEL_SIMD_DEBUG=cs16` lowers the variation without removing it,
+and turning off the shader cache changes nothing. Vello's MSAA tallies each
+pixel's covered samples with integer atomics in workgroup memory, whose totals
+don't depend on order, and a `workgroupBarrier()` added at the end of its MSAA
+fills, so that no fill resets shared memory another thread still reads, changed
+nothing. The machine had no other Vulkan driver to compare with. A report for
+Mesa's anv tracker was drafted but not yet filed. Once a Mesa update or upstream
+fix lands, rerun the example and the canary.
 
 ## CAM preview navigation and execution grouping
 
@@ -1228,21 +1522,28 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
 
 A Grap notebook in the style of Jupyter, but reactive like Pluto, marimo and
 Observable: changing a cell recomputes the cells that use it, so there is no
-hidden state from running cells out of order. Much of it exists already:
-results project through the normal projections (pictures, tool previews, 3D
+hidden state from running cells out of order. A first one is Grap's notebook
+starting point ([projections](projections.md)): a projection of a list of entry
+cells, each drawn as its expression and its result, with a new entry on Enter.
+Results project through the normal projections (pictures, tool previews, 3D
 views), and observed evaluation tracks the cell definitions an evaluation reads.
-A notebook is then mostly a projection of a list of entry cells, each drawn as
-its expression and its result, with ergonomics: a new entry on Enter, and
-progress and cancellation for long computations. It's a starting point of its
-own, beside Grap's.
+Still to come:
+
+- Progress and cancellation for long computations; an entry's result is
+  computed while the frame is drawn, as a pane's is.
+- Selecting an entry itself, to move or delete it, has only the arrow; there is
+  no gutter or handle.
+- Reaching the empty notebook's "new entry" from the keyboard.
+- An entry referred to without a name reads as its short ID, as any unnamed
+  cell does.
 
 - Entries are cells, and one refers to another the standard ways: Cmd-clicking
   it into a slot, copy and paste, or naming it and referring to it by name. No
   automatic names. The picker doesn't yet offer named cells that aren't
   functions, a gap to note rather than fix first.
 - The notebook knows what it is, so an entry is its expression alone, with no
-  wrapper. `{evaluate: expression}` is a poor design as it stands: a reference
-  to one gets the record, not its result.
+  wrapper. An evaluation record is a poor design as it stands: a reference to
+  one gets the record, not its result.
 
 - A REPL pane evaluates in the scope of the selection. After Cmd-clicking an
   output, the call that drew it supplies the bindings, as a debugger console

@@ -9,13 +9,15 @@ use crate::model::Model;
 use crate::occurrence::Step;
 use crate::sources::Sources;
 use crate::timers::Timers;
+use crate::workspace::View;
 use kurbo::Point;
 use parley::{FontContext, LayoutContext};
 use peniko::Brush;
 use puri::edit::TextClipboard;
+use std::rc::Rc;
 
 /// Its fields are the core's, which acts on the model through them.
-pub(crate) struct Session<'a> {
+pub struct Session<'a> {
     pub(crate) model: &'a mut Model,
     pub(crate) libraries: &'a Libraries,
     /// The drag a press started, which owns motion until release.
@@ -87,11 +89,12 @@ impl Session<'_> {
     /// needed to change it. A change ends any drag.
     pub(crate) fn set_folded(
         &mut self,
+        view: &Rc<View>,
         path: &[Step],
         default: bool,
         closed: Option<bool>,
     ) -> bool {
-        let changed = self.model.set_folded(path, default, closed);
+        let changed = self.model.set_folded(view, path, default, closed);
         if changed {
             self.finish_gesture();
         }

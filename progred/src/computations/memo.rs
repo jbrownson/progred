@@ -1,14 +1,16 @@
 //! Whole-evaluation memo boundaries. Each execution owns a fresh interpreter,
 //! so prepared calls cannot bypass an enclosing computation's observations.
-//! The evaluation's host records each definition it resolves, and gives up
-//! reuse when Grap reports an untracked call or an effect the memo doesn't own.
+//! The evaluation's host records each cell it resolves, and gives up
+//! reuse when Grap reports an uncacheable call or an effect the memo doesn't
+//! own.
 
-use gid::{CellId, Resolution, Value};
-use grap::{Definition, Evaluation, Host, absent};
+use gid::{CellId, Value};
+use grap::{Evaluation, ForeignFunction, Host, absent};
 use incremental::{Read, Source};
-use std::{cell::RefCell, rc::Rc};
+use std::cell::RefCell;
 
 #[cfg(test)]
+#[path = "tests/memo.rs"]
 mod tests;
 
 pub const CYCLE: CellId = CellId::from_u128(0xd32978a2ca119d053a8d326e116375d3);
@@ -25,20 +27,12 @@ pub fn failure(error: incremental::Error) -> Value {
     })
 }
 
-#[derive(Clone)]
-pub struct Resolved(pub Option<(Resolution, Definition)>);
-
-impl PartialEq for Resolved {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (None, None) => true,
-            (Some((a, Definition::Value(x))), Some((b, Definition::Value(y)))) => a == b && x == y,
-            (Some((a, Definition::Foreign(x))), Some((b, Definition::Foreign(y)))) => {
-                a == b && Rc::ptr_eq(x, y)
-            }
-            _ => false,
-        }
-    }
+/// What the host says of a cell: its definition, and the code the foreign
+/// function implemented under it runs.
+#[derive(Clone, PartialEq)]
+pub struct Resolved {
+    pub value: Option<Value>,
+    pub implementation: Option<ForeignFunction<'static>>,
 }
 
 pub type Definitions<S> = Source<S, CellId, Resolved>;
@@ -50,10 +44,17 @@ struct ObservingHost<'a, S> {
 }
 
 impl<S: 'static> Host for ObservingHost<'_, S> {
-    fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
-        self.definitions.read(cell, &mut self.read.borrow_mut()).0
+    fn definition(&self, cell: CellId) -> Option<Value> {
+        self.definitions
+            .read(cell, &mut self.read.borrow_mut())
+            .value
     }
-    fn untracked(&self) {
+    fn implementation(&self, cell: CellId) -> Option<ForeignFunction<'static>> {
+        self.definitions
+            .read(cell, &mut self.read.borrow_mut())
+            .implementation
+    }
+    fn uncacheable(&self) {
         self.read.borrow_mut().untracked();
     }
     fn effect(&self) {
@@ -63,36 +64,36 @@ impl<S: 'static> Host for ObservingHost<'_, S> {
     }
 }
 
-pub fn run<S: 'static, T>(
+pub fn run<S: 'static>(
     definitions: &Definitions<S>,
     read: &mut Read,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
-) -> Evaluation<T> {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
+) -> Evaluation {
     observed(definitions, read, false, evaluate)
 }
 
 /// The caller owns and returns all effects as part of the memo result. This
 /// permits local recording, never unrecorded writes into an enclosing sink.
-pub fn with_recorded_effects<S: 'static, T>(
+pub fn with_recorded_effects<S: 'static>(
     definitions: &Definitions<S>,
     read: &mut Read,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
-) -> Evaluation<T> {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
+) -> Evaluation {
     observed(definitions, read, true, evaluate)
 }
 
-fn observed<S: 'static, T>(
+fn observed<S: 'static>(
     definitions: &Definitions<S>,
     read: &mut Read,
     recorded_effects: bool,
-    evaluate: impl FnOnce(&dyn Host) -> Evaluation<T>,
-) -> Evaluation<T> {
+    evaluate: impl FnOnce(&dyn Host) -> Evaluation,
+) -> Evaluation {
     let result = evaluate(&ObservingHost {
         definitions,
         read: RefCell::new(read),
         recorded_effects,
     });
-    if !result.completed {
+    if result.halt.is_some() {
         read.untracked();
     }
     result

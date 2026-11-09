@@ -51,4 +51,5 @@ impl Stock {
 }
 
 #[cfg(test)]
+#[path = "tests/stock.rs"]
 mod tests;

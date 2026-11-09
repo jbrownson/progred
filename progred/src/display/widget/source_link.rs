@@ -85,12 +85,12 @@ pub(crate) fn handlers<W: Host>(
                         let session = world.session();
                         let target = drawn_source(&session.sources(), &input.landmarks, hover)
                             .and_then(|landmark| {
-                                landmark.root.clone().map(|root| (root, landmark.rect))
+                                landmark.area.clone().map(|area| (area, landmark.rect))
                             });
-                        if let Some((root, rect)) = target {
+                        if let Some((area, rect)) = target {
                             input
                                 .geometry(scale)
-                                .reveal_rect(session.model, &root, rect);
+                                .reveal_rect(session.model, &area, rect);
                         }
                         true
                     }
@@ -134,7 +134,7 @@ pub(crate) fn source_landmark<'a, World>(
     source: &SourceTrace,
 ) -> Option<&'a super::navigation::Landmark<World>> {
     landmarks.iter().find(|landmark| {
-        landmark.root.is_some()
+        landmark.area.is_some()
             && landmark
                 .path
                 .location()

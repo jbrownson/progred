@@ -3,7 +3,6 @@
 //! tightly infix binds. An operator's own name carries its tag.
 
 use crate::display::Pending;
-use crate::display::group;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{Delim, Face, alternatives, col, row, selectable_bracket, shared, subscript};
 use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
@@ -77,15 +76,14 @@ pub(crate) fn infix_display<W: Host>(
             .map(|(_, precedence)| *precedence)
     };
     let fields = input.value?;
+    (fields.kind() == Some(::grap::vocabulary::kind::CALL)).then_some(())?;
     let precedence = binds(fields)?;
     let layout = infix(
-        crate::libraries::grap::shallow_path([Step::Key(FUNCTION)], &input.default_projection),
+        crate::libraries::grap::expression_path(input, [Step::Key(FUNCTION)]),
+        [LEFT, RIGHT],
         |field| {
             (
-                crate::libraries::grap::expression_path(
-                    [Step::Key(field)],
-                    &input.default_projection,
-                ),
+                crate::libraries::grap::expression_path(input, [Step::Key(field)]),
                 fields
                     .field(field)
                     .as_ref()
@@ -94,21 +92,22 @@ pub(crate) fn infix_display<W: Host>(
             )
         },
     );
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
-        |key| key == FUNCTION || key == LEFT || key == RIGHT,
-        group(layout),
+        |key| key == FUNCTION || key == LEFT || key == RIGHT || key == ::grap::isa::ISA,
+        layout,
     ))
 }
 
 /// `left operator right`, with `operand` giving the layout under each of
-/// `LEFT` and `RIGHT` and whether it needs parentheses. Too narrow for one
-/// line, the operator starts the second.
+/// the `operands` fields and whether it needs parentheses. Too narrow for
+/// one line, the operator starts the second.
 pub(crate) fn infix<W: Host>(
     operator: Layout<W>,
+    operands: [CellId; 2],
     operand: impl Fn(CellId) -> (Layout<W>, bool),
 ) -> Layout<W> {
-    let [left, right] = [LEFT, RIGHT].map(|field| {
+    let [left, right] = operands.map(|field| {
         let (child, grouped) = operand(field);
         shared(if grouped {
             selectable_bracket(Delim::Paren, child)

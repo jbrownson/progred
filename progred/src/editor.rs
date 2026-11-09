@@ -4,7 +4,7 @@ use crate::UserEvent;
 use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
 use crate::display::widget::frame::Cursor;
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::view::Area;
 use crate::frame::FrameState;
 use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_input};
 #[cfg(target_os = "macos")]
@@ -22,7 +22,6 @@ use crate::{
 use kurbo::{Point, Rect, Size};
 use peniko::Brush;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use parley::{FontContext, LayoutContext};
@@ -246,7 +245,7 @@ impl EditorRunner {
                 let dispatch = &self.frame.dispatch;
                 dispatch
                     .hover_geometry
-                    .cursor(dispatch.pointer_root.as_ref(), hovered)
+                    .cursor(dispatch.pointer_area.as_ref(), hovered)
             });
         match cursor {
             None => CursorIcon::Default,
@@ -471,47 +470,37 @@ impl Editor {
     }
 
     pub(crate) fn menu_toggles(&self) -> command::Toggles {
-        let area = self.model.workspace.selected_or_document(
-            self.model
-                .selection
-                .as_ref()
-                .map(selection::Selection::root),
-        );
+        let pane = self
+            .model
+            .workspace
+            .selected_or_document(self.selected_view().as_ref());
         command::Toggles {
-            shown: area.shown.clone(),
-            preset: self.stack.preset(&area.shown),
+            shown: pane.shown.clone(),
+            preset: self.stack.preset(&pane.shown),
         }
     }
 
     pub(crate) fn menu_availability(&self) -> command::Availability {
-        let selected_root = self
-            .model
-            .selection
-            .as_ref()
-            .map(selection::Selection::root);
+        let selected = self.selected_view();
+        let selected_root = selected.as_ref();
         command::Availability {
             #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             save: self.model.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
-            open_pane: workspace::can_open(self.model.doc.root.as_ref())
-                && self
-                    .model
-                    .selection
-                    .as_ref()
-                    .and_then(|selection| selection.value(&self.sources()))
-                    .is_some(),
+            open_pane: self
+                .model
+                .selection
+                .as_ref()
+                .and_then(|selection| selection.value(&self.sources()))
+                .is_some(),
             close_pane: selected_root
-                .is_some_and(|root| matches!(root.target(), Target::Pane { .. })),
-            show_panes: workspace::can_open(self.model.doc.root.as_ref()),
-            move_up: selected_root
-                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Up)),
-            move_down: selected_root
-                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Down)),
-            move_left: selected_root
-                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Left)),
+                .is_some_and(|area| *area != self.model.workspace.document_area()),
+            move_up: selected_root.is_some_and(|root| self.can_move(root, workspace::Move::Up)),
+            move_down: selected_root.is_some_and(|root| self.can_move(root, workspace::Move::Down)),
+            move_left: selected_root.is_some_and(|root| self.can_move(root, workspace::Move::Left)),
             move_right: selected_root
-                .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Right)),
+                .is_some_and(|root| self.can_move(root, workspace::Move::Right)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             actual_size: self.zoom != 1.0,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -521,183 +510,158 @@ impl Editor {
         }
     }
 
-    /// Opens the selection in a pane on `side`: the place it's stored,
-    /// anchored at its nearest cell, so the pane shows and edits that place,
-    /// or for a computed value, which has no place, a copy of it.
+    fn can_move(&self, area: &Area, direction: workspace::Move) -> bool {
+        self.model
+            .workspace
+            .can_move(&self.sources(), area, direction)
+    }
+
+    /// Opens the selection in a pane at `side`'s end of the editor's row: the
+    /// place it's stored, anchored at its nearest cell, so the pane shows and
+    /// edits that place, or for a computed value, which has no place, a copy
+    /// of it. The document doesn't change.
     fn open_selected_in_pane(&mut self, side: workspace::Side) {
-        self.open_pane(side, |editor, wrapped| {
-            let selection = editor.model.selection.as_ref()?;
-            let sources = editor.sources();
+        let sources = self.sources();
+        let entry = self.model.selection.as_ref().and_then(|selection| {
             let place = selection.location().and_then(|location| {
                 location
                     .stored(&sources)
                     .map(crate::location::Location::into_owned)
             });
             Some(match place {
-                Some(mut place) => {
-                    // Wrapping moves every path from the root under `main`.
-                    if wrapped && place.start == crate::location::Start::Root {
-                        place.path = std::iter::once(gid::Step::Key(workspace::vocabulary::MAIN))
-                            .chain(place.path.iter().cloned())
-                            .collect();
-                    }
-                    crate::location::value(&place)
-                }
-                None => selection.value(&sources)?.clone(),
+                Some(place) => workspace::Entry::Place(place),
+                None => workspace::Entry::Copy(selection.value(&sources)?.clone()),
             })
         });
-    }
-
-    /// Shows the workspace's panes declaration in a pane on the right, as a
-    /// location, so editing it there edits the panes; selects the pane
-    /// already showing it, if one does.
-    fn show_panes(&mut self) {
-        let entry = crate::location::value(&crate::location::Location::root(vec![gid::Step::Key(
-            workspace::vocabulary::PANES,
-        )]));
-        let sources = self.sources();
-        let existing = [workspace::Side::Left, workspace::Side::Right]
-            .into_iter()
-            .flat_map(|side| self.model.workspace.column(side).panes.iter())
-            .find(|pane| match pane.view.root.target() {
-                Target::Pane { path } => sources.resolve_path(path) == Some(&entry),
-                Target::Document => false,
-            })
-            .map(|pane| pane.view.root.clone());
-        match existing {
-            Some(root) => self.select_view_root(&root),
-            None => self.open_pane(workspace::Side::Right, |_, _| Some(entry)),
+        if let Some(entry) = entry {
+            self.open_pane(side, entry);
         }
     }
 
-    /// Selects what the view `root` draws at its root.
-    fn select_view_root(&mut self, root: &Root) {
-        let Some(view) = self.model.workspace.view(root) else {
+    /// Shows `place` in a pane on the right, so the pane draws what's there
+    /// and edits it where it's writable; selects the view already showing
+    /// it, if one does.
+    fn show_in_pane(&mut self, place: crate::location::Location<'static>) {
+        let entry = workspace::Entry::Place(place);
+        let existing = self
+            .model
+            .workspace
+            .views()
+            .find(|view| view.entry == entry)
+            .cloned();
+        match existing {
+            Some(view) => self.select_view_root(&Area::whole(view)),
+            None => self.open_pane(workspace::Side::Right, entry),
+        }
+    }
+
+    /// Selects what the area `area` draws at its root.
+    fn select_view_root(&mut self, area: &Area) {
+        let Some(pane) = self.model.workspace.pane(area) else {
             return;
         };
         let path = workspace::root_path(
             &self.sources(),
-            root.target(),
-            view.shown.shows(crate::libraries::editor::ID),
+            area,
+            pane.shown.shows(crate::libraries::editor::ID),
         );
-        self.model.selection = Some(selection::Selection::edge(path));
+        self.model.selection = Some(selection::Selection::edge(&area.view, path));
     }
 
-    /// Opens what `entry` gives as the last pane on `side` and selects what
-    /// it shows. A bare root is wrapped in a workspace first; `entry` learns
-    /// whether it was, since wrapping moves every path from the root under
-    /// `main`.
-    fn open_pane(
-        &mut self,
-        side: workspace::Side,
-        entry: impl FnOnce(&Self, bool) -> Option<gid::Value>,
-    ) {
-        let next = self.model.doc.root.as_ref().and_then(|root| {
-            let (root, wrapped) = workspace::workspace_root(root);
-            let entry = entry(self, wrapped)?;
-            let (root, _) = workspace::append(&root, side, entry)?;
-            Some((root, wrapped))
-        });
-        if let Some((value, wrapped)) = next {
-            let before = self.model.snapshot();
-            Rc::make_mut(&mut self.model.doc).root = Some(value);
-            self.model.history.record(before);
-            if wrapped {
-                let document = &mut self.model.workspace.document;
-                document.annotations = document
-                    .annotations
-                    .under(&[crate::occurrence::Step::Key(workspace::vocabulary::MAIN)]);
-            }
-            self.model
-                .workspace
-                .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
-            // The value opens as its column's last pane.
-            if let Some(root) = self
-                .model
-                .workspace
-                .column(side)
-                .panes
-                .last()
-                .map(|pane| pane.view.root.clone())
-            {
-                self.select_view_root(&root);
-            }
-            self.refresh_title();
-        }
+    /// Opens `entry` in a view at `side`'s end of the editor's row and
+    /// selects what it shows.
+    fn open_pane(&mut self, side: workspace::Side, entry: workspace::Entry) {
+        let view = self.model.workspace.open(side, entry);
+        self.select_view_root(&Area::whole(view));
     }
 
-    /// Closes the selected pane by removing its entry, so a pane showing a
-    /// location leaves that place as it is.
+    /// Closes the selected pane: a view leaves the editor's layout, unless
+    /// it's the document's, and a part leaves its row or column, written
+    /// where the view's value is stored. A view showing a place leaves that
+    /// place as it is.
     fn close_selected_pane(&mut self) {
-        let next =
-            self.model
-                .selection
-                .as_ref()
-                .and_then(|selection| match selection.root().target() {
-                    Target::Pane { path } => {
-                        crate::spine::without(self.model.doc.root.as_ref()?, path)
-                    }
-                    Target::Document => None,
-                });
-        if let Some(value) = next {
-            let before = self.model.snapshot();
-            Rc::make_mut(&mut self.model.doc).root = Some(value);
-            self.model.history.record(before);
+        let Some(area) = self.selected_view() else {
+            return;
+        };
+        if area.path().is_empty() {
+            if self.model.workspace.close(&area.view) {
+                self.model.selection = None;
+            }
+            return;
+        }
+        let sources = self.sources();
+        let closed = area.view.place(&[]).zip(
+            area.view
+                .value(&sources, &[])
+                .and_then(|value| crate::spine::without(value, area.path())),
+        );
+        if let Some((place, value)) = closed
+            && self.write_view(&place, value)
+        {
             self.model.selection = None;
-            self.model
-                .workspace
-                .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
+            self.sync_views();
             self.refresh_title();
         }
     }
 
-    /// Moves the selected pane, keeping its selection on what it was on.
+    /// Writes `value` at the place a view shows, as an undo step.
+    fn write_view(&mut self, place: &crate::location::Location<'_>, value: gid::Value) -> bool {
+        let before = self.model.snapshot();
+        let written =
+            crate::location::set_value(&mut self.model.doc, &self.stack.libraries, place, value);
+        if written {
+            self.model.history.record(before);
+        }
+        written
+    }
+
+    /// Moves the selected pane one place along its row or column, keeping
+    /// its selection on what it was on: a view along the editor's, and a
+    /// part along its own in the view's value.
     fn move_selected_pane(&mut self, direction: workspace::Move) {
+        let Some(area) = self.selected_view() else {
+            return;
+        };
+        if area.path().is_empty() {
+            self.model.workspace.move_view(&area.view, direction);
+            return;
+        }
+        let sources = self.sources();
         let next = self.model.selection.as_ref().and_then(|selection| {
-            let Target::Pane { path } = selection.root().target() else {
-                return None;
-            };
             let interpreted = self
                 .model
                 .workspace
-                .view(selection.root())?
+                .pane(&area)?
                 .shown
                 .shows(crate::libraries::editor::ID);
-            let shown =
-                workspace::root_path(&self.sources(), selection.root().target(), interpreted);
+            let shown = workspace::root_path(&sources, &area, interpreted);
             let below = selection.path().strip_prefix(shown.as_slice())?.to_vec();
             let (value, path) =
-                workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
-            Some((value, path, below, interpreted, selection.root().clone()))
+                workspace::move_part(area.view.value(&sources, &[])?, area.path(), direction)?;
+            Some((area.view.place(&[])?, value, path, below, interpreted))
         });
-        if let Some((value, path, below, interpreted, root)) = next {
-            let before = self.model.snapshot();
-            Rc::make_mut(&mut self.model.doc).root = Some(value);
-            self.model.history.record(before);
-            let next_root = Root::pane(path);
-            if let Some(view) = self.model.workspace.view_mut(&root) {
-                view.root = next_root.clone();
-                view.annotations = Default::default();
-            }
-            let mut shown = workspace::root_path(&self.sources(), next_root.target(), interpreted);
+        if let Some((place, value, path, below, interpreted)) = next
+            && self.write_view(&place, value)
+        {
+            let next_area = Area::part(area.view.clone(), path);
+            self.model.workspace.retarget(&area, next_area.clone());
+            let mut shown = workspace::root_path(&self.sources(), &next_area, interpreted);
             shown.extend(below);
             if let Some(selection) = self.model.selection.as_mut() {
                 selection.relocate(shown);
             }
-            self.model
-                .workspace
-                .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
+            self.sync_views();
             self.refresh_title();
         }
     }
 
-    /// The view the selection is in, which view commands act on.
-    fn selected_view(&self) -> Option<Root> {
-        self.model
-            .selection
-            .as_ref()
-            .map(selection::Selection::root)
-            .cloned()
+    /// The area the selection is in, which view commands act on.
+    fn selected_view(&self) -> Option<Area> {
+        self.model.selection.as_ref().map(|selection| {
+            self.model
+                .workspace
+                .area_of(selection.view(), selection.path())
+        })
     }
 
     pub(crate) fn choose_menu(&mut self, command: Command, geometry: Geometry<'_, Editor>) {
@@ -729,7 +693,9 @@ impl Editor {
             DocCommand::Redo => self.step_history(false, geometry),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
-            DocCommand::ShowPanes => self.show_panes(),
+            DocCommand::OpenLibrary(library) => {
+                self.show_in_pane(crate::location::Location::in_cell(library, Vec::new()))
+            }
             DocCommand::MovePane(direction) => self.move_selected_pane(direction),
             DocCommand::Preset(preset) => {
                 let selected = self.selected_view();
@@ -759,6 +725,9 @@ impl Editor {
                     self.zoom = zoom;
                 }
             }
+            DocCommand::CopyVersion => {
+                self.text_clipboard.copy(stage(), None, None);
+            }
         }
     }
 
@@ -774,7 +743,11 @@ impl Editor {
             Some(command) => menu::Navigation::Activate(command),
             None => menu::navigate(
                 &mut self.menu,
-                &menu::definition(self.stack.switchable().map(|(library, _)| library)),
+                &menu::definition(
+                    self.stack.switchable().map(|(library, _)| library),
+                    crate::libraries::name::library_names(&self.stack.libraries)
+                        .map(|(library, _)| library),
+                ),
                 availability,
                 event,
             ),
@@ -793,7 +766,7 @@ impl Editor {
     /// selection; the displaced state crosses to the other stack.
     pub(crate) fn step_history(&mut self, back: bool, geometry: Geometry<'_, Editor>) {
         self.finish_gesture();
-        if self.model.step_history(back) {
+        if self.model.step_history(back, &self.stack.libraries) {
             geometry.reveal_selection(&mut self.model);
             self.refresh_title();
         }

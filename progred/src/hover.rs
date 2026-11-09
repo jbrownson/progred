@@ -59,45 +59,24 @@ impl SourceCalls {
     /// source paths for every painted shape.
     pub fn contains(&self, source: &SourceTrace) -> bool {
         self.trace.origins().any(|origin| match (origin, source) {
-            (grap::SourceOrigin::Stored(path), SourceTrace::Stored(target)) => {
+            (grap::SourceOrigin::Root(path), SourceTrace::Root(target)) => {
                 path.as_slice() == target.as_ref()
             }
             (
-                grap::SourceOrigin::Cell {
-                    cell,
-                    resolution,
-                    path,
-                },
+                grap::SourceOrigin::Cell { cell, path },
                 SourceTrace::InCell {
                     cell: target,
-                    resolution: target_resolution,
                     path: target_path,
                 },
-            ) => {
-                cell == target
-                    && resolution == target_resolution
-                    && path.as_slice() == target_path.as_ref()
-            }
+            ) => cell == target && path.as_slice() == target_path.as_ref(),
             (grap::SourceOrigin::Input(suffix), target) => match (&self.input, target) {
-                (Some(SourceTrace::Stored(base)), SourceTrace::Stored(path)) => {
+                (Some(SourceTrace::Root(base)), SourceTrace::Root(path)) => {
                     base.iter().chain(suffix).eq(path.iter())
                 }
                 (
-                    Some(SourceTrace::InCell {
-                        cell,
-                        resolution,
-                        path: base,
-                    }),
-                    SourceTrace::InCell {
-                        cell: target,
-                        resolution: target_resolution,
-                        path,
-                    },
-                ) => {
-                    cell == target
-                        && resolution == target_resolution
-                        && base.iter().chain(suffix).eq(path.iter())
-                }
+                    Some(SourceTrace::InCell { cell, path: base }),
+                    SourceTrace::InCell { cell: target, path },
+                ) => cell == target && base.iter().chain(suffix).eq(path.iter()),
                 _ => false,
             },
             _ => false,
@@ -108,14 +87,9 @@ impl SourceCalls {
 /// `trace` as Grap records a source, the inverse of [`from_grap`].
 pub(crate) fn to_grap(trace: SourceTrace) -> grap::SourceOrigin {
     match trace {
-        SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
-        SourceTrace::InCell {
+        SourceTrace::Root(path) => grap::SourceOrigin::Root(path.to_vec()),
+        SourceTrace::InCell { cell, path } => grap::SourceOrigin::Cell {
             cell,
-            resolution,
-            path,
-        } => grap::SourceOrigin::Cell {
-            cell,
-            resolution,
             path: path.to_vec(),
         },
     }
@@ -126,15 +100,10 @@ pub(crate) fn from_grap(
     input: Option<&SourceTrace>,
 ) -> Option<SourceTrace> {
     match origin {
-        grap::SourceOrigin::Stored(path) => Some(SourceTrace::Stored(path.into())),
+        grap::SourceOrigin::Root(path) => Some(SourceTrace::Root(path.into())),
         grap::SourceOrigin::Input(path) => input.map(|input| input.descendant(&path)),
-        grap::SourceOrigin::Cell {
+        grap::SourceOrigin::Cell { cell, path } => Some(SourceTrace::InCell {
             cell,
-            resolution,
-            path,
-        } => Some(SourceTrace::InCell {
-            cell,
-            resolution,
             path: path.into(),
         }),
     }
@@ -142,16 +111,18 @@ pub(crate) fn from_grap(
 
 /// The secondary target a hover refers to. A `Value` hover's is what its
 /// landmark was drawn sharing, which a computed occurrence has without a
-/// stored source; an `Entry` hover reads the exact completion offers
+/// stored source; a `Source` hover's is its source, drawn in the area the
+/// pointer is in; an `Entry` hover reads the exact completion offers
 /// emitted by the current frame.
 pub(crate) fn hover_secondary<C>(
     landmark: Option<&crate::display::widget::navigation::Landmark<C>>,
+    area: Option<&crate::display::widget::view::Area>,
     completion: Option<&Offers<C>>,
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
         Hover::Value(_) => landmark?.secondary.clone(),
-        Hover::Source(source) => Some(Secondary::from_trace(source)),
+        Hover::Source(source) => Some(Secondary::from_trace(source, &area?.view)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
         Hover::Toggle(_) | Hover::Label(_) => None,
@@ -159,4 +130,5 @@ pub(crate) fn hover_secondary<C>(
 }
 
 #[cfg(test)]
+#[path = "tests/hover.rs"]
 mod tests;

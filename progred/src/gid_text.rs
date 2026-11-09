@@ -38,7 +38,7 @@ enum Token {
 }
 
 fn as_cell_id(token: &str) -> Option<CellId> {
-    token.parse().ok()
+    CellId::read(token)
 }
 
 fn valid_binder(token: &str) -> bool {
@@ -166,20 +166,8 @@ impl Parser<'_> {
             .rest
             .find(|c: char| !c.is_ascii_hexdigit())
             .unwrap_or(self.rest.len());
-        let hex = &self.rest[..end];
-        if !hex.len().is_multiple_of(2) {
-            return Err("a blob needs whole bytes (even hex digits)".to_string());
-        }
-        let bytes = hex
-            .as_bytes()
-            .chunks(2)
-            .map(|pair| {
-                std::str::from_utf8(pair)
-                    .ok()
-                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-            })
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| "a blob holds hex digits".to_string())?;
+        let bytes = gid::read_hex(&self.rest[..end])
+            .ok_or_else(|| "a blob needs whole bytes (even hex digits)".to_string())?;
         self.rest = &self.rest[end..];
         Ok(bytes)
     }
@@ -332,13 +320,7 @@ fn list(elements: Vec<(Option<gid::Position>, Value)>) -> Result<Value, String> 
     if !elements.windows(2).all(|pair| pair[0].0 < pair[1].0) {
         return Err("a list's positions must increase, without repeats".to_string());
     }
-    Ok(Value::List(elements.into_iter().fold(
-        gid::List::new(),
-        |mut list, (position, value)| {
-            list.insert(position, value);
-            list
-        },
-    )))
+    Ok(Value::List(elements.into_iter().collect()))
 }
 
 /// The canonical printer — deterministic from (document, binders).
@@ -561,9 +543,7 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
 
 fn print_bytes(out: &mut String, bytes: &[u8]) {
     out.push_str("0x");
-    for byte in bytes {
-        let _ = write!(out, "{byte:02x}");
-    }
+    out.push_str(&gid::hex_string(bytes));
 }
 
 fn plain_text(value: &Value) -> Option<&str> {
@@ -576,7 +556,9 @@ fn plain_text(value: &Value) -> Option<&str> {
 }
 
 #[cfg(test)]
+#[path = "tests/gid_text.rs"]
 mod tests;
 
 #[cfg(test)]
+#[path = "tests/gid_text/checked_in_files.rs"]
 mod checked_in_files;

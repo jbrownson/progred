@@ -1,10 +1,10 @@
 //! Operations the evaluator runs natively. A library registers one under its
 //! own cell as an ordinary foreign function, with its own labels and reasons;
 //! a call that resolves to it runs the operation directly rather than through
-//! the general foreign-call machinery. Resolution, shadowing, fuel and effects
+//! the general foreign-call machinery. Lookup, shadowing, fuel and effects
 //! are those of any foreign call.
 
-use crate::arguments::{Parse, Signature};
+use crate::arguments::{Argument, Parse, Signature};
 use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
 use gid::CellId;
 use std::rc::Rc;
@@ -104,18 +104,19 @@ impl Number for u64 {
     }
 }
 
-/// A call site's operand expressions, in the primitive's label order.
-pub(crate) type Operands = Rc<[Option<Expression>]>;
+/// A call site's operands, in the primitive's label order.
+pub(crate) type Operands = Rc<[Argument]>;
 
 impl Primitive {
     /// The foreign function a library registers for this operation.
-    pub fn function(self) -> ForeignFunction {
-        ForeignFunction::staged(move |context, call| {
-            let operands = self.operands(context, call);
-            Rc::new(move |context, environment| self.run(context, &operands, environment))
+    pub fn function(self) -> ForeignFunction<'static> {
+        ForeignFunction::staged(move |call| {
+            let operands = self.operands(call);
+            let call = call.clone();
+            Rc::new(move |context, environment| self.run(context, &call, &operands, environment))
         })
         .parameters(self.labels())
-        .tracked()
+        .cacheable()
         .as_primitive(self)
     }
 
@@ -127,17 +128,18 @@ impl Primitive {
     }
 
     /// The call's operands, found once per call site.
-    pub(crate) fn operands(&self, context: &Context, call: &Expression) -> Operands {
+    pub(crate) fn operands(&self, call: &Expression) -> Operands {
         self.labels()
             .into_iter()
-            .map(|label| context.field(call, label))
+            .map(|label| call.argument(label))
             .collect()
     }
 
     pub(crate) fn run(
         &self,
         context: &mut Context,
-        operands: &[Option<Expression>],
+        call: &Expression,
+        operands: &[Argument],
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         match self {
@@ -146,33 +148,30 @@ impl Primitive {
                 left,
                 right,
             } => {
-                let operands = [
-                    (*left, operands[0].as_ref()),
-                    (*right, operands[1].as_ref()),
-                ];
+                let operands = [(*left, &operands[0]), (*right, &operands[1])];
                 match operation {
                     BinaryOperation::F64(operation) => {
-                        binary(operation, context, operands, environment)
+                        binary(operation, context, call, operands, environment)
                     }
                     BinaryOperation::F32(operation) => {
-                        binary(operation, context, operands, environment)
+                        binary(operation, context, call, operands, environment)
                     }
                     BinaryOperation::U64(operation) => {
-                        binary(operation, context, operands, environment)
+                        binary(operation, context, call, operands, environment)
                     }
                 }
             }
             Self::Unary { operation, operand } => {
-                let operand = [(*operand, operands[0].as_ref())];
+                let operand = [(*operand, &operands[0])];
                 match operation {
                     UnaryOperation::F64(operation) => {
-                        unary(operation, context, operand, environment)
+                        unary(operation, context, call, operand, environment)
                     }
                     UnaryOperation::F32(operation) => {
-                        unary(operation, context, operand, environment)
+                        unary(operation, context, call, operand, environment)
                     }
                     UnaryOperation::U64(operation) => {
-                        unary(operation, context, operand, environment)
+                        unary(operation, context, call, operand, environment)
                     }
                 }
             }
@@ -183,28 +182,32 @@ impl Primitive {
 fn binary<N: Number>(
     operation: &Binary<N>,
     context: &mut Context,
-    operands: [(CellId, Option<&Expression>); 2],
+    call: &Expression,
+    operands: [(CellId, &Argument); 2],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    Ok(match <(N, N)>::parse(context, operands, environment)? {
-        Ok((left, right)) => match operation {
-            Binary::Arithmetic(apply) => apply(left, right).runtime(),
-            Binary::Checked(apply, failure) => apply(left, right)
-                .map(N::runtime)
-                .unwrap_or_else(|| absent::value(*failure).into()),
-            Binary::Comparison(apply) => RuntimeValue::bool(apply(left, right)),
+    Ok(
+        match <(N, N)>::parse(context, call, operands, environment)? {
+            Ok((left, right)) => match operation {
+                Binary::Arithmetic(apply) => apply(left, right).runtime(),
+                Binary::Checked(apply, failure) => apply(left, right)
+                    .map(N::runtime)
+                    .unwrap_or_else(|| absent::value(*failure).into()),
+                Binary::Comparison(apply) => RuntimeValue::bool(apply(left, right)),
+            },
+            Err(invalid) => invalid,
         },
-        Err(invalid) => invalid,
-    })
+    )
 }
 
 fn unary<N: Number>(
     operation: &Unary<N>,
     context: &mut Context,
-    operand: [(CellId, Option<&Expression>); 1],
+    call: &Expression,
+    operand: [(CellId, &Argument); 1],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    Ok(match <(N,)>::parse(context, operand, environment)? {
+    Ok(match <(N,)>::parse(context, call, operand, environment)? {
         Ok((value,)) => match operation {
             Unary::Arithmetic(apply) => apply(value).runtime(),
             Unary::Predicate(apply) => RuntimeValue::bool(apply(value)),

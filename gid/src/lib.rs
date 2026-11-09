@@ -6,12 +6,26 @@ mod blob;
 mod cell_id;
 mod cells;
 mod document;
+mod entries;
+mod hex;
+mod list;
+mod path;
 pub mod position;
+mod record;
 mod value;
 
+#[cfg(test)]
+#[path = "tests/blob_profile.rs"]
+mod blob_profile;
+
 pub use blob::Blob;
-pub use cell_id::{CellId, ParseCellIdError, new_cell_id};
+pub use cell_id::{CellId, new_cell_id};
 pub use cells::Cells;
-pub use document::{Document, Path};
+pub use document::Document;
+pub use entries::{Entries, sorted_entries};
+pub use hex::{hex_string, read_hex};
+pub use list::List;
+pub use path::{Path, Step};
 pub use position::Position;
-pub use value::{List, Record, Resolution, Step, Value, hex_string, read_hex, sorted_entries};
+pub use record::Record;
+pub use value::Value;

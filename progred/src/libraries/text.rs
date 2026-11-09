@@ -18,11 +18,7 @@ pub mod vocabulary {
 pub use ::grap::text::{read, value};
 
 pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
-    Some(
-        current
-            .map(|current| current.overlaid(value(spelling)))
-            .unwrap_or_else(|| value(spelling)),
-    )
+    Some(super::keeping_fields(current, value(spelling)))
 }
 
 pub fn completion(spelling: &str) -> crate::display::Completion {
@@ -44,7 +40,7 @@ pub fn query_spelling(query: &str) -> &str {
 /// being added.
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let text = input.value?.as_text()?;
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == vocabulary::UTF8,
         crate::display::line_edit(editor_for_text(text)),
@@ -62,6 +58,7 @@ fn editor_for_text(text: &str) -> crate::display::LineEdit {
         prefix: "\"".into(),
         suffix: "\"".into(),
         family: crate::display::TextFamily::SystemUi,
+        placeholder: None,
     }
 }
 
@@ -76,17 +73,16 @@ pub fn library<W: Host>() -> Library<W> {
     .with_completions(completions)
 }
 
-/// Whatever was typed reads as text, once anything has been: the empty string
-/// takes at least a `"`.
+/// Whatever was typed reads as text, nothing as the empty string, which is
+/// text too, unlike an empty number.
 fn completions(
     request: &crate::display::CompletionRequest<'_>,
 ) -> Option<Vec<crate::display::Completion>> {
     use crate::display::{CompletionKind, CompletionScope};
-    (request.scope == CompletionScope::Literal
-        && request.kind == CompletionKind::Value
-        && !request.query.trim().is_empty())
-    .then(|| vec![completion(query_spelling(request.query))])
+    (request.scope == CompletionScope::Literal && request.kind == CompletionKind::Value)
+        .then(|| vec![completion(query_spelling(request.query))])
 }
 
 #[cfg(test)]
+#[path = "tests/text.rs"]
 mod tests;

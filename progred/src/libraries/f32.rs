@@ -58,4 +58,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/f32.rs"]
 mod tests;

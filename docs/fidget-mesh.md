@@ -10,8 +10,8 @@ This is maximum octree depth, not a surface-error tolerance. Each extra level
 halves the finest cell spacing and can substantially increase work. The upper
 bound keeps this synchronous experimental control from accepting unbounded
 depth; it is not a general resource guarantee for arbitrary fields or scenes.
-The function returns an ordinary `{preview mesh: {...}}` declaration, recognized
-by a partial in the Fidget library. Invalid arguments return absents or decline
+The function returns an ordinary mesh preview, `{isa: mesh preview, ...}`, which
+the Fidget library draws as its kind provides. Invalid arguments return absents or decline
 to the structural fallback, as with the existing preview.
 
 The cube in Examples → Implicit CAD Shapes (Command+2 / Ctrl+2) explicitly uses this

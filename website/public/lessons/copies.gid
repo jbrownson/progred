@@ -4,7 +4,7 @@
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "all": bc2f76148affd64e009a1a37a32aa2bf,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "program": bdf607810b274ad5b02bd409aef34b6a,
     "width": f33c672fef9d0d4561102410fd64129f,
     "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
@@ -21,12 +21,14 @@
     "first": 9940ece27410c72a5308a544890ccc71,
     "third": 5e716c07490849f072b4e9017dd6230d,
     "dot_program": 1aef3dfdbc27183833ef29bbecaccd95,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
   },
   "cells": {
-    dot_program: {function: all, expressions: [{function: fill, paint: {rgb: 0x3b82a0}, shape: {circle: {radius: {f64: 0x0000000000003840}, x: {f64: 0x0000000000004e40}, y: {f64: 0x0000000000004940}}}}, {function: fill, paint: {rgb: 0x3b82a0}, shape: {circle: {radius: {f64: 0x0000000000003840}, x: {f64: 0x0000000000006440}, y: {f64: 0x0000000000004940}}}}]},
+    dot_program: {isa: call, function: all, expressions: [{isa: call, function: fill, paint: {rgb: 0x3b82a0}, shape: {circle: {radius: {f64: 0x0000000000003840}, x: {f64: 0x0000000000004e40}, y: {f64: 0x0000000000004940}}}}, {isa: call, function: fill, paint: {rgb: 0x3b82a0}, shape: {circle: {radius: {f64: 0x0000000000003840}, x: {f64: 0x0000000000006440}, y: {f64: 0x0000000000004940}}}}]},
   },
   "root": {
     first: dot_program,
-    third: {drawing: {width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000005940}, fuel: {f64: 0x0000000000408f40}, program: dot_program}},
+    third: {isa: drawing, width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000005940}, fuel: {f64: 0x0000000000408f40}, program: dot_program},
   },
 }

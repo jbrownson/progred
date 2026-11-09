@@ -47,9 +47,10 @@ fn edit_line(
         doc: &model.doc,
         libraries,
     };
+    // A line drawn where its value is missing types into the pending there.
     let selected = model.selection.as_mut().filter(|selected| {
         selected.path() == path
-            && selected.stage(&sources) == selection::Stage::Edge
+            && selected.stage(&sources) != selection::Stage::Label
             && selected.writable(&sources)
     });
     let (handled, record) = match selected {
@@ -72,7 +73,8 @@ fn edit_line(
 /// Apply this line's conversion of what was typed, and report whether it
 /// opens an undo step. It writes apart from [`write`] because its caller
 /// takes the undo snapshot before the keystroke changes the line, and the
-/// edit run's flag lives on the selection.
+/// edit run's flag lives on the selection. Typed where the value is missing,
+/// the first write puts the value there, and typing goes on in its line.
 pub(crate) fn commit_line(
     doc: &mut std::rc::Rc<gid::Document>,
     libraries: &crate::library::Libraries,
@@ -80,11 +82,12 @@ pub(crate) fn commit_line(
     update: &crate::display::LineUpdate,
 ) -> bool {
     let sources = Sources { doc, libraries };
+    let pending = selection.stage(&sources) == selection::Stage::Pending;
     let next = selection
         .value_edit()
         .filter(|_| selection.writable(&sources))
         .and_then(|editor| {
-            let current = selection.value(&sources);
+            let current = selection.value(&sources).filter(|_| !pending);
             update(editor.text(), current).filter(|next| current != Some(next))
         });
     if next.is_some_and(|next| {
@@ -93,7 +96,11 @@ pub(crate) fn commit_line(
             .is_some_and(|location| crate::location::set_value(doc, libraries, &location, next))
     }) {
         let first = !selection.recorded();
-        selection.set_recorded(true);
+        if pending {
+            selection.typing_on();
+        } else {
+            selection.set_recorded(true);
+        }
         first
     } else {
         false
@@ -139,14 +146,23 @@ pub(crate) fn enter_pending(
     match &session.model.selection {
         Some(current) => {
             let read = Read { sources };
+            // Where the selection's area starts, as at the root.
+            let starts = crate::occurrence::of(
+                session
+                    .model
+                    .workspace
+                    .area_of(current.view(), current.path())
+                    .path(),
+            );
+            let view = current.view();
             if within {
-                selection::pending_insert(&read, current.path(), shift)
+                selection::pending_insert(&read, view, current.path(), shift)
             } else {
-                selection::pending_enter(&read, current.path(), shift)
+                selection::pending_enter(&read, view, current.path(), &starts, shift)
             }
             .map(|pending| pending.with_origin(current.path().to_vec()))
         }
-        None => selection::pending_root(&sources),
+        None => selection::pending_root(&sources, &session.model.workspace.document),
     }
 }
 
@@ -166,7 +182,7 @@ pub(crate) fn author_in<W>(
     // value a cell there refers to: a cheap test before the full one.
     let reached = container
         .iter()
-        .rposition(|step| !matches!(step, Step::Follow(_)))
+        .rposition(|step| !matches!(step, Step::Follow))
         .map_or(&[][..], |last| &container[..=last]);
     let within = command.pressed(&event.modifiers);
     let sources = session.sources();

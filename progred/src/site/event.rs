@@ -16,6 +16,7 @@ use uig::Placement;
 use vocabulary::*;
 
 #[cfg(test)]
+#[path = "tests/event.rs"]
 mod tests;
 
 pub mod vocabulary {

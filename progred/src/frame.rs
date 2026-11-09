@@ -5,7 +5,7 @@
 use crate::display::widget::frame::{Cursor, ViewRegion};
 use crate::display::widget::navigation::{Geometry, Landmark, landmark_at};
 use crate::display::widget::source::SourceTrace;
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::view::Area;
 use crate::display::widget::{container, placed, style, view};
 use crate::hover;
 use crate::menu;
@@ -34,7 +34,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 #[derive(Default)]
 pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
-    pub(crate) pointer_root: Option<crate::display::widget::view::Root>,
+    pub(crate) pointer_area: Option<Area>,
     pub(crate) landmarks: Rc<[Landmark<Editor>]>,
     pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
@@ -64,15 +64,15 @@ pub(crate) struct FrameState {
     pub(crate) dispatch: Dispatch,
     pub(crate) pending_paint: Option<PendingPaint>,
     pub(crate) input_area: Option<Rect>,
-    notified_hover: Option<(Option<Root>, Hovered)>,
+    notified_hover: Option<(Option<Area>, Hovered)>,
     hover_awaits_paint: bool,
 }
 
 impl FrameState {
-    fn hover_location(&self) -> Option<(Option<Root>, Hovered)> {
+    fn hover_location(&self) -> Option<(Option<Area>, Hovered)> {
         self.hover
             .clone()
-            .map(|hover| (self.dispatch.pointer_root.clone(), hover))
+            .map(|hover| (self.dispatch.pointer_area.clone(), hover))
     }
 }
 
@@ -113,7 +113,7 @@ impl Dispatch {
             pointer: editor.pointer,
             modifiers: editor.modifiers,
             pressed: editor.pressed,
-            ..DispatchContext::new(self.pointer_root.clone(), hover)
+            ..DispatchContext::new(self.pointer_area.clone(), hover)
         }
     }
 }
@@ -164,7 +164,7 @@ impl crate::display::Host for Editor {
 fn attribute(
     sources: &sources::Sources<'_>,
     landmarks: &[Landmark<Editor>],
-    root: Option<&Root>,
+    area: Option<&Area>,
     completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
@@ -180,12 +180,12 @@ fn attribute(
     };
     let visible = source_hover_visible(hovered.as_ref(), link);
     let landmark = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(path))) => landmark_at(landmarks, root, path),
+        Some(Hovered::Tree(hover::Hover::Value(path))) => landmark_at(landmarks, area, path),
         _ => None,
     };
     let hovered_secondary = match &hovered {
         Some(Hovered::Tree(hover)) if visible => {
-            hover::hover_secondary(landmark, completion, hover)
+            hover::hover_secondary(landmark, area, completion, hover)
         }
         _ => None,
     };
@@ -199,15 +199,18 @@ fn attribute(
     Attribution {
         hovered,
         hovered_secondary,
-        selected_secondary: crate::display::widget::navigation::selected_secondary(landmarks),
+        // While picking, what the chosen offer refers to, as for the hovered
+        // offer; otherwise what the selection shares.
+        selected_secondary: completion
+            .and_then(|offers| offers.chosen_source())
+            .map(crate::display::widget::source::Secondary::Cell)
+            .or_else(|| crate::display::widget::navigation::selected_secondary(landmarks)),
         hovered_trace,
     }
 }
 
 /// Interpret the winning claim as an editor target and its owning view.
-fn hover_target(
-    claim: Option<(Option<crate::display::widget::view::Root>, Claim<Hovered>)>,
-) -> (Option<Hovered>, Option<crate::display::widget::view::Root>) {
+fn hover_target(claim: Option<(Option<Area>, Claim<Hovered>)>) -> (Option<Hovered>, Option<Area>) {
     match claim {
         Some((root, Claim::Direct(target) | Claim::Extended(target))) => (Some(target), root),
         Some((root, Claim::Occludes)) => (Some(Hovered::Blocked), root),
@@ -248,7 +251,7 @@ pub(crate) struct FrameResources<'a> {
 #[derive(Default)]
 struct PointerInput<'a> {
     position: Option<Point>,
-    previous: Option<(Option<&'a Root>, &'a Hovered)>,
+    previous: Option<(Option<&'a Area>, &'a Hovered)>,
     pressed: bool,
     link_sources: bool,
 }
@@ -303,9 +306,9 @@ fn compute_hover(
             reach_px: HOVER_REACH_POINTS * description.scale,
         },
     );
-    let (hover, pointer_root) = if pointer.pressed {
-        pointer.previous.map_or((None, None), |(root, hover)| {
-            (Some(hover.clone()), root.cloned())
+    let (hover, pointer_area) = if pointer.pressed {
+        pointer.previous.map_or((None, None), |(area, hover)| {
+            (Some(hover.clone()), area.cloned())
         })
     } else {
         hover_target(output.claim.take())
@@ -316,7 +319,7 @@ fn compute_hover(
             libraries: &description.stack.libraries,
         },
         &output.landmarks,
-        pointer_root.as_ref(),
+        pointer_area.as_ref(),
         output.completion.as_ref(),
         hover.clone(),
         pointer.link_sources,
@@ -325,10 +328,25 @@ fn compute_hover(
         output.landmark_select.is_none(),
         "selection handler escaped its landmark"
     );
-    if description.model.selection.is_none()
+    // A selection on nothing drawn, as when what it was on is gone or a view
+    // doesn't draw its place, leaves arrows as no selection does.
+    let undrawn = description
+        .model
+        .selection
+        .as_ref()
+        .filter(|selection| {
+            selection.stage(&crate::sources::Sources {
+                doc: &description.model.doc,
+                libraries: &description.stack.libraries,
+            }) != crate::selection::Stage::Label
+                && !output.landmarks.iter().any(|landmark| landmark.selected)
+        })
+        .map(|selection| selection.path().to_vec());
+    if (description.model.selection.is_none() || undrawn.is_some())
         && let Some(handler) = navigate::initial_navigation(
-            description.model.workspace.document_root(),
+            &description.model.workspace.document_start(),
             &output.landmarks,
+            undrawn,
         )
     {
         output.handler_mut().stack(handler);
@@ -347,7 +365,7 @@ fn compute_hover(
         hover,
         dispatch: Dispatch {
             handler: Rc::new(handler.unwrap_or_else(Handler::new)),
-            pointer_root,
+            pointer_area,
             landmarks: landmarks.into(),
             view_regions: view_regions.into(),
             hover_geometry,
@@ -360,38 +378,41 @@ fn compute_hover(
 impl Editor {
     pub(crate) fn scroll_view(
         &mut self,
-        root: Root,
+        area: Area,
         update: &ui_events::pointer::PointerScrollEvent,
         scale: f64,
         viewport: Size,
         maximum: Vec2,
     ) -> ScrollOutcome {
         // A retained handler can outlive its view; decline rather than panic.
-        match self.model.workspace.view_mut(&root) {
-            Some(view) => {
+        match self.model.workspace.pane_mut(&area) {
+            Some(pane) => {
                 let (next, outcome) = crate::display::widget::scroll::offset(
-                    view.scroll,
+                    pane.scroll,
                     update,
                     scale,
                     viewport,
                     maximum,
                 );
-                view.scroll = next;
+                pane.scroll = next;
                 outcome
             }
             None => ScrollOutcome::pass(update),
         }
     }
 
-    fn sync_views(&mut self) {
-        let declarations = workspace::declarations(self.model.doc.root.as_ref());
-        self.model.workspace.sync_declared(&declarations);
-        if self
-            .model
-            .selection
-            .as_ref()
-            .is_some_and(|selection| self.model.workspace.view(selection.root()).is_none())
-        {
+    pub(crate) fn sync_views(&mut self) {
+        let sources = sources::Sources {
+            doc: &self.model.doc,
+            libraries: &self.stack.libraries,
+        };
+        self.model.workspace.sync(&sources);
+        if self.model.selection.as_ref().is_some_and(|selection| {
+            self.model
+                .workspace
+                .pane_at(selection.view(), selection.path())
+                .is_none()
+        }) {
             self.model.selection = None;
         }
     }
@@ -400,7 +421,7 @@ impl Editor {
         &mut self,
         scale: f64,
         viewport: Size,
-        previous: Option<(Option<Root>, Hovered)>,
+        previous: Option<(Option<Area>, Hovered)>,
     ) -> Frame {
         self.sync_views();
         self.computations.frame_time.set(web_time::Instant::now());
@@ -460,13 +481,13 @@ impl EditorRunner {
     pub(crate) fn probe_pointer(&mut self, scale: f64) {
         // Retain the complete hover location throughout an active press.
         if !self.editor.pressed {
-            let (hover, pointer_root) = hover_target(self.frame.dispatch.hover_geometry.probe(
+            let (hover, pointer_area) = hover_target(self.frame.dispatch.hover_geometry.probe(
                 self.editor.pointer,
                 self.frame.hover.as_ref(),
                 HOVER_REACH_POINTS * scale,
             ));
             self.frame.hover = hover;
-            self.frame.dispatch.pointer_root = pointer_root;
+            self.frame.dispatch.pointer_area = pointer_area;
         }
     }
 
@@ -574,40 +595,45 @@ impl EditorRunner {
     }
 }
 
-/// What `view` draws with: the libraries' projections less those the view
-/// leaves off, as a pane's when `pane`.
+/// What `pane` draws with: the libraries' projections less those it leaves
+/// off, interpreting what's at its root as a pane's entry with
+/// `pane_entry`.
 fn view_projection<'a>(
     stack: &'a stack::Stack,
-    view: &workspace::View,
-    pane: bool,
+    pane: &workspace::Pane,
+    pane_entry: bool,
 ) -> Cow<'a, projection::Projection> {
-    match &*hidden(stack, view) {
-        [] => Cow::Borrowed(if pane {
+    match &*hidden(stack, pane) {
+        [] => Cow::Borrowed(if pane_entry {
             &stack.pane_projection
         } else {
             &stack.projection
         }),
         hidden => {
             let (document, pane_projection) = stack.without(hidden);
-            Cow::Owned(if pane { pane_projection } else { document })
+            Cow::Owned(if pane_entry {
+                pane_projection
+            } else {
+                document
+            })
         }
     }
 }
 
-/// The libraries switched off in `view`.
+/// The libraries switched off in `pane`.
 pub(crate) fn hidden<'a>(
     stack: &stack::Stack,
-    view: &'a workspace::View,
+    pane: &'a workspace::Pane,
 ) -> Cow<'a, [gid::CellId]> {
-    stack.hidden(&view.shown)
+    stack.hidden(&pane.shown)
 }
 
-/// What `view` offers: none of what its libraries switched off offer.
+/// What `pane` offers: none of what its libraries switched off offer.
 pub(crate) fn completions<'a>(
     stack: &'a stack::Stack,
-    view: &workspace::View,
+    pane: &workspace::Pane,
 ) -> Cow<'a, crate::display::CompletionProvider> {
-    match &*hidden(stack, view) {
+    match &*hidden(stack, pane) {
         [] => Cow::Borrowed(&stack.completions),
         hidden => Cow::Owned(stack.completions_without(hidden)),
     }
@@ -625,40 +651,44 @@ struct ViewContent<'a> {
     viewport: bool,
 }
 
-/// What `view` shows in an area of `size` at `scale`: a pane whose value is
-/// a viewport fills the pane with it, while it shows the presentation
-/// library.
+/// What `pane` shows in an area of `size` at `scale`: one showing an
+/// entry, every pane but the document's whole one, fills itself with a
+/// sized value there, while it shows the presentation library.
 fn view_content<'a>(
     stack: &'a stack::Stack,
     sources: sources::Sources<'a>,
-    view: &'a workspace::View,
+    workspace: &workspace::Workspace,
+    pane: &'a workspace::Pane,
     size: Size,
     scale: f64,
 ) -> ViewContent<'a> {
-    let viewport = match view.root.target() {
-        Target::Pane { path } if view.shown.shows(crate::libraries::presentation::ID) => {
-            projection::viewport::entry(sources, path)
-        }
-        _ => None,
-    };
-    let interpreted = view.shown.shows(crate::libraries::editor::ID);
-    let root_path = workspace::root_path(&sources, view.root.target(), interpreted);
-    match (view.root.target(), viewport) {
-        (Target::Pane { path }, Some(entry)) => ViewContent {
-            // The cells the entry follows to its viewport, below the jump.
-            root_path: crate::occurrence::below(&root_path, &entry.path[path.len()..]),
-            root: Some(Cow::Borrowed(entry.value)),
+    let area = &pane.area;
+    let pane_entry = area.view != workspace.document || !area.path().is_empty();
+    let viewport = (pane_entry && pane.shown.shows(crate::libraries::presentation::ID))
+        .then(|| projection::viewport::entry(sources, &area.view.place(area.path())?))
+        .flatten();
+    let interpreted = pane.shown.shows(crate::libraries::editor::ID);
+    let root_path = workspace::root_path(&sources, area, interpreted);
+    match viewport {
+        Some(viewport) => ViewContent {
+            // The cells the value follows to its viewport.
+            root_path: crate::occurrence::below(&root_path, &viewport.path),
+            root: Some(Cow::Borrowed(viewport.value)),
             projection: Cow::Owned(projection::viewport::projection(
-                &view_projection(stack, view, false),
+                &view_projection(stack, pane, false),
                 size / scale,
             )),
             viewport: true,
         },
-        (target, _) => {
-            let root = crate::occurrence::read(&sources, &root_path);
+        None => {
+            // A copy, which nothing stores, draws as computed.
+            let root = match crate::occurrence::location(&root_path) {
+                Some(place) => sources.read(&place),
+                None => area.view.value(&sources, area.path()),
+            };
             let not_found = root
                 .is_none()
-                .then(|| not_found(sources, target, interpreted, &root_path))
+                .then(|| not_found(sources, &root_path))
                 .flatten();
             let mut drawn = root_path;
             if not_found.is_some() {
@@ -667,37 +697,28 @@ fn view_content<'a>(
             ViewContent {
                 root: not_found.map(Cow::Owned).or(root.map(Cow::Borrowed)),
                 root_path: drawn,
-                projection: view_projection(stack, view, matches!(target, Target::Pane { .. })),
+                projection: view_projection(stack, pane, pane_entry),
                 viewport: false,
             }
         }
     }
 }
 
-/// What a pane showing a location draws when its place, where `root_path`
-/// jumps, can't be reached, as after its container was deleted: an absent
-/// naming it. A place that's only empty draws as any empty place does, ready
-/// to write.
+/// What a pane draws when its place, where `root_path` goes, can't be
+/// reached, as after its container was deleted: an absent naming it. A
+/// place that's only empty draws as any empty place does, ready to write.
 fn not_found(
     sources: sources::Sources<'_>,
-    target: &Target,
-    interpreted: bool,
     root_path: &[crate::occurrence::Step],
 ) -> Option<gid::Value> {
-    let Target::Pane { path } = target else {
-        return None;
-    };
-    let location = interpreted
-        .then(|| crate::location::read(sources.resolve_path(path)?))
-        .flatten()?;
     let place = crate::occurrence::location(root_path)?;
-    (!crate::location::reachable(&sources, &place)).then(|| crate::location::not_found(&location))
+    (!crate::location::reachable(&sources, &place)).then(|| crate::location::not_found(&place))
 }
 
-/// Whether `view` labels cells with their names: only with the name library
+/// Whether `pane` labels cells with their names: only with the name library
 /// on.
-pub(crate) fn names(stack: &stack::Stack, view: &workspace::View) -> bool {
-    !hidden(stack, view).contains(&crate::libraries::name::ID)
+pub(crate) fn names(stack: &stack::Stack, pane: &workspace::Pane) -> bool {
+    !hidden(stack, pane).contains(&crate::libraries::name::ID)
 }
 
 /// The margin around a view's content: none for a viewport filling its pane.
@@ -721,7 +742,7 @@ fn project_workspace_view(
     description: &FrameDescription<'_>,
     styles: &style::Styles,
     tcx: &mut TextCtx,
-    view: &workspace::View,
+    pane: &workspace::Pane,
     size: Size,
 ) -> measured::Measured<HoverPass<Editor>> {
     let FrameDescription {
@@ -736,24 +757,24 @@ fn project_workspace_view(
         doc: &model.doc,
         libraries: &stack.libraries,
     };
-    let shown = view_content(stack, sources, view, size, scale);
+    let shown = view_content(stack, sources, &model.workspace, pane, size, scale);
     let margin = content_margin(shown.viewport, scale);
-    let completions = completions(stack, view);
+    let completions = completions(stack, pane);
     let projected = projection::project(
         projection::ProjectDescription {
             computations,
             focused,
             completions: Some(&completions),
             sources,
+            view: pane.area.view.clone(),
             root: shown.root.as_deref(),
             root_path: &shown.root_path,
-            selection: model
-                .selection
-                .as_ref()
-                .filter(|selection| selection.root() == &view.root),
+            selection: model.selection.as_ref().filter(|selection| {
+                model.workspace.area_of(selection.view(), selection.path()) == pane.area
+            }),
             source_selection: model.selection.as_ref(),
-            annotations: &view.annotations,
-            names: names(stack, view),
+            annotations: &pane.annotations,
+            names: names(stack, pane),
             styles,
             width: (size.width - 2.0 * margin).max(0.0),
             projection: &shown.projection,
@@ -761,27 +782,27 @@ fn project_workspace_view(
         tcx,
     );
     let content = measured::pad(Insets::uniform(margin), projected);
-    let root = view.root.clone();
+    let area = pane.area.clone();
     let content = if shown.viewport {
-        view::viewport(content, root.clone())
+        view::viewport(content, area.clone())
     } else {
         let maximum = crate::display::widget::scroll::maximum(content.extent, size, scale);
         let offset = Vec2::new(
-            view.scroll.x.clamp(0.0, maximum.x) * scale,
-            view.scroll.y.clamp(0.0, maximum.y) * scale,
+            pane.scroll.x.clamp(0.0, maximum.x) * scale,
+            pane.scroll.y.clamp(0.0, maximum.y) * scale,
         );
-        let scroll_root = root.clone();
+        let scroll_area = area.clone();
         view::scrolled_at(
             content,
             offset,
-            root.clone(),
+            area.clone(),
             scale,
             move |app: &mut Editor, update| {
-                app.scroll_view(scroll_root.clone(), update, scale, size, maximum)
+                app.scroll_view(scroll_area.clone(), update, scale, size, maximum)
             },
         )
     };
-    let content = view::in_view(content, root);
+    let content = view::in_view(content, area);
     measured::overlay_into(backdrop(size), content, move |placement, _| {
         Some(Placement::new(
             placement.rect,
@@ -790,15 +811,16 @@ fn project_workspace_view(
     })
 }
 
-/// The rule between two columns or panes, which drags to resize them.
+/// The rule between two parts, which drags to move share from one to the
+/// other, `rate` a pixel.
 fn divider_rule(
     divider: workspace::Divider,
     rect: Rect,
+    rate: f64,
     border: peniko::Color,
     scale: f64,
-    size: Size,
 ) -> measured::Measured<HoverPass<Editor>> {
-    let vertical = matches!(divider, workspace::Divider::Columns(_));
+    let vertical = divider.direction == workspace::Direction::Across;
     let hover_divider = divider.clone();
     let cursor_divider = divider.clone();
     let down_divider = divider.clone();
@@ -839,6 +861,7 @@ fn divider_rule(
                             event.state.position.x - clip.x0,
                             event.state.position.y - clip.y0,
                         ),
+                        rate,
                     )
             });
             p.handler().on_pointer_move(move |app: &mut Editor, event| {
@@ -848,7 +871,6 @@ fn divider_rule(
                         event.current.position.x - clip.x0,
                         event.current.position.y - clip.y0,
                     ),
-                    size,
                 )
             });
             p.handler().on_pointer_up(move |app: &mut Editor, _| {
@@ -864,17 +886,20 @@ fn project_workspace(
     tcx: &mut TextCtx,
     size: Size,
 ) -> measured::Measured<HoverPass<Editor>> {
-    let geometry = description
-        .model
-        .workspace
-        .geometry(size, description.scale);
+    let geometry = description.model.workspace.geometry(
+        &sources::Sources {
+            doc: &description.model.doc,
+            libraries: &description.stack.libraries,
+        },
+        size,
+        description.scale,
+    );
     let views = geometry
-        .views
+        .panes
         .into_iter()
-        .fold(backdrop(size), |body, placed_view| {
-            let rect = placed_view.rect;
-            let child =
-                project_workspace_view(description, styles, tcx, placed_view.view, rect.size());
+        .fold(backdrop(size), |body, placed| {
+            let rect = placed.rect;
+            let child = project_workspace_view(description, styles, tcx, placed.pane, rect.size());
             measured::overlay_into(body, child, move |placement, _| {
                 let rect = rect + placement.rect.origin().to_vec2();
                 Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
@@ -888,9 +913,9 @@ fn project_workspace(
             let rule = divider_rule(
                 placed_divider.divider,
                 rect,
+                placed_divider.rate,
                 styles.palette.border,
                 description.scale,
-                size,
             );
             measured::overlay_into(body, rule, move |placement, _| {
                 let rect = rect + placement.rect.origin().to_vec2();
@@ -969,6 +994,9 @@ fn project_frame(
                     .switchable()
                     .map(|(library, name)| (library, name.to_owned()))
                     .collect(),
+                libraries: crate::libraries::name::library_names(&stack.libraries)
+                    .map(|(library, name)| (library, name.to_owned()))
+                    .collect(),
                 scale,
                 width: viewport_width,
             },
@@ -1025,13 +1053,11 @@ fn project_frame(
                     }
                 });
             });
-            container::floating(stage, popup, move |placement, extent| {
-                let x = x
-                    .min(placement.clip_rect.x1 - extent.width)
-                    .max(placement.clip_rect.x0);
+            container::floating(stage, popup, move |_, extent, bounds| {
+                let x = x.min(bounds.x1 - extent.width).max(bounds.x0);
                 Some(Placement::new(
                     extent.rect_at(Point::new(x, content_viewport.y0)),
-                    placement.clip_rect,
+                    bounds,
                 ))
             })
         }
@@ -1041,8 +1067,11 @@ fn project_frame(
 }
 
 #[cfg(test)]
+#[path = "tests/frame/placement_tests.rs"]
 mod placement_tests;
 #[cfg(test)]
+#[path = "tests/frame/test_support.rs"]
 pub(crate) mod test_support;
 #[cfg(test)]
+#[path = "tests/frame.rs"]
 mod tests;

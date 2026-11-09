@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{RowAlignment, activatable, aligned_row, structure, widget};
+use crate::display::{RowAlignment, aligned_row, selectable, structure, widget};
 use kurbo::{Affine, BezPath, PathEl, Stroke};
 use peniko::Color;
 use puri::draw::Canvas;
@@ -18,12 +18,12 @@ pub(crate) fn color(kind: SectionKind) -> [u8; 3] {
 pub(crate) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let value = input.value?;
-    value.field(vocabulary::TOOL)?;
-    let tool = Tool::read(value.as_value())?;
-    let fields = structure::record_layout(input, |_| None)?;
+    let tool = Tool::read(input.value?.as_value())?;
+    let fields = structure::Fields::default()
+        .shown_empty()
+        .rest(input, |key| key == ::grap::isa::ISA)?;
     let site = input.site();
-    let picture = activatable(picture(&tool)?, &site);
+    let picture = selectable(picture(&tool)?, &site);
     Some(aligned_row(
         RowAlignment::Top { baseline: 1 },
         12.0,

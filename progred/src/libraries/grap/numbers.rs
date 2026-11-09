@@ -82,7 +82,14 @@ pub mod u64 {
 
 /// What arithmetic adds to the Grap library: the names of its cells, its
 /// functions, and its projection, which goes before Grap's calls'.
-pub(super) fn contribution<W: Host>() -> (Vec<(CellId, Value)>, ForeignFunctions, Partial<W>) {
+/// The numbers' names, their functions, the projections their operators
+/// provide for calls of them, and the numbers' own projection.
+pub(super) fn contribution<W: Host>() -> (
+    Vec<(CellId, Value)>,
+    ForeignFunctions<'static>,
+    Vec<(CellId, Partial<W>)>,
+    Partial<W>,
+) {
     let mut parts = [f64_parts(), f32_parts(), u64_parts()];
     let names = [
         (vocabulary::LEFT, "left"),
@@ -103,12 +110,19 @@ pub(super) fn contribution<W: Host>() -> (Vec<(CellId, Value)>, ForeignFunctions
             .map(|parts| std::mem::take(&mut parts.functions)),
     );
     let [f64, f32, u64] = parts;
-    let projection = crate::display::compose_partials([
+    let (provided, projections): (Vec<_>, Vec<_>) = [
         f64.projection(f64_arithmetic()),
         f32.projection(f32_arithmetic()),
         u64.projection(u64_arithmetic()),
-    ]);
-    (names, functions, projection)
+    ]
+    .into_iter()
+    .unzip();
+    (
+        names,
+        functions,
+        provided.into_iter().flatten().collect(),
+        crate::display::compose_partials(projections),
+    )
 }
 
 /// An operation's name: its spelling, then its representation's `tag` as a
@@ -159,7 +173,7 @@ fn f64_parts() -> Parts {
     ]);
     parts.functions = parts.functions.register(
         f64::LERP,
-        ForeignFunction::with_arguments([f64::START, f64::END, f64::AMOUNT], lerp).tracked(),
+        ForeignFunction::with_arguments([f64::START, f64::END, f64::AMOUNT], lerp).cacheable(),
     );
     parts.names.extend(
         [
@@ -270,7 +284,7 @@ enum Operation<N> {
 /// forms.
 struct Parts {
     names: Vec<(CellId, Value)>,
-    functions: ForeignFunctions,
+    functions: ForeignFunctions<'static>,
     /// The calls that read infix, and how tightly each binds.
     infix: Vec<(CellId, Precedence)>,
     /// The infix operators by spelling, for typing after a number.
@@ -278,16 +292,23 @@ struct Parts {
 }
 
 impl Parts {
-    /// The calls drawn infix, and a number that takes its operators as
-    /// typing.
+    /// The infix operators' projection for calls of each, and a number
+    /// that takes its operators as typing.
     fn projection<W: Host, N: Scrubbable + std::str::FromStr>(
         self,
         arithmetic: Arithmetic<N>,
-    ) -> Partial<W> {
+    ) -> (Vec<(CellId, Partial<W>)>, Partial<W>) {
         let infix: Rc<[(CellId, Precedence)]> = self.infix.into();
         let symbols: Rc<[(&'static str, CellId)]> = self.symbols.into();
-        crate::display::compose_partials([
-            crate::display::runtime_partial(move |input| infix_display(&infix, input)),
+        let operator = {
+            let infix = infix.clone();
+            crate::display::runtime_partial(move |input| infix_display(&infix, input))
+        };
+        (
+            infix
+                .iter()
+                .map(|(cell, _)| (*cell, operator.clone()))
+                .collect(),
             crate::display::runtime_partial(move |input| {
                 let layout = arithmetic.representation.display(input)?;
                 Some(if input.writable && input.selection.is_some() {
@@ -296,7 +317,7 @@ impl Parts {
                     layout
                 })
             }),
-        ])
+        )
     }
 }
 
@@ -327,7 +348,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
     }
 
     /// `operation` as the primitive Grap runs.
-    fn operation(self, operation: Operation<N>) -> ForeignFunction {
+    fn operation(self, operation: Operation<N>) -> ForeignFunction<'static> {
         let binary = |operation| Primitive::Binary {
             operation: N::binary(operation),
             left: vocabulary::LEFT,
@@ -352,11 +373,11 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
 fn conversion<From: Parse + 'static, N: 'static>(
     runtime: fn(N) -> RuntimeValue,
     convert: fn(From) -> N,
-) -> ForeignFunction {
+) -> ForeignFunction<'static> {
     ForeignFunction::with_arguments([vocabulary::OPERAND], move |_, (number,): (From,)| {
         runtime(convert(number))
     })
-    .tracked()
+    .cacheable()
 }
 
 /// A selected number takes its type's single-character operators as typing:
@@ -432,4 +453,5 @@ fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -
 }
 
 #[cfg(test)]
+#[path = "tests/numbers/mod.rs"]
 mod tests;

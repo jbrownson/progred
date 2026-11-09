@@ -33,6 +33,16 @@ impl<C> Clone for Entry<C> {
 /// Retained in the placed frame for attribution to the exact visible offers.
 pub struct Offers<C> {
     pub entries: Rc<[Entry<C>]>,
+    /// The entry the keyboard has chosen.
+    pub chosen: usize,
+}
+
+impl<C> Offers<C> {
+    /// The cell the chosen entry refers to, which the frame marks as the
+    /// hovered entry's is.
+    pub fn chosen_source(&self) -> Option<CellId> {
+        self.entries.get(self.chosen)?.source
+    }
 }
 
 /// A hole's list for a query, in the order shown, with the spans that matched.
@@ -65,7 +75,8 @@ pub(crate) fn rank<W: Host>(
                                 request
                                     .value()
                                     .and_then(Value::as_record)
-                                    .is_some_and(|fields| fields.contains_key(&cell))
+                                    .and_then(|fields| fields.get(&cell))
+                                    .is_some()
                             }))
             })
             .map(|offer| (text(request, &offer.display), offer))
@@ -131,6 +142,7 @@ fn listed<W: Host>(
 fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> (String, Vec<Range<usize>>) {
     match text {
         CompletionText::Literal(text) => (text.clone(), Vec::new()),
+        CompletionText::Named(name) => (name.spelling().into_owned(), name.subscripts()),
         CompletionText::Name(cell) => match (request.name)(*cell) {
             Some(name) => (name.spelling().into_owned(), name.subscripts()),
             None => (name_or_short_id(None::<&str>, *cell), Vec::new()),
@@ -139,4 +151,5 @@ fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> (String, Vec<
 }
 
 #[cfg(test)]
+#[path = "tests/offers.rs"]
 mod tests;

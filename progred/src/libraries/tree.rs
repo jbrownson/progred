@@ -10,6 +10,7 @@ use gid::{CellId, Value};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(test)]
+#[path = "tests/tree/mod.rs"]
 mod tests;
 
 pub const ID: CellId = CellId::from_u128(0x0680eec8cc78f0aebe7ab8a68562a65f);
@@ -60,14 +61,14 @@ fn children<S: Sink>(
     environment: &Environment,
     output: &Output<S>,
 ) -> Result<RuntimeValue, Halt> {
-    if let Some(elements) = context.elements(&expression).map(<[_]>::to_vec) {
+    if let Some(elements) = expression.elements().map(<[_]>::to_vec) {
         for child in elements {
             context.burn()?;
-            let result = if context.elements(&child).is_some() {
+            let result = if child.elements().is_some() {
                 group(
                     context,
                     child.clone(),
-                    context.source_origin(&child),
+                    child.source_origin(),
                     environment,
                     output,
                 )?
@@ -84,7 +85,7 @@ fn children<S: Sink>(
     }
 }
 
-fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
+fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions<'static> {
     let output = Rc::new(Output {
         sink,
         maps: RefCell::default(),
@@ -94,27 +95,27 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
         .register(
             GROUP,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = context.field(call, CHILDREN) else {
-                    return Ok(context.missing_runtime_argument(CHILDREN));
+                let Some(expression) = call.field(CHILDREN) else {
+                    return Ok(call.missing_runtime_argument(CHILDREN));
                 };
                 group(
                     context,
                     expression,
-                    context.source_origin(call),
+                    call.source_origin(),
                     environment,
                     &group_output,
                 )
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             MAP,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = context.field(call, CHILDREN) else {
-                    return Ok(context.missing_runtime_argument(CHILDREN));
+                let Some(expression) = call.field(CHILDREN) else {
+                    return Ok(call.missing_runtime_argument(CHILDREN));
                 };
-                let Some(map) = context.field(call, MAPPING) else {
-                    return Ok(context.missing_runtime_argument(MAPPING));
+                let Some(map) = call.field(MAPPING) else {
+                    return Ok(call.missing_runtime_argument(MAPPING));
                 };
                 let map = context.prepare_callable(map, environment)?;
                 map_output.maps.borrow_mut().push(map);
@@ -122,15 +123,15 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                 map_output.maps.borrow_mut().pop();
                 result
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             LEAF,
             ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = context.field(call, VALUE) else {
-                    return Ok(context.missing_runtime_argument(VALUE));
+                let Some(expression) = call.field(VALUE) else {
+                    return Ok(call.missing_runtime_argument(VALUE));
                 };
-                let source = context.source_origin(call);
+                let source = call.source_origin();
                 let maps = output
                     .maps
                     .borrow()
@@ -157,7 +158,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                     })
                 })
             })
-            .tracked(),
+            .cacheable(),
         )
 }
 
@@ -257,8 +258,8 @@ fn evaluate(
 ) -> (::grap::Evaluation, Option<Result<Built, RuntimeValue>>) {
     let built = RefCell::new(None);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-        let Some(expression) = context.field(call, PROGRAM) else {
-            return Ok(context.missing_runtime_argument(PROGRAM));
+        let Some(expression) = call.field(PROGRAM) else {
+            return Ok(call.missing_runtime_argument(PROGRAM));
         };
         let callable = context.prepare_callable(expression, environment)?;
         let result = collect(context, &callable)?;
@@ -270,15 +271,16 @@ fn evaluate(
         Ok(value)
     };
     let expression = RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            Value::from(::grap::vocabulary::kind::CALL).into(),
+        ),
         (::grap::vocabulary::FUNCTION, Value::from(COLLECT).into()),
         (PROGRAM, program.clone()),
     ]);
-    let evaluation = ::grap::evaluate_runtime_scoped(
-        &expression,
-        host,
-        &::grap::ForeignOverlay::new(&[COLLECT], &emit).tracked(),
-        fuel,
-    );
+    let evaluation = ::grap::Evaluator::new(host, fuel)
+        .functions(::grap::ForeignFunctions::shared(&[COLLECT], &emit).cacheable())
+        .evaluate_runtime(&expression, None);
     (evaluation, built.into_inner())
 }
 
@@ -298,7 +300,7 @@ fn outcome(
     evaluation: ::grap::Evaluation,
     built: Option<Result<Built, RuntimeValue>>,
 ) -> Result<Built, RuntimeValue> {
-    if evaluation.completed {
+    if evaluation.halt.is_none() {
         built.unwrap_or(Err(evaluation.result))
     } else {
         Err(evaluation.result)
@@ -367,8 +369,8 @@ pub fn library<W: Host>() -> Library<W> {
         .register(
             COLLECT,
             ForeignFunction::new(|context, call, environment| {
-                let Some(program) = context.field(call, PROGRAM) else {
-                    return Ok(context.missing_runtime_argument(PROGRAM));
+                let Some(program) = call.field(PROGRAM) else {
+                    return Ok(call.missing_runtime_argument(PROGRAM));
                 };
                 let program = context.prepare_callable(program, environment)?;
                 Ok(match collect(context, &program)? {
@@ -377,7 +379,7 @@ pub fn library<W: Host>() -> Library<W> {
                 })
             })
             .parameters([PROGRAM])
-            .tracked(),
+            .cacheable(),
         );
     name::named_library(
         ID,

@@ -11,23 +11,45 @@ A document has an optional root and a `CellId -> Value` table. An identity with
 no table entry is a bare cell. Record labels are cell identities; text, names,
 numbers, absence reasons, and domain data are library conventions.
 
+A record's kind is one of those conventions: its `isa` field, whose cell the
+`isa` library owns, names what kind of thing it is, as `{isa: call}` does.
+Typing stays structural, a kind's other fields read by what they are; the kind
+says only what the record is, never what it requires, so a record stays its
+kind while it's unfinished and whatever its kind comes to require. A kind is a
+cell of its own, apart from any field that shares its name: the `call` kind
+will carry the type of calls, an absent's `call` field the type of what it
+holds. Grap's calls, lambdas, closures, foreign functions, value wrappers, unquotes,
+`match` cases, bindings, binders and absents say their kinds, as the Grap library's
+evaluations and notebooks do, and a record that doesn't is data. A value encoded under one tag field,
+a number, text or a boolean, is told by that field.
+
 A cell may accidentally occur in several sources, for example when editing a
 document that also exists as a loaded library. Normal lookup selects the document
 definition first, otherwise the first loaded library definition. Names, structural
 display, and cell evaluation use that value. Definitions are neither merged nor
 implicitly composed. Duplicate indicators and inspection UI are deferred.
 
-Each library has one definition per cell: either an ordinary value or a native
-definition (`grap::Definition::Foreign`) pairing a descriptive value with its
-Rust implementation. Reads and
-calls use the same lookup. Reading a native definition uses its description;
-calling it invokes its implementation. An absent or non-callable result does
-not try another source. Library descriptions (currently name records) live in
-that same table under the library identities, not in a separate metadata store.
+Each library has one value per cell, and the Rust code of the foreign
+functions it implements, each under its own cell. Reads and calls use the same
+lookup. A foreign function's value says what it is, `{isa: foreign function,
+implementation: <its own cell>, name, params}`, the library writing it from the
+function's name and the parameters its code declares. It's data, so a
+reference evaluates to it as to any definition. Only a call reaches code
+(`grap::Host::implementation`): calling a cell whose definition is a foreign
+function implemented under it runs the code there, and calling a foreign
+function value calls its implementation's cell. A document that defines that
+cell otherwise overrides the code too, since the call reads the definition
+first; one implemented nowhere isn't callable. An absent or non-callable result
+does not try another source. A library's own value lives in that same table under
+its identity, not in a separate metadata store: `{isa: loaded library, name,
+cells}`, the name it gives itself and the cells it defines, ordered by their
+names. Composing the loaded libraries writes it, so it lists what each library
+ends up defining; the editor library draws it as its name over a column of
+its cells, each by its name.
 Replacing a loaded library replaces all its contributions in place, including
 projections and completions, before those are composed.
-Explicit source-qualified paths still reach a particular definition; loaded
-library values remain read-only. See [Sources](../progred/src/sources.rs),
+Paths, locations and evaluation all go through that lookup, so a path reaches
+whichever definition it selects; loaded library values remain read-only. See [Sources](../progred/src/sources.rs),
 [Library and Libraries](../progred/src/library.rs), and
 [Grap evaluation](projections.md#evaluation).
 
@@ -40,15 +62,16 @@ library context:
 
 - `Key(cell)` enters a record field.
 - `Element(position)` enters a list element at its stable position.
-- `Follow(Document | Library(id))` crosses a cell into a particular definition.
+- `Follow` crosses a cell into its definition, the one lookup selects.
 
-The empty path is the document root; it need not be a cell. Library sources use
-stable identities, so changing load order cannot silently retarget a `Follow`.
-List positions preserve an occurrence across edits that retain that position;
+The empty path is the document root; it need not be a cell. Loading a library,
+reordering libraries, or adding a document definition can change which
+definition a `Follow` reaches, as other edits can leave a path stale; the editor
+tolerates both. List positions preserve an occurrence across edits that retain that position;
 they are not content identities or globally meaningful addresses.
 
 A [`Location`](../progred/src/location.rs) names stored data: it starts at the
-document's root or at a cell's definition from a particular source, then follows
+document's root or at a cell's definition, then follows
 a path from there. Following a cell starts a new location at its definition,
 however the cell was reached, so what can be edited depends on where the data is
 stored, not on the route to it. Writes land in that stored value: a location's
@@ -57,19 +80,24 @@ root and the document's own definitions are writable, including a cell with no
 definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
 
-A selection's path also names the workspace view it's in: a pane's paths
-start with its declaration and a pane step ([panes](#panes)), and every other
-path is the document view's. So two panes showing the same stored data keep
-separate focus, scroll, and folds, and a view is what it targets, the
-document or a pane's declaration, which a workspace `Root` names; it is not a
-GID cell.
+Where something is drawn has two tiers. The first is the view it's in, a
+[`View`](../progred/src/workspace.rs) the editor lays out: the document's, or
+one it opened beside it ([panes](#panes)). A view is the editor's, not GID
+data, and it's known by its address, an `Rc<View>`, so two views of one place
+are two views. The second tier is the occurrence path within the view,
+unchanged from what the view alone would draw. A selection, a landmark, hover
+and computations carry the view beside the path, so two views drawing the
+same stored data at the same path keep separate focus, scroll, folds and
+results. Where a view's root value is a row or column, each part is drawn in
+its own area of the view, an [`Area`](../progred/src/display/widget/view.rs)
+naming the view and the part's path below its root; which area a path is in
+follows from the path, the part whose path leads it.
 
 [`SourceTrace`](../progred/src/display/widget/source.rs) serves source-linked
 widgets, drawing, and highlighting. It is a location in the form it is stored
-in: a path from the root, or a cell, definition source, and path relative to
-that definition. Normalizing to the nearest followed definition lets different
-occurrences highlight the same source without conflating two libraries'
-definitions of one cell. Both forms still need the caller's resolution context.
+in: a path from the root, or a cell and a path relative to its definition.
+Normalizing to the nearest followed definition lets different occurrences
+highlight the same source. Both forms still need the caller's lookup context.
 Neither is an execution stack or global address.
 
 Computed values use `at` at their own displayed occurrences. They and their
@@ -115,10 +143,10 @@ each occurrence holds its own step and a link to the trail of the occurrence
 it's drawn inside, so descending adds one link, siblings share what's above
 them, and what wants the whole path walks the parents. A selection, made
 rarely, holds its path whole. Its steps are the document's own, `Key`, `Element` and `Follow`,
-plus three of the editor's: a **jump** restarts the path at a location, as a
-projection's `jump` does, a **computed** step stops it, as `at` does for a
-supplied value, and a **pane** step marks where a pane starts, which only the
-frame writes. Resolving a path starts from the document's root, or from its
+plus two of the editor's: a **jump** restarts the path at a location, as a
+projection's `jump` does, and a **computed** step stops it, as `at` does for
+a supplied value. Which view the path is in sits beside it, not in it.
+Resolving a path starts from the document's root, or from its
 last jump's location, and follows the data steps after it; past a computed step
 there's no location until a jump. A cell followed inside a computed value has
 no stored route to it, so following it jumps to its definition, which starts a
@@ -218,10 +246,8 @@ staged writes; an explicitly declined or halted handler commits no effects.
 Ordinary absent results keep preceding effects. Setters return `{}` on successful
 set or clear; absent remains an input convention for clearing, not its return value.
 Site and selection getters return their own missing-state reasons when empty.
-A function must decline before performing effects, including effects in its
-arguments or nested calls. Declining afterward halts the evaluation. Only the
-complete editor operation is staged,
-with no per-call snapshots or rollback. Tests can replace these foreign functions
+Only the complete editor operation is staged, with no per-call snapshots or
+rollback. Tests can replace these foreign functions
 with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and conversion callback.
@@ -279,6 +305,10 @@ hosts use Control+Left/Right for words. Shift extends the selection in each case
 These controls handle movement before structural navigation; affixes remain
 outside the editable span.
 
+Related occurrences are references to the same cell, or occurrences of the same
+location, an empty one included, so a hole drawn in two places marks as one.
+An offer that inserts a cell relates to it: hovering the offer, or choosing it
+from the keyboard while picking, marks where that cell is declared and used.
 Ordinary hover, selection, and related-occurrence highlights share one padded
 outline. Each occurrence paints at most one mark: selection takes precedence,
 then related selection, direct hover, and related hover. Pending text frames keep
@@ -317,7 +347,7 @@ libraries read the query as, such as a number, then text, or for a field the
 name library's new label named as typed, and bytes typed in GID's own `0x`
 spelling. It offers no existing cells. An existing cell
 is reused by pointing at it (Cmd+click) or pasting it; typing makes something
-new. Cmd+clicking a field's label points at the label, not the field's value. The hole at a document's root starts the document: it leads with what the
+new. Cmd+clicking a drawn value points at it, and with no slot open selects it, as a click does; a value's own drawing adds nothing to that. Cmd+clicking a field's label points at the label, not the field's value. The hole at a document's root starts the document: it leads with what the
 libraries switched on there start one as, such as a Grap program or a Fidget
 scene, then offers Raw's. The Raw view switches every library off, so its holes
 offer only GID's own kinds: the constructors and `0x` bytes. A picker can also take keys that choose an offer at once
@@ -332,8 +362,7 @@ library (what it offers anywhere, what it reads the query as, or what a document
 can start as), the hole's path, read-only path and cell lookups, lazy enumeration
 of defined cells, the document's names for cells, and the loaded libraries'
 provider. Cell lookup exposes the selected definition's
-value, source, and whether it has a native implementation, without evaluating
-it. The path names a missing value or the record receiving a new label, from
+value and source, without evaluating it. The path names a missing value or the record receiving a new label, from
 where the hole's location starts, and path lookups read from there too. A hole
 in a cell's definition reads that definition as its own context, however the
 cell was reached, so Grap offers only the bindings visible within it. A
@@ -355,16 +384,16 @@ order, preserving an explicitly empty vocabulary. Grap's parameter reader takes
 an inline or stored lambda's declared parameters when asked, for a call's field
 order, its slots for missing arguments, and `call_completion`'s initial pending
 parameter. It follows cell aliases and declines cycles and computed callables. A
-native function's description lists the arguments its implementation requires
-under `params`; the reader takes that list as is and never interprets a native
-description as a lambda. Filtering names and excluding existing record labels
+foreign function's value lists the arguments its implementation requires
+under `params`; the reader takes that list as is and never interprets a foreign
+function as a lambda. Filtering names and excluding existing record labels
 remain picker responsibilities.
 
 Asked for its offers anywhere with a nonempty query, Grap offers calls to named
 stored lambdas,
 closures, and native functions discovered through those definitions. These are
 ordinary `call_completion` offers, distinguished by a `call` detail; choosing one
-inserts `{function: cell}` and opens its first declared argument when known.
+inserts `{isa: call, function: cell}` and opens its first declared argument when known.
 Call suggestions put document-defined functions before library functions, sorting
 each group alphabetically by display name, ignoring case. Typed-query matching
 still takes precedence; this order breaks equally ranked matches.
@@ -388,22 +417,23 @@ inferred. Cells that are neither bindings nor functions, such as a named
 constant, are not offered there.
 
 A projection that descends into a name passes the name library's partial, which
-draws an existing name as its line editor and a missing one as a hole taking
-whatever is typed as its text, including an empty string and optional
-surrounding quotes. A missing-name marker, such as an anonymous lambda's,
-selects that name location and then draws the same hole. A `name` field drawn by
-the generic structure projection offers Raw's instead. Circle and sphere are
-ordinary named Grap lambdas that use quote/unquote to return Fidget arithmetic;
-the Fidget parser has no circle or sphere forms.
+draws a name as its line editor, there or missing: typed into where it's
+missing, the first keystroke writes the name, and Enter with nothing typed
+writes the empty string. A missing-name marker, such as an anonymous lambda's,
+selects that name location and then draws the same editor. A `name` field drawn by
+the generic structure projection offers Raw's instead. A sphere is a Fidget
+program, not a Fidget form: the examples that use one define `sphere` as an
+ordinary named Grap lambda that quotes Fidget arithmetic with its radius
+unquoted.
 
 The numeric libraries read the query as `f32`, `f64`, and `u64` numbers when it
 parses, showing the representation and the actual stored number; a query that
-doesn't parse, an empty one included, reads as no number. Any nonempty query
-reads as text, after the readings particular to it; the empty string takes at
-least a `"`. A new label likewise needs something typed. An empty query
-therefore offers no typed values, and Raw shows just its constructors, after a
-document root's starting points. A projection whose hole expects a number or
-text can still offer one for an empty query, as a name's hole does for text.
+doesn't parse, an empty one included, reads as no number. Any query reads as
+text, after the readings particular to it, an empty one as the empty string,
+which is text where it isn't a number. A new label needs something typed. An
+empty query therefore offers Raw's constructors, after a document root's
+starting points, then the empty string. A picker with nothing to offer draws
+no card, only its query.
 Raw orders its offers: a reading that spells the query exactly, the
 constructors the query names, the other readings in library order, text (or a
 new label), then constructors the query matches only loosely. The editor does
@@ -456,11 +486,11 @@ leaving the location discards the picker without an edit. The seed color belongs
 only to the picker. An area with the color library switched off, Raw among
 them, offers none of the library's offers, this one included.
 
-Root `grap` and `fidget` offers create a fresh bare
-cell shared by their domain field and a left pane. Fidget's pane applies
-`preview 3d`; Grap's pane renders the evaluated result. The continuation opens
-the cell's pending document definition through the domain field, without
-inventing a placeholder value. Offers that mint identities construct their
+Root `grap` and `fidget` offers create a row of two parts sharing a fresh bare
+cell: a preview on the left, and a record whose domain field names the cell on
+the right. Fidget's preview applies `preview 3d`; Grap's renders the evaluated
+result. The continuation opens the cell's pending document definition through
+the domain field, in its pane, without inventing a placeholder value. Offers that mint identities construct their
 value on activation, so reusing an offer creates independent cells. Both are
 their libraries' starting points, which lead the hole of a document's root.
 
@@ -498,61 +528,79 @@ Enter must not then fall through to inserting the raw query.
 
 ## Panes
 
-[`workspace`](../progred/src/workspace.rs) recognizes a direct, coherent root
-record convention:
+The editor lays out its window as a tree of views, a
+[`Layout`](../progred/src/workspace.rs): one view filling it, or a row or
+column of layouts, each with its share. It starts as the document's view
+alone, which shows the document's root and can't be closed, and the views the
+editor opens go at either end of its row. A view whose root value is a row or
+column splits its part of the window the same way, so the parts that value
+lists are panes of their own:
 
 ```text
-{main: value, panes: {left: [...values...], right: [...values...]}, ...}
+{isa: row, parts: [...values...]}      side by side
+{isa: column, parts: [...values...]}   one above another
 ```
 
-While a view shows the editor library, a view whose value is a workspace
-record starts drawing at its `main` value, so the workspace's own fields stay
-out of sight. The record itself is never drawn, so nothing selects it, and
-selection and navigation reach only what's inside. Plain and Raw leave the
-editor library off and show the whole record, as does turning the editor
-library off in the Projections menu. A root without `main` draws whole, as any
-other document does; one holding only the workspace's fields, as after its
-main value was deleted, draws an empty `main`. A pane showing a workspace
-record starts at its main value the same way. A document
-needs the wrapping only once something adds a workspace field: opening a pane
-on a root without them makes the root the `main` value of a new workspace
-record, moving the document view's folds with it, and starting points that open
-a pane begin that way.
+The editor's layout and a view's rows and columns are laid out in one walk.
+[`workspace`](../progred/src/workspace.rs) splits the window by a row or column
+only at a view's root, and a part that's itself a row or column splits again.
+Deeper in a value, the editor library draws one as its parts laid out the same
+way, so rows compose anywhere: a column stacks its parts, and a row sets them
+side by side, as tall as its tallest, since there's no height to divide. A
+sized value among them draws at 256 points square. A row or column with no parts has nothing to
+split into and is data too. A view splits while its whole area shows the
+editor library; Plain and Raw, or turning the editor library off in the
+Projections menu, show its root whole, rows and all. The document's view and
+an opened view on a row split alike. A starting point that opens a preview
+begins as a row of the preview and the record it shows.
 
-The pane lists determine side and order; entries are ordinary values. A pane
-draws under its declaration's path, after a **pane** step that says a pane
-starts there and changes nothing about where the data is. So its occurrences
-stay apart from the document view's even where that draws the declaration too,
-their paths name the pane they're in, and a pane showing its entry reads and
-writes the entry. An entry
-can name a [location](#data-and-resolution) as data: `{steps: [...]}` from the
-document's root, or `{in: cell, follow: source, steps: [...]}` inside a cell's
-definition, with the steps and source in the path convention's encoding. While
-its pane shows the editor library, the pane jumps to that place after its pane
-step and draws and edits it there, so it stays in sync with the document; Plain and Raw show the entry itself. Open
-Value on Left and Right open the selection's place, starting at its nearest
-cell, so a cell is a location with no steps; a computed value has no place and
-opens as a copy. A place that's only empty, as after its value was deleted,
-draws as any empty place does, ready to write; one that can't be reached, as
-after its container was deleted, draws a read-only `place not found` absent
-carrying the location. Show Panes opens a location pane on the panes
-declaration, `{steps: [panes]}`, or selects the one already open, so the panes
-can be edited as data while they show. Close Pane removes the selected pane's
-entry. Deleting a value
-pane's root does too, but a location pane's root is the place it shows, so
-deleting it deletes that content. Opening, closing and moving panes edit these
-lists, so they save and undo with the document. A malformed pane container or
-nonrecord root is not overwritten to make the operation possible.
+Parts take equal shares of their row or column at first, a rule apart, and
+dragging the rule moves share from one neighbour to the other. Shares are
+session state, as are the layout and each pane's libraries shown, folds and
+scroll; a share too small for the minimum width or height draws at the
+minimum without being rewritten.
 
-Pane identity, the libraries shown, folds, scroll, and requested size are session
-state. The document view starts with the contents of `panes` folded; individual
-pane entries have no initial fold. Expanding the field is preserved when panes
-are added, removed, or moved. Surviving declarations retain their view state.
-Moving an entry assigns a new list position and explicitly retargets selection;
-its size, scroll, and the libraries it shows carry across, while path-keyed folds
-reset.
+A part's pane is an area of its view and draws its part at the part's own
+path below the view's root, so a pane showing its part reads and writes it,
+and its state, folds and scroll included, is kept by that path. A part can
+name a [location](#data-and-resolution) as data: `{isa: location, steps:
+[...]}` from the document's root, or `{isa: location, in: cell, follow:
+source, steps: [...]}` inside a cell's definition, with the steps and source in
+the path convention's encoding. A pane tells what its part is by its kind, so
+any other value, a record that happens to have a `steps` field included, shows
+as it is. While its pane shows the editor library, the pane jumps to that place
+at the part's path and draws and edits it there, so it stays in sync with the
+document; Plain and Raw show the location itself.
 
-`{value: source, projection: function}` is a presentation-library convention,
+Opened views are the editor's and the document doesn't keep them, so opening,
+closing and moving one never edits the document, marks it changed, or enters
+its history. What a view shows, its entry, is Rust state too: a place, or a
+copy of a computed value. Open Value on Left and Right open the selection's
+place, starting at its nearest cell, so a cell is a location with no steps, at
+that end of the editor's row; a computed value has no place and opens as a
+copy, read-only. A view starts drawing where its entry is: a place from the
+document's root along the place's own steps, as the document's view would
+draw it, one inside a cell from a jump there, and a copy as computed. A place
+that's only empty, as after its value was deleted, draws as any empty place
+does, ready to write; one that can't be reached, as after its container was
+deleted, draws a read-only `place not found` absent carrying the location. The
+Libraries menu opens a loaded library the same way, as a location at its own
+cell, which is read-only like every library value, or selects the view already
+showing it; Open Value on a cell it lists opens that cell's definition beside
+it. An empty document stays empty, so its root still offers the starting
+points.
+
+Close Pane closes a view the editor opened, or removes a part from its row or
+column, which writes the view's value where it's stored and undoes as one; a
+view's place stays as it is when the view closes. Move Pane moves a view along
+the editor's row, the document's included, or a part along its row or column
+in the view's value: left and right in a row, up and down in a column. Moving
+a part gives it a new list position and retargets the selection and the
+pane's share, while its path-keyed folds reset. A part that leaves keeps no
+pane state; one that stays keeps its own.
+
+`{isa: projected value, value: source, projection: function}` is a
+presentation-library convention,
 not workspace configuration. The document's normal projection shows this
 declaration as editable data. At pane entry, including through cell definitions,
 the view tries the presentation library's declaration interpreter first. Nested
@@ -562,7 +610,8 @@ following is separate from explicit local or scoped projection composition.
 Raw shows the structural data in either view. See
 [projection composition](projections.md#projection-composition).
 
-An assigned-size pane uses `{value: source, viewport: function}` instead. The
+An assigned-size pane uses `{isa: sized value, value: source, viewport:
+function}` instead. The
 function receives `value`, `width`, and `height` (logical display units) and
 returns ordinary display content, including handlers. Its pane has no automatic
 padding or document scrolling; the assigned rectangle clips its output. Pane
@@ -570,7 +619,7 @@ splitting determines that rectangle before the function runs, so there is no
 feedback from content measurement to pane sizing. View annotations and selection
 keep their existing per-view ownership. Raw returns to ordinary scrolling source
 display. The viewport convention applies only at pane entry, including through
-cell aliases; the main document and nested declarations remain editable data.
+cell aliases; the document view and nested declarations remain editable data.
 
 The Fidget example and template use this contract. Preview image dimensions are
 explicit arguments, separate from the Fidget field and camera volume. Raster
@@ -578,8 +627,11 @@ resolution follows the display scale; rectangular 3D views preserve square
 pixels rather than stretching the geometry. Ordinary preview calls without size
 arguments retain the 256-point default.
 
-`preview 3d` accepts either one Fidget field (white) or a scene value:
-`{scene: [{field: sdf, color: rgb}, ...]}`. A scene groups separately colored
+Fidget's preview functions return data of a kind: `preview` a slice preview,
+`preview 3d` a volume preview and `preview mesh` a mesh preview, each the
+field with its size and bounds, which Fidget's projections draw. `preview 3d`
+accepts either one Fidget field (white) or a scene:
+`{isa: scene, objects: [{field: sdf, color: rgb}, ...]}`. A scene groups separately colored
 objects; it is not a CSG operator. Geometry is depth-merged before lighting,
 and equal depths keep the earlier object. Colors use the existing color
 library's RGB/RGBA values; omitted colors are white and alpha must be opaque.
@@ -601,6 +653,10 @@ menu also omits its shortcuts and keyboard navigation. Undo/redo have a separate
 editing handler, so embedded tutorials retain history without inheriting Raw,
 example switching, or pane commands. Native menus keep their own command routing.
 
+A build's version, the commit it came from, is at the drawn bar's far end and in
+window titles. A click on the drawn one copies it, as Help → Copy Version does
+in either menu, including the macOS one, where only the title shows it.
+
 Examples and replace-in-place New Document are development/demo conveniences,
 not the intended production File menu. Cmd+N (Ctrl+N on non-Mac hosts) and the
 example shortcuts replace the current document after confirming any unsaved
@@ -610,8 +666,8 @@ is New Window; Open creates a separate window.
 Replacement keeps the window, surface, geometry, fonts, text-shaping cache,
 clipboard, library stack, physical pointer/modifier input, and debug-display
 preference. It resets document/saved identity, history, selection and text/IME
-state, all pane identities and annotations (including camera and folds), scroll,
-shown libraries, divider state, binders, menus, gestures, queued input, retained
+state, every pane, opened ones included, and its annotations (camera and folds
+among them), scroll, shown libraries, shares, divider state, binders, menus, gestures, queued input, retained
 handlers/paint, and hover attribution. The successor frame is built immediately.
 On macOS the old file's frame-autosave name is detached without deleting its
 saved geometry; the represented file, title, and edited flag are refreshed.
@@ -622,10 +678,10 @@ too; optimization level is not a distribution feature flag.
 recording a new branch clears redo. The editor's snapshot contains its shared
 document, the selection's path, and per-view folds. Collapse and expand
 record steps without editing the document. Undo restores fold overrides to
-their views, including when a deleted pane returns; it leaves current
+their panes, including when a deleted part returns; it leaves current
 scroll positions, shown libraries, and unrelated annotations alone in surviving
-views. The selection's path names its view, so Undo restores it there rather
-than in whichever pane happens to be selected when Undo is invoked.
+panes. The selection keeps its view beside its path, so Undo restores it there
+rather than in whichever pane happens to be selected when Undo is invoked.
 
 The editor holds its current and saved documents as `Rc<Document>`. Dirty state
 is pointer inequality, constant-time at any document size. Successful writes use

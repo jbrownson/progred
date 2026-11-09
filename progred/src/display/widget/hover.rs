@@ -65,4 +65,5 @@ pub fn hover_highlight<World: 'static, Hover: Clone + PartialEq + 'static>(
 }
 
 #[cfg(test)]
+#[path = "tests/hover.rs"]
 mod tests;

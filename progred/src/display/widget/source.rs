@@ -1,19 +1,16 @@
 use crate::location::{Location, Start};
 use crate::sources::Sources;
-use gid::{CellId, Resolution, Step};
+use crate::workspace::View;
+use gid::{CellId, Step};
 use std::rc::Rc;
 
 /// A structural source location used by execution-linked display.
 /// Definition-relative routes survive multiple projections of the same definition;
-/// stored routes identify an ordinary document occurrence.
+/// routes from the root identify an ordinary document occurrence.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceTrace {
-    Stored(Rc<[Step]>),
-    InCell {
-        cell: CellId,
-        resolution: Resolution,
-        path: Rc<[Step]>,
-    },
+    Root(Rc<[Step]>),
+    InCell { cell: CellId, path: Rc<[Step]> },
 }
 
 impl SourceTrace {
@@ -24,12 +21,8 @@ impl SourceTrace {
         let location = stored.as_ref().unwrap_or(location);
         let path = Rc::from(location.path.as_ref());
         match location.start {
-            Start::Root => Self::Stored(path),
-            Start::Cell { cell, resolution } => Self::InCell {
-                cell,
-                resolution,
-                path,
-            },
+            Start::Root => Self::Root(path),
+            Start::Cell(cell) => Self::InCell { cell, path },
         }
     }
 
@@ -41,14 +34,9 @@ impl SourceTrace {
                 .collect::<Rc<[Step]>>()
         };
         match self {
-            Self::Stored(path) => Self::Stored(append(path)),
-            Self::InCell {
-                cell,
-                resolution,
-                path,
-            } => Self::InCell {
+            Self::Root(path) => Self::Root(append(path)),
+            Self::InCell { cell, path } => Self::InCell {
                 cell: *cell,
-                resolution: *resolution,
                 path: append(path),
             },
         }
@@ -57,14 +45,14 @@ impl SourceTrace {
 
 /// What makes two projected locations secondary copies. Cell values
 /// match wherever that cell is referenced. Other values match only
-/// at the same path inside the same nearest enclosing definition.
+/// at the same path inside the same nearest enclosing definition, whichever
+/// views draw them.
 #[derive(Clone, Debug)]
 pub enum Secondary {
     Cell(CellId),
-    Stored(crate::occurrence::Trail),
+    Root(crate::occurrence::Trail),
     InCell {
         cell: CellId,
-        resolution: Resolution,
         path: crate::occurrence::Trail,
         /// The first step relative to `cell`, immediately after its
         /// `Follow` step in `path`.
@@ -78,43 +66,40 @@ impl Secondary {
     pub fn from_context(
         path: crate::occurrence::Trail,
         cell: Option<CellId>,
-        enclosing: Option<(CellId, Resolution, usize)>,
+        enclosing: Option<(CellId, usize)>,
     ) -> Self {
         match cell {
             Some(cell) => Self::Cell(cell),
             None => match enclosing {
-                Some((cell, resolution, relative_from)) => Self::InCell {
+                Some((cell, relative_from)) => Self::InCell {
                     cell,
-                    resolution,
                     path,
                     relative_from,
                 },
-                None => Self::Stored(path),
+                None => Self::Root(path),
             },
         }
     }
 
-    pub fn from_trace(trace: &SourceTrace) -> Self {
+    /// What `trace`'s data shares, drawn in `view`.
+    pub fn from_trace(trace: &SourceTrace, view: &Rc<View>) -> Self {
+        let trail = |path: &[Step]| {
+            crate::occurrence::Trail::in_view(view.clone(), &crate::occurrence::of(path))
+        };
         match trace {
-            SourceTrace::Stored(path) => {
-                Self::Stored(crate::occurrence::Trail::of(&crate::occurrence::of(path)))
-            }
-            SourceTrace::InCell {
-                cell,
-                resolution,
-                path,
-            } => Self::InCell {
+            SourceTrace::Root(path) => Self::Root(trail(path)),
+            SourceTrace::InCell { cell, path } => Self::InCell {
                 cell: *cell,
-                resolution: *resolution,
-                path: crate::occurrence::Trail::of(&crate::occurrence::of(path)),
+                path: trail(path),
                 relative_from: 0,
             },
         }
     }
 
-    /// What a value other than a reference shares: where it's stored.
-    pub fn from_location(sources: &Sources, location: &Location) -> Self {
-        Self::from_trace(&SourceTrace::from_location(sources, location))
+    /// What a value other than a reference shares, drawn in `view`: where
+    /// it's stored.
+    pub fn from_location(sources: &Sources, location: &Location, view: &Rc<View>) -> Self {
+        Self::from_trace(&SourceTrace::from_location(sources, location), view)
     }
 }
 
@@ -122,24 +107,20 @@ impl PartialEq for Secondary {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Cell(left), Self::Cell(right)) => left == right,
-            (Self::Stored(left), Self::Stored(right)) => left == right,
+            (Self::Root(left), Self::Root(right)) => left.same_after(0, right, 0),
             (
                 Self::InCell {
                     cell: left_cell,
-                    resolution: left_resolution,
                     path: left_path,
                     relative_from: left_from,
                 },
                 Self::InCell {
                     cell: right_cell,
-                    resolution: right_resolution,
                     path: right_path,
                     relative_from: right_from,
                 },
             ) => {
-                left_cell == right_cell
-                    && left_resolution == right_resolution
-                    && left_path.same_after(*left_from, right_path, *right_from)
+                left_cell == right_cell && left_path.same_after(*left_from, right_path, *right_from)
             }
             _ => false,
         }
@@ -149,4 +130,5 @@ impl PartialEq for Secondary {
 impl Eq for Secondary {}
 
 #[cfg(test)]
+#[path = "tests/source.rs"]
 mod tests;

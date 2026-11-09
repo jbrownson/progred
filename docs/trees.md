@@ -53,7 +53,7 @@ data with native state. The supplied key addresses the existing per-view/locatio
 memo root and control state. Dependencies include observed
 cell definitions and missing definitions. The complete retained result contains
 all emission effects, so recording explicitly permits memo reuse; halts and
-untracked calls still prevent reuse.
+uncacheable calls still prevent reuse.
 The memo retains the runtime builder and output. Input comparison uses
 `RuntimeValue::same_result` plus fuel; output comparison includes both runtime
 items and the source-linked hierarchy (or the runtime absent). Equal serialized

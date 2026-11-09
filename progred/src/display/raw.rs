@@ -26,14 +26,13 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
         {
             crate::display::line_edit(hex_editor(bytes))
         }
-        ::grap::Shape::Blob(bytes) => crate::display::selectable_value(
+        ::grap::Shape::Blob(bytes) => crate::display::selectable(
             crate::display::id(format!(
                 "0x{}… ({} bytes)",
                 gid::hex_string(&bytes[..8]),
                 bytes.len()
             )),
             &input.site(),
-            value,
         ),
         ::grap::Shape::Cell(cell) => cell_view(input, cell),
         ::grap::Shape::List(positions) => {
@@ -45,9 +44,9 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
                 foldable(Delim::Bracket, None, |_| false, open)
             }
         }
-        ::grap::Shape::Record(keys) => {
-            let empty = keys.is_empty();
-            let open = crate::display::structure::record_layout_at(input, keys, |_| None);
+        ::grap::Shape::Record(labels) => {
+            let empty = labels.is_empty();
+            let open = crate::display::structure::Fields::default().record_of(input, labels);
             if empty {
                 open
             } else {
@@ -76,6 +75,7 @@ fn hex_editor(bytes: &[u8]) -> crate::display::LineEdit {
         prefix: "0x".into(),
         suffix: String::new(),
         family: crate::display::TextFamily::Monospace,
+        placeholder: None,
     }
 }
 
@@ -86,21 +86,9 @@ fn cell_view<W: Host>(
     cell: gid::CellId,
 ) -> Layout<W> {
     let resolved = input.env.resolve(cell);
-    let open = crate::display::structure::authoring(crate::display::group(
-        crate::display::selectable_bracket(
-            Delim::Paren,
-            crate::display::descend(
-                [gid::Step::Follow(
-                    resolved
-                        .as_ref()
-                        .map_or(gid::Resolution::Document, |definition| {
-                            definition.resolution
-                        }),
-                )],
-                None,
-                None,
-            ),
-        ),
+    let open = crate::display::structure::authoring(crate::display::selectable_bracket(
+        Delim::Paren,
+        crate::display::descend([gid::Step::Follow], None, None),
     ));
     let Some(definition) = resolved else {
         return open;
@@ -197,13 +185,14 @@ fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
 }
 
 /// The blob typed as `0x` and its hex, inserted and selected.
-fn typed_blob(bytes: Vec<u8>) -> Completion {
-    let value = Value::from(bytes);
+fn typed_blob(blob: gid::Blob) -> Completion {
+    let spelling = blob.to_string();
+    let value = Value::Blob(blob);
     let committed = value.clone();
     Completion {
         face: Face::Id,
         preview: Some(value.clone()),
-        ..Completion::new(value.to_string(), move |session| {
+        ..Completion::new(spelling, move |session| {
             if let Some(picking) = session.pending() {
                 picking.commit(
                     committed.clone(),
@@ -253,7 +242,7 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
     let query = request.query;
     let trimmed = query.trim();
     let blob = (kind == CompletionKind::Value)
-        .then(|| trimmed.strip_prefix("0x").and_then(gid::read_hex))
+        .then(|| gid::Blob::read(trimmed))
         .flatten();
     let atom_leads = trimmed.starts_with('"') || blob.is_some();
     let (readings, atoms): (Vec<_>, Vec<_>) = match kind {
@@ -335,4 +324,5 @@ fn ranked_constructors<W: Host>(request: &CompletionRequest<'_>) -> Vec<(Entry<W
 }
 
 #[cfg(test)]
+#[path = "tests/raw.rs"]
 mod tests;

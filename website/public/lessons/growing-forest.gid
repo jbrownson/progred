@@ -6,7 +6,6 @@
     "cloud_x": c0b23aa7c9d3ec44ca06c92f37e70304,
     "cloud_y": ae2efedeef5717fae6a70c83071d0677,
     "cloud_radius": f6cbb75cbd46707ff40c8b09dcbe4008,
-    "absent": d9c0a7145a38859a245640d3469cbcd4,
     "absent_value": cfeaf191b71e06afef86c27ee43eb936,
     "or_default": 6a7a30847dd7d939448d0e7eaeb82893,
     "default": d8bdf7403b181a43fa73578bd976ba3b,
@@ -42,7 +41,7 @@
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "all": bc2f76148affd64e009a1a37a32aa2bf,
     "draw_scene": 760df9daea94f9ff58652a794d5295f3,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "drawing": 0f42d484547d4e61b0f5dae119911117,
     "drawing_with_controls": b6d47a6599ceb167d1950c1bd900ec04,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
@@ -76,7 +75,7 @@
     "path": fbcf1931c6e050d62c4caf5cccba2ce8,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
-    "presentation_render": 37cda4bdea0091349e305951564fbdf1,
+    "render": 2a93e331172d418c82f7c67e426a95f6,
     "presentation_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "program": bdf607810b274ad5b02bd409aef34b6a,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
@@ -109,6 +108,12 @@
     "width": f33c672fef9d0d4561102410fd64129f,
     "x": 415def0fa0a9ac40dfba5fca4d0f8876,
     "y": 4e2dcde5b1ab1480a2f126176dd148c7,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "binder": 81d57515ba3b44aab94e43d59a47fe9a,
+    "binding": 039cd524b99d47ca92d23b26de5a01aa,
   },
   "cells": {
   functions: {name: "functions"},
@@ -117,6 +122,7 @@
   cloud_y: {name: "cloud y"},
   cloud_radius: {name: "cloud radius"},
   clouds: {
+    isa: lambda,
     name: "clouds",
     params: [
       sun_time,
@@ -124,34 +130,44 @@
       color
     ],
     body: {
+      isa: call,
       function: for_each,
       items: {
+        isa: call,
         function: sequence_range,
         sequence_count: {f64: 0x0000000000000840}
       },
       action: {
+        isa: lambda,
         params: [
           item
         ],
         body: {
+          isa: call,
           function: where,
           bindings: [
             {
+              isa: binding,
               bind: cloud_x,
               subject: {
+                isa: call,
                 function: sum,
                 left: {
+                  isa: call,
                   function: sum,
                   left: {f64: 0x0000000000805640},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: item,
                     right: {f64: 0x0000000000c06740}
                   }
                 },
                 right: {
+                  isa: call,
                   function: multiply,
                   left: {
+                    isa: call,
                     function: multiply,
                     left: sun_time,
                     right: cloud_speed
@@ -161,16 +177,21 @@
               }
             },
             {
+              isa: binding,
               bind: cloud_y,
               subject: {
+                isa: call,
                 function: sum,
                 left: {f64: 0x0000000000005440},
                 right: {
+                  isa: call,
                   function: multiply,
                   left: {f64: 0x0000000000003240},
                   right: {
+                    isa: call,
                     function: sin,
                     operand: {
+                      isa: call,
                       function: multiply,
                       left: item,
                       right: {f64: 0x3333333333330340}
@@ -180,11 +201,14 @@
               }
             },
             {
+              isa: binding,
               bind: cloud_radius,
               subject: {
+                isa: call,
                 function: sum,
                 left: {f64: 0x0000000000003240},
                 right: {
+                  isa: call,
                   function: multiply,
                   left: item,
                   right: {f64: 0x0000000000000040}
@@ -193,31 +217,38 @@
             }
           ],
           expression: {
+            isa: call,
             function: do,
             expressions: [
               {
+                isa: call,
                 function: fill,
-                shape: {function: quote, expression: {
+                shape: {isa: call, function: quote, expression: {
                   circle: {
-                    x: {unquote: {
+                    x: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: sum,
                       left: cloud_x,
                       right: {
+                        isa: call,
                         function: multiply,
                         left: cloud_radius,
                         right: {f64: 0xcdccccccccccecbf}
                       }
                     }},
-                    y: {unquote: {
+                    y: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: subtract,
                       left: cloud_y,
                       right: {
+                        isa: call,
                         function: multiply,
                         left: cloud_radius,
                         right: {f64: 0x9a9999999999e93f}
                       }
                     }},
-                    radius: {unquote: {
+                    radius: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: multiply,
                       left: cloud_radius,
                       right: {f64: 0x9a9999999999e93f}
@@ -227,28 +258,34 @@
                 paint: color
               },
               {
+                isa: call,
                 function: fill,
-                shape: {function: quote, expression: {
+                shape: {isa: call, function: quote, expression: {
                   circle: {
-                    x: {unquote: {
+                    x: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: sum,
                       left: cloud_x,
                       right: {
+                        isa: call,
                         function: multiply,
                         left: cloud_radius,
                         right: {f64: 0x0000000000000000}
                       }
                     }},
-                    y: {unquote: {
+                    y: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: subtract,
                       left: cloud_y,
                       right: {
+                        isa: call,
                         function: multiply,
                         left: cloud_radius,
                         right: {f64: 0x666666666666f23f}
                       }
                     }},
-                    radius: {unquote: {
+                    radius: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: multiply,
                       left: cloud_radius,
                       right: {f64: 0x666666666666f23f}
@@ -258,28 +295,34 @@
                 paint: color
               },
               {
+                isa: call,
                 function: fill,
-                shape: {function: quote, expression: {
+                shape: {isa: call, function: quote, expression: {
                   circle: {
-                    x: {unquote: {
+                    x: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: sum,
                       left: cloud_x,
                       right: {
+                        isa: call,
                         function: multiply,
                         left: cloud_radius,
                         right: {f64: 0x000000000000f03f}
                       }
                     }},
-                    y: {unquote: {
+                    y: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: subtract,
                       left: cloud_y,
                       right: {
+                        isa: call,
                         function: multiply,
                         left: cloud_radius,
                         right: {f64: 0xcdccccccccccec3f}
                       }
                     }},
-                    radius: {unquote: {
+                    radius: {isa: unquote_2, unquote: {
+                      isa: call,
                       function: multiply,
                       left: cloud_radius,
                       right: {f64: 0xcdccccccccccec3f}
@@ -307,6 +350,7 @@
   color: {name: "color"},
   forest_drawing: {name: "drawing"},
   growing_tree: {
+    isa: lambda,
     name: "tree",
     params: [
       tree_x,
@@ -316,61 +360,75 @@
       trunk
     ],
     body: {
+      isa: call,
       function: where,
       expression: {
+        isa: call,
         function: do,
         expressions: [
           {
+            isa: call,
             function: fill,
-            shape: {function: quote, expression: {
+            shape: {isa: call, function: quote, expression: {
               rect: {
-                x: {unquote: {
+                x: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: subtract,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: age,
                     right: {f64: 0x0000000000001040}
                   }
                 }},
-                y: {unquote: {
+                y: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x000000000000f03f}
                   }
                 }},
-                width: {unquote: {
+                width: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: multiply,
                   left: age,
                   right: {f64: 0x0000000000002040}
                 }},
-                height: {unquote: tree_height}
+                height: {isa: unquote_2, unquote: tree_height}
               }
             }},
             paint: trunk
           },
           {
+            isa: call,
             function: do,
             expressions: [
-              {function: path},
+              {isa: call, function: path},
               {
+                isa: call,
                 function: move_to,
                 x: {
+                  isa: call,
                   function: subtract,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: age,
                     right: {f64: 0x0000000000000840}
                   }
                 },
                 y: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x000000000000e03f}
@@ -378,20 +436,25 @@
                 }
               },
               {
+                isa: call,
                 function: line_to,
                 x: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: crown,
                     right: {f64: 0x666666666666e6bf}
                   }
                 },
                 y: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x48e17a14ae47e93f}
@@ -399,52 +462,64 @@
                 }
               },
               {
+                isa: call,
                 function: line_to,
                 x: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: age,
                     right: {f64: 0x0000000000000840}
                   }
                 },
                 y: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x000000000000e03f}
                   }
                 }
               },
-              {function: close},
+              {isa: call, function: close},
               {
+                isa: call,
                 function: fill,
                 paint: trunk
               }
             ]
           },
           {
+            isa: call,
             function: do,
             expressions: [
-              {function: path},
+              {isa: call, function: path},
               {
+                isa: call,
                 function: move_to,
                 x: {
+                  isa: call,
                   function: subtract,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: age,
                     right: {f64: 0x0000000000000840}
                   }
                 },
                 y: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x713d0ad7a370e53f}
@@ -452,20 +527,25 @@
                 }
               },
               {
+                isa: call,
                 function: line_to,
                 x: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: crown,
                     right: {f64: 0x000000000000e83f}
                   }
                 },
                 y: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0xcdccccccccccec3f}
@@ -473,56 +553,68 @@
                 }
               },
               {
+                isa: call,
                 function: line_to,
                 x: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: age,
                     right: {f64: 0x0000000000000840}
                   }
                 },
                 y: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x713d0ad7a370e53f}
                   }
                 }
               },
-              {function: close},
+              {isa: call, function: close},
               {
+                isa: call,
                 function: fill,
                 paint: trunk
               }
             ]
           },
           {
+            isa: call,
             function: fill,
-            shape: {function: quote, expression: {
+            shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {unquote: {
+                x: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: crown,
                     right: {f64: 0x3d0ad7a3703de2bf}
                   }
                 }},
-                y: {unquote: {
+                y: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x713d0ad7a370ed3f}
                   }
                 }},
-                radius: {unquote: {
+                radius: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: multiply,
                   left: crown,
                   right: {f64: 0xf6285c8fc2f5e83f}
@@ -532,28 +624,34 @@
             paint: leaves
           },
           {
+            isa: call,
             function: fill,
-            shape: {function: quote, expression: {
+            shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {unquote: {
+                x: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: crown,
                     right: {f64: 0xf6285c8fc2f5e03f}
                   }
                 }},
-                y: {unquote: {
+                y: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x000000000000f03f}
                   }
                 }},
-                radius: {unquote: {
+                radius: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: multiply,
                   left: crown,
                   right: {f64: 0x9a9999999999e93f}
@@ -563,47 +661,56 @@
             paint: leaves
           },
           {
+            isa: call,
             function: fill,
-            shape: {function: quote, expression: {
+            shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {unquote: tree_x},
-                y: {unquote: {
+                x: {isa: unquote_2, unquote: tree_x},
+                y: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0xb81e85eb51b8f23f}
                   }
                 }},
-                radius: {unquote: crown}
+                radius: {isa: unquote_2, unquote: crown}
               }
             }},
             paint: leaves
           },
           {
+            isa: call,
             function: fill,
-            shape: {function: quote, expression: {
+            shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {unquote: {
+                x: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: sum,
                   left: tree_x,
                   right: {
+                    isa: call,
                     function: multiply,
                     left: crown,
                     right: {f64: 0x295c8fc2f528ccbf}
                   }
                 }},
-                y: {unquote: {
+                y: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
                   right: {
+                    isa: call,
                     function: multiply,
                     left: tree_height,
                     right: {f64: 0x000000000000f43f}
                   }
                 }},
-                radius: {unquote: {
+                radius: {isa: unquote_2, unquote: {
+                  isa: call,
                   function: multiply,
                   left: crown,
                   right: {f64: 0xb81e85eb51b8de3f}
@@ -616,16 +723,21 @@
       },
       bindings: [
         {
+          isa: binding,
           subject: {
+            isa: call,
             function: multiply,
             left: size,
             right: {
+              isa: call,
               function: max,
               left: {f64: 0x0000000000000000},
               right: {
+                isa: call,
                 function: min,
                 left: {f64: 0x000000000000f03f},
                 right: {
+                  isa: call,
                   function: multiply,
                   left: age,
                   right: {f64: 0x9a9999999999f93f}
@@ -633,25 +745,32 @@
               }
             }
           },
-          pattern: {bind: tree_height}
+          pattern: {isa: binder, bind: tree_height}
         },
         {
+          isa: binding,
           subject: {
+            isa: call,
             function: multiply,
             left: {
+              isa: call,
               function: multiply,
               left: size,
               right: {f64: 0xa4703d0ad7a3d03f}
             },
             right: {
+              isa: call,
               function: max,
               left: {f64: 0x0000000000000000},
               right: {
+                isa: call,
                 function: min,
                 left: {f64: 0x000000000000f03f},
                 right: {
+                  isa: call,
                   function: multiply,
                   left: {
+                    isa: call,
                     function: subtract,
                     left: age,
                     right: {f64: 0x333333333333c33f}
@@ -661,32 +780,41 @@
               }
             }
           },
-          pattern: {bind: crown}
+          pattern: {isa: binder, bind: crown}
         }
       ]
     }
   },
   forest_view: {
+    isa: lambda,
     name: "forest",
     params: [age, count, rate, leaves, trunk],
     body: {
+      isa: call,
       function: for_each,
       items: {
+        isa: call,
         function: sequence_range,
-        sequence_count: {function: ceil, operand: count}
+        sequence_count: {isa: call, function: ceil, operand: count}
       },
       action: {
+        isa: lambda,
         params: [item],
         body: {
+          isa: call,
           function: growing_tree,
           tree_x: {
+            isa: call,
             function: sum,
             left: {f64: 0x0000000000804b40},
             right: {
+              isa: call,
               function: multiply,
               left: {
+                isa: call,
                 function: divide,
                 left: {
+                  isa: call,
                   function: sum,
                   left: item,
                   right: {f64: 0x000000000000e03f}
@@ -697,14 +825,18 @@
             }
           },
           size: {
+            isa: call,
             function: sum,
             left: {f64: 0x0000000000c05c40},
             right: {
+              isa: call,
               function: multiply,
               left: {f64: 0x0000000000003c40},
               right: {
+                isa: call,
                 function: sin,
                 operand: {
+                  isa: call,
                   function: multiply,
                   left: item,
                   right: {f64: 0x3333333333330340}
@@ -713,16 +845,21 @@
             }
           },
           age: {
+            isa: call,
             function: max,
             left: {f64: 0x0000000000000000},
             right: {
+              isa: call,
               function: min,
               left: {f64: 0x000000000000f03f},
               right: {
+                isa: call,
                 function: subtract,
                 left: {
+                  isa: call,
                   function: multiply,
                   left: {
+                    isa: call,
                     function: multiply,
                     left: age,
                     right: rate
@@ -730,8 +867,10 @@
                   right: {f64: 0xcdccccccccccf43f}
                 },
                 right: {
+                  isa: call,
                   function: multiply,
                   left: {
+                    isa: call,
                     function: divide,
                     left: item,
                     right: count
@@ -748,9 +887,11 @@
     }
   },
   sky_draw: {
+    isa: lambda,
     name: "sky",
     params: [color],
     body: {
+      isa: call,
       function: fill,
       shape: {
         rect: {
@@ -764,9 +905,11 @@
     }
   },
   ground_draw: {
+    isa: lambda,
     name: "ground",
     params: [color],
     body: {
+      isa: call,
       function: fill,
       shape: {
         rect: {
@@ -780,25 +923,31 @@
     }
   },
   sun_draw: {
+    isa: lambda,
     name: "sun",
     params: [
       sun_time,
       color
     ],
     body: {
+      isa: call,
       function: fill,
-      shape: {function: quote, expression: {
+      shape: {isa: call, function: quote, expression: {
         circle: {
-          x: {unquote: {
+          x: {isa: unquote_2, unquote: {
+            isa: call,
             function: sum,
             left: {f64: 0x0000000000804640},
             right: {
+              isa: call,
               function: multiply,
               left: {f64: 0x0000000000708240},
               right: {
+                isa: call,
                 function: max,
                 left: {f64: 0x0000000000000000},
                 right: {
+                  isa: call,
                   function: min,
                   left: {f64: 0x000000000000f03f},
                   right: sun_time
@@ -806,21 +955,27 @@
               }
             }
           }},
-          y: {unquote: {
+          y: {isa: unquote_2, unquote: {
+            isa: call,
             function: subtract,
             left: {f64: 0x0000000000806640},
             right: {
+              isa: call,
               function: multiply,
               left: {f64: 0x0000000000806140},
               right: {
+                isa: call,
                 function: sin,
                 operand: {
+                  isa: call,
                   function: multiply,
                   left: pi,
                   right: {
+                    isa: call,
                     function: max,
                     left: {f64: 0x0000000000000000},
                     right: {
+                      isa: call,
                       function: min,
                       left: {f64: 0x000000000000f03f},
                       right: sun_time
@@ -837,43 +992,51 @@
     }
   },
   draw_scene: {
+    isa: lambda,
     name: "draw",
     params: [
       program
     ],
     body: {
+      isa: call,
       function: quote,
       expression: {
-        drawing: {
-          width: {f64: 0x0000000000408540},
-          ascent: {f64: 0x0000000000000000},
-          descent: {f64: 0x0000000000c07240},
-          fuel: {f64: 0x00000000006a0841},
-          program: {
-            function: {unquote: program}
-          }
+        isa: drawing,
+        width: {f64: 0x0000000000408540},
+        ascent: {f64: 0x0000000000000000},
+        descent: {f64: 0x0000000000c07240},
+        fuel: {f64: 0x00000000006a0841},
+        program: {
+          isa: call,
+          function: {isa: unquote_2, unquote: program}
         }
       }
     }
   },
   drawing_with_controls: {
+    isa: lambda,
     name: "drawing with controls",
     params: [
       controls,
       forest_drawing
     ],
     body: {
+      isa: call,
       function: controls_with_controls,
       controls: controls,
       view: {
+        isa: lambda,
         params: [
           controls_parameters
         ],
         body: {
+          isa: call,
           function: draw_scene,
           program: {
+            isa: lambda,
             params: [],
             body: {
+              isa: call,
               function: forest_drawing,
               controls_parameters: controls_parameters
             }
@@ -887,12 +1050,16 @@
     }
   },
   sample: {
+    isa: call,
     function: drawing_with_controls,
     controls: {
+      isa: lambda,
       params: [controls_state, controls_update],
       body: {
+        isa: call,
         function: controls_slider,
         presentation_value: {
+          isa: call,
           function: or_default,
           absent_value: controls_state,
           default: {f64: 0xcdcccccccccce43f}
@@ -901,26 +1068,32 @@
       }
     },
     forest_drawing: {
+      isa: lambda,
       params: [
         controls_parameters
       ],
       body: {
+        isa: call,
         function: all,
         expressions: [
           {
+            isa: call,
             function: sky_draw,
             color: {rgb: 0xeff8fa}
           },
           {
+            isa: call,
             function: ground_draw,
             color: {rgb: 0xdcecc6}
           },
           {
+            isa: call,
             function: sun_draw,
             sun_time: controls_parameters,
             color: {rgb: 0xf8c970}
           },
           {
+            isa: call,
             function: forest_view,
             age: controls_parameters,
             count: {f64: 0x0000000000001c40},
@@ -936,6 +1109,6 @@
   "root": {
   functions: [clouds],
   first: sample,
-  second: {presentation_render: sample}
+  second: {isa: render, expression: sample}
 },
 }

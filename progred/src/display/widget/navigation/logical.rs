@@ -1,6 +1,6 @@
 //! Fold the chosen layout traversal into line boundaries and local neighbors.
 use super::super::frame::DispatchContext;
-use super::super::view::Root;
+use super::super::view::Area;
 use super::landmark_at;
 use measured::{Composition, RowAlignment};
 use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
@@ -312,26 +312,47 @@ impl Accumulator {
 pub(crate) struct Collector {
     current: Accumulator,
     parents: Vec<Accumulator>,
-    /// Open whole-value stops; `None` marks one that refined an outer stop.
-    containers: Vec<Option<Stop>>,
+    /// The open landmarks, innermost last, each with whether a stop of its
+    /// own has been declared inside it yet.
+    landmarks: Vec<(Stop, bool)>,
 }
 
 impl Collector {
-    /// A repeated declaration of the innermost open whole value's occurrence
-    /// is the same stop, not a second one.
-    fn refine(&mut self, stop: Stop) -> Option<Stop> {
-        match self.containers.iter_mut().rev().flatten().next() {
-            Some(open) if open.path == stop.path => {
-                *open = stop;
-                None
+    /// A stop placed where it's drawn, as a control's is. It's its
+    /// occurrence's own stop, so the landmark there adds none.
+    pub fn stop(&mut self, path: OccurrencePath, selected: bool) {
+        self.declared(&path);
+        self.current.push(Lines::stop(Stop { path, selected }));
+    }
+
+    /// Notes a stop at `path` for the open landmarks there: the innermost,
+    /// and any it's nested in directly at the same occurrence.
+    fn declared(&mut self, path: &OccurrencePath) {
+        for (open, declared) in self.landmarks.iter_mut().rev() {
+            if open.path != *path {
+                break;
             }
-            _ => Some(stop),
+            *declared = true;
         }
     }
 
-    pub fn stop(&mut self, path: OccurrencePath, selected: bool) {
-        if let Some(stop) = self.refine(Stop { path, selected }) {
-            self.current.push(Lines::stop(stop));
+    /// Opens the landmark of the occurrence at `path`, which is a stop: its
+    /// own, if its projection declares one inside it, or else a whole-value
+    /// stop before what's drawn inside it.
+    pub fn begin_landmark(&mut self, path: OccurrencePath, selected: bool) {
+        self.landmarks.push((Stop { path, selected }, false));
+        self.begin(Composition::Row(RowAlignment::Baseline));
+    }
+
+    pub fn end_landmark(&mut self) {
+        let lines = self.close();
+        let (stop, declared) = self.landmarks.pop().expect("balanced landmarks");
+        if declared {
+            self.current.push(lines);
+        } else {
+            let path = stop.path.clone();
+            self.current.push(lines.enclosed(stop));
+            self.declared(&path);
         }
     }
 
@@ -355,27 +376,13 @@ impl Collector {
         self.current.push(lines);
     }
 
-    pub fn begin_container(&mut self, path: OccurrencePath, selected: bool) {
-        let stop = self.refine(Stop { path, selected });
-        self.containers.push(stop);
-        self.begin(Composition::Row(RowAlignment::Baseline));
-    }
-
-    pub fn end_container(&mut self) {
-        let lines = self.close();
-        self.current.push(match self.containers.pop().flatten() {
-            Some(stop) => lines.enclosed(stop),
-            None => lines,
-        });
-    }
-
     /// Arrows arrive at a destination through that occurrence's landmark in
     /// this view, which owns its selection and any direction-aware arrival.
     pub fn finish<C: 'static, H: 'static>(
         self,
-        view: Option<Root>,
+        view: Option<Area>,
     ) -> Option<Handler<C, DispatchContext<C, H>>> {
-        debug_assert!(self.parents.is_empty() && self.containers.is_empty());
+        debug_assert!(self.parents.is_empty() && self.landmarks.is_empty());
         self.current.lines.destinations().map(|destinations| {
             Handler::from_function(move |world, event, input: &mut DispatchContext<C, H>| {
                 match event {
@@ -404,4 +411,5 @@ impl Collector {
 }
 
 #[cfg(test)]
+#[path = "tests/logical.rs"]
 mod tests;

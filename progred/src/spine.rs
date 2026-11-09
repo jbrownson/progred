@@ -18,15 +18,15 @@ pub fn set(current: Option<&Value>, spine: &[Step], leaf: Value) -> Option<Value
             let fields = current?.as_record()?;
             let child = fields.get(label);
             let rebuilt = set(child, rest, leaf)?;
-            Some(Value::Record(fields.update(*label, rebuilt)))
+            Some(Value::Record(fields.with(*label, rebuilt)))
         }
         Some((Step::Element(position), rest)) => {
             let elements = current?.as_list()?;
             let child = elements.get(position);
             let rebuilt = set(child, rest, leaf)?;
-            Some(Value::List(elements.update(position.clone(), rebuilt)))
+            Some(Value::List(elements.with(position.clone(), rebuilt)))
         }
-        Some((Step::Follow(_), _)) => None,
+        Some((Step::Follow, _)) => None,
     }
 }
 
@@ -37,30 +37,29 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
     match spine.split_first() {
         None => None,
         Some((Step::Key(label), [])) => {
-            let fields = value.as_record()?;
-            fields
-                .contains_key(label)
-                .then(|| Value::Record(fields.without(label)))
+            let mut fields = value.as_record()?.clone();
+            fields.set(*label, None)?;
+            Some(Value::Record(fields))
         }
         Some((Step::Element(position), [])) => {
-            let elements = value.as_list()?;
-            elements
-                .contains_key(position)
-                .then(|| Value::List(elements.without(position)))
+            let mut elements = value.as_list()?.clone();
+            elements.set(position.clone(), None)?;
+            Some(Value::List(elements))
         }
         Some((Step::Key(label), rest)) => {
             let fields = value.as_record()?;
             let rebuilt = without(fields.get(label)?, rest)?;
-            Some(Value::Record(fields.update(*label, rebuilt)))
+            Some(Value::Record(fields.with(*label, rebuilt)))
         }
         Some((Step::Element(position), rest)) => {
             let elements = value.as_list()?;
             let rebuilt = without(elements.get(position)?, rest)?;
-            Some(Value::List(elements.update(position.clone(), rebuilt)))
+            Some(Value::List(elements.with(position.clone(), rebuilt)))
         }
-        Some((Step::Follow(_), _)) => None,
+        Some((Step::Follow, _)) => None,
     }
 }
 
 #[cfg(test)]
+#[path = "tests/spine.rs"]
 mod tests;

@@ -52,8 +52,7 @@ fn evaluated(
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<RuntimeValue>, Halt> {
-    context
-        .field(call, field)
+    call.field(field)
         .map(|value| context.eval(value, environment))
         .transpose()
 }
@@ -73,6 +72,10 @@ impl List {
     fn values(&self) -> ::grap::RuntimeListValues<'_> {
         self.0.list_values().expect("parsed as a list")
     }
+
+    fn positions(&self) -> Vec<gid::Position> {
+        self.0.list_positions().expect("parsed as a list")
+    }
 }
 
 impl Parse for List {
@@ -89,17 +92,23 @@ fn out_of_bounds() -> RuntimeValue {
     ::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into()
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             vocabulary::PREPEND,
             ForeignFunction::with_arguments(
                 [vocabulary::LIST, vocabulary::ITEM],
                 |_, (list, item): (List, RuntimeValue)| {
-                    RuntimeValue::list(std::iter::once(item).chain(list.values()))
+                    let positions = list.positions();
+                    let first = gid::position::between(None, positions.first())
+                        .expect("there's room before any position");
+                    RuntimeValue::list_at(
+                        std::iter::once(first).chain(positions).collect(),
+                        std::iter::once(item).chain(list.values()),
+                    )
                 },
             )
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::CONCAT,
@@ -112,14 +121,14 @@ fn functions() -> ForeignFunctions {
                     RuntimeValue::list(left.values().chain(right.values()))
                 },
             )
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::LENGTH,
             ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
                 RuntimeValue::f64(list.len() as f64)
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::AT,
@@ -131,28 +140,27 @@ fn functions() -> ForeignFunctions {
                         .unwrap_or_else(out_of_bounds)
                 },
             )
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::TAIL,
             ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
-                let mut values = list.values();
-                match values.next() {
-                    Some(_) => RuntimeValue::list(values),
-                    None => out_of_bounds(),
+                match list.len() {
+                    0 => out_of_bounds(),
+                    _ => RuntimeValue::list_at(list.positions()[1..].into(), list.values().skip(1)),
                 }
             })
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::UNFOLD,
             ForeignFunction::new(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
+                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_runtime_argument(vocabulary::STEP));
+                let Some(step) = call.field(vocabulary::STEP) else {
+                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
@@ -180,20 +188,20 @@ fn functions() -> ForeignFunctions {
                 }
             })
             .parameters([vocabulary::INITIAL, vocabulary::STEP])
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::FOLD,
             ForeignFunction::new(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_runtime_argument(vocabulary::LIST));
+                    return Ok(call.missing_runtime_argument(vocabulary::LIST));
                 };
                 let Some(accumulator) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
+                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_runtime_argument(vocabulary::STEP));
+                let Some(step) = call.field(vocabulary::STEP) else {
+                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 match list.list_values() {
@@ -210,17 +218,17 @@ fn functions() -> ForeignFunctions {
                 }
             })
             .parameters([vocabulary::LIST, vocabulary::INITIAL, vocabulary::STEP])
-            .tracked(),
+            .cacheable(),
         )
         .register(
             vocabulary::ITERATE,
             ForeignFunction::new(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
+                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_runtime_argument(vocabulary::STEP));
+                let Some(step) = call.field(vocabulary::STEP) else {
+                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 loop {
@@ -234,7 +242,7 @@ fn functions() -> ForeignFunctions {
                 }
             })
             .parameters([vocabulary::INITIAL, vocabulary::STEP])
-            .tracked(),
+            .cacheable(),
         )
 }
 
@@ -268,4 +276,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/list.rs"]
 mod tests;

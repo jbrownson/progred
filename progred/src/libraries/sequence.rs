@@ -37,9 +37,9 @@ fn evaluated(
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<RuntimeValue, Halt> {
-    match context.field(call, field) {
+    match call.field(field) {
         Some(expression) => context.eval(expression, environment),
-        None => Ok(context.missing_runtime_argument(field)),
+        None => Ok(call.missing_runtime_argument(field)),
     }
 }
 
@@ -95,8 +95,8 @@ fn consume(
         let action = if collect {
             None
         } else {
-            let Some(expression) = context.field(call, ACTION) else {
-                return Ok(context.missing_runtime_argument(ACTION));
+            let Some(expression) = call.field(ACTION) else {
+                return Ok(call.missing_runtime_argument(ACTION));
             };
             Some(context.prepare_callable(expression, env)?)
         };
@@ -133,27 +133,27 @@ fn consume(
     }
 }
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
             RANGE,
-            ForeignFunction::with_arguments([COUNT], range).tracked(),
+            ForeignFunction::with_arguments([COUNT], range).cacheable(),
         )
         .register(
             RANGE_STEP,
-            ForeignFunction::with_arguments([COUNT, INDEX], range_step).tracked(),
+            ForeignFunction::with_arguments([COUNT, INDEX], range_step).cacheable(),
         )
         .register(
             FOR_EACH,
             ForeignFunction::new(|cx, call, env| consume(cx, call, env, false))
                 .parameters([ITEMS, ACTION])
-                .tracked(),
+                .cacheable(),
         )
         .register(
             COLLECT,
             ForeignFunction::new(|cx, call, env| consume(cx, call, env, true))
                 .parameters([ITEMS])
-                .tracked(),
+                .cacheable(),
         )
 }
 
@@ -179,4 +179,5 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
+#[path = "tests/sequence.rs"]
 mod tests;

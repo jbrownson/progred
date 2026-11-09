@@ -6,8 +6,8 @@ The axis origin is the tool tip; positive axial coordinates point toward the
 spindle. Example dimensions are inches, but the representation itself has no
 unit system.
 
-A tool contains a `tool` list of sections. It describes geometry only, with no
-approximation tolerance or rendering-quality setting.
+A tool, `{isa: tool, sections}`, lists its sections. It describes geometry
+only, with no approximation tolerance or rendering-quality setting.
 Each section is `{cutting: [moves...]}` or `{non-cutting: [moves...]}`.
 The two tags are distinct library identities, not boolean values; a section
 must have exactly one of them. The tool starts implicitly at radius zero,
@@ -30,7 +30,7 @@ For example, a 1/8-inch bull mill with a 0.010-inch corner radius and a
 0.22-inch cutting length is (numbers shown in readable shorthand):
 
 ```text
-{tool: [{cutting: [
+{isa: tool, sections: [{cutting: [
   {radius: 0.0525},
   {convex arc: 0.010, axial: 0.010, radius: 0.0625},
   {axial: 0.22}

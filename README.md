@@ -50,10 +50,15 @@ clearance, or a safe machining plan.**
 
 - **Structural editing:** context-specific completions, editable names and
   literals, color swatches and pickers, PNG images shown as pictures,
-  two-dimensional number scrubbing, multiple panes and windows, copies other
-  apps can paste as pictures, and undo/redo.
+  two-dimensional number scrubbing, rows and columns that split the window at
+  a document's root and lay out their parts anywhere inside one, panes opened
+  beside a document to look around without changing it, multiple windows,
+  copies other apps can paste as pictures, and undo/redo.
   A cell that shows up in a computed result, such as the one a missing-cell
   error names, can be edited or defined right there.
+- **A Grap notebook:** a starting point where each entry shows what it
+  evaluates to, kept current as the entries it reads change. An error there, as
+  in a pane, opens to the calls it was made under.
 - **Live drawings:** an editable recreation of the tree scene from Bret Victor's
   *Inventing on Principle*, with links between source code and drawing output.
 - **Implicit CAD:** editable [Fidget](https://github.com/mkeeter/fidget) fields,

@@ -737,4 +737,5 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
 }
 
 #[cfg(test)]
+#[path = "tests/edit.rs"]
 mod tests;

@@ -34,4 +34,5 @@ impl Timers {
 }
 
 #[cfg(test)]
+#[path = "tests/timers.rs"]
 mod tests;

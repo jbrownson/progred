@@ -330,4 +330,5 @@ fn bisect(low: &[u8], high: &[u8]) -> (out: Vec<u8>)
 } // verus!
 
 #[cfg(test)]
+#[path = "tests/position.rs"]
 mod tests;

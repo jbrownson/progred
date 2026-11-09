@@ -64,16 +64,45 @@ separate target directory, and default Cargo to offline mode. This applies in
 new terminals and automated coding sessions because Cargo discovers the file
 from the repository itself. `make build-web` runs the browser build through the same wrapper.
 
-The tripwire also blocks Cargo operations such as full dependency metadata
-resolution when Cargo probes the compiler. Use `./tools/sandbox-cargo
-metadata ...` when that information is needed; IDE integration may need to be
-pointed at the sandbox wrapper rather than invoking Cargo directly.
+The wrapper lets Cargo's questions about the compiler and target through
+(`rustc -vV` and `--print`), which compile nothing, so `cargo metadata` works
+outside the sandbox. Anything that would compile is refused.
 
 The checked-in Cargo tripwire is defense against mistakes, not a security
 boundary: a process running as the repository owner can override Cargo config
 or edit the repository. The sandboxes (or a VM) are the boundary. Outside the
 two wrappers and the hosted website build, do not bypass the tripwire with
 `RUSTC_WRAPPER=` and then reuse those artifacts.
+
+## Editors
+
+rust-analyzer runs dependency code twice over: it builds the workspace to get
+build script outputs and procedural macros, and then loads those macros into
+its proc-macro server and runs them whenever it expands a macro. Both go
+through the sandbox. [`.zed/settings.json`](../.zed/settings.json) configures
+Zed, and other editors take the same rust-analyzer settings:
+
+- `cargo.extraEnv` sets `CARGO_HOME` to `target/sandbox/cargo-home`, so
+  rust-analyzer's own `cargo metadata` reads the dependency sources `make`
+  fetched there;
+- `cargo.buildScripts.overrideCommand` and `check.overrideCommand` run
+  `tools/rust-analyzer-cargo`, which hands the command to `tools/linux-cargo` or
+  `tools/sandbox-cargo`, into a target directory of its own,
+  `target/sandbox/rust-analyzer`, so it doesn't wait on `make`'s builds;
+- `procMacro.server` runs `tools/rust-analyzer-proc-macro-srv`, the
+  toolchain's proc-macro server inside the sandbox, so macros expand with the
+  boundaries they were built with.
+
+rust-analyzer reads the standard library from the toolchain's `rust-src`. It
+finds that toolchain by running `rustc --print sysroot`, using the first
+`rustc` on the editor's `PATH`. Make that the toolchain the wrappers build
+with, so the library it reads is the one builds use:
+
+- with rustup, the wrappers build with its stable toolchain: run `rustup
+  component add rust-src` and put `~/.cargo/bin` ahead of a distribution's
+  Rust on the editor's `PATH`;
+- without rustup, they build with the distribution's compiler, whose sysroot
+  is `/usr` or similar: install the distribution's `rust-src` package.
 
 Cargo configuration cannot redirect `cargo run` itself because aliases may not
 replace Cargo's built-in commands. Doing that transparently would require a

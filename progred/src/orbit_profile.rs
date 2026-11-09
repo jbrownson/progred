@@ -60,9 +60,8 @@ impl OrbitProfile {
         )
         .unwrap();
         let selection = tree_range::Selection::new(tree.items.as_value(), None);
-        let declarations = workspace::declarations(doc.root.as_ref());
-        let controls: Vec<_> = declarations[0]
-            .path
+        let panes = workspace::panes(doc.root.as_ref());
+        let controls: Vec<_> = panes[0]
             .iter()
             .cloned()
             .map(crate::occurrence::Step::from)
@@ -82,10 +81,10 @@ impl OrbitProfile {
             Default::default(),
             None,
         );
-        editor.model.workspace.sync_declared(&declarations);
-        editor.model.workspace.left_width = 0.5;
+        editor.sync_views();
+        let document = editor.model.workspace.document.clone();
         if collapsed {
-            let outline = libraries::presentation::vocabulary::OUTLINE;
+            let outline = libraries::presentation::vocabulary::SECTIONS;
             let sections: Vec<_> = editor
                 .model
                 .doc
@@ -103,6 +102,7 @@ impl OrbitProfile {
                 .collect();
             for (position, key) in sections {
                 editor.session().set_folded(
+                    &document,
                     &crate::occurrence::of(&[
                         Step::Key(outline),
                         Step::Element(position),
@@ -113,8 +113,14 @@ impl OrbitProfile {
                 );
             }
         }
-        editor.model.workspace.left.panes[0]
-            .view
+        editor
+            .model
+            .workspace
+            .pane_mut(&crate::display::widget::view::Area::part(
+                document,
+                panes[0].clone(),
+            ))
+            .unwrap()
             .annotations
             .set_field(
                 &controls,

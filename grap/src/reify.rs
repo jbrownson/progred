@@ -1,6 +1,8 @@
 //! Materialize one GID result without expanding shared runtime subgraphs.
 //! The borrowed input stays alive for the walk; the address table dies with it.
 use super::*;
+use crate::environment::{EnvironmentFrame, frames};
+use crate::runtime::RuntimeValueKind;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -44,24 +46,38 @@ impl Reify {
                 .share(Some(Shared::Record(Rc::as_ptr(fields))), |this| {
                     Value::record(fields.iter().map(|(key, value)| (*key, this.value(value))))
                 }),
-            RuntimeValueKind::List(elements) => self
-                .share(Some(Shared::List(Rc::as_ptr(elements))), |this| {
-                    Value::list(elements.iter().map(|value| this.value(value)))
-                }),
-            RuntimeValueKind::Foreign(cell) => ffi(*cell),
+            RuntimeValueKind::List(list) => {
+                self.share(Some(Shared::List(Rc::as_ptr(&list.values))), |this| {
+                    Value::List(
+                        list.positions()
+                            .iter()
+                            .cloned()
+                            .zip(list.values.iter().map(|value| this.value(value)))
+                            .collect(),
+                    )
+                })
+            }
+            // The lambda as written, then what it closes over and where its
+            // body came from, beside it.
             RuntimeValueKind::Closure(closure) => {
-                let mut fields = closure.fields.clone();
-                fields.insert(vocabulary::BODY, self.value(&closure.body.0.source));
-                fields.insert(
-                    vocabulary::ENVIRONMENT,
-                    self.environment(&closure.environment),
-                );
-                if let Some(origin) = source::origin(&closure.body) {
-                    fields.insert(source::vocabulary::BODY_ORIGIN, source::value(&origin));
-                } else {
-                    fields.remove(&source::vocabulary::BODY_ORIGIN);
-                }
-                Value::record([(vocabulary::CLOSURE, Value::Record(fields))])
+                let mut lambda = closure.fields.clone();
+                lambda.set(vocabulary::BODY, self.value(&closure.body.0.source));
+                Value::record(
+                    [
+                        (crate::isa::ISA, Value::from(vocabulary::kind::CLOSURE)),
+                        (vocabulary::LAMBDA, Value::Record(lambda)),
+                        (
+                            vocabulary::ENVIRONMENT,
+                            self.environment(&closure.environment),
+                        ),
+                    ]
+                    .into_iter()
+                    .chain(
+                        source::origin(&closure.body).map(|origin| {
+                            (source::vocabulary::BODY_ORIGIN, source::value(&origin))
+                        }),
+                    ),
+                )
             }
         }
     }
@@ -88,4 +104,5 @@ impl Reify {
 }
 
 #[cfg(test)]
+#[path = "tests/reify.rs"]
 mod tests;

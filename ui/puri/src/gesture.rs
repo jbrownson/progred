@@ -42,4 +42,5 @@ pub fn filter<'a>(
 }
 
 #[cfg(test)]
+#[path = "tests/gesture.rs"]
 mod tests;

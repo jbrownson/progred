@@ -4,8 +4,7 @@
 use crate::display::Host;
 use crate::libraries::{Library, absent, f64, layout, name, presentation};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
-    RuntimeValue,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
 use gid::{CellId, Value};
 use std::{cell::RefCell, rc::Rc};
@@ -20,6 +19,7 @@ mod playback;
 mod preview;
 mod refined;
 #[cfg(test)]
+#[path = "tests/toolpath/mod.rs"]
 mod tests;
 
 pub const ID: CellId = CellId::from_u128(0xa3f84c8e8c0930058475518fe17bf84a);
@@ -55,6 +55,31 @@ pub mod vocabulary {
     pub const STOCK_MIN: CellId = CellId::from_u128(0x8ea1172ebbc67d795f0810ee5ca04d00);
     pub const STOCK_MAX: CellId = CellId::from_u128(0x607b5e9a8636c8258959709bf0c3506b);
     pub const STOCK: CellId = CellId::from_u128(0xc7dc9217fe6809ea89ba31d458706e5c);
+
+    /// The kinds of the previews toolpath's functions return, each the
+    /// program to draw and how.
+    pub mod kind {
+        use gid::CellId;
+
+        /// Paths drawn flat: `{isa: paths preview, program, width, height,
+        /// fuel}`, as `preview paths` makes one.
+        pub const PATHS_PREVIEW: CellId = CellId::from_u128(0xcfbb63befb1148ddbec04b0f7d823cea);
+        /// Paths drawn over a Fidget volume preview: `{isa: paths volume
+        /// preview, value, program, line radius, color, fuel, playback?}`, as
+        /// `preview paths 3d` makes one.
+        pub const PATHS_VOLUME_PREVIEW: CellId =
+            CellId::from_u128(0xec1a120368384df19bfba3678d60d03c);
+        /// The same over a mesh preview, as `preview paths mesh` makes one.
+        pub const PATHS_MESH_PREVIEW: CellId =
+            CellId::from_u128(0x783cbd3416244b8586647d2ca133520b);
+        /// The same over a mesh preview refined by the implicit stock, as
+        /// `preview paths refined` makes one.
+        pub const PATHS_REFINED_PREVIEW: CellId =
+            CellId::from_u128(0xb2b559c9e1b74b3baa7c45c5621c6474);
+        /// A point or a direction: `{isa: point, x, y, z}`, as `point`
+        /// makes one.
+        pub const POINT: CellId = CellId::from_u128(0xa780ca3f4fdd472d8b634c8fb96d83ab);
+    }
 }
 
 use cam::paths::{Axis, InvalidPath, Point3, Sink};
@@ -65,7 +90,10 @@ const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL
 
 #[cfg(any(test, feature = "cam-profile"))]
 fn point_value(point: Point3) -> Value {
-    Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
+    ::grap::isa::record(
+        kind::POINT,
+        [X, Y, Z].into_iter().zip(point.map(f64::value)),
+    )
 }
 
 /// Playback that cuts a one-unit stock cube, centred on the origin, up to
@@ -92,7 +120,10 @@ fn cube_playback(progress: f64) -> playback::Settings {
 }
 
 fn runtime_point_value(point: Point3) -> RuntimeValue {
-    RuntimeValue::record([X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)))
+    ::grap::isa::runtime(
+        kind::POINT,
+        [X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)),
+    )
 }
 
 fn read_point(value: &Value) -> Option<Point3> {
@@ -100,6 +131,7 @@ fn read_point(value: &Value) -> Option<Point3> {
 }
 
 fn read_runtime_point(value: &RuntimeValue) -> Option<Point3> {
+    (value.kind()? == kind::POINT).then_some(())?;
     let point = [
         value.field(X)?.as_f64()?,
         value.field(Y)?.as_f64()?,
@@ -148,10 +180,9 @@ fn background_unavailable<W: Host>(
     )
 }
 
-fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
-    context
-        .field(call, field)
-        .ok_or_else(|| Error::Invalid(context.missing_runtime_argument(field)))
+fn argument(call: &Expression, field: CellId) -> Result<Expression, Error> {
+    call.field(field)
+        .ok_or_else(|| Error::Invalid(call.missing_runtime_argument(field)))
 }
 
 fn number(
@@ -160,7 +191,7 @@ fn number(
     environment: &Environment,
     field: CellId,
 ) -> Result<f64, Error> {
-    let expression = argument(context, call, field)?;
+    let expression = argument(call, field)?;
     context
         .eval_f64(expression, environment)?
         .filter(|n| n.is_finite())
@@ -196,7 +227,7 @@ fn fuel(
     call: &Expression,
     environment: &Environment,
 ) -> Result<usize, Error> {
-    if context.field(call, layout::vocabulary::FUEL).is_some() {
+    if call.field(layout::vocabulary::FUEL).is_some() {
         ::grap::f64::to_usize(number(
             context,
             call,
@@ -205,7 +236,7 @@ fn fuel(
         )?)
         .ok_or_else(invalid)
     } else {
-        Ok(::grap::DEFAULT_FUEL)
+        Ok(crate::sources::DEFAULT_FUEL)
     }
 }
 
@@ -297,7 +328,7 @@ fn operation(
                     Ok(result?)
                 }
             }
-            let program = argument(context, call, PROGRAM)?;
+            let program = argument(call, PROGRAM)?;
             let program = present(context.eval(program, environment)?)?;
             sequence(context, &program, output)
         }
@@ -305,7 +336,7 @@ fn operation(
             let point = point(context, call, environment)?;
             let mut emission = Emission { output, context };
             if function == START_AT {
-                let axis = if let Some(expression) = emission.context.field(call, TOOL_AXIS) {
+                let axis = if let Some(expression) = call.field(TOOL_AXIS) {
                     let value = emission.context.eval(expression, environment)?;
                     Axis::new(read_runtime_point(&value).ok_or_else(invalid)?)
                         .ok_or_else(invalid)?
@@ -319,8 +350,8 @@ fn operation(
             Ok(RuntimeValue::record([]))
         }
         MAP_POINTS | MAP_AXES => {
-            let mapper = argument(context, call, MAPPER)?;
-            let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
+            let mapper = argument(call, MAPPER)?;
+            let expression = argument(call, ::grap::vocabulary::EXPRESSION)?;
             let mapper = context.eval(mapper, environment)?;
             let mappers = if function == MAP_POINTS {
                 &output.mappers
@@ -334,8 +365,8 @@ fn operation(
             Ok(value?)
         }
         WITH_TOOL => {
-            let tool = argument(context, call, cutter::vocabulary::TOOL)?;
-            let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
+            let tool = argument(call, cutter::vocabulary::TOOL)?;
+            let expression = argument(call, ::grap::vocabulary::EXPRESSION)?;
             let value = present(context.eval(tool, environment)?)?;
             let tool = cutter::Tool::read(value.as_value()).ok_or_else(invalid)?;
             // Release the sink borrow before evaluating the body: nested calls
@@ -353,7 +384,7 @@ fn operation(
 /// sink and discard it on failure; the preview does this for each frame.
 pub fn run<T>(
     sink: &mut dyn Sink<Error = InvalidPath>,
-    evaluate: impl FnOnce(&ForeignOverlay<'_>) -> T,
+    evaluate: impl FnOnce(ForeignFunctions<'_>) -> T,
 ) -> T {
     let output = Output {
         sink: RefCell::new(sink),
@@ -364,7 +395,7 @@ pub fn run<T>(
         |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
             runtime_result(operation(function, context, call, environment, &output))
         };
-    evaluate(&ForeignOverlay::new(EMITTERS, &emit).tracked())
+    evaluate(ForeignFunctions::shared(EMITTERS, &emit).cacheable())
 }
 
 /// What the 3D path previews require; their other arguments have defaults.
@@ -375,7 +406,7 @@ const PATH_PREVIEW_PARAMETERS: [CellId; 4] = [
     crate::libraries::fidget::vocabulary::COLOR,
 ];
 
-fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(START_AT, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))
         .register(LINE_TO, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))
@@ -399,19 +430,19 @@ fn functions() -> ForeignFunctions {
             PREVIEW_3D,
             ForeignFunction::new(fidget::preview)
                 .parameters(PATH_PREVIEW_PARAMETERS)
-                .tracked(),
+                .cacheable(),
         )
         .register(
             PREVIEW_MESH,
             ForeignFunction::new(mesh::preview)
                 .parameters(PATH_PREVIEW_PARAMETERS)
-                .tracked(),
+                .cacheable(),
         )
         .register(
             PREVIEW_REFINED,
             ForeignFunction::new(refined::preview)
                 .parameters(PATH_PREVIEW_PARAMETERS)
-                .tracked(),
+                .cacheable(),
         )
         .register(
             POINT,
@@ -419,7 +450,7 @@ fn functions() -> ForeignFunctions {
                 runtime_result(point(context, call, environment).map(runtime_point_value))
             })
             .parameters([X, Y, Z])
-            .tracked(),
+            .cacheable(),
         )
         .register(
             PREVIEW,
@@ -431,7 +462,7 @@ fn functions() -> ForeignFunctions {
                 layout::vocabulary::WIDTH,
                 layout::vocabulary::HEIGHT,
             ])
-            .tracked(),
+            .cacheable(),
         )
 }
 
@@ -452,6 +483,11 @@ pub fn library<W: Host>() -> Library<W> {
             (Y, "y"),
             (Z, "z"),
             (PREVIEW, "preview paths"),
+            (kind::PATHS_PREVIEW, "paths preview"),
+            (kind::POINT, "point"),
+            (kind::PATHS_VOLUME_PREVIEW, "paths volume preview"),
+            (kind::PATHS_MESH_PREVIEW, "paths mesh preview"),
+            (kind::PATHS_REFINED_PREVIEW, "paths refined preview"),
             (PREVIEW_3D, "preview paths 3d"),
             (PREVIEW_MESH, "preview paths mesh"),
             (PREVIEW_REFINED, "preview paths refined"),
@@ -474,11 +510,26 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(cutter::names()),
         cutter::functions(functions()),
     )
-    .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(cutter::display),
-        crate::display::runtime_partial(preview::display),
-        crate::display::runtime_partial(fidget::display),
-        crate::display::runtime_partial(mesh::display),
-        crate::display::runtime_partial(refined::display),
-    ]))
+    .with_projections_for([
+        (
+            kind::PATHS_PREVIEW,
+            crate::display::runtime_partial(preview::display),
+        ),
+        (
+            kind::PATHS_VOLUME_PREVIEW,
+            crate::display::runtime_partial(fidget::display),
+        ),
+        (
+            kind::PATHS_MESH_PREVIEW,
+            crate::display::runtime_partial(mesh::display),
+        ),
+        (
+            kind::PATHS_REFINED_PREVIEW,
+            crate::display::runtime_partial(refined::display),
+        ),
+        (
+            cutter::vocabulary::kind::TOOL,
+            crate::display::runtime_partial(cutter::display),
+        ),
+    ])
 }

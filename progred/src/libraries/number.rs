@@ -2,8 +2,8 @@
 //! and drawn, the typed reading of a number, and scrub editing. Their
 //! arithmetic is Grap's, in [`crate::libraries::grap::numbers`].
 
-use crate::display::activatable;
 use crate::display::host::{Host, Layout, ProjectionInput};
+use crate::display::selectable;
 use crate::libraries::representation::tagged;
 use crate::libraries::{Library, name};
 use ::grap::RuntimeValue;
@@ -66,10 +66,11 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
             prefix: String::new(),
             suffix: String::new(),
             family: crate::display::TextFamily::SystemUi,
+            placeholder: None,
         });
         let line = tagged(input, digits, self.tag);
         let site = input.site();
-        let line = activatable(line, &site);
+        let line = selectable(line, &site);
         let line = if number.scrubbable() {
             let original = original.clone();
             // Outlined where it drags: the whole number, its tag too.
@@ -82,7 +83,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
                     Box::new(move |event| {
                         let scrubbed = scrub.update(event);
                         ScrubUpdate {
-                            value: original.overlaid(encode(scrubbed.value)),
+                            value: super::keeping_fields(Some(&original), encode(scrubbed.value)),
                             spelling: scrubbed.value.spelling(scrubbed.precision),
                         }
                     })
@@ -91,7 +92,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
         } else {
             line
         };
-        Some(crate::display::structure::with_extra_fields(
+        Some(crate::display::structure::Fields::default().after(
             input,
             |key| key == self.tag || key == name::vocabulary::NAME,
             name::with_name(input, line),
@@ -127,11 +128,7 @@ pub(crate) fn edit<N: std::str::FromStr>(
     encode: fn(N) -> Value,
 ) -> Option<Value> {
     let value = encode(spelling.trim().parse().ok()?);
-    Some(
-        current
-            .map(|current| current.overlaid(value.clone()))
-            .unwrap_or(value),
-    )
+    Some(super::keeping_fields(current, value))
 }
 
 struct Scrubbed<N> {
@@ -237,4 +234,5 @@ pub(crate) fn rounded(value: f64, step: f64) -> f64 {
 }
 
 #[cfg(test)]
+#[path = "tests/number/mod.rs"]
 mod tests;

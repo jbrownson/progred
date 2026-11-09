@@ -95,7 +95,8 @@ pub(super) fn binders() -> Binders {
             (::grap::vocabulary::FUNCTION, "function"),
             (png::vocabulary::PNG, "png"),
             (::grap::f64::F64, "f64"),
-            (::grap::absent::ABSENT, "absent"),
+            (::grap::vocabulary::kind::ABSENT, "absent"),
+            (::grap::absent::REASON, "reason"),
             (::grap::absent::MISSING_ARGUMENT, "missing_argument"),
             (::grap::absent::MISSING_CELL, "missing_cell"),
             (::grap::absent::NOT_CALLABLE, "not_callable"),
@@ -126,7 +127,7 @@ pub(super) fn invalid_request(message: String) -> Value {
     )
 }
 
-fn functions(session: &Rc<RefCell<Session>>) -> ForeignFunctions {
+fn functions(session: &Rc<RefCell<Session>>) -> ForeignFunctions<'static> {
     use vocabulary::*;
     ForeignFunctions::default()
         .register(SCREENSHOT, screenshot(session.clone()))
@@ -202,7 +203,7 @@ fn action<const N: usize>(
     session: &Rc<RefCell<Session>>,
     required: [CellId; N],
     read: impl Fn(&mut Arguments) -> Result<Action, Stop> + 'static,
-) -> ForeignFunction {
+) -> ForeignFunction<'static> {
     let session = session.clone();
     ForeignFunction::from_value(move |context, call, environment| {
         match read(&mut Arguments {
@@ -220,7 +221,7 @@ fn action<const N: usize>(
     .parameters(required)
 }
 
-fn screenshot(session: Rc<RefCell<Session>>) -> ForeignFunction {
+fn screenshot(session: Rc<RefCell<Session>>) -> ForeignFunction<'static> {
     ForeignFunction::from_value(move |_, _, _| {
         Ok(session.borrow_mut().screenshot().map_or_else(
             |message| {
@@ -256,8 +257,8 @@ struct Arguments<'a, 'context> {
 
 impl Arguments<'_, '_> {
     fn value(&mut self, parameter: CellId) -> Result<Option<Value>, Halt> {
-        self.context
-            .field(self.call, parameter)
+        self.call
+            .field(parameter)
             .map(|expression| self.context.eval_to_value(expression, self.environment))
             .transpose()
     }
@@ -405,4 +406,5 @@ fn key_named(name: &str) -> Option<Key> {
 }
 
 #[cfg(test)]
+#[path = "tests/computer.rs"]
 mod tests;

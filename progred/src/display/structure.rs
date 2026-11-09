@@ -25,7 +25,7 @@ pub(crate) fn list_column_with<W: Host>(
     item: impl Fn(gid::Position, Layout<W>) -> Layout<W>,
 ) -> Option<Layout<W>> {
     let items = list_items(input, child)?;
-    Some(authoring(group(if items.is_empty() {
+    Some(authoring(if items.is_empty() {
         selectable_bracket(Delim::Bracket, row(0.0, []))
     } else {
         col(
@@ -35,7 +35,7 @@ pub(crate) fn list_column_with<W: Host>(
                 list_gap(gap, before, after)
             }),
         )
-    })))
+    }))
 }
 
 /// Prepare element paths, including a pending insertion, and share their
@@ -58,7 +58,7 @@ fn list_items_at<W: Host>(
         positions.push(position.clone());
         positions.sort();
     }
-    let child = child.map(|p| compose_partials([p, input.default_projection.clone()]));
+    let child = child.map(|child| crate::display::first(input, child));
     positions
         .into_iter()
         .map(|position| {
@@ -97,7 +97,7 @@ where
                 .map(|position| input.site().below(&[Step::Element(position)]));
             let content = render(site.as_ref().map(|site| W::Hover::from(site.hover())));
             widget::fill_width(match site {
-                Some(site) => activatable(content, &site),
+                Some(site) => selectable(content, &site),
                 None => content,
             })
         })
@@ -166,48 +166,239 @@ pub fn list_layout_at<W: Host>(
     );
     authoring(selectable_bracket(
         Delim::Bracket,
-        group(alternatives([row(0.0, horizontal), col(1, 0.0, vertical)])),
+        alternatives([row(0.0, horizontal), col(1, 0.0, vertical)]),
     ))
 }
 
-pub fn record_layout<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Option<Layout<W>> {
-    Some(record_layout_at(input, input.value?.record_keys()?, child))
+/// How a record's fields read, whether drawn as a whole record
+/// ([`Fields::record`]) or after what a projection draws of the record itself
+/// ([`Fields::form`], [`Fields::after`]): which come first, which show as
+/// slots to fill even where the record lacks them, and how a field's name and
+/// value are drawn. A field being added is drawn among them, where it will
+/// stay.
+pub(crate) struct Fields<W: Host> {
+    leading: Vec<CellId>,
+    slots: Vec<CellId>,
+    parts: Vec<CellId>,
+    child: Rc<dyn Fn(CellId) -> Option<Partial<W>>>,
+    label: Rc<dyn Fn(CellId) -> Option<Layout<W>>>,
+    shown_empty: bool,
 }
 
-pub fn record_layout_at<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    keys: Vec<CellId>,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Layout<W> {
-    authoring(record_heads(
-        ordered_keys(input, keys)
-            .into_iter()
-            .map(|key| record_field(input, key, child(key))),
-        pending_field(input),
-    ))
-}
-
-pub(crate) fn record_keys<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Vec<CellId>> {
-    Some(ordered_keys(input, input.value?.record_keys()?))
-}
-
-/// Display order, including a pending new field.
-fn ordered_keys<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    mut keys: Vec<CellId>,
-) -> Vec<CellId> {
-    if let Some(Pending::Child(Step::Key(key))) = &input.pending
-        && !keys.contains(key)
-    {
-        keys.push(*key);
+impl<W: Host> Default for Fields<W> {
+    fn default() -> Self {
+        Self {
+            leading: Vec::new(),
+            slots: Vec::new(),
+            parts: Vec::new(),
+            child: Rc::new(|_| None),
+            label: Rc::new(|_| None),
+            shown_empty: false,
+        }
     }
-    keys.sort_by(|left, right| field_order(input.env, left, right));
-    keys
+}
+
+impl<W: Host> Fields<W> {
+    /// `keys` first, in this order; the others after them by [`field_order`].
+    pub(crate) fn leading(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
+        self.leading = keys.into_iter().collect();
+        self
+    }
+
+    /// `keys` drawn even where the record lacks them, as slots to fill.
+    pub(crate) fn slots(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
+        self.slots = keys.into_iter().collect();
+        self
+    }
+
+    /// `keys`' values drawn as parts of the record ([`crate::display::part`]):
+    /// no stop of their own, their names selecting nothing.
+    pub(crate) fn parts(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
+        self.parts = keys.into_iter().collect();
+        self
+    }
+
+    /// A field's value drawn by the projection `child` gives for its key,
+    /// where it gives one.
+    pub(crate) fn child(mut self, child: impl Fn(CellId) -> Option<Partial<W>> + 'static) -> Self {
+        self.child = Rc::new(child);
+        self
+    }
+
+    /// A field's name read as `label` gives for its key, where it gives one.
+    pub(crate) fn label(mut self, label: impl Fn(CellId) -> Option<Layout<W>> + 'static) -> Self {
+        self.label = Rc::new(label);
+        self
+    }
+
+    /// The fields after a form's own drawn even when there are none, as a
+    /// call's arguments are.
+    pub(crate) fn shown_empty(mut self) -> Self {
+        self.shown_empty = true;
+        self
+    }
+
+    /// The whole record, its fields between braces.
+    pub(crate) fn record(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    ) -> Option<Layout<W>> {
+        let labels = input.value?.record_keys()?;
+        Some(self.record_of(input, labels))
+    }
+
+    /// [`Fields::record`] for a record already read as one, with `labels`.
+    pub(crate) fn record_of(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        labels: Vec<CellId>,
+    ) -> Layout<W> {
+        let keys = self.keys(labels, input, |_| false);
+        authoring(record_braces(
+            keys.into_iter().map(|key| self.field(input, key)),
+            pending_field(input),
+        ))
+    }
+
+    /// A form drawn from the `queried` fields, the others following it
+    /// ([`Fields::after`]), so the form hides nothing. `draw` is given the
+    /// queried fields' values, in their order, to bind by name. One of the
+    /// queried being added is the form's to draw, or to leave to a plainer
+    /// view.
+    pub(crate) fn form<const N: usize>(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        queried: [CellId; N],
+        draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+    ) -> Option<Layout<W>> {
+        let fields = input.value?;
+        let content = draw(queried.map(|key| fields.field(key)))?;
+        Some(self.after(input, |key| queried.contains(&key), content))
+    }
+
+    /// [`Fields::form`] for a record of `kind`, as its `isa` says, declining
+    /// one of another kind. The form draws what kind it is, so the `isa`
+    /// doesn't follow it.
+    pub(crate) fn kind_form<const N: usize>(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        kind: CellId,
+        queried: [CellId; N],
+        draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+    ) -> Option<Layout<W>> {
+        let fields = input.value?;
+        (fields.kind() == Some(kind)).then_some(())?;
+        let content = draw(queried.map(|key| fields.field(key)))?;
+        Some(self.after(
+            input,
+            |key| key == ::grap::isa::ISA || queried.contains(&key),
+            content,
+        ))
+    }
+
+    /// `content` followed by the fields it doesn't draw, as a call's function
+    /// is by its arguments. Drawn as one piece, the value takes no new field
+    /// from Enter: these views don't offer [`authoring`], which a rawer view
+    /// of it does.
+    pub(crate) fn after(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: impl Fn(CellId) -> bool,
+        content: Layout<W>,
+    ) -> Layout<W> {
+        match self.rest(input, drawn) {
+            Some(rest) => hug(content, rest, 0.0),
+            None => content,
+        }
+    }
+
+    /// The fields `drawn` doesn't cover between braces, to follow what is
+    /// drawn of the record; `None` where there are none to show.
+    pub(crate) fn rest(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: impl Fn(CellId) -> bool,
+    ) -> Option<Layout<W>> {
+        let keys = self.keys(input.value?.record_keys()?, input, drawn);
+        let pending = pending_field(input);
+        (self.shown_empty || !keys.is_empty() || pending.is_some())
+            .then(|| record_braces(keys.into_iter().map(|key| self.field(input, key)), pending))
+    }
+
+    /// The keys to draw but those `drawn` covers: the record's `labels`, its
+    /// slots, and one being added, in order.
+    fn keys(
+        &self,
+        labels: Vec<CellId>,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: impl Fn(CellId) -> bool,
+    ) -> Vec<CellId> {
+        let mut keys = labels;
+        let adding = match &input.pending {
+            Some(Pending::Child(Step::Key(key))) => Some(*key),
+            _ => None,
+        };
+        for key in self.slots.iter().copied().chain(adding) {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        keys.retain(|key| !drawn(*key));
+        let lead = |key: &CellId| {
+            self.leading
+                .iter()
+                .position(|leader| leader == key)
+                .unwrap_or(self.leading.len())
+        };
+        keys.sort_by(|left, right| {
+            lead(left)
+                .cmp(&lead(right))
+                .then_with(|| field_order(input.env, left, right))
+        });
+        keys
+    }
+
+    fn field(
+        &self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        key: CellId,
+    ) -> RecordField<W, W::Hover> {
+        let name = (self.label)(key).unwrap_or_else(|| field_name(input.env, key));
+        let part = self.parts.contains(&key);
+        // A missing field's name selects it only where it's a slot to fill,
+        // and a part's selects nothing.
+        let selects = !part
+            && (self.slots.contains(&key)
+                || input.value.is_some_and(|value| value.contains_field(key)));
+        let child = (self.child)(key).map(|child| crate::display::first(input, child));
+        RecordField {
+            label: field_label(input, key, name, selects),
+            value: if part {
+                crate::display::part([Step::Key(key)], child, None)
+            } else {
+                descend([Step::Key(key)], child, None)
+            },
+        }
+    }
+}
+
+/// [`Fields::form`], the fields read as usual.
+pub(crate) fn record_form<W: Host, const N: usize>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    queried: [CellId; N],
+    draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+) -> Option<Layout<W>> {
+    Fields::default().form(input, queried, draw)
+}
+
+/// [`Fields::kind_form`], the fields read as usual.
+pub(crate) fn kind_form<W: Host, const N: usize>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    kind: CellId,
+    queried: [CellId; N],
+    draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+) -> Option<Layout<W>> {
+    Fields::default().kind_form(input, kind, queried, draw)
 }
 
 /// Named fields first, by name, then the others by id.
@@ -221,67 +412,57 @@ pub(crate) fn field_order(env: &dyn Env, left: &CellId, right: &CellId) -> Order
 }
 
 /// A field's name, or its short id where it has none.
-pub(crate) fn field_label<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
+pub(crate) fn field_name<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
     match env.name(key) {
         Some(name) => crate::display::named(&name, Face::Label),
         None => faced(crate::identity::short_id(key), Face::Id),
     }
 }
 
-pub(crate) fn record_field<W: Host>(
+/// The label of the field `key` here, read as `name`, then its colon. It
+/// hovers apart from the field's value, so a Cmd+click picks the label, not
+/// the value, or, with no slot open, acts as a click; a click selects the
+/// field where `selects`.
+pub(crate) fn field_label<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
-    child: Option<Partial<W>>,
-) -> RecordField<W, W::Hover> {
-    RecordField {
-        label: record_label(input, key),
-        value: descend(
-            [Step::Key(key)],
-            child.map(|p| compose_partials([p, input.default_projection.clone()])),
-            None,
-        ),
-    }
-}
-
-/// The ordinary field-name presentation and interaction, independent of how
-/// the enclosing record arranges its fields.
-pub(crate) fn record_label<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    key: CellId,
+    name: Layout<W>,
+    selects: bool,
 ) -> Layout<W> {
     let site = input.site().below(&[Step::Key(key)]);
-    let head = row(0.0, [field_label(input.env, key), dim(":")]);
-    let present = input.value.is_some_and(|value| value.contains_field(key));
-    crate::display::field_label_at(head, &site, key, present)
-}
-
-/// The fields a projection leaves undrawn, and one being added, as a
-/// record fragment to follow what it does draw.
-pub(crate) fn extra_fields<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    drawn: impl Fn(CellId) -> bool,
-) -> Option<Layout<W>> {
-    let fields = record_keys(input)?
-        .into_iter()
-        .filter(|key| !drawn(*key))
-        .map(|key| record_field(input, key, None))
-        .collect::<Vec<_>>();
-    let pending = pending_field(input);
-    (!fields.is_empty() || pending.is_some()).then(|| record_fragment(fields, pending))
-}
-
-/// `content` followed by its [`extra_fields`], as a call's head is by its
-/// arguments. Drawn as one piece, the value takes no new field from Enter:
-/// these views don't offer [`authoring`], which a rawer view of it does.
-pub(crate) fn with_extra_fields<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    drawn: impl Fn(CellId) -> bool,
-    content: Layout<W>,
-) -> Layout<W> {
-    match extra_fields(input, drawn) {
-        Some(extras) => group_hug(content, extras, 0.0),
-        None => content,
-    }
+    let target = W::Hover::from(site.label_hover());
+    let hover = target.clone();
+    let select = selects.then(|| widget::navigation::selecting(site));
+    let label = ::grap::RuntimeValue::from(Value::from(key));
+    let pressed = widget::before(
+        row(0.0, [name, dim(":")]),
+        Rc::new(move |_| {
+            let target = target.clone();
+            let select = select.clone();
+            let label = label.clone();
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    let (click, otherwise) = (select.clone(), select.clone());
+                    let label = label.clone();
+                    output.on_press(
+                        target,
+                        move |world: &mut W, _| {
+                            click
+                                .as_ref()
+                                .is_some_and(|select| select(&mut world.session()))
+                        },
+                        move |world: &mut W, _| {
+                            widget::interaction::pick(world, &label)
+                                || otherwise
+                                    .as_ref()
+                                    .is_some_and(|select| select(&mut world.session()))
+                        },
+                    );
+                }
+            })
+        }),
+    );
+    on_hover(pressed, hover)
 }
 
 /// Enter's authoring for the container `child` draws: a field or element
@@ -331,4 +512,5 @@ pub(crate) fn pending_field<W: Host>(
 }
 
 #[cfg(test)]
+#[path = "tests/structure.rs"]
 mod tests;

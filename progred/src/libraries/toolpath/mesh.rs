@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 pub(super) mod computation;
 #[cfg(test)]
+#[path = "tests/mesh.rs"]
 mod tests;
 mod tubes;
 
@@ -25,13 +26,13 @@ pub(super) fn preview(
         context,
         call,
         environment,
-        PREVIEW_MESH,
+        kind::PATHS_MESH_PREVIEW,
         fidget::mesh::preview,
     ))
 }
 
 pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?.field(PREVIEW_MESH)?;
+    let fields = input.value?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let super::fidget::PathPreview {

@@ -1,6 +1,6 @@
 # Layout-derived keyboard navigation
 
-Projections declare selectable stops by occurrence path. While the
+Every drawn occurrence is a selectable stop, named by its path. While the
 chosen layout alternative is placed, the collector folds those stops into
 temporary line summaries. No coordinates, distances, or measured-height
 thresholds choose arrow destinations; Tab's order (below) comes from painted
@@ -40,23 +40,50 @@ to the outermost stop. A stop before the block, such as a function label, ends
 that sharing. An enclosing stop always begins the topmost entry line, so it
 precedes a deeper block that sits beside its first one.
 
-A repeated declaration of the innermost open whole value's occurrence is the
-same stop, not a second one.
+## Stops
 
-## Projection stops
+Every occurrence drawn is an arrow stop, unless its projection draws it as a
+part of the occurrence around it (below). An occurrence's landmark adds a
+whole-value stop before what's drawn
+inside it, unless a control drawn for the occurrence, a line edit or a picker,
+declares the occurrence's stop itself. That stop stays where the control is
+drawn, as a number's does after its name, and the landmark adds no second one;
+a landmark nested directly in another at the same occurrence, as a picker's is,
+shares its stop. So cells, lists, records, custom forms, and values drawn by a
+Grap projection function all stop the same way. What a projection draws as part
+of its own occurrence, such as a call's argument record or an outline's extra
+fields, adds no stop, and punctuation, padding, and other inert decoration add
+no stops or lines. Empty lists stop once; empty cells offer both the reference
+and the missing contents.
 
-`display::group(content)` adds the whole-value stop before its
-contents; cells, lists, records, and custom forms all use it. `group_hug`
-combines a selectable whole with inline or indented head-body alternatives;
-ordinary `row` and `col` need no navigation-specific counterpart. A call groups
-its function and argument fields together, and its arguments use
-`record_fragment_with` to arrange fields without another whole-call stop. An
-outline groups its heading and body in a column, then composes sections and
-extras vertically; extras use `record_fragment` so they add no second
-root-record stop. Empty lists stop once; empty cells offer both the reference
-and the missing contents. A leaf facet can supply its widget-specific selection
-callback at the occurrence of an enclosing whole-value stop without adding a
-stop. Punctuation, padding, and other inert decoration declare no stops or lines.
+Each stop draws something of its own, so selecting it looks different from
+selecting what's inside it, and every arrow press shows. Where what's inside
+would draw all of an occurrence, its projection marks it with a handle from the
+toolkit: a bar as tall as what it draws, before it, that a click on selects, as
+a notebook has. It always shows: structure seen only once selected isn't
+visible. Other marks serve too: a notebook numbers its entries in its
+list's margin, and an entry shows its arrow before it has a result. A sweep
+selects each stop and checks that its box is neither the box of the stop around
+it nor of one just inside it, over the sample and a new notebook, and, ignored
+for its time, the larger examples.
+
+A domain projection presents the domain's things, and a level someone working
+in it wouldn't act on alone isn't a stop: it's drawn as a part of the thing
+around it (`part`, a walk like `descend`). A part has no stop, highlight, or
+landmark of its own, so arrows pass from the thing to what's inside the part,
+which keeps its own stops; a control drawn for the part itself, such as the
+hole of a definition yet to be written, still declares one there. A Grap
+parameter is a cell and its definition record as one thing, its name a stop
+inside; a notebook is its record and its list of entries, each entry a stop
+inside. The underlying data stays a view away, in Raw. Backspace landing on its
+container skips a part for the thing around it. The aim is that the domain
+views make an invalid state hard to reach and easy to leave: a parameter's
+definition can't be selected or deleted alone, and one with none is a hole
+whose offer, the name typed, defines it.
+
+A selection on nothing drawn, such as one inside a value its projection draws
+whole, as a number draws its spelling rather than its encoding, leaves arrows
+as no selection does: the first selects the root.
 
 ## Arrow policy
 
@@ -102,9 +129,9 @@ pointer and source selection and the explicit Select All command.
 
 Every occurrence the engine draws gets a landmark: the view's root, and each
 value a projection draws through `descend` or its peers (`at`, `jump`). What a
-projection draws itself, such as a number's digits, gets none. A view showing
-a workspace record starts at its main value, so the record isn't drawn and
-nothing selects it.
+projection draws itself, such as a number's digits, gets none. A document
+whose root is a row or column draws each part in its own pane, so the row
+isn't drawn and nothing selects it.
 
 Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one
 before, in reading order within the selection's view: line by line, where a
@@ -120,9 +147,9 @@ to go declines, so a browser moves focus on to the rest of its page, which
 clears the selection. A window has nowhere else to go, so there that Tab clears
 the selection itself, and the next starts over from the first.
 
-The anonymous lambda's `λ` marker is clickable to name the function but is
-neither an arrow stop nor a tab stop; the whole lambda, parameter list, and
-body remain navigable.
+The anonymous lambda's `λ` marker is the missing name's place, an arrow stop
+like any drawn occurrence. Arriving there types into the name as a line, with
+no completion; it isn't a tab stop, since the name is optional.
 
 Revealing a destination follows [selection and reveal](puri.md#selection-and-reveal).
 
@@ -138,9 +165,11 @@ constraint.
 [examples/navigation.gid](../examples/navigation.gid) includes nested cells around a
 multiline outline, document-authored side-by-side and offset-baseline columns,
 and content after a block; [examples/README.md](../examples/README.md) says what
-to try. Collector tests in `navigation/logical/tests.rs` drive the collector
+to try. Collector tests in `navigation/tests/logical.rs` drive the collector
 through shapes mirroring the layout traversal; frame tests exercise the same
-policies through real projections and the navigation example document.
+policies through real projections and the navigation example document. A
+sweep selects every occurrence the sample draws and checks some arrow leaves
+it; an ignored one sweeps the larger examples.
 
 Navigation's frame cost shows in `make perf`'s `cam_source_scroll_profile_loop`
 canary; see [performance checks](performance.md). Earlier measurements and

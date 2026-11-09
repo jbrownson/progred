@@ -776,4 +776,5 @@ const NAMED: &[Named] = &[
 ];
 
 #[cfg(test)]
+#[path = "tests/named.rs"]
 mod tests;

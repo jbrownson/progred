@@ -2,16 +2,10 @@
 //! spellings. All 128 bits are identity; there are no UUID version or
 //! variant bits.
 
-use crate::value::{hex_string, read_hex};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use std::str::FromStr;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CellId([u8; 16]);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ParseCellIdError;
 
 impl CellId {
     pub const fn from_bytes(bytes: [u8; 16]) -> Self {
@@ -25,50 +19,27 @@ impl CellId {
     pub const fn as_bytes(&self) -> &[u8; 16] {
         &self.0
     }
+
+    /// The id that 32 hex digits spell, in either case, as Display writes
+    /// it; `from_str_radix` alone would also take fewer digits or a leading
+    /// `+`.
+    pub fn read(text: &str) -> Option<Self> {
+        if text.len() != 32 || !text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+        u128::from_str_radix(text, 16).ok().map(Self::from_u128)
+    }
 }
 
 impl fmt::Display for CellId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&hex_string(&self.0))
+        write!(f, "{:032x}", u128::from_be_bytes(self.0))
     }
 }
 
 impl fmt::Debug for CellId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CellId({self})")
-    }
-}
-
-impl fmt::Display for ParseCellIdError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "cell id must be 32 hexadecimal digits")
-    }
-}
-
-impl std::error::Error for ParseCellIdError {}
-
-impl FromStr for CellId {
-    type Err = ParseCellIdError;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        read_hex(input)
-            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
-            .map(Self)
-            .ok_or(ParseCellIdError)
-    }
-}
-
-impl Serialize for CellId {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(self)
-    }
-}
-
-impl<'de> Deserialize<'de> for CellId {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -79,4 +50,5 @@ pub fn new_cell_id() -> CellId {
 }
 
 #[cfg(test)]
+#[path = "tests/cell_id.rs"]
 mod tests;

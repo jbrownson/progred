@@ -73,6 +73,8 @@ fn named<'a>(
 ) -> Option<Name<'a>> {
     let name = value_of(cell)?.as_record()?.get(&vocabulary::NAME)?;
     Some(match text::read(name) {
+        // An empty name names nothing.
+        Some("") => return None,
         Some(text) => Name::Plain(text),
         None => {
             let mut runs = Vec::new();
@@ -141,7 +143,7 @@ pub fn named_library<'a, W: Host>(
     id: CellId,
     name: &'a str,
     names: impl IntoIterator<Item = (CellId, &'a str)>,
-    functions: ForeignFunctions,
+    functions: ForeignFunctions<'static>,
 ) -> Library<W> {
     library_named(
         id,
@@ -159,13 +161,49 @@ pub fn library_named<W: Host>(
     id: CellId,
     name: &str,
     names: impl IntoIterator<Item = (CellId, Value)>,
-    functions: ForeignFunctions,
+    functions: ForeignFunctions<'static>,
 ) -> Library<W> {
     let mut cells = Cells::new();
     for (cell, name) in std::iter::once((id, text::value(name))).chain(names) {
         cells.set_value(cell, Value::record([(vocabulary::NAME, name)]));
     }
     Library::new(Definitions::from_parts(cells, functions))
+}
+
+/// `libraries` with each one's own cell holding the library as a value,
+/// `{isa: loaded library, name, cells}`: the name it gives itself and the
+/// cells it defines, in order of their names, those without one last.
+pub(crate) fn described(libraries: Libraries) -> Libraries {
+    use crate::library::vocabulary::{CELLS, kind::LIBRARY};
+    let mut described = libraries.clone();
+    for (id, definitions) in libraries.iter() {
+        let mut cells: Vec<_> = definitions
+            .iter()
+            .map(|(cell, _)| cell)
+            .filter(|cell| *cell != id)
+            .map(|cell| {
+                let name = definitions.value(cell).and_then(read);
+                (name.is_none(), name.map(str::to_lowercase), cell)
+            })
+            .collect();
+        cells.sort();
+        let name = definitions
+            .value(id)
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&vocabulary::NAME))
+            .map(|name| (vocabulary::NAME, name.clone()));
+        let value = ::grap::isa::record(
+            LIBRARY,
+            name.into_iter().chain([(
+                CELLS,
+                Value::list(cells.into_iter().map(|(_, _, cell)| cell.into())),
+            )]),
+        );
+        let mut definitions = definitions.clone();
+        definitions.insert(id, value);
+        described.insert(id, definitions);
+    }
+    described
 }
 
 /// Each loaded library and the name it gives itself, in load order.
@@ -190,7 +228,7 @@ pub(crate) fn with_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     content: Layout<W>,
 ) -> Layout<W> {
-    use crate::display::{Pending, descend_local};
+    use crate::display::{Pending, descend};
     let step = gid::Step::Key(vocabulary::NAME);
     let has_name = input
         .value
@@ -199,7 +237,11 @@ pub(crate) fn with_name<W: Host>(
         crate::display::row(
             6.0,
             [
-                descend_local([step], projection(), &input.default_projection),
+                descend(
+                    [step],
+                    Some(crate::display::first(input, projection(None))),
+                    None,
+                ),
                 content,
             ],
         )
@@ -249,24 +291,58 @@ fn new_label(spelling: &str) -> Completion {
     }
 }
 
-/// A name as its line editor or, missing, a hole for one. A projection
-/// passes this where it descends into a name.
-pub(crate) fn projection<W: Host>() -> Partial<W> {
-    crate::display::partial(|input| match input.value {
-        Some(value) => editor(value).map(crate::display::line_edit),
-        None => Some(hole()),
-    })
+/// A named cell as its name, a reference to it, where a projection means the
+/// cell rather than what it holds, as Grap's references do. One without a
+/// name is left to show its definition.
+pub(crate) fn shallow_cell<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    shallow_cell_with(input, |label| label)
 }
 
-/// An empty name, which takes whatever is typed as its text.
-pub(crate) fn hole<W: Host>() -> Layout<W> {
-    crate::display::picker(crate::display::Picker::new(
-        crate::display::CompletionKind::Value,
-        crate::display::ranked(std::rc::Rc::new(|request| {
-            Some(vec![text::completion(text::query_spelling(request.query))])
-        })),
+/// [`shallow_cell`], its name drawn by `decorate`.
+pub(crate) fn shallow_cell_with<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    decorate: impl FnOnce(Layout<W>) -> Layout<W>,
+) -> Option<Layout<W>> {
+    let cell = input.value?.as_cell()?;
+    let name = input.env.name(cell)?;
+    Some(shallow_reference(
+        input,
+        decorate(crate::display::named(&name, Face::Name)),
     ))
 }
 
+/// A cell reference drawn as `label`, which a click selects.
+pub(crate) fn shallow_reference<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    label: Layout<W>,
+) -> Layout<W> {
+    crate::display::selectable(label, &input.site())
+}
+
+/// A name as its line editor, there or missing: typing into a missing one
+/// writes it from the first keystroke. A projection passes this where it
+/// descends into a name; a missing or empty name shows `placeholder` dim
+/// until one is typed.
+pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
+    crate::display::partial(move |input| {
+        Some(crate::display::line_edit(crate::display::LineEdit {
+            placeholder: placeholder.clone(),
+            ..line(input.value)?
+        }))
+    })
+}
+
+/// The editor of the name `value`, or of a missing one, which its first
+/// keystroke writes.
+pub(crate) fn line(value: Option<&Value>) -> Option<crate::display::LineEdit> {
+    match value {
+        Some(value) => editor(value),
+        None => editor(&text::value("")),
+    }
+}
+
 #[cfg(test)]
+#[path = "tests/name.rs"]
 mod tests;

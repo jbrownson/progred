@@ -59,4 +59,5 @@ pub fn draw_stretched(
 }
 
 #[cfg(test)]
+#[path = "tests/widget.rs"]
 mod tests;

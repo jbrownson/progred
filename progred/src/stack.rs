@@ -2,7 +2,7 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    absent, color, controls, declared, editor, f32, f64, fidget, grap as grap_library, layout,
+    absent, color, controls, declared, editor, f32, f64, fidget, grap as grap_library, isa, layout,
     list, logic, name, png, presentation, random, sequence, text, toolpath, tree, u64,
 };
 use crate::library::{Libraries, Library};
@@ -13,9 +13,17 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 /// The libraries Plain shows, for the editor and the tutorial page alike:
-/// names, text, absent values and numbers read as themselves, and
+/// names, kinds, text, absent values and numbers read as themselves, and
 /// everything else as Raw draws it.
-pub const PLAIN: [gid::CellId; 6] = [name::ID, text::ID, absent::ID, f32::ID, f64::ID, u64::ID];
+pub const PLAIN: [gid::CellId; 7] = [
+    name::ID,
+    isa::ID,
+    text::ID,
+    absent::ID,
+    f32::ID,
+    f64::ID,
+    u64::ID,
+];
 
 /// The sets of libraries the Projections menu offers by name. Any other set
 /// is a custom one.
@@ -45,9 +53,10 @@ pub struct Stack {
     pub projection: Projection,
     pub pane_projection: Projection,
     pub completions: crate::display::CompletionProvider,
-    /// The projections and completion providers libraries bring, in load
-    /// order, so an area can leave some of them off.
+    /// The projections, cells' projections and completion providers
+    /// libraries bring, in load order, so an area can leave some of them off.
     partials: Rc<[(gid::CellId, Partial)]>,
+    provided: Rc<[(gid::CellId, gid::CellId, Partial)]>,
     providers: Rc<[(gid::CellId, crate::display::CompletionProvider)]>,
 }
 
@@ -57,6 +66,7 @@ impl Stack {
     pub fn switchable(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
         crate::libraries::name::library_names(&self.libraries).filter(|(library, _)| {
             self.partials.iter().any(|(id, _)| id == library)
+                || self.provided.iter().any(|(id, _, _)| id == library)
                 || self.providers.iter().any(|(id, _)| id == library)
         })
     }
@@ -101,11 +111,15 @@ impl Stack {
     /// The document and pane projections with `hidden` libraries' own
     /// projections left off, a pane's presentation among them.
     pub fn without(&self, hidden: &[gid::CellId]) -> (Projection, Projection) {
-        let document = Projection::new(
+        let document = projection(
             self.partials
                 .iter()
                 .filter(|(id, _)| !hidden.contains(id))
                 .map(|(_, partial)| partial.clone()),
+            self.provided
+                .iter()
+                .filter(|(id, _, _)| !hidden.contains(id))
+                .map(|(_, cell, partial)| (*cell, partial.clone())),
         );
         let pane = if hidden.contains(&presentation::ID) {
             document.clone()
@@ -137,13 +151,20 @@ pub fn load_selected(ids: &[gid::CellId]) -> Result<Stack, String> {
 fn compose(
     contributions: impl IntoIterator<Item = (gid::CellId, Library<crate::Editor, Hovered>)>,
 ) -> Stack {
-    let (libraries, partials, providers) = Libraries::from_contributions(contributions);
+    let (libraries, partials, provided, providers) = Libraries::from_contributions(contributions);
+    let libraries = crate::libraries::name::described(libraries);
     let providers: Rc<[_]> = providers.into();
     let completions = crate::libraries::completion::combine(
         providers.iter().map(|(_, provider)| provider.clone()),
     );
     let partials: Rc<[_]> = partials.into();
-    let projection = Projection::new(partials.iter().map(|(_, partial)| partial.clone()));
+    let provided: Rc<[_]> = provided.into();
+    let projection = projection(
+        partials.iter().map(|(_, partial)| partial.clone()),
+        provided
+            .iter()
+            .map(|(_, cell, partial)| (*cell, partial.clone())),
+    );
     let pane_projection = pane(projection.clone());
     Stack {
         libraries,
@@ -151,21 +172,31 @@ fn compose(
         projection,
         completions,
         partials,
+        provided,
         providers,
     }
 }
 
+/// The libraries' projections, a record that says what kind of thing it is
+/// first drawn as its kind provides, when its kind provides a projection.
+fn projection(
+    partials: impl IntoIterator<Item = Partial>,
+    provided: impl IntoIterator<Item = (gid::CellId, Partial)>,
+) -> Projection {
+    Projection::new(std::iter::once(crate::display::by_kind()).chain(partials))
+        .with_provided(crate::display::Provided::new(provided))
+}
+
 /// `projection` for a pane, whose entry may present its value instead.
 fn pane(projection: Projection) -> Projection {
-    projection.with_entry(crate::display::runtime_partial(
-        presentation::projected_display,
-    ))
+    projection.with_entry(crate::display::runtime_partial(presentation::pane_entry))
 }
 
 type BuildLibrary = fn() -> Library<crate::Editor, Hovered>;
 
 const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (name::ID, name::library),
+    (isa::ID, isa::library),
     (text::ID, text::library),
     (png::ID, png::library),
     (absent::ID, absent::library),
@@ -191,4 +222,5 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
 ];
 
 #[cfg(test)]
+#[path = "tests/stack.rs"]
 mod tests;

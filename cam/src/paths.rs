@@ -372,4 +372,5 @@ impl Sink for Recording {
 }
 
 #[cfg(test)]
+#[path = "tests/paths/playback_tests.rs"]
 mod playback_tests;

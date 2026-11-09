@@ -60,9 +60,13 @@ pub(crate) fn representation() -> number::Representation<f64> {
 pub fn library<W: Host>() -> Library<W> {
     representation().library(ID).with_values([(
         vocabulary::PI,
-        value(std::f64::consts::PI).overlaid(name::record("π", [])),
+        name::record(
+            "π",
+            value(std::f64::consts::PI).as_record().unwrap().clone(),
+        ),
     )])
 }
 
 #[cfg(test)]
+#[path = "tests/f64.rs"]
 mod tests;

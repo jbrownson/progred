@@ -149,6 +149,7 @@ impl Picking<'_, '_> {
             Some(current) => {
                 model.selection = Some(selection::Selection::from_payload(
                     &sources,
+                    current.view(),
                     current.path().to_vec(),
                     payload,
                 ));

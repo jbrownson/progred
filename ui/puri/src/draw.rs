@@ -426,4 +426,5 @@ fn replay_cmds<C: Canvas + ?Sized>(cmds: &[DrawCmd], canvas: &mut C, outer: Affi
 }
 
 #[cfg(test)]
+#[path = "tests/draw.rs"]
 mod tests;
