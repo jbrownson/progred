@@ -1566,8 +1566,10 @@ From the same month's discussion, none of it started:
   implementation of it.
 - **A declared function form.** Foreign functions receive a call's syntax and
   its environment, as macros do, by design. One that only wants its arguments'
-  values could be declared so, and the fast evaluator could call it without
-  building that syntax. It changes the implementation, not the definition.
+  values could be declared so, and the proven fast evaluator could call it
+  without building that syntax, as the production evaluator's
+  `ForeignFunction::with_arguments` already finds a call site's arguments
+  once. It changes the implementation, not the definition.
 - **Editor laws as property tests.** Selection and navigation have laws worth
   stating (a selection deleted from under itself becomes a pending one; what
   an arrow leaves, the opposite arrow returns to), which the headless driver
