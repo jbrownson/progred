@@ -430,7 +430,12 @@ fn rectangular_previews_preserve_pixel_scale_and_render_at_native_resolution() {
         assert_eq!(preview.size, size);
         for scale in [1.0, 1.5, 2.0] {
             let raster = raster_size(size, scale).unwrap();
-            let view = volume_view(&preview, Camera::default(), raster);
+            let view = volume_view_bounds(
+                preview.shape.min,
+                preview.shape.max,
+                Camera::default(),
+                raster,
+            );
             let screen = view.world_to_model * view.size.screen_to_world();
             let x = screen.fixed_view::<3, 1>(0, 0).norm();
             let y = screen.fixed_view::<3, 1>(0, 1).norm();
@@ -492,7 +497,12 @@ fn cpu_previews_support_constant_fields() {
             [(presentation::vocabulary::VALUE, field)],
         ));
         let preview = volume_preview(&value).unwrap();
-        let view = volume_view(&preview, Camera::default(), PixelRenderSize::from(64));
+        let view = volume_view_bounds(
+            preview.shape.min,
+            preview.shape.max,
+            Camera::default(),
+            PixelRenderSize::from(64),
+        );
         let rgba = cpu_volume(&preview.shape.objects, &view, &Default::default()).unwrap();
         assert_eq!(rgba.len(), 64 * 64 * 4);
         assert!(
@@ -562,8 +572,9 @@ fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
         },
         size: Size::new(256.0, 256.0),
     };
-    let view = volume_view(
-        &preview,
+    let view = volume_view_bounds(
+        preview.shape.min,
+        preview.shape.max,
         Camera {
             yaw: 0.0,
             pitch: 0.0,

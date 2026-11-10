@@ -48,8 +48,9 @@ fn implicit_depth_matches_mesh_camera_and_pixel_centers() {
             .model_to_view
             .transform_point(&nalgebra::Point3::from(center));
         let [sx, sy, sz, dz] = view.projection;
-        let depth_count = super::super::super::volume_view(
-            &preview,
+        let depth_count = super::super::super::volume_view_bounds(
+            preview.shape.min,
+            preview.shape.max,
             camera(Some(&state)),
             PixelRenderSize::new(width, height),
         )

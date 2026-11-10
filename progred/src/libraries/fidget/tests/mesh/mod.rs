@@ -155,7 +155,7 @@ fn changing_pane_width_preserves_mesh_and_implicit_camera_scale() {
         };
         let square = PixelRenderSize::from(height);
         let mesh = view(&preview, camera, square).unwrap();
-        let implicit = volume_view(&preview, camera, square);
+        let implicit = volume_view_bounds(preview.shape.min, preview.shape.max, camera, square);
         let screen_to_model = implicit.world_to_model * implicit.size.screen_to_world();
         // Cross the square aspect ratio: neither narrowing nor widening a pane
         // should change pixel spacing or the depth volume, only its X extent.
@@ -168,7 +168,8 @@ fn changing_pane_width_preserves_mesh_and_implicit_camera_scale() {
                     < 0.001
             );
             assert_eq!(resized_mesh.projection[1], mesh.projection[1]);
-            let resized_implicit = volume_view(&preview, camera, pixels);
+            let resized_implicit =
+                volume_view_bounds(preview.shape.min, preview.shape.max, camera, pixels);
             assert_eq!(resized_implicit.size.depth(), implicit.size.depth());
             let resized_screen_to_model =
                 resized_implicit.world_to_model * resized_implicit.size.screen_to_world();
@@ -243,7 +244,8 @@ fn mesh_and_implicit_views_agree_on_framing_and_flat_surface_lighting() {
         ] {
             let pixels = PixelRenderSize::new(width, height);
             let mesh_view = view(&preview, camera, pixels).unwrap();
-            let voxel_view = volume_view(&preview, camera, pixels);
+            let voxel_view =
+                volume_view_bounds(preview.shape.min, preview.shape.max, camera, pixels);
             let to_model = voxel_view.world_to_model * voxel_view.size.screen_to_world();
             for (x, y) in [(0.0, 0.0), (width as f32 * 0.5, height as f32 * 0.5)] {
                 let model = to_model.transform_point(&nalgebra::Point3::new(x, y, 1.0));

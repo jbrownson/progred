@@ -1,5 +1,5 @@
 use super::super::vocabulary::{TOOL_DIAMETER, TOOL_LENGTH};
-use super::super::{Error, invalid, number, result};
+use super::super::{Error, invalid, number, runtime_result};
 use super::*;
 use crate::libraries::f64;
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions};
@@ -257,10 +257,11 @@ fn mill(
     tool: fn(&mut Context, &Expression, &Environment) -> Result<Option<Tool>, Error>,
 ) -> ForeignFunction<'static> {
     ForeignFunction::from_value(move |context, call, environment| {
-        result(
+        runtime_result(
             tool(context, call, environment)
-                .and_then(|tool| tool.map(|tool| tool.value()).ok_or_else(invalid)),
+                .and_then(|tool| tool.map(|tool| tool.value().into()).ok_or_else(invalid)),
         )
+        .map(::grap::RuntimeValue::into_value)
     })
     .parameters(parameters)
     .cacheable()

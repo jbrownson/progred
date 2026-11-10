@@ -3,7 +3,7 @@ use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
 use crate::libraries::{layout, presentation};
 use ::grap::{Context, Environment, Expression, RuntimeValue};
-use cam::paths::{Axis, InvalidPath, MapPoints, Point3, Sink};
+use cam::paths::{Axis, InvalidPath, Point3, Sink};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Stroke};
 use peniko::Color;
 use puri::draw::Canvas;
@@ -24,8 +24,9 @@ struct Lines2D {
 }
 
 impl Lines2D {
-    fn point(&mut self, [x, y, _]: Point3) -> Result<Point, InvalidPath> {
-        let point = Point::new(x, y);
+    /// `point` in the isometric projection the lines are drawn in.
+    fn point(&mut self, point: Point3) -> Result<Point, InvalidPath> {
+        let point = isometric(point);
         if !point.x.is_finite() || !point.y.is_finite() {
             return Err(InvalidPath::NonFinitePoint);
         }
@@ -57,16 +58,6 @@ impl Sink for Lines2D {
         let point = self.point(point)?;
         self.path.line_to(point);
         Ok(())
-    }
-}
-
-fn projected() -> MapPoints<Lines2D, impl FnMut(Point3) -> Result<Point3, InvalidPath>> {
-    MapPoints {
-        sink: Lines2D::default(),
-        map: |point| {
-            let point = isometric(point);
-            Ok([point.x, point.y, 0.0])
-        },
     }
 }
 
@@ -135,7 +126,7 @@ pub(super) fn display<W: Host>(
     } else {
         let size = Size::new(width, height);
         Some(Layout::program(Rc::new(move |context, build| {
-            let mut lines = projected();
+            let mut lines = Lines2D::default();
             let evaluation = run(&mut lines, |scope| {
                 ::grap::Evaluator::new(context.viewing().host(), fuel)
                     .functions(scope)
@@ -143,7 +134,7 @@ pub(super) fn display<W: Host>(
             });
             if evaluation.result.absent_reason().is_some() {
                 presentation::result_layout(&evaluation.result).measure(context, build)
-            } else if let Some(path) = fitted(lines.sink, size) {
+            } else if let Some(path) = fitted(lines, size) {
                 let scale = context.viewing().scale();
                 measured::choices::ChoiceLayout::fixed(widget::paint(
                     widget::Extent {

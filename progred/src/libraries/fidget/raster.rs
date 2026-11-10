@@ -14,8 +14,8 @@ use puri::mesh::DepthImage;
 // docs/history/fidget-jit-vm-2026-10-11.md.
 use fidget_engine::vm::{VmFunction, VmShape};
 
-fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
-    Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap())
+fn software_tiles() -> fidget_engine::render::TileSizes {
+    fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap()
 }
 
 #[derive(Clone, PartialEq)]
@@ -83,7 +83,7 @@ impl SoftwareScene {
         };
         let eval = fidget_engine::raster::voxel::EvalConfig {
             cancel: render_cancel(cancellation),
-            tile_sizes: software_tiles(),
+            tile_sizes: Some(software_tiles()),
             ..Default::default()
         };
         let pixels = self.scene.render(&config, &eval, None)?;
@@ -136,7 +136,7 @@ impl SoftwareScene {
         };
         let eval = fidget_engine::raster::voxel::EvalConfig {
             cancel,
-            tile_sizes: software_tiles(),
+            tile_sizes: Some(software_tiles()),
             progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
             ..Default::default()
         };

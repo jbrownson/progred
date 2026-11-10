@@ -704,14 +704,6 @@ struct VolumeView {
     world_to_model: Matrix4<f32>,
 }
 
-fn volume_view(
-    preview: &VolumePreview,
-    camera: Camera,
-    raster_size: PixelRenderSize,
-) -> VolumeView {
-    volume_view_bounds(preview.shape.min, preview.shape.max, camera, raster_size)
-}
-
 /// The center of the box from `min` to `max`, and the radius a view frames
 /// around it: half its diagonal, with a margin. The implicit and mesh views
 /// share it, so that a refined preview's two images agree.
@@ -784,7 +776,7 @@ impl PreviewRenderer {
         camera: Camera,
         raster_size: PixelRenderSize,
     ) -> Option<Vec<u8>> {
-        let view = volume_view(preview, camera, raster_size);
+        let view = volume_view_bounds(preview.shape.min, preview.shape.max, camera, raster_size);
         if preview.shape.objects.is_empty() {
             return Some(vec![
                 0;

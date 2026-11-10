@@ -99,7 +99,7 @@ fn control(preview: &VolumePreview, view: &VolumeView, parallel: bool) -> Json {
     };
     let eval = EvalConfig {
         threads: parallel.then_some(&ThreadPool::Global),
-        tile_sizes: software_tiles(),
+        tile_sizes: Some(software_tiles()),
         ..Default::default()
     };
     let start = Instant::now();

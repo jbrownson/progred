@@ -210,10 +210,6 @@ fn point(
     ])
 }
 
-fn result(value: Result<Value, Error>) -> Result<Value, Halt> {
-    runtime_result(value.map(Into::into)).map(RuntimeValue::into_value)
-}
-
 fn runtime_result(value: Result<RuntimeValue, Error>) -> Result<RuntimeValue, Halt> {
     match value {
         Ok(value) => Ok(value),

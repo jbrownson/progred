@@ -3,12 +3,12 @@ use kurbo::Shape;
 
 #[test]
 fn fits_extents_and_preserves_disconnected_passes() {
-    let mut lines = projected();
+    let mut lines = Lines2D::default();
     lines.start_at([0.0, 0.0, 0.0], Axis::Z).unwrap();
     lines.line_to([1.0, 1.0, 0.0]).unwrap();
     lines.start_at([1.0, 0.0, 0.0], Axis::Z).unwrap();
     lines.line_to([0.0, 1.0, 0.0]).unwrap();
-    let path = fitted(lines.sink, Size::new(600.0, 300.0)).unwrap();
+    let path = fitted(lines, Size::new(600.0, 300.0)).unwrap();
     assert_eq!(
         path.elements()
             .iter()
