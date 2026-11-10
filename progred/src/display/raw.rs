@@ -253,11 +253,11 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
         .then(|| gid::Blob::read(trimmed))
         .flatten();
     let atom_leads = trimmed.starts_with('"') || blob.is_some();
+    let (readings, strings) = literals(request);
     let (readings, atoms): (Vec<_>, Vec<_>) = match kind {
         // A new label is what's typed taken as a label, so it goes where
         // text does.
         CompletionKind::Field => {
-            let (readings, _) = literals(request);
             let labels = readings
                 .into_iter()
                 .filter_map(|offer| fitting(request, offer))
@@ -265,7 +265,6 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
             (Vec::new(), labels)
         }
         CompletionKind::Value => {
-            let (readings, strings) = literals(request);
             let entries = |offers: Vec<Completion>| {
                 offers
                     .into_iter()

@@ -205,11 +205,7 @@ fn row_spans<O>(rows: &[Measured<O>], gap: f64, scale: f64) -> Vec<(f64, f64)> {
 fn viewport_height(spans: &[(f64, f64)]) -> f64 {
     const VISIBLE_ROWS: usize = 8;
     spans
-        .get(
-            VISIBLE_ROWS
-                .saturating_sub(1)
-                .min(spans.len().saturating_sub(1)),
-        )
+        .get((VISIBLE_ROWS - 1).min(spans.len().saturating_sub(1)))
         .map_or(0.0, |(_, bottom)| *bottom)
 }
 

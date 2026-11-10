@@ -68,16 +68,14 @@ impl Secondary {
         cell: Option<CellId>,
         enclosing: Option<(CellId, usize)>,
     ) -> Self {
-        match cell {
-            Some(cell) => Self::Cell(cell),
-            None => match enclosing {
-                Some((cell, relative_from)) => Self::InCell {
-                    cell,
-                    path,
-                    relative_from,
-                },
-                None => Self::Root(path),
+        match (cell, enclosing) {
+            (Some(cell), _) => Self::Cell(cell),
+            (None, Some((cell, relative_from))) => Self::InCell {
+                cell,
+                path,
+                relative_from,
             },
+            (None, None) => Self::Root(path),
         }
     }
 

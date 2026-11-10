@@ -350,9 +350,8 @@ impl Collector {
         if declared {
             self.current.push(lines);
         } else {
-            let path = stop.path.clone();
+            self.declared(&stop.path);
             self.current.push(lines.enclosed(stop));
-            self.declared(&path);
         }
     }
 
