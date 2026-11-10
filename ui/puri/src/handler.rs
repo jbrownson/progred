@@ -322,6 +322,7 @@ impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
+#[path = "tests/handler/test_support.rs"]
 pub mod test_support;
 
 #[cfg(test)]
