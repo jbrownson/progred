@@ -232,14 +232,20 @@ pub(crate) struct FrameDescription<'a> {
     pub command_modifier: puri::keyboard::CommandModifier,
     computations: &'a crate::computations::Computations,
     focused: bool,
-    drawn_menu: bool,
     model: &'a Model,
     stack: &'a stack::Stack,
-    menu: menu::State,
-    availability: crate::command::Availability,
-    toggles: crate::command::Toggles,
+    /// What the menu bar shows, when the frame draws one.
+    menu: Option<MenuInput>,
     scale: f64,
     viewport: Size,
+}
+
+/// What a drawn menu bar shows: its state, and which of its commands are
+/// enabled and checked.
+struct MenuInput {
+    state: menu::State,
+    availability: crate::command::Availability,
+    toggles: crate::command::Toggles,
 }
 
 pub(crate) struct FrameResources<'a> {
@@ -458,12 +464,13 @@ impl Editor {
                 command_modifier: self.command_modifier,
                 computations: &self.computations,
                 focused: self.focused,
-                drawn_menu: self.drawn_menu,
-                toggles: self.menu_toggles(),
-                availability: self.menu_availability(),
                 model: &self.model,
                 stack: &self.stack,
-                menu: self.menu,
+                menu: self.drawn_menu.then(|| MenuInput {
+                    state: self.menu,
+                    availability: self.menu_availability(),
+                    toggles: self.menu_toggles(),
+                }),
                 scale,
                 viewport,
             },
@@ -953,12 +960,9 @@ fn project_frame(
         palette,
         command_modifier,
         computations,
-        drawn_menu,
-        ref toggles,
         model,
         stack,
-        menu,
-        availability,
+        ref menu,
         scale,
         viewport,
         ..
@@ -981,15 +985,15 @@ fn project_frame(
         cache: text_cache,
     };
     let styles = style::editor(palette, scale);
-    let application_menu = drawn_menu.then(|| {
+    let application_menu = menu.as_ref().map(|input| {
         menu::view(
             &mut tcx,
             menu::Description {
                 palette,
                 command_modifier,
-                state: menu,
-                availability,
-                toggles: toggles.clone(),
+                state: input.state,
+                availability: input.availability,
+                toggles: input.toggles.clone(),
                 projections: stack
                     .switchable()
                     .map(|(library, name)| (library, name.to_owned()))
@@ -1012,7 +1016,7 @@ fn project_frame(
         ),
         None => (None, None, 0.0, history),
     };
-    let content_viewport = content_viewport(drawn_menu, viewport, scale);
+    let content_viewport = content_viewport(menu.is_some(), viewport, scale);
     let body = project_workspace(description, &styles, &mut tcx, content_viewport.size());
     // The stage is editor chrome around one workspace tree. Empty
     // space deselection remains the shell's final editor action.
