@@ -4,6 +4,18 @@ use crate::display::widget::view::Area;
 use puri::handler::test_support::DispatchShorthands;
 use std::{cell::RefCell, rc::Rc};
 
+/// Nothing hovered or selected, for the tests that bind a frame by hand.
+impl<H> Default for Attribution<H> {
+    fn default() -> Self {
+        Self {
+            hovered: None,
+            hovered_secondary: None,
+            selected_secondary: None,
+            hovered_trace: None,
+        }
+    }
+}
+
 #[test]
 fn view_scope_hides_other_views_hover_without_hiding_input() {
     use puri::handler::{Event, EventOutcome};

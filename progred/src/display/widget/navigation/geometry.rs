@@ -31,7 +31,7 @@ const REVEAL_PAD: f64 = 12.0;
 
 impl<W> Geometry<'_, W> {
     /// Missing paths do nothing; new geometry does not retry the request.
-    pub fn reveal_path(self, model: &mut Model, area: &Area, path: &[Step]) {
+    fn reveal_path(self, model: &mut Model, area: &Area, path: &[Step]) {
         if let Some(target) = landmark_at(self.landmarks, Some(area), path) {
             self.reveal_rect(model, area, target.rect);
         }

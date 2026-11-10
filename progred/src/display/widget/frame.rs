@@ -718,16 +718,6 @@ fn view_handler<C: 'static, H: 'static>(
     })
 }
 
-impl<H> Default for Attribution<H> {
-    fn default() -> Self {
-        Self {
-            hovered: None,
-            hovered_secondary: None,
-            selected_secondary: None,
-            hovered_trace: None,
-        }
-    }
-}
 impl<C: 'static, H: 'static> HasHandler<C> for HoverOutput<C, H> {
     type Input = DispatchContext<C, H>;
     fn handler(&mut self) -> &mut Handler<C, Self::Input> {

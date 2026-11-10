@@ -49,12 +49,17 @@ pub fn card_border(scale: f64) -> Stroke {
 
 /// A card of `extent` against `anchor`, within `bounds`; none while the
 /// anchor is clipped out.
-pub fn position(anchor: Placement, extent: Extent, bounds: Rect, gap: f64) -> Option<Placement> {
+pub(crate) fn position(
+    anchor: Placement,
+    extent: Extent,
+    bounds: Rect,
+    gap: f64,
+) -> Option<Placement> {
     (!anchor.clipped_out())
         .then(|| Placement::new(rect(anchor.rect, extent.size(), bounds, gap), bounds))
 }
 
-pub fn rect(anchor: Rect, size: Size, bounds: Rect, gap: f64) -> Rect {
+fn rect(anchor: Rect, size: Size, bounds: Rect, gap: f64) -> Rect {
     let below = anchor.y1 + gap;
     let above = anchor.y0 - gap - size.height;
     let y = if below + size.height <= bounds.y1 || above < bounds.y0 {

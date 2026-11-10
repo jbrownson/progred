@@ -7,7 +7,13 @@ use puri::handler::HasHandler;
 use ui_events::keyboard::{Key, NamedKey};
 
 pub fn list<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
-    runtime_partial(move |input| list_layout(input, child.clone()))
+    runtime_partial(move |input| {
+        Some(list_layout_at(
+            input,
+            input.value?.list_positions()?,
+            child.clone(),
+        ))
+    })
 }
 
 /// An editable list without brackets or commas; items retain the standard
@@ -129,13 +135,6 @@ fn list_gap<W: Host>(
     };
     (before.is_some() || after.is_some())
         .then_some(move |hover| widget::list::insertion_gap(height, hover))
-}
-
-pub fn list_layout<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    child: Option<Partial<W>>,
-) -> Option<Layout<W>> {
-    Some(list_layout_at(input, input.value?.list_positions()?, child))
 }
 
 pub fn list_layout_at<W: Host>(

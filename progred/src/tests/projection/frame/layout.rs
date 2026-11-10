@@ -1172,7 +1172,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         .with_entry(d::runtime_partial(|input| {
             Some(d::padding(
                 (0.0, 0.0, 0.0, 400.0).into(),
-                d::structure::list_layout(input, None)?,
+                d::structure::list_layout_at(input, input.value?.list_positions()?, None),
             ))
         }));
     let between = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>,
