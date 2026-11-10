@@ -31,10 +31,7 @@ fn fixture(value: Value) -> (crate::Editor, gid::Path, Path) {
 
 /// The value at `path`, as the occurrence there reads it.
 fn read<'a>(editor: &'a crate::Editor, path: &[Step]) -> Option<&'a Value> {
-    Read {
-        sources: editor.sources(),
-    }
-    .resolve_path(path)
+    crate::occurrence::read(&editor.sources(), path)
 }
 
 fn line(spelling: &str) -> crate::display::LineEdit {
@@ -136,8 +133,11 @@ fn a_missing_child_under_a_jump_uses_the_ordinary_completion_and_continuation() 
         &mut editor.session(),
         text::value("inserted"),
         None,
-        Some(Rc::new(|view, path, changes| {
-            assert_eq!(view.resolve_path(path), Some(&text::value("inserted")));
+        Some(Rc::new(|sources, path, changes| {
+            assert_eq!(
+                crate::occurrence::read(sources, path),
+                Some(&text::value("inserted"))
+            );
             changes.select(path.to_vec(), crate::selection::payload::edge());
             true
         }))
@@ -259,12 +259,7 @@ fn library_values_reached_by_a_jump_remain_read_only_and_failed_writes_change_no
     let occurrence = jump(&[gid::Step::Follow]);
     let document = editor.model.doc.clone();
     assert!(read(&editor, &occurrence).is_some());
-    assert!(
-        !Read {
-            sources: editor.sources()
-        }
-        .writable(&occurrence)
-    );
+    assert!(!crate::occurrence::writable(&editor.sources(), &occurrence));
     assert!(!Edit::new(editor.session()).replace(&occurrence, text::value("denied")));
     assert!(Rc::ptr_eq(&document, &editor.model.doc));
     assert!(!editor.model.history.can_undo());

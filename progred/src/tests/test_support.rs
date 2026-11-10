@@ -428,14 +428,9 @@ pub(crate) fn test_entry(
                 CompletionKind::Value => {
                     crate::selection::pending_value(&crate::test_document(), vec![])
                 }
-                CompletionKind::Field => pending_edge(
-                    &crate::editing::Read {
-                        sources: world.sources(),
-                    },
-                    &crate::test_document(),
-                    vec![],
-                )
-                .unwrap(),
+                CompletionKind::Field => {
+                    pending_edge(&world.sources(), &crate::test_document(), vec![]).unwrap()
+                }
             });
             (entry.activate)(&mut world);
             result.selected = world

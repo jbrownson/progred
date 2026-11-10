@@ -672,13 +672,7 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     assert_eq!(driver.value(&[Step::Key(a)]), f64::value(4.0));
 
     let mut world = driver.runner.editor;
-    world.model.selection = pending_edge(
-        &crate::editing::Read {
-            sources: world.sources(),
-        },
-        &crate::test_document(),
-        Vec::new(),
-    );
+    world.model.selection = pending_edge(&world.sources(), &crate::test_document(), Vec::new());
     assert!(editing_frame(&mut world).completion.is_some());
     let Value::Record(fields) = Rc::make_mut(&mut world.model.doc).root.as_mut().unwrap() else {
         unreachable!()

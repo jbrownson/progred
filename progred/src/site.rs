@@ -41,7 +41,7 @@ pub struct PendingChanges {
     pub selection_changed: bool,
 }
 
-pub type Continuation = Rc<dyn Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool>;
+pub type Continuation = Rc<dyn Fn(&Sources<'_>, &[Step], &mut PendingChanges) -> bool>;
 
 impl PendingChanges {
     /// What a handler starts from: the annotation and selection there are,
@@ -73,7 +73,7 @@ impl PendingChanges {
 pub fn grap(
     function: impl Into<grap::RuntimeValue>,
     arguments: impl IntoIterator<Item = (gid::CellId, Value)> + Clone,
-) -> impl Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool {
+) -> impl Fn(&Sources<'_>, &[Step], &mut PendingChanges) -> bool {
     let function = function.into();
     handler(move |sources, path, annotation, selection| {
         evaluate_with(path, annotation, selection, |functions| {
@@ -94,9 +94,9 @@ fn handler(
         Option<Value>,
         Option<(Path, Value)>,
     ) -> Option<PendingChanges>,
-) -> impl Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool {
+) -> impl Fn(&Sources<'_>, &[Step], &mut PendingChanges) -> bool {
     move |sources, path, staged| match evaluate(
-        &sources.sources,
+        sources,
         path,
         staged.annotation.clone(),
         staged.selection.clone(),
@@ -143,13 +143,8 @@ pub(crate) fn apply_scoped_event(
         .and_then(|state| state.annotations.at(&path))
         .cloned();
     let mut staged = PendingChanges::unchanged(annotation, current);
-    let handled = grap(function, [(event::vocabulary::EVENT, event)])(
-        &crate::editing::Read {
-            sources: session.sources(),
-        },
-        &path,
-        &mut staged,
-    );
+    let handled =
+        grap(function, [(event::vocabulary::EVENT, event)])(&session.sources(), &path, &mut staged);
     let model = &mut *session.model;
     if handled && let Some(state) = model.workspace.pane_at_mut(view, &path) {
         install_scoped(

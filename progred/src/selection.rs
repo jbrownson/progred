@@ -1,7 +1,6 @@
 //! Selection and collapse. Selection paths name projected occurrences, and
 //! say where the data a mutation writes is.
 
-use crate::editing::Read;
 use crate::location::Location;
 use crate::occurrence::{Path, Step};
 use crate::sources::Sources;
@@ -80,10 +79,15 @@ impl Selection {
         let mut selection = match stage_of(&payload) {
             Stage::Pending | Stage::Label => query_selection(view, path, payload),
             Stage::Edge => {
-                let read = Read { sources: *sources };
                 let mounted = payload::editor_text(&payload)
-                    .filter(|_| read.writable(&path))
-                    .map(|text| mount(&payload, text, read.resolve_path(&path).is_none()));
+                    .filter(|_| crate::occurrence::writable(sources, &path))
+                    .map(|text| {
+                        mount(
+                            &payload,
+                            text,
+                            crate::occurrence::read(sources, &path).is_none(),
+                        )
+                    });
                 let (payload, editor) = match mounted {
                     Some((payload, editor)) => (payload, Some(editor)),
                     None => (payload, None),
@@ -369,30 +373,38 @@ fn query_selection(view: &Rc<View>, path: Path, payload: Value) -> Selection {
 }
 
 /// A new field on a writable record, following a cell if needed.
-pub(crate) fn pending_edge(read: &Read<'_>, view: &Rc<View>, parent: Path) -> Option<Selection> {
-    let value = read.resolve_path(&parent)?;
+pub(crate) fn pending_edge(
+    sources: &Sources<'_>,
+    view: &Rc<View>,
+    parent: Path,
+) -> Option<Selection> {
+    let value = crate::occurrence::read(sources, &parent)?;
     let parent = match value {
         Value::Record(_) => parent,
         Value::Cell(cell) => {
-            read.sources.value(*cell)?.as_record()?;
+            sources.value(*cell)?.as_record()?;
             let mut followed = parent;
             followed.push(Step::Follow);
             followed
         }
         Value::Blob(_) | Value::List(_) => return None,
     };
-    read.writable(&parent).then_some(())?;
+    crate::occurrence::writable(sources, &parent).then_some(())?;
     Some(query_selection(view, parent, payload::label("")))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
-pub(crate) fn pending_follow(read: &Read<'_>, view: &Rc<View>, path: &[Step]) -> Option<Selection> {
-    let cell = read.resolve_path(path)?.as_cell()?;
-    read.sources.resolve(cell).is_none().then_some(())?;
+pub(crate) fn pending_follow(
+    sources: &Sources<'_>,
+    view: &Rc<View>,
+    path: &[Step],
+) -> Option<Selection> {
+    let cell = crate::occurrence::read(sources, path)?.as_cell()?;
+    sources.resolve(cell).is_none().then_some(())?;
     let mut followed = path.to_vec();
     followed.push(Step::Follow);
-    read.writable(&followed).then_some(())?;
+    crate::occurrence::writable(sources, &followed).then_some(())?;
     Some(pending_value(view, followed))
 }
 
@@ -408,7 +420,7 @@ pub(crate) enum Insertion {
 /// an element step), on that `side` of it, minted between it and its
 /// neighbor. The list projection's gesture.
 fn pending_beside(
-    read: &Read<'_>,
+    sources: &Sources<'_>,
     view: &Rc<View>,
     path: &[Step],
     side: Insertion,
@@ -417,11 +429,11 @@ fn pending_beside(
         [parent_path @ .., Step::Element(position)] => Some((parent_path, position)),
         _ => None,
     }?;
-    let elements = read.resolve_path(parent_path)?.as_list()?;
+    let elements = crate::occurrence::read(sources, parent_path)?.as_list()?;
     // Stated, not incidental: a list under an external cell takes no
     // minted siblings (the write would decline anyway, but a pending
     // that opens and cannot commit is an affordance lie).
-    read.writable(parent_path).then_some(())?;
+    crate::occurrence::writable(sources, parent_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let index = positions.iter().position(|p| *p == position)?;
     let fresh = match side {
@@ -441,23 +453,23 @@ fn pending_beside(
 /// take elements, by type, and the owning cell must be writable, as in
 /// [`pending_edge`].
 pub(crate) fn pending_into(
-    read: &Read<'_>,
+    sources: &Sources<'_>,
     view: &Rc<View>,
     path: &[Step],
     side: Insertion,
 ) -> Option<Selection> {
-    let value = read.resolve_path(path)?;
+    let value = crate::occurrence::read(sources, path)?;
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
         Value::Cell(cell) => {
-            let elements = read.sources.value(*cell)?.as_list()?;
+            let elements = sources.value(*cell)?.as_list()?;
             let mut followed = path.to_vec();
             followed.push(Step::Follow);
             (followed, elements)
         }
         Value::Blob(_) | Value::Record(_) => return None,
     };
-    read.writable(&list_path).then_some(())?;
+    crate::occurrence::writable(sources, &list_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let fresh = match side {
         Insertion::After => position::between(positions.last().copied(), None)?,
@@ -476,23 +488,23 @@ pub(crate) fn pending_into(
 /// appended element on a list. A cell's whole value is drawn where its
 /// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(
-    read: &Read<'_>,
+    sources: &Sources<'_>,
     view: &Rc<View>,
     path: &[Step],
     starts: &[Step],
     side: Insertion,
 ) -> Option<Selection> {
     match path {
-        _ if path == starts => pending_insert(read, view, path, side),
-        [reference @ .., Step::Follow] => pending_enter(read, view, reference, starts, side),
-        [.., Step::Jump(_) | Step::Computed] => pending_insert(read, view, path, side),
-        _ => pending_beside(read, view, path, side)
+        _ if path == starts => pending_insert(sources, view, path, side),
+        [reference @ .., Step::Follow] => pending_enter(sources, view, reference, starts, side),
+        [.., Step::Jump(_) | Step::Computed] => pending_insert(sources, view, path, side),
+        _ => pending_beside(sources, view, path, side)
             .or_else(|| {
                 path.split_last()
-                    .and_then(|(_, parent)| pending_edge(read, view, parent.to_vec()))
+                    .and_then(|(_, parent)| pending_edge(sources, view, parent.to_vec()))
             })
-            .or_else(|| pending_edge(read, view, path.to_vec()))
-            .or_else(|| pending_into(read, view, path, Insertion::After)),
+            .or_else(|| pending_edge(sources, view, path.to_vec()))
+            .or_else(|| pending_into(sources, view, path, Insertion::After)),
     }
 }
 
@@ -501,16 +513,16 @@ pub(crate) fn pending_enter(
 /// a bare cell's first value. Before, as with shift, the front instead —
 /// prepend. Atoms other than links have no within and decline.
 pub(crate) fn pending_insert(
-    read: &Read<'_>,
+    sources: &Sources<'_>,
     view: &Rc<View>,
     path: &[Step],
     side: Insertion,
 ) -> Option<Selection> {
     match side {
-        Insertion::Before => pending_into(read, view, path, side),
-        Insertion::After => pending_edge(read, view, path.to_vec())
-            .or_else(|| pending_into(read, view, path, side))
-            .or_else(|| pending_follow(read, view, path)),
+        Insertion::Before => pending_into(sources, view, path, side),
+        Insertion::After => pending_edge(sources, view, path.to_vec())
+            .or_else(|| pending_into(sources, view, path, side))
+            .or_else(|| pending_follow(sources, view, path)),
     }
 }
 

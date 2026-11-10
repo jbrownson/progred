@@ -950,9 +950,9 @@ fn function_completion<'a>(
 ) -> Completion {
     let then = after_function(&Value::from(function).into(), resolve);
     // The call is where its function slot is.
-    let continuation: crate::site::Continuation = std::rc::Rc::new(move |read, slot, staged| {
+    let continuation: crate::site::Continuation = std::rc::Rc::new(move |sources, slot, staged| {
         slot.split_last()
-            .is_some_and(|(_, call)| then(read, call, staged))
+            .is_some_and(|(_, call)| then(sources, call, staged))
     });
     crate::libraries::completion::insert(function, function.into(), Some(continuation))
 }

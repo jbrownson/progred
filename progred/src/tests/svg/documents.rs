@@ -2,7 +2,6 @@
 //! few checks of what they draw.
 
 use super::*;
-use crate::editing::Read;
 use crate::libraries::{f64, name};
 use crate::projection::test_support::make_projected_selection;
 use crate::sample::sample_document;
@@ -235,11 +234,9 @@ fn svg_bench_renders_a_pending_edge() {
     let doc = sample_document();
     let library = crate::stack::load().libraries;
     let edge = pending_edge(
-        &Read {
-            sources: Sources {
-                doc: &doc,
-                libraries: &library,
-            },
+        &Sources {
+            doc: &doc,
+            libraries: &library,
         },
         &crate::test_document(),
         crate::occurrence::of(&[Step::Key(crate::test_values::label("shape"))]),
@@ -258,11 +255,9 @@ fn svg_bench_renders_a_pending_edge() {
     };
     let typing = typed(
         pending_edge(
-            &Read {
-                sources: Sources {
-                    doc: &doc,
-                    libraries: &library,
-                },
+            &Sources {
+                doc: &doc,
+                libraries: &library,
             },
             &crate::test_document(),
             Vec::new(),

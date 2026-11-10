@@ -7,22 +7,6 @@ use crate::occurrence::Path;
 use crate::workspace::View;
 use std::rc::Rc;
 
-/// Read-only access to the data occurrences show.
-#[derive(Clone, Copy)]
-pub struct Read<'data> {
-    pub(crate) sources: Sources<'data>,
-}
-
-impl<'data> Read<'data> {
-    pub fn resolve_path(&self, path: &[Step]) -> Option<&'data Value> {
-        crate::occurrence::read(&self.sources, path)
-    }
-
-    pub(crate) fn writable(&self, path: &[Step]) -> bool {
-        crate::occurrence::writable(&self.sources, path)
-    }
-}
-
 /// Edits of occurrences, acting on the session a dispatch lends.
 pub(crate) struct Edit<'a> {
     session: Session<'a>,

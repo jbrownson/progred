@@ -116,11 +116,9 @@ pub(crate) fn prepare(
     let mut effects = crate::site::PendingChanges::unchanged(annotation, selection);
     if let Some(function) = on_commit {
         function(
-            &crate::editing::Read {
-                sources: Sources {
-                    doc: &document,
-                    libraries: sources.libraries,
-                },
+            &Sources {
+                doc: &document,
+                libraries: sources.libraries,
             },
             &path,
             &mut effects,

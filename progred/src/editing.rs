@@ -13,7 +13,6 @@ mod picking;
 mod session;
 mod site;
 pub(crate) use edit::Edit;
-pub use edit::Read;
 pub(crate) use session::{Session, TextTools};
 pub(crate) use site::{Selected, Site};
 
@@ -139,7 +138,6 @@ pub(crate) fn enter_pending(
     let sources = session.sources();
     match &session.model.selection {
         Some(current) => {
-            let read = Read { sources };
             // Where the selection's area starts, as at the root.
             let starts = crate::occurrence::of(
                 session
@@ -155,9 +153,9 @@ pub(crate) fn enter_pending(
                 selection::Insertion::After
             };
             if within {
-                selection::pending_insert(&read, view, current.path(), side)
+                selection::pending_insert(&sources, view, current.path(), side)
             } else {
-                selection::pending_enter(&read, view, current.path(), &starts, side)
+                selection::pending_enter(&sources, view, current.path(), &starts, side)
             }
             .map(|pending| pending.with_origin(current.path().to_vec()))
         }

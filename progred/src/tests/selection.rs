@@ -51,37 +51,19 @@ fn a_shadowing_document_definition_stays_editable() {
         root: Some(cell.into()),
         cells: Cells::new(),
     });
-    assert!(
-        pending_edge(
-            &Read {
-                sources: src(&doc, &lib)
-            },
-            &crate::test_document(),
-            vec![]
-        )
-        .is_none()
-    );
+    assert!(pending_edge(&src(&doc, &lib), &crate::test_document(), vec![]).is_none());
 
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::record([]));
-    let pending = pending_edge(
-        &Read {
-            sources: src(&doc, &lib),
-        },
-        &crate::test_document(),
-        vec![],
-    )
-    .unwrap();
+    let pending = pending_edge(&src(&doc, &lib), &crate::test_document(), vec![]).unwrap();
     assert_eq!(pending.path(), &[Step::Follow]);
 
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::list([]));
     let pending = pending_into(
-        &Read {
-            sources: src(&doc, &lib),
-        },
+        &src(&doc, &lib),
         &crate::test_document(),
         &[],
         Insertion::After,
@@ -117,9 +99,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         ),
     ]);
     Rc::make_mut(&mut doc).root = doc.root.clone();
-    let sources = Read {
-        sources: src(&doc, &lib),
-    };
+    let sources = src(&doc, &lib);
 
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.
@@ -349,11 +329,9 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
             };
             let mut native = initial();
             assert!(at(&child, payload.clone())(
-                &crate::editing::Read {
-                    sources: crate::sources::Sources {
-                        doc: &document,
-                        libraries: &empty
-                    }
+                &crate::sources::Sources {
+                    doc: &document,
+                    libraries: &empty
                 },
                 &site,
                 &mut native,
@@ -363,11 +341,9 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
                 crate::libraries::editor::selection::tests::grap_at(&child, payload.clone()),
                 [],
             )(
-                &crate::editing::Read {
-                    sources: crate::sources::Sources {
-                        doc: &document,
-                        libraries: &stack.libraries
-                    }
+                &crate::sources::Sources {
+                    doc: &document,
+                    libraries: &stack.libraries
                 },
                 &site,
                 &mut interpreted,

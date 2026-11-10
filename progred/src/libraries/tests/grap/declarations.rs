@@ -375,9 +375,7 @@ fn declaration_names_draw_metadata_after_them_and_take_new_fields() {
             .is_some()
     );
     let pending = pending_edge(
-        &crate::editing::Read {
-            sources: src(&doc, &libraries),
-        },
+        &src(&doc, &libraries),
         &crate::test_document(),
         crate::occurrence::of(&definition),
     )
@@ -398,7 +396,7 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
             cells,
         };
         let sources = src(&doc, &libraries);
-        let read = crate::editing::Read { sources };
+        let read = sources;
         let list_path = crate::occurrence::of(&binder_path[..1]);
         let pending =
             pending_into(&read, &crate::test_document(), &list_path, Insertion::After).unwrap();
@@ -675,13 +673,7 @@ fn quote_prefixes_draw_extra_fields_after_them_and_keep_field_insertion_availabl
             frame.landmarks.landmark(&[Step::Key(extra)]).is_some()
         };
         assert!(has_metadata(&editing_frame(&mut world)));
-        world.model.selection = pending_edge(
-            &crate::editing::Read {
-                sources: world.sources(),
-            },
-            &crate::test_document(),
-            Vec::new(),
-        );
+        world.model.selection = pending_edge(&world.sources(), &crate::test_document(), Vec::new());
         assert!(editing_frame(&mut world).completion.is_some());
     }
 }
@@ -708,13 +700,8 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
         root: Some(sum.clone()),
     };
     let mut world = crate::test_editor(doc.clone());
-    world.model.selection = pending_edge(
-        &crate::editing::Read {
-            sources: src(&doc, &libraries),
-        },
-        &crate::test_document(),
-        Vec::new(),
-    );
+    world.model.selection =
+        pending_edge(&src(&doc, &libraries), &crate::test_document(), Vec::new());
     assert!(editing_frame(&mut world).completion.is_some());
     let doc = Document {
         cells: Cells::new(),
@@ -776,13 +763,8 @@ fn compact_grap_forms_draw_other_fields_after_them_and_keep_field_insertion_avai
             root: Some(root.clone()),
         };
         let mut world = crate::test_editor(doc.clone());
-        world.model.selection = pending_edge(
-            &crate::editing::Read {
-                sources: src(&doc, &libraries),
-            },
-            &crate::test_document(),
-            Vec::new(),
-        );
+        world.model.selection =
+            pending_edge(&src(&doc, &libraries), &crate::test_document(), Vec::new());
         assert!(editing_frame(&mut world).completion.is_some());
 
         let doc = Document {
