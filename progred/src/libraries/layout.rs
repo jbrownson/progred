@@ -253,8 +253,8 @@ fn decode_with<W: Host>(
 ) -> Option<Layout<W>> {
     use crate::libraries::editor::path;
     use vocabulary::*;
-    let number = |field| read_number(value.field(field)?.as_value());
-    let nonnegative = |field| read_nonnegative(value.field(field)?.as_value());
+    let number = |field| coordinate(value, field);
+    let nonnegative = |field| number(field).filter(|number| *number >= 0.0);
     let child = || decode_with(&value.field(CHILD)?, &Place::Field(place, CHILD), site);
     let children_field = || {
         children(
@@ -269,12 +269,9 @@ fn decode_with<W: Host>(
             let children = children_field()?;
             Some(match value.field(BASELINE) {
                 None => crate::display::row(gap, children),
-                Some(baseline) => crate::display::aligned_row(
+                Some(_) => crate::display::aligned_row(
                     RowAlignment::Top {
-                        baseline: baseline_index(
-                            read_number(baseline.as_value())?,
-                            children.len(),
-                        )?,
+                        baseline: baseline_index(number(BASELINE)?, children.len())?,
                     },
                     gap,
                     children,
@@ -376,6 +373,15 @@ fn children<W: Host>(
         .enumerate()
         .map(|(index, child)| decode_with(&child, &Place::Item(place, list, index), site))
         .collect()
+}
+
+/// The finite number under `key` of an evaluated value, read without
+/// building the record an unboxed number stands for.
+fn coordinate(value: &::grap::RuntimeValue, key: CellId) -> Option<f64> {
+    value
+        .field(key)?
+        .as_f64()
+        .filter(|number| number.is_finite())
 }
 
 fn read_number(value: &Value) -> Option<f64> {

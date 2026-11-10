@@ -3,7 +3,7 @@
 //! recorded leaf, which records a visible program once per frame for both
 //! hit-testing and painting.
 
-use super::{read_paint, read_shape, vocabulary};
+use super::{coordinate, read_paint, read_shape, vocabulary};
 use crate::display::Host;
 use crate::display::widget::recorded::{Record, Recorder};
 use gid::{CellId, Step, Value};
@@ -182,13 +182,6 @@ fn evaluated_transform(value: &grap::RuntimeValue) -> Option<Affine> {
                 None => transform * Affine::rotate(coordinate(&operation, ROTATE)?),
             })
         })
-}
-
-fn coordinate(value: &grap::RuntimeValue, key: CellId) -> Option<f64> {
-    value
-        .field(key)?
-        .as_f64()
-        .filter(|number| number.is_finite())
 }
 
 #[cfg(test)]
