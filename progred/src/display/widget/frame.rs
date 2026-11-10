@@ -164,9 +164,8 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
     pub fn occlude(&mut self, placement: Placement) {
         if !placement.clipped_out() {
             self.claim(Probe::occludes(placement));
-            self.handler().on_pointer_down(move |_, event| {
-                placement.contains(Point::new(event.state.position.x, event.state.position.y))
-            });
+            self.handler()
+                .on_pointer_down(move |_, event| placement.contains(super::at(&event.state)));
         }
     }
 
@@ -269,8 +268,8 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
     ) {
         let base = std::mem::take(&mut self.output);
         content(self);
-        let child = std::mem::replace(&mut self.output, base);
-        self.output = std::mem::take(&mut self.output).over(map(child));
+        let child = std::mem::take(&mut self.output);
+        self.output = base.over(map(child));
     }
 
     pub fn in_view(&mut self, area: Area, content: impl FnOnce(&mut Self)) {
