@@ -134,7 +134,8 @@ whose root is a row or column draws each part in its own pane, so the row
 isn't drawn and nothing selects it.
 
 Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one
-before, in reading order within the selection's view: line by line, where a
+before, in reading order within the selection's area, its pane's part of the
+view: line by line, where a
 line is what overlaps vertically, then left to right. A widget marks its own
 occurrence as a tab stop, as it registers an arrow stop. The picker marks
 every empty, writable hole it draws, optional ones such as a value's missing

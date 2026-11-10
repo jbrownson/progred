@@ -35,12 +35,12 @@ undo restores an edge location, not its prior caret or pending query. Preserving
 those states is a separate UX decision, not necessary to make restored selections
 usable. Never resurrect active drags or IME composition from history.
 
-Line-editor conversion runs after every accepted event, including caret
-movement; equal results already skip document writes. Avoiding unnecessary
-conversion is a separate optimization. Projections must not rely on that
-optimization to keep a missing value absent: a direct line editor offers its
-spelling for write-through. Lambda names instead use the completion picker,
-which stages input until commit.
+Line-editor conversion runs after each accepted event that changes the line's
+text, not after caret movement; equal results skip document writes. A direct
+line editor writes its spelling through: where its value is missing, the
+first edit writes it, and Enter with nothing typed writes the line's reading
+of nothing. Lambda names use such a line editor too, not the completion
+picker.
 
 ## Duplicate-definition inspection
 
@@ -1178,8 +1178,8 @@ construction is separate work, not solved by inventing identities in the widget.
 
 ## Keyboard navigation and list reordering
 
-Ordinary arrows use [layout-derived navigation](navigation.md). Placeholder
-Tab navigation, grow-selection commands, directional history, and moving a list
+Ordinary arrows use [layout-derived navigation](navigation.md), and Tab moves
+between the places to fill in. Grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
 
@@ -1395,8 +1395,9 @@ language-neutral. The coupling is in four places:
 1. Display's value type is `grap::RuntimeValue`. It would become the neutral
    value, with Grap's closures and unboxed numbers staying inside Grap.
 2. Every library's native functions take Grap's `(Context, Expression,
-   Environment)` and read their arguments with the same few lines, repeated
-   about 66 times. The new signature replaces both.
+   Environment)`, most through `ForeignFunction::with_arguments` or
+   `ForeignFunction::early`, which read a call's arguments in one place. The
+   new signature replaces these.
 3. Display's `Env` evaluates and applies Grap. It would call a callable,
    whatever its language.
 4. Click-to-source reads Grap's per-call origins. A neutral origin is a cell
@@ -1437,7 +1438,7 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
   written as Verus specification functions, defines what Grap means:
   results, absents and their causes, effects and their order, remaining fuel
   under `Context::burn`'s model, and the call origins click-to-source reads.
-  [`conformance.rs`](../progred/src/libraries/conformance.rs) is a hand-written
+  [`conformance.rs`](../progred/src/tests/libraries/conformance.rs) is a hand-written
   slice of it. The fast evaluator would be proven to match, so optimizations,
   an LLM's included, need review only of the specification and the list of
   trusted assumptions. Fuel stays exact: an optimization that skips
@@ -1517,8 +1518,8 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
     doesn't always give back the new value.
   - A branch whose condition changes runs fresh. A changed closure is a
     replacement, which keeps the proof first-order.
-  - The IoP tree's sequential random stream makes an early change reach every
-    later draw; a seed per branch would keep it local.
+  - The IoP tree draws its random numbers from a key per branch (`random
+    key`), so an early change stays local and doesn't reach every later draw.
   - Exact fuel needs each derivative to report the change in what a full
     evaluation burns.
   - AGENTS.md routes reuse across frames through `incremental`, so derivatives
@@ -1537,8 +1538,8 @@ Still to come:
 
 - Progress and cancellation for long computations; an entry's result is
   computed while the frame is drawn, as a pane's is.
-- Selecting an entry itself, to move or delete it, has only the arrow; there is
-  no gutter or handle.
+- Selecting an entry itself, to delete it, has its arrow and its number in the
+  list's margin; moving one has no gesture.
 - Reaching the empty notebook's "new entry" from the keyboard.
 - An entry referred to without a name reads as its short ID, as any unnamed
   cell does.

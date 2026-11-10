@@ -223,11 +223,11 @@ separate: the occurrence's source supplies permissions, and a reference to a
 read-only definition is still replaceable at its writable occurrence.
 
 The lambda-name partial shows `λ` when the name is missing and unselected.
-Activation selects that missing location for entry. Once selected, it draws the
-name library's hole, which offers what's typed as the name; only committing
-creates the field. Neither pointer activation nor navigation supplies picker
-state. The picker uses defaults for an ordinary selection, including an empty payload.
-The name library supplies text suggestions at name fields. Existing names
+Activation selects that missing location for entry. Once selected, it draws an
+empty name editor, and the first edit writes the name, creating the field.
+Neither pointer activation nor navigation supplies editor
+state. The editor uses defaults for an ordinary selection, including an empty payload.
+The name library offers what's typed as a new field's label, a new cell named that. Existing names
 use unquoted line editors, like parameter names. An explicitly empty name stays
 an empty editor, distinct from the missing name's `λ` marker. Ordinary string
 projections retain their quotes.
@@ -487,8 +487,9 @@ projects the result. Like a declaration, it isn't part of the ordinary
 projection, so anywhere but a pane's entry it's the record it is, its
 expression editable; a tutorial slot, a pane of its own, presents one too.
 A render requests an observed evaluation memo at its current view/path; hosts without a
-computation runtime evaluate directly. The existing Grap observer tracks cell
-definitions (including missing ones) and native observations. Uncacheable foreign
+computation runtime evaluate directly. The memo's host tracks the cell
+definitions the evaluation reads (including missing ones) and the foreign
+implementations it reaches. Uncacheable foreign
 calls, unrecorded effects, and evaluator halts prevent reuse. Expression and fuel
 are explicit inputs. This memo retains only the computed Value, never widgets,
 handlers, or rendered output.
@@ -785,9 +786,9 @@ definition.
 Duplicate definitions are tolerated, not merged, composed, or overloaded. Names
 and structural display use the same selected definition; duplicate indicators
 and inspection UI are [deferred](deferred.md#duplicate-definition-inspection).
-A stored `Follow` names the document or a stable library identity, never an
-ordinal into the loaded stack, so loading or reordering libraries cannot
-silently retarget editor state. With no definition,
+A stored `Follow` names no source: lookup decides which definition it
+reaches, so loading or reordering libraries, or adding a document definition,
+can change it. With no definition,
 evaluation returns missing-cell absent. A cell is transparent: its definition is
 evaluated where it is referenced, using the bindings in scope there, so a cell
 defined for a function body can be referenced in several places within it. A

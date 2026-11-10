@@ -75,7 +75,7 @@ document's root or at a cell's definition, then follows
 a path from there. Following a cell starts a new location at its definition,
 however the cell was reached, so what can be edited depends on where the data is
 stored, not on the route to it. Writes land in that stored value: a location's
-last `Follow` names the definition it is in, or else its own start does. The
+last `Follow` enters the definition it is in, or else its own start names it. The
 root and the document's own definitions are writable, including a cell with no
 definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
@@ -116,8 +116,8 @@ definition can itself still be replaced or removed from a writable document.
 
 ## Selection and editing
 
-[`Selection`](../progred/src/selection.rs) owns a path, which names its
-workspace view, a GID payload, and an optional Rust editor. Its stages
+[`Selection`](../progred/src/selection.rs) owns its workspace view, a path
+within it, a GID payload, and an optional Rust editor. Its stages
 distinguish an existing edge, a pending value, and a pending record label.
 Annotation records live in an [`Annotations`](../progred/src/annotations.rs)
 tree owned by the view, a node per path step, so a projection carries the node
@@ -137,7 +137,8 @@ do cells holding no cells, which can't cascade. A cell whose whole value is
 another cell opens through to it.
 
 An [occurrence path](../progred/src/occurrence.rs) says where its data is, so a
-selection, a site and a landmark are each a path, with nothing beside them.
+selection, a site and a landmark are each a path in a view, with no location
+beside it.
 As projection builds them, paths are [trails](../progred/src/occurrence/trail.rs):
 each occurrence holds its own step and a link to the trail of the occurrence
 it's drawn inside, so descending adds one link, siblings share what's above
@@ -330,8 +331,8 @@ selection, or undo history. Authored drawing colors remain document data, not
 theme colors. These styles change presentation, not projection recognition or
 source/selection policy.
 
-Cmd+A (Ctrl+A on non-Mac hosts) selects the current view's root through its
-landmark's direct-selection callback. With no selection, it targets the document root. Focused text fields
+Cmd+A (Ctrl+A on non-Mac hosts) selects the root of the selection's area through its
+landmark's direct-selection callback. With no selection, it targets the document view's whole area. Focused text fields
 handle the shortcut first and select their own text.
 
 ## Completion
@@ -389,11 +390,13 @@ under `params`; the reader takes that list as is and never interprets a foreign
 function as a lambda. Filtering names and excluding existing record labels
 remain picker responsibilities.
 
-Asked for its offers anywhere with a nonempty query, Grap offers calls to named
-stored lambdas,
-closures, and native functions discovered through those definitions. These are
-ordinary `call_completion` offers, distinguished by a `call` detail; choosing one
+Grap's expression slots offer calls to named stored lambdas, closures, and
+foreign functions, found through the defined cells; the Grap library itself
+answers only what a document can start as. These are
+ordinary `call_completion` offers, distinguished by a `call` detail, which also
+names a library function's library; choosing one
 inserts `{isa: call, function: cell}` and opens its first declared argument when known.
+A call's function slot offers each function as itself, with a `function` detail.
 Call suggestions put document-defined functions before library functions, sorting
 each group alphabetically by display name, ignoring case. Typed-query matching
 still takes precedence; this order breaks equally ranked matches.
@@ -564,8 +567,8 @@ A part's pane is an area of its view and draws its part at the part's own
 path below the view's root, so a pane showing its part reads and writes it,
 and its state, folds and scroll included, is kept by that path. A part can
 name a [location](#data-and-resolution) as data: `{isa: location, steps:
-[...]}` from the document's root, or `{isa: location, in: cell, follow:
-source, steps: [...]}` inside a cell's definition, with the steps and source in
+[...]}` from the document's root, or `{isa: location, in: cell, steps:
+[...]}` inside a cell's definition, with the steps in
 the path convention's encoding. A pane tells what its part is by its kind, so
 any other value, a record that happens to have a `steps` field included, shows
 as it is. While its pane shows the editor library, the pane jumps to that place

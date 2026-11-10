@@ -239,8 +239,9 @@ model/stock; future paths and the visible cutter are meshes composed against its
 depth image. Camera, image size, display scale, color and playback are explicit
 dependencies. Scrolling reuses the image; camera changes request new pixels
 without rebuilding the field, recompiling, or re-running the generator.
-The previous **whole image** is dimmed while awaiting the first
-current image. Each current refinement replaces it at normal color. An unlabelled
+While awaiting the first current image, no image is drawn: one of a previous
+scene or view isn't one of this, so only the path and tool meshes show. Each
+current refinement then replaces the last at normal color. An unlabelled
 progress bar overlays the top edge of the viewport while work remains.
 The bar resets per refinement and disappears on completion. The mesh tool/path
 can move independently of those pixels. Before any image is available,
