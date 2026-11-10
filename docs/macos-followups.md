@@ -7,6 +7,41 @@ empty.
 
 ## Next
 
+From the November 2026 cleanup pass (101 commits after `dbec690c`), built and
+tested on Linux only; its macOS code was checked with
+`--target aarch64-apple-darwin` but not run. In order:
+
+- **The build sandbox.** `tools/sandbox-cargo` now takes its environment from
+  `sandbox_env` in `tools/cargo-common.sh`, shared with `tools/linux-cargo`
+  (`f757f1f5`), and `tools/rust-analyzer-proc-macro-srv` goes through
+  `tools/rust-analyzer-cargo` (`7b4ce691`). Run `make check`, `make test`
+  (1405 passing on Linux) and `make verify` (12 and 255 items); open the
+  project in an editor with rust-analyzer and see that proc macros expand. If
+  the sandbox fails, revert those two commits before anything else.
+- **GPU tests.** `puri_vello::capture::Gpu::new` returns a `Result`
+  (`6af6ad2c`), compile-checked only. Run `make test-gpu`, and `make
+  test-web-gpu`, which is macOS-only.
+- **Images.** Run `make images` and see that no checked-in image changes: the
+  pass meant to change no drawing.
+- **The app's macOS branches.** `Editor::active_window()` replaced the
+  hand-written matches, among them the one that renames a document's window
+  frame (`2e871e82`); `platform::drawn_menu()` replaced a constant
+  (`b3054db9`); the frame builds its menu input only when it draws the menu
+  (`2f92cc0c`); a lost surface is configured again instead of panicking
+  (`d080be71`). In the app: open two windows, save an untitled document under
+  a name and see the title and proxy icon follow, use the native menus and
+  their shortcuts, including a library's and a projection's entries, sleep and
+  wake the machine with a window open, and move a window between displays.
+- **Speed on the Mac.** The pass was measured in instructions per frame on
+  Linux (about 1 to 2% fewer on five canaries, 0.3% more on the IoP picture).
+  The owner found a native demo in early November slower than remembered. Run
+  `make perf ARGS=--editor` at `dbec690c` and at the head and compare wall
+  times; then orbit a CAM preview and drag the forest's slider by hand.
+- **To write: don't sync the native menu on every redraw.** `App::sync_menus`
+  (app.rs) calls `native_menu.sync` with the editor's availability and toggles
+  from five places, one of them each redraw. Keep the last pair synced and
+  skip the call when it's unchanged; measure that it pays before keeping it.
+
 - **The clipboard.** The system clipboard's copy and paste moved from
   `commands.rs` into `clipboard.rs`, behind a clipboard chosen at run time.
   Copy and paste a value and a text range in the app, and paste into another
