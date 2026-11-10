@@ -39,7 +39,8 @@ impl<H> Clone for HoverInput<'_, H> {
 pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
     pub(super) output: &'a mut HoverOutput<C, H>,
-    area: Option<Area>,
+    /// The view being placed, borrowed: most leaves never record it.
+    area: Option<&'a Area>,
     navigation: &'a mut Collector,
 }
 
@@ -143,7 +144,7 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
         self.output
             .hover_geometry
             .cursors
-            .push((self.area.clone(), target, cursor));
+            .push((self.area.cloned(), target, cursor));
     }
 
     pub fn claim(&mut self, probe: Probe<H>) {
@@ -152,12 +153,12 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
             self.input
                 .pointer
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
-                .map(|claim| (self.area.clone(), claim)),
+                .map(|claim| (self.area.cloned(), claim)),
         );
         self.output
             .hover_geometry
             .probes
-            .push((self.area.clone(), probe));
+            .push((self.area.cloned(), probe));
     }
 
     /// Blocks the targets below `placement`, and the presses there.
@@ -252,7 +253,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             &mut self.output,
             &mut self.navigation,
         );
-        context.area = self.area.clone();
+        context.area = self.area.as_ref();
         step(&mut context);
         if let Some(handler) = self.output.handler.take() {
             self.output.after_hover.push(move |_, output| {
