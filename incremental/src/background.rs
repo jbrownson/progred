@@ -326,7 +326,7 @@ impl Tasks {
                 generation: 0,
                 cancel: Cancellation::default(),
                 value: Rc::new(Availability::Pending { previous: None }),
-                pending_report: None,
+                pending_output: None,
                 pending_progress: None,
                 progress: None,
                 failure: None,
@@ -352,9 +352,14 @@ impl Drop for Tasks {
     }
 }
 
+/// What a worker sends: counts of its work, or something it produced.
 enum Report<T> {
-    Value(T),
     WorkProgress(Progress),
+    Output(Output<T>),
+}
+
+enum Output<T> {
+    Value(T),
     Finished(std::thread::Result<Result<T, Error>>),
 }
 
@@ -376,7 +381,9 @@ struct State<I, T> {
     generation: u64,
     cancel: Cancellation,
     value: Rc<Availability<T>>,
-    pending_report: Option<GenerationReport<T>>,
+    // Collected under the current generation; whatever advances the
+    // generation clears it.
+    pending_output: Option<Output<T>>,
     pending_progress: Option<Progress>,
     progress: Option<Progress>,
     failure: Option<Error>,
@@ -460,7 +467,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                     .generation
                     .checked_add(1)
                     .expect("request generation exhausted");
-                state.pending_report = None;
+                state.pending_output = None;
                 state.pending_progress = None;
                 self.slot.clear();
                 return Err(error);
@@ -489,7 +496,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                     .checked_add(1)
                     .expect("request generation exhausted");
                 state.running_input = None;
-                state.pending_report = None;
+                state.pending_output = None;
                 state.pending_progress = None;
             }
             state.input = Some(input.clone());
@@ -528,7 +535,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                     let mut publish = |value| {
                         cancel.check()?;
                         reports
-                            .push((generation, Report::Value(value)))
+                            .push((generation, Report::Output(Output::Value(value))))
                             .map_err(|_| Error::Cancelled)?;
                         wake();
                         Ok(())
@@ -546,7 +553,10 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                     cancel.check()?;
                     Ok(value)
                 }));
-                if reports.push((generation, Report::Finished(result))).is_ok() {
+                if reports
+                    .push((generation, Report::Output(Output::Finished(result))))
+                    .is_ok()
+                {
                     wake();
                 }
             }));
@@ -570,18 +580,15 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             state.progress = (!state.awaiting_start).then_some(progress);
             state.changed = revision;
         }
-        if let Some((generation, report)) = state.pending_report.take()
-            && generation == state.generation
-        {
+        if let Some(output) = state.pending_output.take() {
             state.changed = revision;
             let current = state
                 .running_input
                 .as_ref()
                 .zip(state.input.as_ref())
                 .is_some_and(|(running, wanted)| Rc::ptr_eq(running, wanted));
-            match report {
-                Report::WorkProgress(_) => unreachable!("collected separately from values"),
-                Report::Value(value) => {
+            match output {
+                Output::Value(value) => {
                     state.value = Rc::new(if current {
                         Availability::Refining(Arc::new(value))
                     } else {
@@ -590,7 +597,7 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
                         }
                     })
                 }
-                Report::Finished(completed) => {
+                Output::Finished(completed) => {
                     state.progress = None;
                     state.running_input = None;
                     let completed = completed.unwrap_or_else(|panic| {
@@ -620,11 +627,11 @@ impl<I, T> BackgroundNode for AsyncNode<I, T> {
     fn collect(&self) -> bool {
         let mut state = self.state.borrow_mut();
         let mut changed = false;
-        while let Ok(result) = self.reports.pop() {
-            if !state.closed && result.0 == state.generation {
-                match result {
-                    (_, Report::WorkProgress(progress)) => state.pending_progress = Some(progress),
-                    report => state.pending_report = Some(report),
+        while let Ok((generation, report)) = self.reports.pop() {
+            if !state.closed && generation == state.generation {
+                match report {
+                    Report::WorkProgress(progress) => state.pending_progress = Some(progress),
+                    Report::Output(output) => state.pending_output = Some(output),
                 }
                 changed = true;
             }
