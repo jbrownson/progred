@@ -54,23 +54,35 @@ pub trait Gesture {
 }
 
 /// A drag that `start`s where a primary press over `target` lands inside the
-/// visible placement, the command key held exactly if `pick`.
+/// visible placement, the command key not held.
 pub fn targeted<World: 'static, Hover: Clone + PartialEq + 'static>(
     target: Hover,
-    pick: bool,
     start: impl Fn(&mut World, Point) -> bool + 'static,
 ) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
-        let start = move |world: &mut World, event: &PointerButtonEvent| {
-            let point = super::at(&event.state);
-            placement.contains(point) && start(world, point)
-        };
-        if pick {
-            output.on_press(target, |_, _| false, start);
-        } else {
-            output.on_press(target, start, |_, _| false);
-        }
+        output.on_press(target, starting_within(placement, start), |_, _| false);
     })
+}
+
+/// [`targeted`], for a press with the command key held.
+pub fn pick_targeted<World: 'static, Hover: Clone + PartialEq + 'static>(
+    target: Hover,
+    start: impl Fn(&mut World, Point) -> bool + 'static,
+) -> HoverCallback<World, Hover> {
+    Box::new(move |output, placement| {
+        output.on_press(target, |_, _| false, starting_within(placement, start));
+    })
+}
+
+/// `start`, given where a press lands, for one inside the visible placement.
+fn starting_within<World>(
+    placement: uig::Placement,
+    start: impl Fn(&mut World, Point) -> bool,
+) -> impl Fn(&mut World, &PointerButtonEvent) -> bool {
+    move |world, event| {
+        let point = super::at(&event.state);
+        placement.contains(point) && start(world, point)
+    }
 }
 
 pub fn on_state_drag<W: Host>(
@@ -89,7 +101,7 @@ pub fn on_state_drag<W: Host>(
             let on_press = on_press.clone();
             let scale = context.toolkit.styles().scale;
             let threshold = crate::gesture::DRAG_THRESHOLD;
-            targeted(target.clone(), false, move |world: &mut W, point| {
+            targeted(target.clone(), move |world: &mut W, point| {
                 let mut session = world.session();
                 if on_press(&mut session) {
                     session.start_gesture(

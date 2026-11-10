@@ -36,7 +36,7 @@ pub(crate) fn on_scrub<W: Host>(
                 let scale = context.viewing().scale();
                 let target = target.clone();
                 let drag =
-                    widget::gesture::targeted(target.clone(), true, move |world: &mut W, point| {
+                    widget::gesture::pick_targeted(target.clone(), move |world: &mut W, point| {
                         let edit = site.edit_run();
                         let mut session = world.session();
                         if edit.select(&mut session) {
