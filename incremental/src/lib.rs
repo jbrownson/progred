@@ -3,7 +3,7 @@
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::rc::{Rc, Weak};
 use std::sync::{
@@ -177,6 +177,8 @@ pub struct Read {
     revision: u64,
     cancellation: Cancellation,
     dependencies: Vec<Observed>,
+    // The addresses of `dependencies`' nodes, which the Vec keeps alive.
+    observed: HashSet<*const ()>,
     reusable: bool,
     same_runtime: bool,
 }
@@ -191,6 +193,7 @@ impl Read {
             revision: runtime.0.get(),
             cancellation: cancellation.clone(),
             dependencies: Vec::new(),
+            observed: HashSet::new(),
             reusable: true,
             same_runtime: true,
         }
@@ -198,7 +201,7 @@ impl Read {
 
     fn observe(&mut self, node: Rc<dyn Dependency>, version: u64) {
         self.same_runtime &= Rc::ptr_eq(&self.runtime.0, &node.runtime().0);
-        if !self.dependencies.iter().any(|d| Rc::ptr_eq(&d.node, &node)) {
+        if self.observed.insert(Rc::as_ptr(&node).cast()) {
             self.dependencies.push(Observed { node, version });
         }
     }
