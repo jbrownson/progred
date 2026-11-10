@@ -1055,12 +1055,15 @@ pub(crate) fn present(
                 device.queue.present(texture);
                 Ok(true)
             }
-            CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
+            // A lost surface, as after the GPU resets or a display changes,
+            // is configured again like an outdated one, not a crash.
+            CurrentSurfaceTexture::Outdated
+            | CurrentSurfaceTexture::Suboptimal(_)
+            | CurrentSurfaceTexture::Lost => {
                 context.configure_surface(surface);
                 Ok(false)
             }
             CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => Ok(false),
-            CurrentSurfaceTexture::Lost => Err("the surface was lost".into()),
             CurrentSurfaceTexture::Validation => Err("the surface failed validation".into()),
         })
 }
