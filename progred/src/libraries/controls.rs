@@ -466,6 +466,43 @@ fn initial_position(
     })
 }
 
+/// The cell a control's `key` argument names, or the absence the control
+/// answers with instead.
+fn key(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<Result<CellId, RuntimeValue>, Halt> {
+    Ok(match call.field(KEY) {
+        Some(key) => context
+            .eval(key, environment)?
+            .as_cell()
+            .ok_or_else(invalid_input),
+        None => Err(call.missing_runtime_argument(KEY)),
+    })
+}
+
+/// A tree control's `items` with the links to where they are stored, or the
+/// absence the control answers with instead.
+fn items<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<Result<(Value, Option<tree_range::ItemDecoration<W>>), RuntimeValue>, Halt> {
+    Ok(match call.field(ITEMS) {
+        Some(expression) => {
+            let decorate = stored_item_links(expression.clone());
+            let items = context.eval_to_value(expression, environment)?;
+            if ::grap::absent::is_absent(&items) {
+                Err(items.into())
+            } else {
+                Ok((items, decorate))
+            }
+        }
+        None => Err(call.missing_runtime_argument(ITEMS)),
+    })
+}
+
 fn slider<W: Host>(
     context: &mut Context,
     call: &Expression,
@@ -514,12 +551,9 @@ fn radio<W: Host>(
     width: f64,
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(key) = call.field(KEY) else {
-        return Ok(call.missing_runtime_argument(KEY));
-    };
-    let key = context.eval(key, environment)?;
-    let Some(key) = key.as_cell() else {
-        return Ok(invalid_input());
+    let key = match key(context, call, environment)? {
+        Ok(key) => key,
+        Err(absent) => return Ok(absent),
     };
     let Some(expression) = call.field(OPTIONS) else {
         return Ok(call.missing_runtime_argument(OPTIONS));
@@ -557,21 +591,14 @@ fn tree_range_control<W: Host>(
     width: f64,
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(key) = call.field(KEY) else {
-        return Ok(call.missing_runtime_argument(KEY));
+    let key = match key(context, call, environment)? {
+        Ok(key) => key,
+        Err(absent) => return Ok(absent),
     };
-    let key = context.eval(key, environment)?;
-    let Some(key) = key.as_cell() else {
-        return Ok(invalid_input());
+    let (items, decorate) = match items(context, call, environment)? {
+        Ok(items) => items,
+        Err(absent) => return Ok(absent),
     };
-    let Some(expression) = call.field(ITEMS) else {
-        return Ok(call.missing_runtime_argument(ITEMS));
-    };
-    let decorate = stored_item_links(expression.clone());
-    let items = context.eval_to_value(expression, environment)?;
-    if ::grap::absent::is_absent(&items) {
-        return Ok(items.into());
-    }
     let selection = tree_range::Selection::new(&items, read_state(state, key));
     Ok(context.effect(|| {
         widgets
@@ -589,21 +616,14 @@ fn tree_cursor<W: Host>(
     width: f64,
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(key) = call.field(KEY) else {
-        return Ok(call.missing_runtime_argument(KEY));
+    let key = match key(context, call, environment)? {
+        Ok(key) => key,
+        Err(absent) => return Ok(absent),
     };
-    let key = context.eval(key, environment)?;
-    let Some(key) = key.as_cell() else {
-        return Ok(invalid_input());
+    let (items, decorate) = match items(context, call, environment)? {
+        Ok(items) => items,
+        Err(absent) => return Ok(absent),
     };
-    let Some(expression) = call.field(ITEMS) else {
-        return Ok(call.missing_runtime_argument(ITEMS));
-    };
-    let decorate = stored_item_links(expression.clone());
-    let items = context.eval_to_value(expression, environment)?;
-    if ::grap::absent::is_absent(&items) {
-        return Ok(items.into());
-    }
     let Some(initial) = initial_position(context, call, environment)? else {
         return Ok(invalid_input());
     };
@@ -630,12 +650,9 @@ fn tree_program_cursor<W: Host>(
     frame: &widget::Context<'_, '_, W, W::Hover>,
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(key) = call.field(KEY) else {
-        return Ok(call.missing_runtime_argument(KEY));
-    };
-    let key = context.eval(key, environment)?;
-    let Some(key) = key.as_cell() else {
-        return Ok(invalid_input());
+    let key = match key(context, call, environment)? {
+        Ok(key) => key,
+        Err(absent) => return Ok(absent),
     };
     let Some(program) = call.field(tree::vocabulary::PROGRAM) else {
         return Ok(call.missing_runtime_argument(tree::vocabulary::PROGRAM));
