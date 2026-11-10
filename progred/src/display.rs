@@ -647,10 +647,21 @@ pub fn aligned_row<World: 'static, Hover: 'static>(
     gap: f64,
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
+    composite(children, move |builder, children| {
+        builder.row(alignment, gap, children)
+    })
+}
+
+/// The layout `combine` builds of `children`, each run in order first.
+fn composite<World: 'static, Hover: 'static>(
+    children: impl IntoIterator<Item = Layout<World, Hover>>,
+    combine: impl Fn(&mut dyn builder::Builder<World, Hover>, Vec<builder::Node>) -> builder::Node
+    + 'static,
+) -> Layout<World, Hover> {
     let children: Vec<_> = children.into_iter().collect();
     Layout::new(move |builder| {
         let children = children.iter().map(|child| child.run(builder)).collect();
-        builder.row(alignment, gap, children)
+        combine(builder, children)
     })
 }
 
@@ -659,9 +670,7 @@ pub fn col<World: 'static, Hover: 'static>(
     gap: f64,
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    let children: Vec<_> = children.into_iter().collect();
-    Layout::new(move |builder| {
-        let children = children.iter().map(|child| child.run(builder)).collect();
+    composite(children, move |builder, children| {
         builder.col(baseline, gap, children)
     })
 }
@@ -687,11 +696,7 @@ pub fn hug<World: 'static, Hover: Clone + 'static>(
 pub fn overlay<World: 'static, Hover: 'static>(
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    let children: Vec<_> = children.into_iter().collect();
-    Layout::new(move |builder| {
-        let children = children.iter().map(|child| child.run(builder)).collect();
-        builder.overlay(children)
-    })
+    composite(children, |builder, children| builder.overlay(children))
 }
 
 /// Where floating content goes, from the scale, its anchor's placement, its
@@ -1009,11 +1014,7 @@ fn computed<World: 'static, Hover: 'static>(
 pub fn alternatives<World: 'static, Hover: 'static>(
     options: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    let options: Vec<_> = options.into_iter().collect();
-    Layout::new(move |builder| {
-        let options = options.iter().map(|option| option.run(builder)).collect();
-        builder.alternatives(options)
-    })
+    composite(options, |builder, options| builder.alternatives(options))
 }
 
 #[cfg(test)]
