@@ -296,9 +296,7 @@ impl EditorRunner {
         }
         match event {
             PointerEvent::Scroll(event) => {
-                if let Some(pending) = self.pending_gesture.take() {
-                    self.dispatch_batch(pending, |events| Event::Gesture(events));
-                }
+                self.flush_gesture();
                 if let Some(pending) = queue(
                     &mut self.pending_scroll,
                     PendingScroll {
@@ -308,16 +306,14 @@ impl EditorRunner {
                     },
                     PendingScroll::merge,
                 ) {
-                    self.dispatch_batch(pending, |events| Event::Scroll(events));
+                    self.dispatch_scroll(pending);
                 }
                 true
             }
             PointerEvent::Gesture(event) => {
                 // Different continuous operations retain their arrival order.
                 // Ordinary pointer refreshes can still coalesce alongside them.
-                if let Some(pending) = self.pending_scroll.take() {
-                    self.dispatch_batch(pending, |events| Event::Scroll(events));
-                }
+                self.flush_scroll();
                 if let Some(pending) = queue(
                     &mut self.pending_gesture,
                     PendingGesture {
@@ -327,7 +323,7 @@ impl EditorRunner {
                     },
                     PendingGesture::merge,
                 ) {
-                    self.dispatch_batch(pending, |events| Event::Gesture(events));
+                    self.dispatch_gesture(pending);
                 }
                 true
             }
@@ -417,6 +413,30 @@ impl EditorRunner {
         )
     }
 
+    fn dispatch_scroll(&mut self, pending: PendingScroll) -> bool {
+        self.dispatch_batch(pending, |events| Event::Scroll(events))
+    }
+
+    fn dispatch_gesture(&mut self, pending: PendingGesture) -> bool {
+        self.dispatch_batch(pending, |events| Event::Gesture(events))
+    }
+
+    /// Dispatches the held scroll, if there is one. Whether it reminted the
+    /// frame.
+    fn flush_scroll(&mut self) -> bool {
+        self.pending_scroll
+            .take()
+            .is_some_and(|pending| self.dispatch_scroll(pending))
+    }
+
+    /// Dispatches the held gesture, if there is one. Whether it reminted the
+    /// frame.
+    fn flush_gesture(&mut self) -> bool {
+        self.pending_gesture
+            .take()
+            .is_some_and(|pending| self.dispatch_gesture(pending))
+    }
+
     fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
         self.editor.cursor = Point::new(
             pending.event.current.position.x,
@@ -464,13 +484,8 @@ impl EditorRunner {
     /// still refresh hover even if no handler accepts it.
     pub(crate) fn flush_pending_continuous(&mut self) -> bool {
         let pointer = self.pending_pointer.take();
-        let mut reminted = match self.pending_scroll.take() {
-            Some(pending) => self.dispatch_batch(pending, |events| Event::Scroll(events)),
-            None => false,
-        };
-        if let Some(pending) = self.pending_gesture.take() {
-            reminted |= self.dispatch_batch(pending, |events| Event::Gesture(events));
-        }
+        let mut reminted = self.flush_scroll();
+        reminted |= self.flush_gesture();
         if let Some(pointer) = pointer {
             reminted |= self.dispatch_pointer_batch(&pointer);
             if !reminted {

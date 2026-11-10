@@ -209,6 +209,14 @@ impl EditorRunner {
             && !matches!(event, WindowEvent::RedrawRequested)
     }
 
+    /// Builds the frame afresh at `window`'s size and scale, mirrors it into
+    /// the window, and asks for it to be drawn.
+    pub(crate) fn refresh_window(&mut self, window: &Window) {
+        self.refresh_frame(self.editor.scale(window), viewport(window));
+        self.sync_window(window);
+        window.request_redraw();
+    }
+
     /// Mirror the installed frame into the window state the platform owns:
     /// the pointer cursor, and whether and where text composition happens.
     pub(crate) fn sync_window(&mut self, window: &Window) {
@@ -277,9 +285,7 @@ impl EditorRunner {
         editor.replace_document(doc, path, text_binders);
         if let RenderState::Active { window, .. } = &editor.state {
             let window = window.clone();
-            self.refresh_frame(self.editor.scale(&window), viewport(&window));
-            self.sync_window(&window);
-            window.request_redraw();
+            self.refresh_window(&window);
         }
     }
 }

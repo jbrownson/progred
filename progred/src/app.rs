@@ -191,9 +191,7 @@ impl ApplicationHandler<UserEvent> for App {
                         && let RenderState::Active { window, .. } = &runner.editor.state
                     {
                         let window = window.clone();
-                        runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
-                        runner.sync_window(&window);
-                        window.request_redraw();
+                        runner.refresh_window(&window);
                     }
                 }
             }
@@ -454,9 +452,7 @@ impl App {
             {
                 runner.editor.focused = browser_editor_focused(&window);
             }
-            runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
-            runner.sync_window(&window);
-            window.request_redraw();
+            runner.refresh_window(&window);
         }
     }
 
