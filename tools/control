@@ -18,7 +18,10 @@ pixels in the session's 1280 x 800 window, from its top left; modifiers are
 A screenshot is saved as a PNG, under target/control/screenshots unless FILE
 is given, and its path printed. Other actions print `done`, or why they
 couldn't happen. Each request is a GID document whose root calls the action,
-spelled with the binders the session writes beside its socket.
+spelled with the binders the session writes beside its socket. With --print
+before the action, the request is printed instead of sent, which is how the
+session's tests read what this client writes. $CONTROL_DIR names the
+session's directory when it isn't target/control.
 """
 
 import os
@@ -29,7 +32,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CONTROL = ROOT / "target" / "control"
+CONTROL = Path(os.environ.get("CONTROL_DIR") or ROOT / "target" / "control").resolve()
 SOCKET = CONTROL / "progred.sock"
 SCREENSHOTS = CONTROL / "screenshots"
 
@@ -142,13 +145,20 @@ def screenshot_path(arguments):
 
 
 def main():
-    if len(sys.argv) < 2:
+    words = sys.argv[1:]
+    printing = words[:1] == ["--print"]
+    words = words[1:] if printing else words
+    if not words:
         raise SystemExit(__doc__)
-    action, arguments = sys.argv[1], sys.argv[2:]
+    action, arguments = words[0], words[1:]
     fields = request(action, arguments)
     call = ", ".join(["isa: call", f"function: {action}"] + [f"{label}: {value}" for label, value in fields.items()])
     lines = ",\n    ".join(binders())
-    reply = exchange(f'{{\n  "binders": {{\n    {lines},\n  }},\n  "root": {{{call}}},\n}}\n')
+    document = f'{{\n  "binders": {{\n    {lines},\n  }},\n  "root": {{{call}}},\n}}\n'
+    if printing:
+        print(document, end="")
+        return
+    reply = exchange(document)
     root = reply.split('"root": ', 1)[1].rsplit("}", 1)[0].strip().rstrip(",")
     png = re.fullmatch(r"\{\s*png: 0x([0-9a-f]+),?\s*\}", root)
     if png:

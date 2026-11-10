@@ -185,18 +185,76 @@ fn gpu_screenshots_are_pngs_of_the_window() {
     );
 }
 
-/// `tools/control` writes its requests by hand, with the session's binders.
-#[test]
-fn a_request_spelled_as_the_client_spells_it_is_done() {
-    let session = session(Value::record([]));
-    let binders = computer::binders();
-    let lines: String = binders
-        .iter()
-        .map(|(name, cell)| format!("    \"{name}\": {cell},\n"))
-        .collect();
-    let request = format!(
-        "{{\n  \"binders\": {{\n{lines}  }},\n  \"root\": {{isa: call, function: key, text: \"Down\"}},\n}}\n"
+/// What `tools/control` would send for `arguments`, spelled with the
+/// vocabulary a session writes: the client itself, run with `--print`.
+fn client_request(arguments: &[&str]) -> Vec<u8> {
+    let directory = std::env::temp_dir().join(format!("progred-control-{}", gid::new_cell_id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("vocabulary.gid"),
+        computer::vocabulary_document(&computer::binders()),
+    )
+    .unwrap();
+    let output = std::process::Command::new("python3")
+        .arg("-B")
+        .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/../tools/control"))
+        .arg("--print")
+        .args(arguments)
+        .env("CONTROL_DIR", &directory)
+        .output()
+        .expect("python3 runs the control client");
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
-    let reply = respond(&Session::libraries(&session), &binders, request.as_bytes());
-    assert_eq!(gid_text::parse(&reply).unwrap().0.root, Some(DONE.into()));
+    output.stdout
+}
+
+/// The client writes its requests by hand, in Python, so only running it
+/// shows that a session understands them.
+#[test]
+fn the_session_does_what_the_client_asks() {
+    let field = gid::new_cell_id();
+    let session = session(Value::record([(field, text::value("hello"))]));
+    let binders = computer::binders();
+    for arguments in [
+        &["mouse_move", "20", "20"][..],
+        &["left_click", "20", "20"],
+        &["left_click", "20", "20", "shift"],
+        &["double_click", "20", "20"],
+        &["triple_click", "20", "20"],
+        &["left_click_drag", "20", "20", "60", "40"],
+        &["scroll", "20", "20", "down", "3"],
+        &["key", "Down"],
+        &["key", "shift+Tab"],
+        &["type", "a \"quoted\" word"],
+    ] {
+        let reply = respond(
+            &Session::libraries(&session),
+            &binders,
+            &client_request(arguments),
+        );
+        assert_eq!(
+            gid_text::parse(&reply).unwrap().0.root,
+            Some(DONE.into()),
+            "{arguments:?}"
+        );
+    }
+    // A screenshot answers with a picture, or says the machine can't draw one.
+    let reply = respond(
+        &Session::libraries(&session),
+        &binders,
+        &client_request(&["screenshot"]),
+    );
+    let root = gid_text::parse(&reply).unwrap().0.root.unwrap();
+    let fields = root.as_record().unwrap();
+    assert!(
+        fields
+            .get(&crate::libraries::png::vocabulary::PNG)
+            .is_some()
+            || fields.get(&::grap::absent::REASON) == Some(&SCREENSHOT_FAILED.into()),
+        "{reply}"
+    );
 }
