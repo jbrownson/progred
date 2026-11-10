@@ -51,8 +51,7 @@ impl Edit<'_> {
         self.selection().is_some_and(|current| {
             current.view() == view
                 && current.path().starts_with(path)
-                && current.stage(&sources) == selection::Stage::Edge
-                && current.value_edit().is_none()
+                && current.mode(&sources) == selection::Mode::Resting
         })
     }
 

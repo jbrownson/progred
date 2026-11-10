@@ -53,6 +53,19 @@ pub enum Stage {
     Label,
 }
 
+/// What the selection is doing, from its stage and its line together.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Authoring a new field's label.
+    Label,
+    /// Picking a value for a place that has none.
+    Pending,
+    /// Typing in its value's line.
+    Typing,
+    /// Resting on a value.
+    Resting,
+}
+
 impl Selection {
     /// Reify a payload at a host-owned path: the mutation boundary Grap
     /// capabilities use after decoding the path.
@@ -161,6 +174,17 @@ impl Selection {
                 Stage::Pending
             }
             stage => stage,
+        }
+    }
+
+    pub(crate) fn mode(&self, sources: &Sources) -> Mode {
+        match self.stage(sources) {
+            Stage::Label => Mode::Label,
+            Stage::Pending => Mode::Pending,
+            Stage::Edge => match self.value_edit() {
+                Some(_) => Mode::Typing,
+                None => Mode::Resting,
+            },
         }
     }
 

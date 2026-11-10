@@ -187,25 +187,23 @@ impl Editor {
     ) -> bool {
         event.state.is_down()
             && match &event.key {
-                Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(current) if current.stage(&self.sources()) != selection::Stage::Edge => {
-                        self.model.selection = Some(current);
-                        false
-                    }
+                Key::Named(NamedKey::Enter) => match self
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(|current| current.mode(&self.sources()))
+                {
                     // Typing has already written the value, so Enter only ends
                     // the typing, and the text re-spells from what was written.
-                    Some(mut current)
-                        if current.value_edit().is_some()
-                            && !self.command_modifier.pressed(&event.modifiers) =>
+                    Some(selection::Mode::Typing)
+                        if !self.command_modifier.pressed(&event.modifiers) =>
                     {
-                        current.clear_editor();
-                        self.model.selection = Some(current);
+                        if let Some(current) = &mut self.model.selection {
+                            current.clear_editor();
+                        }
                         true
                     }
-                    Some(current) => {
-                        self.model.selection = Some(current);
-                        false
-                    }
+                    Some(_) => false,
                     None => {
                         let within = self.command_modifier.pressed(&event.modifiers);
                         let started = crate::editing::enter_pending(

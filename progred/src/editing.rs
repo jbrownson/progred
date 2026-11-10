@@ -197,8 +197,11 @@ pub(crate) fn author_in<W>(
         .as_ref()
         .filter(|current| {
             current.path().starts_with(reached)
-                && current.stage(&sources) == selection::Stage::Edge
-                && (current.value_edit().is_none() || within)
+                && match current.mode(&sources) {
+                    selection::Mode::Resting => true,
+                    selection::Mode::Typing => within,
+                    selection::Mode::Label | selection::Mode::Pending => false,
+                }
         })
         .and_then(|_| enter_pending(session, within, event.modifiers.shift()))
         .filter(|pending| {
