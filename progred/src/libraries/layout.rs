@@ -758,7 +758,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ForeignFunctions::default().register(
             vocabulary::LAYOUT_PROGRAM,
-            ForeignFunction::new(scope::program)
+            ForeignFunction::early(scope::program)
                 .parameters([::grap::vocabulary::EXPRESSION])
                 .cacheable(),
         ),

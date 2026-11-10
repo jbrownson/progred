@@ -34,17 +34,16 @@ pub(super) fn program(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    match call.field(::grap::vocabulary::EXPRESSION) {
-        Some(expression) => {
-            let closure = context.closure([], expression, environment);
-            Ok(::grap::isa::runtime(
-                kind::LAYOUT_PROGRAM,
-                [(PROGRAM, closure)],
-            ))
-        }
-        None => Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
-    }
+) -> Result<::grap::RuntimeValue, ::grap::Early> {
+    let closure = context.closure(
+        [],
+        call.argument(::grap::vocabulary::EXPRESSION)?,
+        environment,
+    );
+    Ok(::grap::isa::runtime(
+        kind::LAYOUT_PROGRAM,
+        [(PROGRAM, closure)],
+    ))
 }
 
 /// Why an operation emits no layout.
