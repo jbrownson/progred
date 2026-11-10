@@ -5,9 +5,8 @@ use gid::{CellId, Step, Value};
 use peniko::Brush;
 pub use puri::delim::Delim;
 use puri::draw::Leaf;
-use std::cmp::Ordering;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod builder;
 pub mod fold;
@@ -878,7 +877,7 @@ fn record_forms<W: 'static, H: Clone + 'static>(
 /// the child is projected and measured once per frame. A selected
 /// concrete form must contain at most one use.
 pub fn shared<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> Layout<World, Hover> {
-    let id = NEXT_SHARED_LAYOUT.fetch_add(1, AtomicOrdering::Relaxed);
+    let id = NEXT_SHARED_LAYOUT.fetch_add(1, Ordering::Relaxed);
     Layout::new(move |builder| builder.shared(id, &child))
 }
 

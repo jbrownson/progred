@@ -199,7 +199,7 @@ impl<W: Host> Default for Fields<W> {
 }
 
 impl<W: Host> Fields<W> {
-    /// `keys` first, in this order; the others after them by [`field_order`].
+    /// `keys` first, in this order; the others after them, named ones by name and then the rest by id.
     pub(crate) fn leading(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
         self.leading = keys.into_iter().collect();
         self
@@ -344,16 +344,19 @@ impl<W: Host> Fields<W> {
             }
         }
         keys.retain(|key| !drawn(*key));
-        let lead = |key: &CellId| {
-            self.leading
+        // The leading keys in their order, then named fields by name, then
+        // the others by id; each key's name is read once.
+        keys.sort_by_cached_key(|key| {
+            let lead = self
+                .leading
                 .iter()
                 .position(|leader| leader == key)
-                .unwrap_or(self.leading.len())
-        };
-        keys.sort_by(|left, right| {
-            lead(left)
-                .cmp(&lead(right))
-                .then_with(|| field_order(input.env, left, right))
+                .unwrap_or(self.leading.len());
+            let name = input
+                .env
+                .name(*key)
+                .map(|name| name.spelling().into_owned());
+            (lead, name.is_none(), name, *key)
         });
         keys
     }
@@ -399,16 +402,6 @@ pub(crate) fn kind_form<W: Host, const N: usize>(
     draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
 ) -> Option<Layout<W>> {
     Fields::default().kind_form(input, kind, queried, draw)
-}
-
-/// Named fields first, by name, then the others by id.
-pub(crate) fn field_order(env: &dyn Env, left: &CellId, right: &CellId) -> Ordering {
-    match (env.name(*left), env.name(*right)) {
-        (Some(a), Some(b)) => a.spelling().cmp(&b.spelling()).then(left.cmp(right)),
-        (Some(_), None) => Ordering::Less,
-        (None, Some(_)) => Ordering::Greater,
-        (None, None) => left.cmp(right),
-    }
 }
 
 /// A field's name, or its short id where it has none.
