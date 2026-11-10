@@ -2,6 +2,7 @@ use super::super::cutter::{self, Tool};
 use super::playback::Draw;
 use super::*;
 use cam::field::{capsule, coordinate};
+use cam::paths::*;
 use fidget_engine::{context::Tree, shape::EzShape, vm::VmShape};
 
 // The all-implicit path field: the benchmark reference, and the subject of a

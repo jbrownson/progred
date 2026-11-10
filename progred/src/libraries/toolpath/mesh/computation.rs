@@ -3,7 +3,6 @@ use super::*;
 use crate::computations::Computations;
 use incremental::background::{AsyncMemo, Availability, Tasks};
 use incremental::{Input, Memo, Runtime};
-use std::sync::Arc;
 
 /// How a preview draws its recorded paths: their radius and color, and the
 /// playback, if any, which hides what's cut, places the cutter, and cuts the

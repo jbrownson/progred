@@ -8,7 +8,6 @@ use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{color, f64, fidget, layout, presentation};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use cam::field::read_radius;
-use cam::paths::*;
 use gid::Value;
 use std::rc::Rc;
 use std::sync::Arc;

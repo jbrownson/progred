@@ -1,6 +1,7 @@
 use super::super::super::computation::recording;
 use super::*;
 use crate::libraries::{f32, grap::control};
+use cam::paths::*;
 use gid::{Document, new_cell_id};
 use incremental::background::{Executor, Job};
 use std::{collections::VecDeque, sync::Mutex};
