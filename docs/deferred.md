@@ -896,6 +896,11 @@ for incremental lambda calculus, see
 The [2026-09-04 tree profile](history/tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
 
+`incremental::Roots` finds a root by scanning its entries. A hash map keyed by
+the root's key and type was tried in November 2026 and cost about 0.6% more
+instructions per frame on the IoP source canary, since hashing a trail walks
+all its steps where comparing two usually stops at the last; the scan stays.
+
 ### Runtime results across evaluator boundaries
 
 Public evaluation and application return owned `RuntimeValue`s, and the
@@ -1267,6 +1272,14 @@ settles:
 
 Both need the editor to tell the page about gestures, not just the selection.
 
+## Inputs nothing bounds
+
+Known, and not a priority (November 2026): a Fidget preview's size has no
+cap, so a document can ask for an image larger than memory; reading `.gid`
+text recurses once per nesting level with no limit; and a failed save or open
+is reported on stderr, not in the window. Progred doesn't promise to survive
+documents built to break it.
+
 ## Platform work
 
 ### Opening documents from the macOS shell
@@ -1429,6 +1442,24 @@ benchmark's instructions, malloc not counted, 24% of the layout FFI
 benchmark's, 19% of the forest slider's and 13% of CAM scrolling's, where
 Fidget took 25%.
 
+### Fidget's own previews on the editor thread
+
+Toolpath previews mesh and render in background tasks, with cancellation,
+progress, and the previous surface greyed while its replacement is computed.
+Fidget's own `preview 3d` and `preview mesh` don't: `preview mesh` meshes
+while its projection is built, with no cache, and `preview 3d` renders on the
+GPU natively but falls back to a blocking CPU render, the only path in a
+browser. Moving both onto the toolpath previews' pipeline would leave one
+pipeline and remove the synchronous renderer; they'd show as awaiting for a
+frame or two where they now appear at once. Undecided (November 2026).
+
+A refined toolpath preview's mesh and image tasks each build the cut stock's
+expression and compile it to their own form. Measured in November 2026 over
+the CAM examples: 1.4 to 6.6 ms to build the expression, 18 to 102 ms to
+compile it, 0.2 to 1.8 s to mesh. Sharing the expression needs a third
+background memo both await; it would have its place if the previews above
+join this pipeline, and isn't worth adding for the few milliseconds alone.
+
 ### A reference Grap and derivative mode
 
 From a November 2026 discussion, after Verus arrived to prove `gid::position`
@@ -1524,6 +1555,27 @@ From a November 2026 discussion, after Verus arrived to prove `gid::position`
     evaluation burns.
   - AGENTS.md routes reuse across frames through `incremental`, so derivatives
     either nest inside memos or that rule changes.
+
+### What comes after the proofs
+
+From the same month's discussion, none of it started:
+
+- **One evaluator.** The production evaluator in `grap/` is only tested
+  against the proven ones. Replacing it with the proven fast evaluator, grown
+  to cover foreign functions, would leave the definition and one
+  implementation of it.
+- **A declared function form.** Foreign functions receive a call's syntax and
+  its environment, as macros do, by design. One that only wants its arguments'
+  values could be declared so, and the fast evaluator could call it without
+  building that syntax. It changes the implementation, not the definition.
+- **Editor laws as property tests.** Selection and navigation have laws worth
+  stating (a selection deleted from under itself becomes a pending one; what
+  an arrow leaves, the opposite arrow returns to), which the headless driver
+  could check over generated documents and key sequences.
+- **A host with proofs built in.** Lean, or Bend, as the language Progred is
+  written in, with the definition and its proofs in the same language as the
+  editor. A question for after the Rust and Verus version shows what the
+  proofs buy.
 
 ### Notebook and REPL
 
