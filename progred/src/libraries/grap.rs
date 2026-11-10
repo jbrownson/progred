@@ -947,8 +947,7 @@ fn function_offers(
                         definition.library,
                     ))
                 } else {
-                    operation_on(request, cell)
-                        .unwrap_or_else(|| call_completion(cell.into(), cell, request.resolve))
+                    call_completion(cell.into(), cell, request.resolve)
                         .with_detail(function_detail(request, "call", definition.library))
                 };
                 (definition.library.is_some(), name, offer)
@@ -957,27 +956,6 @@ fn function_offers(
         .collect();
     offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), name.clone()));
     offers.into_iter().map(|(_, _, offer)| offer).collect()
-}
-
-/// A call of the binary operation `function` on the value the slot holds:
-/// chosen over a value, as typing `*` over `x` offers it, an operation takes
-/// the value as its left operand and its right is picked next. None for an
-/// empty slot, and for any other function.
-fn operation_on(
-    request: &crate::display::CompletionRequest<'_>,
-    function: CellId,
-) -> Option<Completion> {
-    use numbers::vocabulary::{LEFT, RIGHT};
-    let left = request.value()?;
-    (function_parameters(&Value::from(function).into(), request.resolve)? == [LEFT, RIGHT]).then(
-        || {
-            crate::libraries::completion::insert(
-                function,
-                ::grap::call(function.into(), [(LEFT, left.clone())]),
-                Some(crate::selection::pending_at(&[Step::Key(RIGHT)])),
-            )
-        },
-    )
 }
 
 /// `function` picked for the call whose function slot this is: the call's
