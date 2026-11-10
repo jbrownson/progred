@@ -59,10 +59,11 @@ with finite 3D tool-tip coordinates. The normalized axis points from the tip
 toward the spindle and stays fixed until the next start (3+2 positioning, not
 simultaneous orientation interpolation). A new start begins a separate path: it is neither a cutting link
 nor a rapid move from the previous endpoint. A line requires a preceding start.
-Calling generators in sequence composes their output. `MapPoints` adapts another
-sink, so translation, reflection, surface mapping, and further adapters compose
-without recording intermediate paths. It maps positions only, preserving axes;
-an arbitrary surface mapping does not define a cutter orientation.
+Calling generators in sequence composes their output. A sink can adapt another,
+so translation, reflection, surface mapping, and further adapters compose
+without recording intermediate paths. Nothing shipped needs one yet; the tests'
+`MapPoints` is one, mapping positions only and preserving axes, since an
+arbitrary surface mapping does not define a cutter orientation.
 
 `Recording` is an optional initial representation: native start/line commands
 and nested tool groups. Playback uses it for total distance and seeking; tests also

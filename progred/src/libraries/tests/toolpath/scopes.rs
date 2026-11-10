@@ -142,13 +142,14 @@ fn point_mapping_preserves_tool_scopes() {
     let tool = cutter::Tool::square(0.25, 0.4).unwrap();
     let (result, path) = evaluate(&tool_scope(&tool, line(0.0)), 1000);
     assert_eq!(result.halt, None);
-    let mut mapped = MapPoints {
-        sink: Recording::default(),
+    let mut mapped = Recording::default();
+    path.replay(&mut MapPoints {
+        sink: &mut mapped,
         map: |p: Point3| Ok(p.map(|v| v + 3.0)),
-    };
-    path.replay(&mut mapped).unwrap();
+    })
+    .unwrap();
     assert_eq!(
-        mapped.sink.tool_segments().next(),
+        mapped.tool_segments().next(),
         Some(([3.0; 3], [3.0, 4.0, 3.0], Axis::Z, Some(&tool)))
     );
 }

@@ -382,6 +382,34 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
     );
 }
 
+/// Passes a path on to `sink` with each of its points mapped.
+struct MapPoints<'a, S: ?Sized, F> {
+    sink: &'a mut S,
+    map: F,
+}
+
+impl<S: Sink + ?Sized, F: FnMut(Point3) -> Result<Point3, S::Error>> Sink for MapPoints<'_, S, F> {
+    type Error = S::Error;
+
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
+        self.sink.start_at((self.map)(point)?, axis)
+    }
+
+    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
+        self.sink.line_to((self.map)(point)?)
+    }
+
+    fn end_path(&mut self) {
+        self.sink.end_path();
+    }
+    fn enter_tool(&mut self, tool: &Tool) {
+        self.sink.enter_tool(tool);
+    }
+    fn leave_tool(&mut self) {
+        self.sink.leave_tool();
+    }
+}
+
 #[test]
 fn point_adapters_compose_and_keep_path_breaks() {
     let mut recording = Recording::default();

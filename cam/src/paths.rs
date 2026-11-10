@@ -83,55 +83,6 @@ pub fn with_tool<S: Sink + ?Sized, T>(
     result
 }
 
-pub struct MapPoints<S, F> {
-    pub sink: S,
-    pub map: F,
-}
-
-impl<S: Sink, F: FnMut(Point3) -> Result<Point3, S::Error>> Sink for MapPoints<S, F> {
-    type Error = S::Error;
-
-    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
-        self.sink.start_at((self.map)(point)?, axis)
-    }
-
-    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
-        self.sink.line_to((self.map)(point)?)
-    }
-
-    fn end_path(&mut self) {
-        self.sink.end_path();
-    }
-    fn enter_tool(&mut self, tool: &Tool) {
-        self.sink.enter_tool(tool);
-    }
-    fn leave_tool(&mut self) {
-        self.sink.leave_tool();
-    }
-}
-
-impl<S: Sink + ?Sized> Sink for &mut S {
-    type Error = S::Error;
-
-    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
-        (**self).start_at(point, axis)
-    }
-
-    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
-        (**self).line_to(point)
-    }
-
-    fn end_path(&mut self) {
-        (**self).end_path();
-    }
-    fn enter_tool(&mut self, tool: &Tool) {
-        (**self).enter_tool(tool);
-    }
-    fn leave_tool(&mut self) {
-        (**self).leave_tool();
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     StartAt(Point3, Axis),
