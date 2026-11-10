@@ -602,15 +602,15 @@ impl EditorRunner {
     }
 }
 
-/// What `pane` draws with: the libraries' projections less those it leaves
-/// off, interpreting what's at its root as a pane's entry with
-/// `pane_entry`.
+/// What a pane draws with: the libraries' projections less those of the
+/// `hidden` ones it leaves off, interpreting what's at its root as a pane's
+/// entry with `pane_entry`.
 fn view_projection<'a>(
     stack: &'a stack::Stack,
-    pane: &workspace::Pane,
+    hidden: &[gid::CellId],
     pane_entry: bool,
 ) -> Cow<'a, projection::Projection> {
-    match &*hidden(stack, pane) {
+    match hidden {
         [] => Cow::Borrowed(if pane_entry {
             &stack.pane_projection
         } else {
@@ -627,20 +627,13 @@ fn view_projection<'a>(
     }
 }
 
-/// The libraries switched off in `pane`.
-pub(crate) fn hidden<'a>(
-    stack: &stack::Stack,
-    pane: &'a workspace::Pane,
-) -> Cow<'a, [gid::CellId]> {
-    stack.hidden(&pane.shown)
-}
-
-/// What `pane` offers: none of what its libraries switched off offer.
+/// What a pane offers: none of what the `hidden` libraries, those switched
+/// off in it, offer.
 pub(crate) fn completions<'a>(
     stack: &'a stack::Stack,
-    pane: &workspace::Pane,
+    hidden: &[gid::CellId],
 ) -> Cow<'a, crate::display::CompletionProvider> {
-    match &*hidden(stack, pane) {
+    match hidden {
         [] => Cow::Borrowed(&stack.completions),
         hidden => Cow::Owned(stack.completions_without(hidden)),
     }
@@ -658,14 +651,16 @@ struct ViewContent<'a> {
     viewport: bool,
 }
 
-/// What `pane` shows in an area of `size` at `scale`: one showing an
-/// entry, every pane but the document's whole one, fills itself with a
-/// sized value there, while it shows the presentation library.
+/// What `pane` shows in an area of `size` at `scale`, `hidden` the
+/// libraries switched off in it: one showing an entry, every pane but the
+/// document's whole one, fills itself with a sized value there, while it
+/// shows the presentation library.
 fn view_content<'a>(
     stack: &'a stack::Stack,
     sources: sources::Sources<'a>,
     workspace: &workspace::Workspace,
     pane: &'a workspace::Pane,
+    hidden: &[gid::CellId],
     size: Size,
     scale: f64,
 ) -> ViewContent<'a> {
@@ -682,7 +677,7 @@ fn view_content<'a>(
             root_path: crate::occurrence::below(&root_path, &viewport.path),
             root: Some(Cow::Borrowed(viewport.value)),
             projection: Cow::Owned(projection::viewport::projection(
-                &view_projection(stack, pane, false),
+                &view_projection(stack, hidden, false),
                 size / scale,
             )),
             viewport: true,
@@ -704,7 +699,7 @@ fn view_content<'a>(
             ViewContent {
                 root: not_found.map(Cow::Owned).or(root.map(Cow::Borrowed)),
                 root_path: drawn,
-                projection: view_projection(stack, pane, pane_entry),
+                projection: view_projection(stack, hidden, pane_entry),
                 viewport: false,
             }
         }
@@ -722,10 +717,10 @@ fn not_found(
     (!crate::location::reachable(&sources, &place)).then(|| crate::location::not_found(&place))
 }
 
-/// Whether `pane` labels cells with their names: only with the name library
-/// on.
-pub(crate) fn names(stack: &stack::Stack, pane: &workspace::Pane) -> bool {
-    !hidden(stack, pane).contains(&crate::libraries::name::ID)
+/// Whether a pane with the `hidden` libraries switched off labels cells with
+/// their names: only with the name library on.
+pub(crate) fn names(hidden: &[gid::CellId]) -> bool {
+    !hidden.contains(&crate::libraries::name::ID)
 }
 
 /// The margin around a view's content: none for a viewport filling its pane.
@@ -764,9 +759,10 @@ fn project_workspace_view(
         doc: &model.doc,
         libraries: &stack.libraries,
     };
-    let shown = view_content(stack, sources, &model.workspace, pane, size, scale);
+    let hidden = stack.hidden(&pane.shown);
+    let shown = view_content(stack, sources, &model.workspace, pane, &hidden, size, scale);
     let margin = content_margin(shown.viewport, scale);
-    let completions = completions(stack, pane);
+    let completions = completions(stack, &hidden);
     let projected = projection::project(
         projection::ProjectDescription {
             computations,
@@ -781,7 +777,7 @@ fn project_workspace_view(
             }),
             source_selection: model.selection.as_ref(),
             annotations: &pane.annotations,
-            names: names(stack, pane),
+            names: names(&hidden),
             styles,
             width: (size.width - 2.0 * margin).max(0.0),
             projection: &shown.projection,

@@ -43,15 +43,17 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
         doc: &world.model.doc,
         libraries: &world.stack.libraries,
     };
+    let hidden = world.stack.hidden(&view.shown);
     let shown = view_content(
         &world.stack,
         sources,
         &world.model.workspace,
         view,
+        &hidden,
         Size::new(500.0, 500.0),
         1.0,
     );
-    let completions = crate::frame::completions(&world.stack, view);
+    let completions = crate::frame::completions(&world.stack, &hidden);
     let selection = world.model.selection.as_ref();
     let measured = projection::project(
         projection::ProjectDescription {
@@ -65,7 +67,7 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
             selection,
             source_selection: selection,
             annotations: &view.annotations,
-            names: crate::frame::names(&world.stack, view),
+            names: crate::frame::names(&hidden),
             styles: &styles,
             width: 500.0,
             projection: &shown.projection,
@@ -186,6 +188,7 @@ impl ProfileView {
             sources,
             &workspace,
             &view,
+            &context.stack.hidden(&view.shown),
             self.size * self.scale,
             self.scale,
         );

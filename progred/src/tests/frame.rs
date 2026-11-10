@@ -812,7 +812,7 @@ fn raw_switches_every_library_off() {
         scroll: Vec2::ZERO,
     };
     let starters = |view: &workspace::Pane| {
-        let provider = completions(&stack, view);
+        let provider = completions(&stack, &stack.hidden(&view.shown));
         crate::test_support::ask_over(
             &crate::test_support::src(&document, &stack.libraries),
             crate::display::CompletionKind::Value,
@@ -825,10 +825,10 @@ fn raw_switches_every_library_off() {
         .len()
     };
     let standard = view(workspace::Shown::ALL);
-    assert!(names(&stack, &standard));
+    assert!(names(&stack.hidden(&standard.shown)));
     assert!(starters(&standard) > 0);
     let raw = view(workspace::Shown::RAW);
-    assert!(!names(&stack, &raw));
+    assert!(!names(&stack.hidden(&raw.shown)));
     assert_eq!(starters(&raw), 0);
 }
 
