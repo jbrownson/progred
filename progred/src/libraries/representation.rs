@@ -61,7 +61,6 @@ impl Precedence {
 /// including one being added, follow in a record.
 pub(crate) fn infix_display<W: Host>(
     operators: &[(CellId, Precedence)],
-    last: &crate::libraries::grap::Last,
     input: &ProjectionInput<'_, W, RuntimeValue>,
 ) -> Option<Layout<W>> {
     matches!(
@@ -91,11 +90,6 @@ pub(crate) fn infix_display<W: Host>(
             // An operand's parentheses are its own, not this call's.
             let operand = if grouped {
                 crate::libraries::grap::grouped_expression_path(input, [Step::Key(field)])
-            } else if fields.field(field).is_none()
-                || input.pending == Some(Pending::Child(Step::Key(field)))
-            {
-                // Only a slot being filled lists offers.
-                crate::libraries::grap::operand_path(input, [Step::Key(field)], last.clone())
             } else {
                 crate::libraries::grap::expression_path(input, [Step::Key(field)])
             };

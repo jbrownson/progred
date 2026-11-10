@@ -11,12 +11,7 @@ use gid::CellId;
 /// f64's infix notation, with operands that are calls of it drawn the same.
 fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     let infix = |input: &ProjectionInput<'_, RuntimeValue>| {
-        crate::libraries::representation::infix_display(
-            &super::super::f64_parts().infix,
-            &(std::rc::Rc::new(|_: &crate::display::Completion| false)
-                as crate::libraries::grap::Last),
-            input,
-        )
+        crate::libraries::representation::infix_display(&super::super::f64_parts().infix, input)
     };
     infix(&ProjectionInput {
         default_projection: crate::display::runtime_partial(infix),
