@@ -1,4 +1,5 @@
 use super::*;
+use kurbo::Point;
 
 #[test]
 fn read_only_line_needs_no_selection_or_editing_capabilities() {

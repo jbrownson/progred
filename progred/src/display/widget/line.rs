@@ -6,7 +6,6 @@ use super::navigation::Select;
 use super::{Context, extent, leaf};
 use crate::display::{Host, Layout, TextFamily};
 use gid::Value;
-use kurbo::Point;
 use measured::Measured;
 use puri::edit::LineEditDescription;
 use puri::handler::{HasHandler, NavigationDirection};

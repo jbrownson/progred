@@ -8,6 +8,7 @@ use crate::display::widget::style::{Theme, editor, primary_highlight};
 use crate::frame::Hovered;
 use crate::test_support::key_down;
 use gid::Value;
+use kurbo::Point;
 use kurbo::Rect;
 use peniko::Brush;
 use puri::draw::{DrawCmd, DrawList, Shape};

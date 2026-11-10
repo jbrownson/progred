@@ -6,7 +6,7 @@ use crate::hover::Hover;
 use super::offers::Entry;
 use super::style::{Styles, face_style, primary_highlight_stroke};
 use super::{container, extent, leaf, popover, scroll};
-use kurbo::{Insets, Point, Rect, Size, Vec2};
+use kurbo::{Insets, Rect, Size, Vec2};
 use measured::{Extent, Measured, col, pad};
 use puri::handler::HasHandler;
 use puri::hover::Probe;
