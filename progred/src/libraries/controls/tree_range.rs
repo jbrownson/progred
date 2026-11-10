@@ -14,15 +14,22 @@ pub(crate) fn encode(range: Range<usize>) -> Value {
     Value::list([f64::value(range.start as f64), f64::value(range.end as f64)])
 }
 
-fn tree(value: &Value, key: Key) -> tree_slider::Tree<Key> {
+/// The slider's tree of a nested structure, each node keyed by the positions
+/// down to it from `key`. `children` gives a group's, and `None` for a leaf.
+fn keyed_tree<'a, N: 'a, I: Iterator<Item = (&'a gid::Position, &'a N)>>(
+    node: &'a N,
+    key: Key,
+    children: &impl Fn(&'a N) -> Option<I>,
+) -> tree_slider::Tree<Key> {
     use tree_slider::Tree;
-    match value.as_list() {
-        Some(list) => Tree::group(
+    match children(node) {
+        Some(group) => Tree::group(
             key.clone(),
-            list.iter().map(|(position, value)| {
-                tree(
-                    value,
+            group.map(|(position, child)| {
+                keyed_tree(
+                    child,
                     key.iter().cloned().chain([position.clone()]).collect(),
+                    children,
                 )
             }),
         ),
@@ -30,28 +37,27 @@ fn tree(value: &Value, key: Key) -> tree_slider::Tree<Key> {
     }
 }
 
+fn tree(value: &Value, key: Key) -> tree_slider::Tree<Key> {
+    keyed_tree(value, key, &|value: &Value| {
+        value
+            .as_list()
+            .map(|list| list.iter().map(|(position, value)| (position, value)))
+    })
+}
+
 pub(super) fn emitted_tree(node: &tree::Node, key: Key) -> tree_slider::Tree<Key> {
-    match &node.children {
-        Some(children) => tree_slider::Tree::group(
-            key.clone(),
-            children.iter().map(|(position, child)| {
-                emitted_tree(
-                    child,
-                    key.iter().cloned().chain([position.clone()]).collect(),
-                )
-            }),
-        ),
-        None => tree_slider::Tree::leaf(key),
-    }
+    keyed_tree(node, key, &|node: &tree::Node| {
+        node.children.as_ref().map(|children| children.iter())
+    })
+}
+
+/// The path that `key` is from the items' root.
+pub(super) fn steps(key: &[gid::Position]) -> Vec<gid::Step> {
+    key.iter().cloned().map(gid::Step::Element).collect()
 }
 
 fn key_value(key: &Key) -> Value {
-    path::value(
-        &key.iter()
-            .cloned()
-            .map(gid::Step::Element)
-            .collect::<Vec<_>>(),
-    )
+    path::value(&steps(key))
 }
 
 fn read_key(value: &Value) -> Option<Key> {

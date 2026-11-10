@@ -715,12 +715,7 @@ fn stored_item_links<W: Host>(expression: Expression) -> Option<tree_range::Item
     let source = crate::hover::from_grap(expression.source_origin()?, None)?;
     Some(Rc::new(move |key| {
         Some(crate::display::widget::source_link::decoration(
-            source.descendant(
-                &key.iter()
-                    .cloned()
-                    .map(gid::Step::Element)
-                    .collect::<Vec<_>>(),
-            ),
+            source.descendant(&tree_range::steps(key)),
         ))
     }))
 }
