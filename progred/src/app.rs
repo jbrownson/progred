@@ -378,7 +378,7 @@ impl App {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn close_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
         let closed = self.editors.remove(index);
-        if closed.editor.window_id().is_some() && closed.editor.window_id() == self.focused {
+        if closed.editor.window_id() == self.focused {
             self.focused = None;
         }
         drop(closed);

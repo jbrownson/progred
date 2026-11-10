@@ -11,8 +11,8 @@ LOG = Path(__file__).resolve().parent.parent / "docs" / "performance-log.tsv"
 
 
 def main():
-    with LOG.open(newline="") as file:
-        dates = [datetime.date.fromisoformat(row["date"][:10]) for row in csv.DictReader(file, delimiter="\t")]
+    rows = csv.DictReader(LOG.read_text().splitlines(), delimiter="\t") if LOG.exists() else []
+    dates = [datetime.date.fromisoformat(row["date"][:10]) for row in rows]
     last = max(dates, default=None)
     if last is None:
         print("No performance run is recorded in docs/performance-log.tsv. Suggest the weekly check.")

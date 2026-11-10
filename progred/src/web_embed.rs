@@ -44,7 +44,7 @@ pub(crate) fn peeled(
         (false, Some(slots)) => Some(
             slots
                 .split(',')
-                .map(|slot| format!("{}:raw", slot.split(':').next().unwrap_or(slot)))
+                .map(|slot| format!("{}:raw", slot.split_once(':').map_or(slot, |(id, _)| id)))
                 .collect::<Vec<_>>()
                 .join(","),
         ),
