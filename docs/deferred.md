@@ -1446,12 +1446,28 @@ Fidget took 25%.
 
 Toolpath previews mesh and render in background tasks, with cancellation,
 progress, and the previous surface greyed while its replacement is computed.
-Fidget's own `preview 3d` and `preview mesh` don't: `preview mesh` meshes
-while its projection is built, with no cache, and `preview 3d` renders on the
-GPU natively but falls back to a blocking CPU render, the only path in a
-browser. Moving both onto the toolpath previews' pipeline would leave one
-pipeline and remove the synchronous renderer; they'd show as awaiting for a
-frame or two where they now appear at once. Undecided (November 2026).
+Fidget's own `preview 3d` and `preview mesh` work on the editor thread while
+their layout is built. `preview mesh` keeps its mesh between frames (orbiting
+the cube example fell from 19 ms a frame to 0.35 ms on a Linux VM in November
+2026), so only a change of shape or depth blocks. `preview 3d` renders each
+frame, on the GPU natively and otherwise on the CPU, about 27 ms a frame for
+the spheres example on that VM, which is every frame in a browser.
+
+The owner is willing to unify them (November 2026). Two things stand in the
+way of simply moving both onto the toolpath previews' pipeline:
+
+- That pipeline is CPU only, because Fidget's GPU interpreter can't run the
+  cut stock's field (see [toolpaths](toolpaths.md)). Fidget's own fields run
+  on it, so a native `preview 3d` would give up its GPU render or keep it as a
+  path of its own.
+- A page without shared memory has no background tasks, and toolpath previews
+  show a note there. Fidget's previews draw there today, on the editor thread.
+
+One pipeline for all of them therefore needs tasks that run in place where
+there are no workers, which would also draw toolpath previews on such a page,
+slowly. Short of that, the step that removes work without adding a path is the
+CPU `preview 3d`: render it through the background image pipeline where tasks
+exist, and keep the blocking render only for a page without them.
 
 A refined toolpath preview's mesh and image tasks each build the cut stock's
 expression and compile it to their own form. Measured in November 2026 over

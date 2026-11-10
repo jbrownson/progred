@@ -407,7 +407,7 @@ fn fidget_gyroid_profile_loop() {
 }
 
 #[test]
-#[ignore = "Cube viewport orbit, remeshing each frame"]
+#[ignore = "Cube viewport orbit, its mesh kept between frames"]
 fn fidget_cube_profile_loop() {
     fidget_orbit_profile("cube", crate::test_examples::CUBE);
 }

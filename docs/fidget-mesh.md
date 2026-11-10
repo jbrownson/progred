@@ -52,9 +52,10 @@ shared `Arc<Geometry>` mesh; the renderer retains its uploaded vertex/index
 buffers across camera changes. Upload reuse requires the same mesh allocation
 and an already uploaded index prefix. A weak reference preserves that identity
 without keeping obsolete CPU geometry alive; edits through `Arc::make_mut`
-detach the identity. A different mesh replaces the retained upload. Ordinary
-Fidget previews still construct a fresh mesh each frame; CAM retains geometry
-through its computation graph. Camera inputs, depth, and pixels are overwritten
+detach the identity. A different mesh replaces the retained upload. An ordinary
+Fidget `preview mesh` keeps its mesh in a memo at its occurrence, made again
+only when its shape or depth changes, though still on the editor thread; CAM
+retains geometry through its computation graph and meshes in the background. Camera inputs, depth, and pixels are overwritten
 on every draw; this is not a rendered-image cache. Hybrid rendering also retains one uploaded surface
 color/depth pair, keyed by image identity/dimensions and shared depth identity,
 replacing it on publication. A depth-only edit also refreshes this upload.
@@ -102,7 +103,8 @@ The ignored `mesh_gpu_renders_and_reuses_buffers` test requires a real GPU and
 does not fall back to CPU. It checks the shader, transparent background, empty
 draws, non-aligned readback row widths, and resource resizing/reuse.
 
-The existing `fidget_cube_profile_loop` exercises the mesh fixture and remeshes;
+The existing `fidget_cube_profile_loop` exercises the mesh fixture, whose mesh
+is made once;
 `fidget_toolpaths_profile_loop` follows the Command+3 fixture, recording deferred
 mesh drawing. Its timing excludes GPU rendering; the paired
 `cam_mesh_roundtrip_profile` covers drawing plus full-editor composition.

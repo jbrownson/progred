@@ -86,13 +86,61 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
     })
 }
 
+/// A preview's mesh, made again only when its shape or depth changes, not as
+/// the camera turns.
+struct Meshed {
+    request: incremental::Input<(VolumePreview, u8)>,
+    mesh: incremental::Memo<Option<Mesh>>,
+}
+
+impl Meshed {
+    fn new(runtime: &incremental::Runtime, request: (VolumePreview, u8)) -> Self {
+        let request = runtime.input(request);
+        Self {
+            mesh: runtime.memo_by(
+                {
+                    let request = request.clone();
+                    move |read| {
+                        let (preview, depth) = &*request.read(read);
+                        Ok(generate(preview, *depth))
+                    }
+                },
+                // A new mesh is a new mesh; comparing vertex buffers costs more.
+                |_, _| false,
+            ),
+            request,
+        }
+    }
+}
+
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let (preview, depth) = read(input.value?.as_value())?;
-    let geometry = generate(&preview, depth)?;
+    let request = read(input.value?.as_value())?;
+    let state = input.state.cloned();
+    let scale_factor = input.scale_factor;
     Some(interactive_volume(
-        drawing(&geometry, &preview, input.state, input.scale_factor)?,
+        Layout::program(Rc::new(move |context, build| {
+            let computations = context.viewing().computations();
+            let meshed = context.site().memo(computations, || {
+                Meshed::new(&computations.runtime, request.clone())
+            });
+            meshed.request.set(request.clone());
+            let drawing = match computations.runtime.read(&meshed.mesh) {
+                Ok(mesh) => mesh
+                    .as_ref()
+                    .as_ref()
+                    .and_then(|mesh| drawing(mesh, &request.0, state.as_ref(), scale_factor)),
+                Err(_) => None,
+            };
+            drawing
+                .unwrap_or_else(|| {
+                    crate::libraries::presentation::result_layout(::grap::absent::value(
+                        vocabulary::INVALID_FIELD,
+                    ))
+                })
+                .measure(context, build)
+        })),
         input,
     ))
 }
