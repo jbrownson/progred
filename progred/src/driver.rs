@@ -71,24 +71,27 @@ impl<P> Driver<P> {
     /// The wheel turned by `lines` with the pointer at `point`: positive
     /// `y` scrolls up, positive `x` left.
     pub(crate) fn scroll_at(&mut self, point: Point, lines: Vec2) {
-        self.move_to(point);
-        self.window_event(WindowEvent::MouseWheel {
-            device_id: DeviceId::dummy(),
-            delta: MouseScrollDelta::LineDelta(lines.x as f32, lines.y as f32),
-            phase: TouchPhase::Moved,
-        });
+        self.wheel_at(
+            point,
+            MouseScrollDelta::LineDelta(lines.x as f32, lines.y as f32),
+        );
     }
 
     /// A trackpad swipe of `pixels` with the pointer at `point`: positive
     /// `y` scrolls up, positive `x` left.
     #[cfg(test)]
     pub(crate) fn swipe_at(&mut self, point: Point, pixels: Vec2) {
+        self.wheel_at(
+            point,
+            MouseScrollDelta::PixelDelta(PhysicalPosition::new(pixels.x, pixels.y)),
+        );
+    }
+
+    fn wheel_at(&mut self, point: Point, delta: MouseScrollDelta) {
         self.move_to(point);
         self.window_event(WindowEvent::MouseWheel {
             device_id: DeviceId::dummy(),
-            delta: MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(
-                pixels.x, pixels.y,
-            )),
+            delta,
             phase: TouchPhase::Moved,
         });
     }
@@ -151,11 +154,7 @@ impl<P> Driver<P> {
     }
 
     fn button(&mut self, state: ElementState) {
-        self.window_event(WindowEvent::MouseInput {
-            device_id: DeviceId::dummy(),
-            state,
-            button: MouseButton::Left,
-        });
+        self.window_event(left_button(state));
     }
 
     /// A moment passes: the next press starts a new click rather than
@@ -178,11 +177,7 @@ impl<P> Driver<P> {
         let presses = (0..count)
             .flat_map(|_| [ElementState::Pressed, ElementState::Released])
             .map(|state| {
-                let event = WindowEvent::MouseInput {
-                    device_id: DeviceId::dummy(),
-                    state,
-                    button: MouseButton::Left,
-                };
+                let event = left_button(state);
                 let pointer = self.translate(&event);
                 (event, pointer)
             })
@@ -230,6 +225,15 @@ impl<P> Driver<P> {
         }
         self.present();
         handled
+    }
+}
+
+/// The left mouse button going to `state`.
+fn left_button(state: ElementState) -> WindowEvent {
+    WindowEvent::MouseInput {
+        device_id: DeviceId::dummy(),
+        state,
+        button: MouseButton::Left,
     }
 }
 

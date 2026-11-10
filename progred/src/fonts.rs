@@ -21,24 +21,16 @@ pub(crate) fn bundled_font_context() -> FontContext {
         }),
         source_cache: Default::default(),
     };
-    let sans = fonts
-        .collection
-        .register_fonts(
-            Blob::from(include_bytes!("../assets/NotoSans-Regular.ttf").to_vec()),
-            None,
-        )
-        .into_iter()
-        .map(|(family, _)| family)
-        .collect::<Vec<_>>();
-    let mono = fonts
-        .collection
-        .register_fonts(
-            Blob::from(include_bytes!("../assets/NotoSansMono-Regular.ttf").to_vec()),
-            None,
-        )
-        .into_iter()
-        .map(|(family, _)| family)
-        .collect::<Vec<_>>();
+    let mut families = |font: &[u8]| {
+        fonts
+            .collection
+            .register_fonts(Blob::from(font.to_vec()), None)
+            .into_iter()
+            .map(|(family, _)| family)
+            .collect::<Vec<_>>()
+    };
+    let sans = families(include_bytes!("../assets/NotoSans-Regular.ttf"));
+    let mono = families(include_bytes!("../assets/NotoSansMono-Regular.ttf"));
     for family in [GenericFamily::SystemUi, GenericFamily::SansSerif] {
         fonts
             .collection
