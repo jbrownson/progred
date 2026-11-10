@@ -72,6 +72,17 @@ pub fn missing_field(field: CellId) -> Value {
     with_detail(MISSING_FIELD, CELL, field.into())
 }
 
+/// The absence a reference answers when `cell` has no definition.
+pub(crate) fn missing_cell(cell: CellId) -> crate::RuntimeValue {
+    with_detail(MISSING_CELL, CELL, cell.into()).into()
+}
+
+/// The absence a call answers when `callable` can't be called: an absent
+/// `callable` as it is, since what failed before it is the reason.
+pub(crate) fn not_callable(callable: &crate::RuntimeValue) -> crate::RuntimeValue {
+    crate::arguments::not(NOT_CALLABLE, callable.clone())
+}
+
 pub fn value(reason: CellId) -> Value {
     absent(reason, [])
 }

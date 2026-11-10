@@ -199,7 +199,7 @@ impl<'a> Context<'a> {
                     Some(Some(expression)) => expression.clone(),
                     _ => match self.host.definition(cell) {
                         Some(value) => self.lowered_cell(cell, &value),
-                        None => return Ok(missing_cell(cell)),
+                        None => return Ok(absent::missing_cell(cell)),
                     },
                 };
                 self.eval(expression, environment)
@@ -233,15 +233,6 @@ fn native_f64(value: &RuntimeValue) -> Option<f64> {
         },
         _ => None,
     }
-}
-
-/// The absence a reference answers when `cell` has no definition.
-pub(crate) fn missing_cell(cell: CellId) -> RuntimeValue {
-    RuntimeValue::from(absent::with_detail(
-        absent::MISSING_CELL,
-        absent::CELL,
-        cell.into(),
-    ))
 }
 
 /// `value` in its unboxed form when it is a record following a

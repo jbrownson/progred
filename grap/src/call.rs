@@ -1,7 +1,7 @@
 //! Calls: closures, cell and foreign function calls, and prepared callables.
 
 use crate::environment::{CellIndex, CellIndices, Environment, binding_index};
-use crate::eval::{missing_cell, unbox};
+use crate::eval::unbox;
 use crate::foreign::{
     ForeignFunction, ForeignFunctions, ForeignImplementation, Prepare, Stage, implementation_cell,
 };
@@ -108,7 +108,7 @@ impl<'a> Context<'a> {
                         Some(Err(absent)) => PreparedCallTargetKind::Absent(absent),
                         None => PreparedCallTargetKind::Value(self.lowered_cell(cell, &value)),
                     },
-                    None => PreparedCallTargetKind::Absent(missing_cell(cell)),
+                    None => PreparedCallTargetKind::Absent(absent::missing_cell(cell)),
                 };
                 let target = Rc::new(PreparedCallTarget {
                     kind,
@@ -149,7 +149,7 @@ impl<'a> Context<'a> {
         (implementation_cell(value)? == cell).then(|| {
             self.host
                 .implementation(cell)
-                .ok_or_else(|| not_callable(&RuntimeValue::from(value.clone())))
+                .ok_or_else(|| absent::not_callable(&RuntimeValue::from(value.clone())))
         })
     }
 
@@ -172,7 +172,7 @@ impl<'a> Context<'a> {
                     }
                     None => self.call_cell(cell, call, environment, None),
                 },
-                None => Ok(not_callable(callable)),
+                None => Ok(absent::not_callable(callable)),
             },
         }
     }
@@ -316,7 +316,7 @@ impl<'a> Context<'a> {
                         None => self.call_cell(cell, &call, &callable.environment, None),
                     }
                 }
-                None => Ok(not_callable(&callable.value)),
+                None => Ok(absent::not_callable(&callable.value)),
             },
         }
     }
@@ -363,7 +363,7 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         let Some(value) = self.host.definition(cell) else {
-            return Ok(missing_cell(cell));
+            return Ok(absent::missing_cell(cell));
         };
         match self.own_implementation(cell, &value) {
             Some(Ok(implementation)) => {
@@ -436,7 +436,7 @@ impl<'a> Context<'a> {
                     ),
                     None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
                 },
-                None => Ok(not_callable(&callable)),
+                None => Ok(absent::not_callable(&callable)),
             },
         }
     }
@@ -544,10 +544,4 @@ fn callee_cell(callable: &RuntimeValue) -> Option<CellId> {
         (callable.kind()? == vocabulary::kind::FOREIGN_FUNCTION)
             .then(|| callable.field(vocabulary::IMPLEMENTATION)?.as_cell())?
     })
-}
-
-/// The absence a call answers when `callable` can't be called: an absent
-/// `callable` as it is, since what failed before it is the reason.
-pub(crate) fn not_callable(callable: &RuntimeValue) -> RuntimeValue {
-    arguments::not(absent::NOT_CALLABLE, callable.clone())
 }
