@@ -304,6 +304,16 @@ impl RuntimeValue {
         self.field(absent::REASON)?.as_cell()
     }
 
+    /// This value when it's there, or itself as the error when it's absent,
+    /// for a function that passes an absent argument on as its answer.
+    pub fn present(self) -> Result<Self, Self> {
+        if self.absent_reason().is_some() {
+            Err(self)
+        } else {
+            Ok(self)
+        }
+    }
+
     pub fn declines(&self) -> bool {
         self.absent_reason() == Some(absent::DECLINED)
     }

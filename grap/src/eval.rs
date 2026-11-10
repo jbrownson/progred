@@ -106,6 +106,16 @@ impl<'a> Context<'a> {
         self.eval_burned(expression, environment)
     }
 
+    /// `call`'s argument under `label`, evaluated; or, early, why it has none.
+    pub fn eval_argument(
+        &mut self,
+        call: &Expression,
+        label: CellId,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, crate::Early> {
+        Ok(self.eval(call.argument(label)?, environment)?)
+    }
+
     /// Evaluate an expression a caller will read as a number, skipping
     /// the owned `RuntimeValue` round trip when the answer is already
     /// an unboxed f64. Fuel, halts and results match

@@ -5,9 +5,7 @@
 use crate::display::Host;
 use crate::libraries::{Library, f64, name};
 use ::grap::arguments::Parse;
-use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
-};
+use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
@@ -44,17 +42,6 @@ pub mod vocabulary {
     pub const STATE: CellId = CellId::from_u128(0x3775735ae4c156144c110ba819cb1e39);
     pub const INVALID_STEP: CellId = CellId::from_u128(0xfd524cb1a241f60ebdb192db4d9ce9c5);
     pub const FINISHED: CellId = CellId::from_u128(0xb19fe726e3c2eab7a5d81cda12cf44b7);
-}
-
-fn evaluated(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    field: gid::CellId,
-) -> Result<Option<RuntimeValue>, Halt> {
-    call.field(field)
-        .map(|value| context.eval(value, environment))
-        .transpose()
 }
 
 fn not_list() -> RuntimeValue {
@@ -154,15 +141,10 @@ fn functions() -> ForeignFunctions<'static> {
         )
         .register(
             vocabulary::UNFOLD,
-            ForeignFunction::new(|context, call, environment| {
-                let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
-                else {
-                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
-                };
-                let Some(step) = call.field(vocabulary::STEP) else {
-                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
-                };
-                let step = context.prepare_callable(step, environment)?;
+            ForeignFunction::early(|context, call, environment| {
+                let mut state = context.eval_argument(call, vocabulary::INITIAL, environment)?;
+                let step =
+                    context.prepare_callable(call.argument(vocabulary::STEP)?, environment)?;
                 let mut items = Vec::new();
                 // A step's item, if it has one, joins the list; a step
                 // without a next state is the last.
@@ -192,20 +174,13 @@ fn functions() -> ForeignFunctions<'static> {
         )
         .register(
             vocabulary::FOLD,
-            ForeignFunction::new(|context, call, environment| {
-                let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(call.missing_runtime_argument(vocabulary::LIST));
-                };
-                let Some(accumulator) = evaluated(context, call, environment, vocabulary::INITIAL)?
-                else {
-                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
-                };
-                let Some(step) = call.field(vocabulary::STEP) else {
-                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
-                };
-                let step = context.prepare_callable(step, environment)?;
+            ForeignFunction::early(|context, call, environment| {
+                let list = context.eval_argument(call, vocabulary::LIST, environment)?;
+                let accumulator = context.eval_argument(call, vocabulary::INITIAL, environment)?;
+                let step =
+                    context.prepare_callable(call.argument(vocabulary::STEP)?, environment)?;
                 match list.list_values() {
-                    Some(mut values) => values.try_fold(accumulator, |accumulator, item| {
+                    Some(mut values) => Ok(values.try_fold(accumulator, |accumulator, item| {
                         context.call_prepared(
                             &step,
                             [
@@ -213,7 +188,7 @@ fn functions() -> ForeignFunctions<'static> {
                                 (vocabulary::ITEM, item),
                             ],
                         )
-                    }),
+                    })?),
                     None => Ok(not_list()),
                 }
             })
@@ -222,15 +197,10 @@ fn functions() -> ForeignFunctions<'static> {
         )
         .register(
             vocabulary::ITERATE,
-            ForeignFunction::new(|context, call, environment| {
-                let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
-                else {
-                    return Ok(call.missing_runtime_argument(vocabulary::INITIAL));
-                };
-                let Some(step) = call.field(vocabulary::STEP) else {
-                    return Ok(call.missing_runtime_argument(vocabulary::STEP));
-                };
-                let step = context.prepare_callable(step, environment)?;
+            ForeignFunction::early(|context, call, environment| {
+                let mut state = context.eval_argument(call, vocabulary::INITIAL, environment)?;
+                let step =
+                    context.prepare_callable(call.argument(vocabulary::STEP)?, environment)?;
                 loop {
                     let next =
                         context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;

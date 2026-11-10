@@ -12,7 +12,7 @@ pub use call::PreparedCallable;
 pub use environment::Environment;
 pub use eval::{Halt, MAX_DEPTH};
 pub use foreign::{
-    ForeignFunction, ForeignFunctions, Stage, foreign_function, implementation_cell,
+    Early, ForeignFunction, ForeignFunctions, Stage, foreign_function, implementation_cell,
 };
 pub use lower::Expression;
 pub use runtime::{RuntimeListValues, RuntimeValue, Shape};

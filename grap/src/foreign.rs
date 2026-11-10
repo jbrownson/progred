@@ -15,6 +15,27 @@ pub(crate) type Prepare = Rc<dyn Fn(&Expression) -> Stage>;
 type Direct<'a> =
     Rc<dyn Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Halt> + 'a>;
 
+/// How a foreign function's body ends before its last line: the evaluation
+/// halts, or the call already has its answer, such as why an argument is
+/// missing. `?` turns a halt or such an answer into one, so a body reads its
+/// arguments in a line each.
+pub enum Early {
+    Halt(Halt),
+    Answer(RuntimeValue),
+}
+
+impl From<Halt> for Early {
+    fn from(halt: Halt) -> Self {
+        Self::Halt(halt)
+    }
+}
+
+impl From<RuntimeValue> for Early {
+    fn from(answer: RuntimeValue) -> Self {
+        Self::Answer(answer)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) enum ForeignImplementation<'a> {
     Direct(Direct<'a>),
@@ -59,6 +80,20 @@ impl<'a> ForeignFunction<'a> {
             parameters: None,
             primitive: None,
         }
+    }
+
+    /// [`Self::new`] for a body that may answer early: with `?` on a missing
+    /// argument ([`Expression::argument`]) or an absent one
+    /// ([`RuntimeValue::present`]), the call's answer is that absent.
+    pub fn early(
+        call: impl Fn(&mut Context, &Expression, &Environment) -> Result<RuntimeValue, Early> + 'a,
+    ) -> Self {
+        Self::new(move |context, expression, environment| {
+            match call(context, expression, environment) {
+                Ok(answer) | Err(Early::Answer(answer)) => Ok(answer),
+                Err(Early::Halt(halt)) => Err(halt),
+            }
+        })
     }
 
     /// The two-stage form: `prepare` runs when a call site first meets
