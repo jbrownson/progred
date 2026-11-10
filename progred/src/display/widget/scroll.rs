@@ -1,5 +1,5 @@
 use super::HoverCallback;
-use kurbo::{Point, Size, Vec2};
+use kurbo::{Size, Vec2};
 use measured::Extent;
 use puri::handler::{HasHandler, ScrollOutcome};
 
@@ -16,8 +16,7 @@ pub struct Probe {
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 impl Probe {
     pub fn captures(&self, event: &ui_events::pointer::PointerScrollEvent) -> bool {
-        self.placement
-            .contains(Point::new(event.state.position.x, event.state.position.y))
+        self.placement.contains(super::at(&event.state))
             && offset(
                 self.offset,
                 event,
@@ -89,7 +88,7 @@ pub fn scroll<World: 'static, Hover: 'static>(
     Box::new(move |output, placement| {
         let units = units(scale, placement.rect.size());
         output.handler().on_scroll(move |world, event| {
-            if placement.contains(Point::new(event.state.position.x, event.state.position.y)) {
+            if placement.contains(super::at(&event.state)) {
                 units.handle(event.delta, |delta| handler(world, delta))
             } else {
                 ScrollOutcome::pass(event)

@@ -2,7 +2,7 @@
 
 use super::HoverPass;
 
-use kurbo::{Point, Rect, Vec2};
+use kurbo::{Rect, Vec2};
 use measured::{Extent, Measured};
 use puri::handler::{Event, EventOutcome, Handler, HasHandler, ScrollOutcome};
 use ui_events::pointer::PointerScrollEvent;
@@ -43,9 +43,7 @@ pub fn scrolled<World: 'static, H: 'static>(
                     scale,
                 });
                 base.handler().on_scroll(move |state, event| {
-                    if placement
-                        .contains(Point::new(event.state.position.x, event.state.position.y))
-                    {
+                    if placement.contains(super::at(&event.state)) {
                         on_scroll(state, event)
                     } else {
                         ScrollOutcome::pass(event)
@@ -71,17 +69,15 @@ pub fn gate_starts<World: 'static, Input: 'static>(
     Handler::from_function(move |world, event, input| match event {
         Event::Scroll(events) => puri::scroll::filter(
             events,
-            |event| placement.contains(Point::new(event.state.position.x, event.state.position.y)),
+            |event| placement.contains(super::at(&event.state)),
             |events| child.dispatch(world, Event::Scroll(events), input),
         ),
         Event::Gesture(events) => puri::gesture::filter(
             events,
-            |event| placement.contains(Point::new(event.state.position.x, event.state.position.y)),
+            |event| placement.contains(super::at(&event.state)),
             |events| child.dispatch(world, Event::Gesture(events), input),
         ),
-        Event::PointerDown(down)
-            if !placement.contains(Point::new(down.state.position.x, down.state.position.y)) =>
-        {
+        Event::PointerDown(down) if !placement.contains(super::at(&down.state)) => {
             EventOutcome::decline(Event::PointerDown(down))
         }
         event => child.dispatch(world, event, input),

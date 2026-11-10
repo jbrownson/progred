@@ -62,7 +62,7 @@ pub fn targeted<World: 'static, Hover: Clone + PartialEq + 'static>(
 ) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
         let start = move |world: &mut World, event: &PointerButtonEvent| {
-            let point = Point::new(event.state.position.x, event.state.position.y);
+            let point = super::at(&event.state);
             placement.contains(point) && start(world, point)
         };
         if pick {
@@ -148,7 +148,7 @@ pub fn on_point<W: Host>(child: Layout<W>, handler: PointHandler) -> Layout<W> {
                 let handler = handler.clone();
                 Box::new(move |output, placement| {
                     output.handler().on_pointer_down(move |world, event| {
-                        let at = Point::new(event.state.position.x, event.state.position.y);
+                        let at = super::at(&event.state);
                         if is_primary_contact(event) && placement.contains(at) {
                             world.session().start_gesture(
                                 point(placement.rect, handler.clone(), site.edit_run()),

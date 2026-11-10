@@ -282,6 +282,11 @@ pub fn after_place<W: 'static, H: 'static>(
     })
 }
 
+/// Where a pointer is, as geometry.
+pub(crate) fn at(pointer: &ui_events::pointer::PointerState) -> kurbo::Point {
+    kurbo::Point::new(pointer.position.x, pointer.position.y)
+}
+
 #[cfg(test)]
 #[path = "tests/widget.rs"]
 mod tests;

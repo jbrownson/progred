@@ -244,10 +244,7 @@ fn completion_row<C: 'static, H: Clone + PartialEq + 'static>(
             output.handler().on_pointer_move(move |world, event| {
                 if event.pointer.pointer_type == PointerType::Mouse
                     && event.current.buttons.is_empty()
-                    && placement.contains(Point::new(
-                        event.current.position.x,
-                        event.current.position.y,
-                    ))
+                    && placement.contains(super::at(&event.current))
                 {
                     choose(world);
                     true

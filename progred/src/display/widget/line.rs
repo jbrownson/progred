@@ -167,8 +167,7 @@ pub fn view<W: Host>(
             let command = output.input.command_modifier;
             output.handler().on_pointer_down(move |world, event| {
                 crate::modifiers::primary_edit(command, event)
-                    && placement
-                        .contains(Point::new(event.state.position.x, event.state.position.y))
+                    && placement.contains(super::at(&event.state))
                     && {
                         let mut session = world.session();
                         let mut edit = site.open(&mut session);

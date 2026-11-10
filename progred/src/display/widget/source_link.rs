@@ -4,7 +4,6 @@ use crate::display::Host;
 use crate::display::widget::source::SourceTrace;
 use crate::hover::Hover;
 use crate::sources::Sources;
-use kurbo::Point;
 use puri::handler::{Event, EventOutcome, HasHandler};
 use std::rc::Rc;
 use uig::Placement;
@@ -61,8 +60,7 @@ pub(crate) fn handlers<W: Host>(
             .on_pointer_down_with(move |world, event, input| {
                 puri::interact::is_primary_contact(event)
                     && command.pressed(&event.state.modifiers)
-                    && placement
-                        .contains(Point::new(event.state.position.x, event.state.position.y))
+                    && placement.contains(super::at(&event.state))
                     && match input.hovered().and_then(W::tree) {
                         Some(hover @ (Hover::Source(_) | Hover::Calls(_))) => {
                             let target =
