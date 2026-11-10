@@ -11,7 +11,8 @@ use crate::display::hug;
 use crate::display::structure::kind_form;
 use crate::display::{alternatives, col, descend, dim, row, selectable, shared};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
+    Context, Early, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    Stage,
 };
 use std::ops::ControlFlow;
 use std::rc::Rc;
@@ -94,19 +95,19 @@ fn functions() -> ForeignFunctions<'static> {
         )
         .register(
             vocabulary::DO,
-            ForeignFunction::new(do_foreign)
+            ForeignFunction::early(do_foreign)
                 .parameters([vocabulary::EXPRESSIONS])
                 .cacheable(),
         )
         .register(
             vocabulary::ALL,
-            ForeignFunction::new(all_foreign)
+            ForeignFunction::early(all_foreign)
                 .parameters([vocabulary::EXPRESSIONS])
                 .cacheable(),
         )
         .register(
             vocabulary::QUOTE,
-            ForeignFunction::new(quote_foreign)
+            ForeignFunction::early(quote_foreign)
                 .parameters([::grap::vocabulary::EXPRESSION])
                 .cacheable(),
         )
@@ -116,12 +117,9 @@ fn do_foreign(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    let Some(expressions) = call.field(vocabulary::EXPRESSIONS) else {
-        return Ok(call.missing_runtime_argument(vocabulary::EXPRESSIONS));
-    };
-    match expressions.elements() {
-        Some(elements) => in_turn(elements, context, environment),
+) -> Result<RuntimeValue, Early> {
+    match call.argument(vocabulary::EXPRESSIONS)?.elements() {
+        Some(elements) => Ok(in_turn(elements, context, environment)?),
         None => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
     }
 }
@@ -149,15 +147,15 @@ fn all_foreign(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    let Some(expressions) = call.field(vocabulary::EXPRESSIONS) else {
-        return Ok(call.missing_runtime_argument(vocabulary::EXPRESSIONS));
-    };
+) -> Result<RuntimeValue, Early> {
+    let expressions = call.argument(vocabulary::EXPRESSIONS)?;
     match (expressions.elements(), expressions.element_positions()) {
-        (Some(elements), Some(positions)) => try_map_sized(elements, |expression| {
-            context.eval(expression.clone(), environment)
-        })
-        .map(|values| RuntimeValue::list_at(positions, values)),
+        (Some(elements), Some(positions)) => Ok(RuntimeValue::list_at(
+            positions,
+            try_map_sized(elements, |expression| {
+                context.eval(expression.clone(), environment)
+            })?,
+        )),
         _ => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
     }
 }
@@ -166,11 +164,12 @@ fn quote_foreign(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    let Some(expression) = call.field(::grap::vocabulary::EXPRESSION) else {
-        return Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
-    };
-    replace_unquotes(expression, context, environment)
+) -> Result<RuntimeValue, Early> {
+    Ok(replace_unquotes(
+        call.argument(::grap::vocabulary::EXPRESSION)?,
+        context,
+        environment,
+    )?)
 }
 
 fn replace_unquotes(
