@@ -20,7 +20,7 @@ use ::grap::source::vocabulary::BODY_ORIGIN;
 use ::grap::vocabulary::{
     BODY, ENVIRONMENT, FUNCTION, IMPLEMENTATION, LAMBDA, PARAMS, VALUE, kind,
 };
-use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use ::grap::{Context, Early, Environment, Expression, ForeignFunction, ForeignFunctions};
 use puri::text::Script;
 
 pub mod control;
@@ -708,16 +708,12 @@ fn evaluate_foreign(
     context: &mut Context,
     call: &Expression,
     calling_environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(expression) = call.field(::grap::vocabulary::EXPRESSION) else {
-        return Ok(call.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
-    };
-    let Some(environment) = call.field(::grap::vocabulary::ENVIRONMENT) else {
-        return Ok(call.missing_runtime_argument(::grap::vocabulary::ENVIRONMENT));
-    };
+) -> Result<::grap::RuntimeValue, Early> {
+    let expression = call.argument(::grap::vocabulary::EXPRESSION)?;
+    let environment = call.argument(::grap::vocabulary::ENVIRONMENT)?;
     let environment = context.eval_to_value(environment, calling_environment)?;
     match context.environment(&environment) {
-        Some(environment) => context.eval(expression, &environment),
+        Some(environment) => Ok(context.eval(expression, &environment)?),
         None => Ok(::grap::absent::with_detail(
             ::grap::absent::INVALID_ENVIRONMENT,
             ::grap::absent::VALUE,
@@ -730,7 +726,7 @@ fn evaluate_foreign(
 fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
-        ForeignFunction::new(evaluate_foreign)
+        ForeignFunction::early(evaluate_foreign)
             .parameters([
                 ::grap::vocabulary::EXPRESSION,
                 ::grap::vocabulary::ENVIRONMENT,
