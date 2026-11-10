@@ -503,49 +503,50 @@ impl Compositor {
                     self.image(gpu, resources, source, *transform, true, target, scissor)?;
                 }
                 Layer::Clip(shape, transform, children) => {
-                    if let Some(rect) = integer_rect(shape, *transform, target, scissor) {
-                        if rect[2] > 0 && rect[3] > 0 {
+                    match clip_region(shape, *transform, target, scissor) {
+                        ClipRegion::Empty => {}
+                        ClipRegion::Scissor(rect) => self.render_group(
+                            gpu,
+                            children,
+                            resources,
+                            vector,
+                            target,
+                            depth,
+                            Some(rect),
+                        )?,
+                        ClipRegion::Mask => {
+                            self.counts.clip_depth = self.counts.clip_depth.max(depth + 1);
+                            if resources.groups.len() <= depth {
+                                resources.groups.push(None);
+                            }
+                            let child = texture_at_size(
+                                &mut resources.groups[depth],
+                                gpu,
+                                target.width(),
+                                target.height(),
+                            );
+                            gpu.clear(&child, wgpu::Color::TRANSPARENT);
                             self.render_group(
                                 gpu,
                                 children,
                                 resources,
                                 vector,
-                                target,
-                                depth,
-                                Some(rect),
+                                &child,
+                                depth + 1,
+                                None,
                             )?;
+                            let mask =
+                                self.mask(gpu, resources, shape.clone(), *transform, target)?;
+                            self.blend(
+                                gpu,
+                                &child,
+                                Some(&mask),
+                                Affine::IDENTITY,
+                                true,
+                                target,
+                                scissor,
+                            );
                         }
-                    } else {
-                        self.counts.clip_depth = self.counts.clip_depth.max(depth + 1);
-                        if resources.groups.len() <= depth {
-                            resources.groups.push(None);
-                        }
-                        let child = texture_at_size(
-                            &mut resources.groups[depth],
-                            gpu,
-                            target.width(),
-                            target.height(),
-                        );
-                        gpu.clear(&child, wgpu::Color::TRANSPARENT);
-                        self.render_group(
-                            gpu,
-                            children,
-                            resources,
-                            vector,
-                            &child,
-                            depth + 1,
-                            None,
-                        )?;
-                        let mask = self.mask(gpu, resources, shape.clone(), *transform, target)?;
-                        self.blend(
-                            gpu,
-                            &child,
-                            Some(&mask),
-                            Affine::IDENTITY,
-                            true,
-                            target,
-                            scissor,
-                        );
                     }
                 }
             }
@@ -569,40 +570,50 @@ impl Compositor {
             source.width() as f64,
             source.height() as f64,
         ));
-        if let Some(rect) = integer_rect(&shape, transform, target, scissor) {
-            if rect[2] > 0 && rect[3] > 0 {
-                self.blend(
-                    gpu,
-                    source,
-                    None,
-                    transform,
-                    premultiplied,
-                    target,
-                    Some(rect),
-                );
-            }
-        } else {
-            let mask = self.mask(gpu, resources, shape, transform, target)?;
-            self.blend(
+        match clip_region(&shape, transform, target, scissor) {
+            ClipRegion::Empty => {}
+            ClipRegion::Scissor(rect) => self.blend(
                 gpu,
                 source,
-                Some(&mask),
+                None,
                 transform,
                 premultiplied,
                 target,
-                scissor,
-            );
+                Some(rect),
+            ),
+            ClipRegion::Mask => {
+                let mask = self.mask(gpu, resources, shape, transform, target)?;
+                self.blend(
+                    gpu,
+                    source,
+                    Some(&mask),
+                    transform,
+                    premultiplied,
+                    target,
+                    scissor,
+                );
+            }
         }
         Ok(())
     }
 }
 
-fn integer_rect(
+/// What clipping to a shape inside the enclosing scissor leaves of the target.
+enum ClipRegion {
+    Empty,
+    /// A whole-pixel rectangle `[x, y, width, height]`, which a scissor cuts
+    /// exactly.
+    Scissor([u32; 4]),
+    /// Any other shape, which needs a mask.
+    Mask,
+}
+
+fn clip_region(
     shape: &Shape,
     transform: Affine,
     target: &wgpu::Texture,
     enclosing: Option<[u32; 4]>,
-) -> Option<[u32; 4]> {
+) -> ClipRegion {
     match shape {
         Shape::Rect(rect) if transform.as_coeffs()[1] == 0.0 && transform.as_coeffs()[2] == 0.0 => {
             let rect = transform.transform_rect_bbox(*rect);
@@ -616,11 +627,15 @@ fn integer_rect(
                 let y0 = rect.y0.clamp(y as f64, (y + height) as f64) as u32;
                 let x1 = rect.x1.clamp(x0 as f64, (x + width) as f64) as u32;
                 let y1 = rect.y1.clamp(y0 as f64, (y + height) as f64) as u32;
-                Some([x0, y0, x1 - x0, y1 - y0])
+                if x1 > x0 && y1 > y0 {
+                    ClipRegion::Scissor([x0, y0, x1 - x0, y1 - y0])
+                } else {
+                    ClipRegion::Empty
+                }
             } else {
-                None
+                ClipRegion::Mask
             }
         }
-        _ => None,
+        _ => ClipRegion::Mask,
     }
 }
