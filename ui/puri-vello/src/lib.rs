@@ -46,7 +46,7 @@ impl puri::draw::CanvasSink for VelloCanvas<'_> {
             .draw_glyphs(&run.font)
             .font_size(run.size)
             .brush(&run.brush)
-            .hint(run.hint)
+            .hint(true)
             .transform(run.transform)
             .glyph_transform(run.glyph_transform)
             .normalized_coords(&run.normalized_coords)

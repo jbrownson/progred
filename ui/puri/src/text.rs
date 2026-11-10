@@ -261,7 +261,6 @@ pub fn draw_layout(
                 .collect(),
             normalized_coords: run.normalized_coords().to_vec(),
             brush: style.brush.clone(),
-            hint: true,
             transform,
             glyph_transform: glyph_xform,
         });

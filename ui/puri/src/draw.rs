@@ -202,7 +202,6 @@ pub struct GlyphRun {
     /// Variable-font axis positions, raw `F2Dot14` bits as parley reports them.
     pub normalized_coords: Vec<i16>,
     pub brush: Brush,
-    pub hint: bool,
     pub transform: Affine,
     pub glyph_transform: Option<Affine>,
 }
