@@ -103,6 +103,26 @@ fn operators_typed_in_a_line_group_as_the_line_reads() {
 }
 
 #[test]
+fn an_operation_chosen_over_a_value_takes_it_as_its_left_operand() {
+    use crate::libraries::f32;
+    use crate::libraries::grap::numbers::f32::{MULTIPLY, SUM};
+    let x = Value::from(new_cell_id());
+    let mut driver = Driver::of(::grap::call(
+        SUM.into(),
+        [(LEFT, x.clone()), (RIGHT, f32::value(1.0))],
+    ));
+    driver.select(&[Step::Key(LEFT)]);
+    driver.type_text("*");
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    assert_eq!(
+        driver.value(&[Step::Key(LEFT)]),
+        ::grap::call(MULTIPLY.into(), [(LEFT, x)])
+    );
+    assert_eq!(driver.selection(), [Step::Key(LEFT), Step::Key(RIGHT)]);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+}
+
+#[test]
 fn a_parenthesis_selects_the_operand_it_groups() {
     use crate::libraries::f32;
     use crate::libraries::grap::numbers::f32::{MULTIPLY, SUM};
