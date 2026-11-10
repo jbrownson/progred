@@ -456,13 +456,21 @@ fn call_completion<'a>(
     display: impl Into<crate::display::CompletionText>,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Completion {
-    let first = function_parameters(&(&function).into(), resolve)
-        .and_then(|parameters| parameters.first().copied());
-    let continuation = match first {
+    let continuation = after_function(&(&function).into(), resolve);
+    crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
+}
+
+/// Where a call goes once it has `function`: to its first declared
+/// parameter, when known, else to its own edge.
+fn after_function<'a>(
+    function: &::grap::RuntimeValue,
+    resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+) -> crate::site::Continuation {
+    match function_parameters(function, resolve).and_then(|parameters| parameters.first().copied())
+    {
         Some(parameter) => crate::selection::pending_at(&[Step::Key(parameter)]),
         None => crate::selection::at(&[], crate::selection::payload::edge()),
-    };
-    crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
+    }
 }
 
 /// A call, drawn as its function provides, else as a call.
@@ -940,12 +948,7 @@ fn function_completion<'a>(
     function: CellId,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Completion {
-    let first = function_parameters(&Value::from(function).into(), resolve)
-        .and_then(|parameters| parameters.first().copied());
-    let then = match first {
-        Some(parameter) => crate::selection::pending_at(&[Step::Key(parameter)]),
-        None => crate::selection::at(&[], crate::selection::payload::edge()),
-    };
+    let then = after_function(&Value::from(function).into(), resolve);
     // The call is where its function slot is.
     let continuation: crate::site::Continuation = std::rc::Rc::new(move |read, slot, staged| {
         slot.split_last()
