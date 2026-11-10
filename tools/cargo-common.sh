@@ -1,6 +1,7 @@
 # Shared by tools/sandbox-cargo and tools/linux-cargo, which source it after
-# checking their platform and then define run_sandboxed: Cargo's commands are
-# the same on both, and only the sandbox differs. See docs/build-security.md.
+# checking their platform and then define run_sandboxed: Cargo's commands and
+# the environment they run in are the same on both, and only the sandbox
+# differs. See docs/build-security.md.
 #
 #   run_sandboxed ALLOW_NETWORK ALLOW_LOCK_WRITE COMMAND [ARGUMENTS...]
 
@@ -54,6 +55,32 @@ stamp() {
             --release | -r) "$tool_dir/progred-commit"; return ;;
         esac
     done
+}
+
+# A sandboxed command's whole environment, with none of the caller's, set
+# before the sandbox's launcher starts. COMMIT is what `stamp` printed for the
+# command, and further NAME=VALUE settings may precede the launcher.
+#
+#   sandbox_env ALLOW_NETWORK COMMIT [NAME=VALUE...] LAUNCHER [ARGUMENTS...]
+sandbox_env() {
+    offline=$([ "$1" = 1 ] && echo false || echo true)
+    commit=$2
+    shift 2
+    env -i \
+        CARGO_HOME="$cargo_home" \
+        CARGO_NET_OFFLINE="$offline" \
+        CARGO_TARGET_DIR="$target_dir" \
+        HOME="$sandbox_home" \
+        LOGNAME="$user_name" \
+        PATH="$toolchain_root/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+        PROGRED_COMMIT="$commit" \
+        RUSTC="$rustc_path" \
+        RUSTC_WRAPPER= \
+        RUSTDOC="$rustdoc_path" \
+        CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="${web_rustflags-}" \
+        TMPDIR="$sandbox_tmp" \
+        USER="$user_name" \
+        "$@"
 }
 
 # Updates and resolution exclude registry releases less than seven days old,
