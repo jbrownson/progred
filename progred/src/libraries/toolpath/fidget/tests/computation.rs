@@ -42,7 +42,7 @@ fn with_render(
     program: RuntimeValue,
     settings: Settings,
     render: impl Fn(
-        Arc<SceneRequest>,
+        Arc<playback::Solid>,
         ViewRequest,
         &incremental::Cancellation,
         &mut (dyn FnMut(Outcome<DepthImage>) -> Result<(), incremental::Error> + Send),
@@ -402,7 +402,13 @@ fn implicit_playback_contains_only_stock_not_paths_or_visible_cutter() {
     let playback = playback(0.5);
     let expected = playback.removal().unwrap().remaining(&path).unwrap();
     settings.style.playback = Some(playback);
-    let rendered = scene(SceneRequest::new(path, &settings)).unwrap();
+    let rendered = playback::Solid::new(
+        &settings.request.preview.objects,
+        &path,
+        settings.style.playback.as_ref(),
+    )
+    .objects()
+    .unwrap();
     assert_eq!(
         rendered.len(),
         1,

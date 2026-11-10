@@ -13,26 +13,6 @@ pub(crate) struct Settings {
     pub style: PathStyle,
 }
 
-#[derive(Clone, PartialEq)]
-enum SceneRequest {
-    Model(Vec<volume::SceneObject>),
-    Stock(Arc<Recording>, playback::Removal),
-}
-
-impl SceneRequest {
-    fn new(path: Arc<Recording>, settings: &Settings) -> Self {
-        match settings
-            .style
-            .playback
-            .as_ref()
-            .and_then(playback::Settings::removal)
-        {
-            Some(removal) => Self::Stock(path, removal),
-            None => Self::Model(settings.request.preview.objects.clone()),
-        }
-    }
-}
-
 pub(crate) struct ViewImage {
     pub image: Option<DepthImage>,
     pub pending: bool,
@@ -120,8 +100,8 @@ pub(crate) fn image(
         settings,
         ready,
         permitted,
-        |request, cancel| {
-            Ok(match scene(request) {
+        |solid, cancel| {
+            Ok(match solid.objects() {
                 Ok(objects) => SoftwareScene::new(&objects, cancel)?
                     .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)),
                 Err(failure) => Err(failure),
@@ -151,7 +131,10 @@ fn image_with<S: Send + Sync + 'static>(
     settings: Input<Settings>,
     ready: Option<Memo<bool>>,
     permitted: Memo<bool>,
-    prepare: impl Fn(SceneRequest, &incremental::Cancellation) -> Result<Outcome<S>, incremental::Error>
+    prepare: impl Fn(
+        playback::Solid,
+        &incremental::Cancellation,
+    ) -> Result<Outcome<S>, incremental::Error>
     + Send
     + Sync
     + 'static,
@@ -172,9 +155,13 @@ fn image_with<S: Send + Sync + 'static>(
         move |read| {
             let record = recording.read(read)?;
             let settings = settings.read(read);
-            Ok(record
-                .path()
-                .map(|_| SceneRequest::new(record.path.clone(), &settings)))
+            Ok(record.path().map(|_| {
+                playback::Solid::new(
+                    &settings.request.preview.objects,
+                    &record.path,
+                    settings.style.playback.as_ref(),
+                )
+            }))
         }
     });
     let view = runtime.memo(move |read| Ok(settings.read(read).request.view()));
@@ -268,16 +255,6 @@ fn image_with<S: Send + Sync + 'static>(
         },
         |_, _| false,
     )
-}
-
-fn scene(request: SceneRequest) -> Outcome<Vec<volume::SceneObject>> {
-    match request {
-        SceneRequest::Model(objects) => Ok(objects),
-        SceneRequest::Stock(path, removal) => removal
-            .remaining(&path)
-            .map(|stock| vec![stock])
-            .map_err(|_| ::grap::absent::value(INVALID_INPUT)),
-    }
 }
 
 #[cfg(test)]

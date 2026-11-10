@@ -2,6 +2,7 @@ use super::{cutter::Tool, vocabulary::*};
 use crate::libraries::{f64, fidget};
 use cam::{paths::*, stock::Stock};
 use gid::Value;
+use std::sync::Arc;
 
 pub(super) trait Draw: Sink<Error = InvalidPath> {
     fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath>;
@@ -25,6 +26,39 @@ pub(super) struct Settings {
 pub(super) struct Removal {
     playback: Settings,
     color: [u8; 3],
+}
+
+/// What a preview shows solid: its model, or what's left of the stock in the
+/// model's place when playback removes.
+#[derive(Clone, PartialEq)]
+pub(super) enum Solid {
+    Model(Vec<volume::SceneObject>),
+    Stock(Arc<Recording>, Removal),
+}
+
+impl Solid {
+    pub(super) fn new(
+        model: &[volume::SceneObject],
+        path: &Arc<Recording>,
+        playback: Option<&Settings>,
+    ) -> Self {
+        match playback.and_then(Settings::removal) {
+            Some(removal) => Self::Stock(path.clone(), removal),
+            None => Self::Model(model.to_vec()),
+        }
+    }
+
+    /// The objects to show, absent as invalid input when the path can't cut
+    /// the stock.
+    pub(super) fn objects(self) -> Result<Vec<volume::SceneObject>, Value> {
+        match self {
+            Self::Model(objects) => Ok(objects),
+            Self::Stock(path, removal) => removal
+                .remaining(&path)
+                .map(|stock| vec![stock])
+                .map_err(|_| ::grap::absent::value(INVALID_INPUT)),
+        }
+    }
 }
 
 impl Settings {

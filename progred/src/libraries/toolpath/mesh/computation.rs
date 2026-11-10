@@ -31,8 +31,9 @@ pub(crate) struct ViewGeometry {
 
 #[derive(Clone, PartialEq)]
 struct Surface {
+    /// The model's shape, which the solid's objects are meshed within.
     model: fidget::mesh::Shape,
-    removal: Option<(Arc<Recording>, playback::Removal)>,
+    solid: playback::Solid,
     depth: u8,
 }
 
@@ -110,27 +111,30 @@ fn surface(
         let depth = *depth.read(read);
         Ok(record.path().map(|_| Surface {
             model: settings.shape.clone(),
-            removal: settings
-                .style
-                .playback
-                .as_ref()
-                .and_then(playback::Settings::removal)
-                .map(|removal| (record.path.clone(), removal)),
+            solid: playback::Solid::new(
+                &settings.shape.objects,
+                &record.path,
+                settings.style.playback.as_ref(),
+            ),
             depth,
         }))
     });
     // Paths and cutter redraw immediately. Let each admitted surface finish,
     // then catch up to the latest inputs, without a queue of drag samples.
     tasks.memo_conflated(prepared, |prepared, cancel| match prepared {
-        Ok(request) => {
+        Ok(Surface {
+            model,
+            solid,
+            depth,
+        }) => {
             cancel.check()?;
-            let shape = remaining_shape(&request);
+            let shape = remaining_shape(model, solid);
             cancel.check()?;
             match shape {
                 Ok(shape) => {
                     let mut geometry = Geometry::default();
                     Ok(shape
-                        .append(&mut geometry, request.depth, cancel)?
+                        .append(&mut geometry, depth, cancel)?
                         .map(|()| geometry.into())
                         .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
                 }
@@ -195,16 +199,12 @@ fn updating_color(color: [f32; 3]) -> [f32; 3] {
     color.map(|channel| 0.25 * channel + 0.75 * gray)
 }
 
-fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
-    let mut shape = request.model.clone();
-    if let Some((path, removal)) = &request.removal {
-        shape.objects = vec![
-            removal
-                .remaining(path)
-                .map_err(|_| ::grap::absent::value(INVALID_INPUT))?,
-        ];
-    }
-    Ok(shape)
+fn remaining_shape(
+    mut model: fidget::mesh::Shape,
+    solid: playback::Solid,
+) -> Outcome<fidget::mesh::Shape> {
+    model.objects = solid.objects()?;
+    Ok(model)
 }
 
 /// The tubes of the recorded paths and the cutter, drawn again only when the
