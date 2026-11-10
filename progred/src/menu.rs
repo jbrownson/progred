@@ -656,10 +656,7 @@ mod view {
                 p.handler().on_pointer_move(move |app: &mut Editor, event| {
                     if event.pointer.pointer_type == PointerType::Mouse
                         && event.current.buttons.is_empty()
-                        && placement.contains(kurbo::Point::new(
-                            event.current.position.x,
-                            event.current.position.y,
-                        ))
+                        && placement.contains(crate::display::widget::at(&event.current))
                     {
                         app.menu.cursor = None;
                         true

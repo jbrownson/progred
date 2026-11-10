@@ -1,3 +1,4 @@
+use crate::display::widget::at;
 use crate::frame::DispatchContext;
 use crate::{Editor, EditorRunner, navigate};
 use kurbo::{Point, Rect, Size};
@@ -82,12 +83,10 @@ impl<T> PendingBatch<T> {
 
 fn pointer_position(event: &PointerEvent) -> Option<Point> {
     match event {
-        PointerEvent::Down(e) | PointerEvent::Up(e) => {
-            Some(Point::new(e.state.position.x, e.state.position.y))
-        }
-        PointerEvent::Move(u) => Some(Point::new(u.current.position.x, u.current.position.y)),
-        PointerEvent::Scroll(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
-        PointerEvent::Gesture(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
+        PointerEvent::Down(e) | PointerEvent::Up(e) => Some(at(&e.state)),
+        PointerEvent::Move(u) => Some(at(&u.current)),
+        PointerEvent::Scroll(e) => Some(at(&e.state)),
+        PointerEvent::Gesture(e) => Some(at(&e.state)),
         _ => None,
     }
 }
@@ -340,7 +339,7 @@ impl EditorRunner {
                 ) {
                     self.dispatch_pointer_batch(&pending);
                 }
-                self.editor.cursor = Point::new(event.current.position.x, event.current.position.y);
+                self.editor.cursor = at(&event.current);
                 self.editor.pointer = window_pointer(self.editor.cursor, viewport);
                 self.editor.modifiers = event.current.modifiers;
                 true
@@ -438,10 +437,7 @@ impl EditorRunner {
     }
 
     fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
-        self.editor.cursor = Point::new(
-            pending.event.current.position.x,
-            pending.event.current.position.y,
-        );
+        self.editor.cursor = at(&pending.event.current);
         self.editor.pointer = window_pointer(self.editor.cursor, pending.viewport);
         self.editor.modifiers = pending.event.current.modifiers;
         self.probe_pointer(pending.scale);
@@ -451,9 +447,7 @@ impl EditorRunner {
             pending.viewport,
             |editor, dispatch, hover| {
                 let event = &pending.event;
-                let samples: Vec<_> = puri::interact::pointer_samples(event)
-                    .map(|sample| Point::new(sample.position.x, sample.position.y))
-                    .collect();
+                let samples: Vec<_> = puri::interact::pointer_samples(event).map(at).collect();
                 let moved = editor.advance_gesture(&samples)
                     || dispatch.send(editor, hover, Event::PointerMove(event));
                 // Unclaimed touch motion scrolls through the same nested handlers.
@@ -461,7 +455,7 @@ impl EditorRunner {
                     || (event.pointer.pointer_type == PointerType::Touch && {
                         let scroll = puri::interact::pointer_samples(event)
                             .scan(pending.start, |previous, sample| {
-                                let point = Point::new(sample.position.x, sample.position.y);
+                                let point = at(sample);
                                 let delta = point - *previous;
                                 *previous = point;
                                 Some(PointerScrollEvent {
