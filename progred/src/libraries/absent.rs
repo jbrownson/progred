@@ -266,19 +266,11 @@ pub fn outside_scope(
 fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default().register(
         vocabulary::OR_DEFAULT,
-        ForeignFunction::new(|context, call, environment| {
-            let Some(expression) = call.field(vocabulary::VALUE) else {
-                return Ok(call.missing_runtime_argument(vocabulary::VALUE));
-            };
-            let value = context.eval(expression, environment)?;
-            if value.absent_reason().is_some() {
-                match call.field(vocabulary::DEFAULT) {
-                    Some(default) => context.eval(default, environment),
-                    None => Ok(call.missing_runtime_argument(vocabulary::DEFAULT)),
-                }
-            } else {
-                Ok(value)
-            }
+        ForeignFunction::early(|context, call, environment| {
+            context
+                .eval_argument(call, vocabulary::VALUE, environment)?
+                .present()
+                .or_else(|_| context.eval_argument(call, vocabulary::DEFAULT, environment))
         })
         .parameters([vocabulary::VALUE, vocabulary::DEFAULT])
         .cacheable(),
