@@ -170,10 +170,11 @@ async function perform(page, [action, ...args]) {
 }
 
 // The site built and served locally; resolves to the server and its address.
-async function preview(build = true) {
+// `serverErrors` is the server's stderr handling.
+async function preview(build = true, serverErrors = "inherit") {
   const server = spawn("python3", [
     "-B", "website/preview.py", "--no-open", "--port", "0", ...(build ? [] : ["--no-build"]),
-  ], { cwd: ROOT, stdio: ["ignore", "pipe", "inherit"] });
+  ], { cwd: ROOT, stdio: ["ignore", "pipe", serverErrors] });
   const url = await new Promise((resolve, reject) => {
     let output = "";
     server.stdout.on("data", (chunk) => {
@@ -181,6 +182,7 @@ async function preview(build = true) {
       const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
       if (match) resolve(match[1]);
     });
+    server.once("error", reject);
     server.once("exit", (code) => reject(new Error(`the preview server exited: ${code}`)));
   });
   return { server, url };
