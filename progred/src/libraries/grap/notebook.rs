@@ -6,7 +6,7 @@
 //! its first.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{Completion, alternatives, col, indent, row, selectable, shared};
+use crate::display::{Completion, row, selectable};
 use gid::{Position, Step, Value};
 use puri::handler::HasHandler;
 use std::rc::Rc;
@@ -173,19 +173,11 @@ fn entry_of<W: Host>(
             .env
             .evaluation(reference, crate::sources::DEFAULT_FUEL, &[]),
     );
-    let (expression, arrow, result) = (
-        shared(expression),
-        shared(selectable(crate::display::arrow(), &site)),
-        shared(result),
-    );
-    Some(alternatives([
-        row(6.0, [expression.clone(), arrow.clone(), result.clone()]),
-        col(
-            0,
-            2.0,
-            [row(6.0, [expression, arrow]), indent(20.0, result)],
-        ),
-    ]))
+    Some(super::with_result(
+        expression,
+        selectable(crate::display::arrow(), &site),
+        result,
+    ))
 }
 
 /// Enter on the entry at `at`, after its own handlers decline it, starts a

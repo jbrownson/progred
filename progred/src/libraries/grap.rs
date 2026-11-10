@@ -682,20 +682,27 @@ fn evaluation_display<W: Host>(
                 crate::sources::DEFAULT_FUEL,
                 &[Step::Key(EXPRESSION)],
             );
-            let expression = shared(expression_path(input, [Step::Key(EXPRESSION)]));
-            let shaft_site = input.site();
-            let shaft = shared(selectable(crate::display::arrow(), &shaft_site));
-            let result = shared(crate::libraries::presentation::result_layout(&result));
-            Some(alternatives([
-                row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
-                col(
-                    0,
-                    2.0,
-                    [row(6.0, [expression, shaft]), indent(20.0, result)],
-                ),
-            ]))
+            Some(with_result(
+                expression_path(input, [Step::Key(EXPRESSION)]),
+                selectable(crate::display::arrow(), &input.site()),
+                crate::libraries::presentation::result_layout(&result),
+            ))
         },
     )
+}
+
+/// `expression` and its `arrow` with `result` beside them when they fit, else
+/// below them.
+fn with_result<W: Host>(expression: Layout<W>, arrow: Layout<W>, result: Layout<W>) -> Layout<W> {
+    let (expression, arrow, result) = (shared(expression), shared(arrow), shared(result));
+    alternatives([
+        row(6.0, [expression.clone(), arrow.clone(), result.clone()]),
+        col(
+            0,
+            2.0,
+            [row(6.0, [expression, arrow]), indent(20.0, result)],
+        ),
+    ])
 }
 
 fn evaluate_foreign(
