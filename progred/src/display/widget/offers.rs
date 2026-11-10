@@ -61,23 +61,20 @@ pub(crate) fn rank<W: Host>(
     offers: Vec<Completion>,
     request: &CompletionRequest<'_>,
 ) -> Vec<Entry<W>> {
+    // A new field's label can't be one the record already has.
+    let taken = (request.kind == CompletionKind::Field)
+        .then(|| request.value().and_then(Value::as_record))
+        .flatten();
     crate::filter::rank_with_aliases(
         offers
             .into_iter()
             .filter(|offer| {
                 fits(request, offer)
-                    && (request.kind != CompletionKind::Field
-                        || !offer
-                            .preview
-                            .as_ref()
-                            .and_then(Value::as_cell)
-                            .is_some_and(|cell| {
-                                request
-                                    .value()
-                                    .and_then(Value::as_record)
-                                    .and_then(|fields| fields.get(&cell))
-                                    .is_some()
-                            }))
+                    && !offer
+                        .preview
+                        .as_ref()
+                        .and_then(Value::as_cell)
+                        .is_some_and(|cell| taken.is_some_and(|fields| fields.get(&cell).is_some()))
             })
             .map(|offer| (text(request, &offer.display), offer))
             .collect(),
