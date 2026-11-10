@@ -326,7 +326,17 @@ impl<T: 'static> Dependency for MemoNode<T> {
 pub struct Source<S, K, V> {
     snapshot: Input<S>,
     select: Rc<dyn Fn(&S, &K) -> V>,
-    entries: Rc<RefCell<HashMap<K, Weak<Selected<S, K, V>>>>>,
+    entries: Rc<RefCell<Entries<S, K, V>>>,
+}
+
+/// A source's selections by key. Their readers own them, so an entry outlives
+/// its selection until a prune.
+struct Entries<S, K, V> {
+    selections: HashMap<K, Weak<Selected<S, K, V>>>,
+    /// How many entries the last prune left. Pruning once there are twice as
+    /// many keeps the dead ones within the live ones' number, and its cost
+    /// within that of the reads that added them.
+    kept: usize,
 }
 
 impl<S, K, V> Clone for Source<S, K, V> {
@@ -353,17 +363,26 @@ impl<S: 'static, K: Clone + Eq + Hash + 'static, V: Clone + PartialEq + 'static>
         Self {
             snapshot,
             select: Rc::new(select),
-            entries: Rc::default(),
+            entries: Rc::new(RefCell::new(Entries {
+                selections: HashMap::new(),
+                kept: 0,
+            })),
         }
     }
 
     pub fn read(&self, key: K, read: &mut Read) -> V {
         let mut entries = self.entries.borrow_mut();
         let node = entries
+            .selections
             .get(&key)
             .and_then(Weak::upgrade)
             .unwrap_or_else(|| {
-                entries.retain(|_, entry| entry.strong_count() != 0);
+                if entries.selections.len() > 2 * entries.kept {
+                    entries
+                        .selections
+                        .retain(|_, entry| entry.strong_count() != 0);
+                    entries.kept = entries.selections.len();
+                }
                 let revision = self.snapshot.0.changed.get();
                 let node = Rc::new(Selected {
                     snapshot: self.snapshot.clone(),
@@ -373,7 +392,7 @@ impl<S: 'static, K: Clone + Eq + Hash + 'static, V: Clone + PartialEq + 'static>
                     verified: Cell::new(revision),
                     changed: Cell::new(revision),
                 });
-                entries.insert(key, Rc::downgrade(&node));
+                entries.selections.insert(key, Rc::downgrade(&node));
                 node
             });
         node.refresh();

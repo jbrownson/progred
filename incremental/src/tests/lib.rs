@@ -191,6 +191,21 @@ fn selected_reads_track_missing_entries_and_ignore_unrelated_changes() {
 }
 
 #[test]
+fn a_source_forgets_the_selections_nothing_reads() {
+    let runtime = Runtime::default();
+    let source = Source::new(runtime.input(()), |(), key: &u32| *key);
+    let mut held = Read::new(&runtime, &Cancellation::default());
+    assert_eq!(source.read(0, &mut held), 0);
+    for key in 1..100 {
+        let mut dropped = Read::new(&runtime, &Cancellation::default());
+        assert_eq!(source.read(key, &mut dropped), key);
+    }
+    let entries = source.entries.borrow();
+    assert!(entries.selections[&0].strong_count() != 0);
+    assert!(entries.selections.len() < 10);
+}
+
+#[test]
 fn cancelled_or_interrupted_work_is_not_published() {
     let runtime = Runtime::default();
     let input = runtime.input(0);
