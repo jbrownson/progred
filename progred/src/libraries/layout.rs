@@ -384,6 +384,15 @@ fn coordinate(value: &::grap::RuntimeValue, key: CellId) -> Option<f64> {
         .filter(|number| number.is_finite())
 }
 
+/// The fuel a `fuel` field grants: `field` is the number it reads as, where
+/// there is such a field, and without one the default is granted. A field
+/// that isn't a count grants none.
+pub(crate) fn fuel(field: Option<Option<f64>>) -> Option<usize> {
+    field.map_or(Some(crate::sources::DEFAULT_FUEL), |number| {
+        ::grap::f64::to_usize(number?)
+    })
+}
+
 fn read_number(value: &Value) -> Option<f64> {
     f64_convention::read(value).filter(|number| number.is_finite())
 }

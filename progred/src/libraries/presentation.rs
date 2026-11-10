@@ -124,10 +124,7 @@ fn viewport_runtime_output(
     };
     Some(match fields.get(&vocabulary::PREPARE) {
         Some(prepare) => {
-            let fuel = match fields.get(&layout::vocabulary::FUEL) {
-                Some(value) => ::grap::f64::to_usize(f64::read(value)?)?,
-                None => crate::sources::DEFAULT_FUEL,
-            };
+            let fuel = layout::fuel(fields.get(&layout::vocabulary::FUEL).map(f64::read))?;
             let prepared =
                 env.apply_runtime_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
             // An absent preparation is the output; the viewport doesn't run.
@@ -156,10 +153,11 @@ fn render_display<W: Host>(
 ) -> Option<Layout<W>> {
     let render = input.value?;
     let expression = render.field(::grap::vocabulary::EXPRESSION)?;
-    let fuel = match render.field(layout::vocabulary::FUEL) {
-        Some(fuel) => ::grap::f64::to_usize(fuel.as_f64()?)?,
-        None => crate::sources::DEFAULT_FUEL,
-    };
+    let fuel = layout::fuel(
+        render
+            .field(layout::vocabulary::FUEL)
+            .map(|fuel| fuel.as_f64()),
+    )?;
     let steps = [Step::Key(::grap::vocabulary::EXPRESSION)];
     let result = input.env.evaluate_runtime_memo(&expression, fuel, &steps);
     Some(crate::display::at_evaluated(

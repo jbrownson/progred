@@ -428,14 +428,8 @@ fn drawing<W: Host>(
             descent,
         })
         .ok_or(BuildError::Invalid)?;
-    let fuel = ::grap::f64::to_usize(number_argument(
-        context,
-        call,
-        environment,
-        FUEL,
-        Some(crate::sources::DEFAULT_FUEL as f64),
-    )?)
-    .ok_or(BuildError::Invalid)?;
+    let fuel = fuel(optional_number(context, call, environment, FUEL)?.map(Some))
+        .ok_or(BuildError::Invalid)?;
     let program = evaluated(context, call, environment, PROGRAM)?;
     // An evaluated program has no stored location.
     Ok(super::drawing::program(extent, fuel, None, program))
