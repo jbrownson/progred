@@ -167,16 +167,17 @@ impl puri::draw::CanvasSink for WebCanvas {
                 outline.draw(settings, &mut CanvasPen(&path)).ok()?;
                 Some((glyph, path))
             });
+            // One fill style for the run, scoped like each glyph's transform.
+            self.0.save();
+            self.set_fill_style(&run.brush);
             for (glyph, path) in paths {
                 let transform = run.transform
                     * Affine::translate((glyph.x as f64, glyph.y as f64))
                     * Affine::scale_non_uniform(1.0, -1.0)
                     * run.glyph_transform.unwrap_or(Affine::IDENTITY);
-                self.with_transform(transform, |canvas| {
-                    canvas.set_fill_style(&run.brush);
-                    canvas.0.fill_with_path_2d(&path);
-                });
+                self.with_transform(transform, |canvas| canvas.0.fill_with_path_2d(&path));
             }
+            self.0.restore();
         }
     }
 
