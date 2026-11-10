@@ -138,8 +138,8 @@ impl Trail {
         })
     }
 
-    /// Whether what's here is computed, as [`super::computed`] says of the
-    /// path.
+    /// Whether what's here is computed: its last jump or computed step is a
+    /// computed one, where [`super::within_computed`] finds the path.
     pub fn computed(&self) -> bool {
         self.link.as_ref().is_some_and(|link| link.computed)
     }
