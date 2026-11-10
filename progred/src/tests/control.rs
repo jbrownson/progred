@@ -184,3 +184,19 @@ fn gpu_screenshots_are_pngs_of_the_window() {
         Some((WINDOW.width as u32, WINDOW.height as u32))
     );
 }
+
+/// `tools/control` writes its requests by hand, with the session's binders.
+#[test]
+fn a_request_spelled_as_the_client_spells_it_is_done() {
+    let session = session(Value::record([]));
+    let binders = computer::binders();
+    let lines: String = binders
+        .iter()
+        .map(|(name, cell)| format!("    \"{name}\": {cell},\n"))
+        .collect();
+    let request = format!(
+        "{{\n  \"binders\": {{\n{lines}  }},\n  \"root\": {{isa: call, function: key, text: \"Down\"}},\n}}\n"
+    );
+    let reply = respond(&Session::libraries(&session), &binders, request.as_bytes());
+    assert_eq!(gid_text::parse(&reply).unwrap().0.root, Some(DONE.into()));
+}

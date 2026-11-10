@@ -92,6 +92,8 @@ pub(super) fn binders() -> Binders {
     NAMES
         .into_iter()
         .chain([
+            (::grap::isa::ISA, "isa"),
+            (::grap::vocabulary::kind::CALL, "call"),
             (::grap::vocabulary::FUNCTION, "function"),
             (png::vocabulary::PNG, "png"),
             (::grap::f64::F64, "f64"),

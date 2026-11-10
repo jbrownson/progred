@@ -146,7 +146,7 @@ def main():
         raise SystemExit(__doc__)
     action, arguments = sys.argv[1], sys.argv[2:]
     fields = request(action, arguments)
-    call = ", ".join([f"function: {action}"] + [f"{label}: {value}" for label, value in fields.items()])
+    call = ", ".join(["isa: call", f"function: {action}"] + [f"{label}: {value}" for label, value in fields.items()])
     lines = ",\n    ".join(binders())
     reply = exchange(f'{{\n  "binders": {{\n    {lines},\n  }},\n  "root": {{{call}}},\n}}\n')
     root = reply.split('"root": ', 1)[1].rsplit("}", 1)[0].strip().rstrip(",")
