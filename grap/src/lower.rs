@@ -1,7 +1,7 @@
 //! Lowering: stored and runtime code turned into expressions that remember
 //! their origins, and expressions compiled into thunks.
 
-use crate::call::{CallPlan, PreparedCallTarget, not_callable};
+use crate::call::{CallPlan, PreparedCallTarget};
 use crate::environment::{Environment, cell_index};
 use crate::eval::unbox;
 use crate::foreign::{Prepare, Stage};
@@ -426,16 +426,7 @@ impl<'a> Context<'a> {
                         }
                         None => context.eval(function.clone(), environment)?,
                     };
-                    match context.try_call_callable(
-                        callable.clone(),
-                        &call,
-                        environment,
-                        &plan,
-                        &stages,
-                    ) {
-                        Some(result) => result,
-                        None => Ok(not_callable(&callable)),
-                    }
+                    context.call_callable(&callable, &call, environment, &plan, &stages)
                 }
             })
         })

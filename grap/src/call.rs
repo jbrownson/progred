@@ -126,19 +126,9 @@ impl<'a> Context<'a> {
                 self.call_foreign_staged(function, call, environment, Some(&target.stages))
             }
             PreparedCallTargetKind::Value(expression) => {
+                // An absent isn't callable, and answers as it is.
                 let callable = self.eval(expression.clone(), environment)?;
-                if callable.absent_reason().is_some() {
-                    Ok(callable)
-                } else {
-                    self.try_call_callable(
-                        callable.clone(),
-                        call,
-                        environment,
-                        &target.plan,
-                        &target.stages,
-                    )
-                    .unwrap_or_else(|| Ok(not_callable(&callable)))
-                }
+                self.call_callable(&callable, call, environment, &target.plan, &target.stages)
             }
             PreparedCallTargetKind::Primitive(primitive, operands) => {
                 primitive.run(self, call, operands, environment)
@@ -163,32 +153,27 @@ impl<'a> Context<'a> {
         })
     }
 
-    pub(crate) fn try_call_callable(
+    /// A call of `callable`: a closure's body, the cell it names, or why it
+    /// can't be called.
+    pub(crate) fn call_callable(
         &mut self,
-        callable: RuntimeValue,
+        callable: &RuntimeValue,
         call: &Expression,
         environment: &Environment,
         plan: &RefCell<Option<CallPlan>>,
         stages: &RefCell<Option<(Prepare, Stage)>>,
-    ) -> Option<Result<RuntimeValue, Halt>> {
-        match &callable.0 {
-            RuntimeValueKind::Closure(closure) => {
-                Some(self.eval_grap_call(closure.clone(), call, environment, plan))
-            }
-            RuntimeValueKind::Data(_)
-            | RuntimeValueKind::Unboxed(_)
-            | RuntimeValueKind::Record(_) => match self.runtime_closure(&callable) {
-                Some(closure) => Some(self.eval_grap_call(closure, call, environment, plan)),
-                None => callee_cell(&callable).map(|cell| {
-                    match self.foreign_target_cell(cell).cloned() {
-                        Some(foreign) => {
-                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
-                        }
-                        None => self.call_cell(cell, call, environment, None),
+    ) -> Result<RuntimeValue, Halt> {
+        match self.runtime_closure(callable) {
+            Some(closure) => self.eval_grap_call(closure, call, environment, plan),
+            None => match callee_cell(callable) {
+                Some(cell) => match self.foreign_target_cell(cell).cloned() {
+                    Some(foreign) => {
+                        self.call_foreign_staged(&foreign, call, environment, Some(stages))
                     }
-                }),
+                    None => self.call_cell(cell, call, environment, None),
+                },
+                None => Ok(not_callable(callable)),
             },
-            RuntimeValueKind::List(_) => None,
         }
     }
 
@@ -199,15 +184,6 @@ impl<'a> Context<'a> {
             .iter()
             .rev()
             .find_map(|functions| functions.get(cell))
-    }
-
-    fn call_foreign(
-        &mut self,
-        foreign: &ForeignFunction,
-        call: &Expression,
-        environment: &Environment,
-    ) -> Result<RuntimeValue, Halt> {
-        self.call_foreign_staged(foreign, call, environment, None)
     }
 
     /// Call `foreign` with evaluated arguments, which it receives as the
@@ -230,7 +206,7 @@ impl<'a> Context<'a> {
             .into_iter()
             .chain(arguments),
         ));
-        self.call_foreign(foreign, &call, environment)
+        self.call_foreign_staged(foreign, &call, environment, None)
     }
 
     fn call_foreign_staged(
@@ -306,13 +282,11 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> PreparedCallable {
         let callable = match &callable.0 {
-            RuntimeValueKind::Data(_)
-            | RuntimeValueKind::Unboxed(_)
-            | RuntimeValueKind::Record(_) => self
+            RuntimeValueKind::Closure(_) => callable,
+            _ => self
                 .runtime_closure(&callable)
                 .map(|closure| RuntimeValue::new(RuntimeValueKind::Closure(closure)))
                 .unwrap_or(callable),
-            _ => callable,
         };
         PreparedCallable {
             value: callable,
@@ -332,24 +306,18 @@ impl<'a> Context<'a> {
             RuntimeValueKind::Closure(closure) => {
                 self.call_closure(closure.clone(), &callable.value, &arguments)
             }
-            RuntimeValueKind::Data(_)
-            | RuntimeValueKind::Unboxed(_)
-            | RuntimeValueKind::Record(_) => {
-                let value = &callable.value;
-                match callee_cell(value) {
-                    Some(cell) => {
-                        let call = runtime_call(value.clone(), arguments);
-                        match self.foreign_target_cell(cell).cloned() {
-                            Some(foreign) => {
-                                self.call_foreign(&foreign, &call, &callable.environment)
-                            }
-                            None => self.call_cell(cell, &call, &callable.environment, None),
+            _ => match callee_cell(&callable.value) {
+                Some(cell) => {
+                    let call = runtime_call(callable.value.clone(), arguments);
+                    match self.foreign_target_cell(cell).cloned() {
+                        Some(foreign) => {
+                            self.call_foreign_staged(&foreign, &call, &callable.environment, None)
                         }
+                        None => self.call_cell(cell, &call, &callable.environment, None),
                     }
-                    None => Ok(not_callable(value)),
                 }
-            }
-            RuntimeValueKind::List(_) => Ok(not_callable(&callable.value)),
+                None => Ok(not_callable(&callable.value)),
+            },
         }
     }
 
@@ -382,10 +350,7 @@ impl<'a> Context<'a> {
                 };
                 self.eval(function, &environment)?
             };
-            match self.try_apply_callable(callable.clone(), &arguments, &environment) {
-                Some(result) => result,
-                None => Ok(not_callable(&callable)),
-            }
+            self.apply_callable(callable, &arguments, &environment)
         }
     }
 
@@ -409,12 +374,7 @@ impl<'a> Context<'a> {
                 // Lowered once per evaluation, as a call of the cell is.
                 let expression = self.lowered_cell(cell, &value);
                 let callable = self.eval(expression, environment)?;
-                if callable.absent_reason().is_some() {
-                    Ok(callable)
-                } else {
-                    self.try_apply_callable(callable.clone(), &arguments, environment)
-                        .unwrap_or_else(|| Ok(not_callable(&callable)))
-                }
+                self.apply_callable(callable, &arguments, environment)
             }
         }
     }
@@ -456,29 +416,27 @@ impl<'a> Context<'a> {
         self.eval(closure.body, &closure.environment.extended_runtime(bound))
     }
 
-    fn try_apply_callable(
+    /// `callable` applied to argument values: a closure's body, the cell it
+    /// names, or why it can't be called.
+    fn apply_callable(
         &mut self,
         callable: RuntimeValue,
         arguments: &[(CellId, RuntimeValue)],
         environment: &Environment,
-    ) -> Option<Result<RuntimeValue, Halt>> {
+    ) -> Result<RuntimeValue, Halt> {
         match self.runtime_closure(&callable) {
-            Some(closure) => Some(self.call_closure(closure, &callable, arguments)),
-            None => match callable.0 {
-                RuntimeValueKind::Data(_)
-                | RuntimeValueKind::Unboxed(_)
-                | RuntimeValueKind::Record(_) => callee_cell(&callable).map(|cell| {
-                    match self.foreign_target_cell(cell).cloned() {
-                        Some(foreign) => self.apply_foreign(
-                            &foreign,
-                            callable,
-                            arguments.iter().cloned(),
-                            environment,
-                        ),
-                        None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
-                    }
-                }),
-                RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+            Some(closure) => self.call_closure(closure, &callable, arguments),
+            None => match callee_cell(&callable) {
+                Some(cell) => match self.foreign_target_cell(cell).cloned() {
+                    Some(foreign) => self.apply_foreign(
+                        &foreign,
+                        callable,
+                        arguments.iter().cloned(),
+                        environment,
+                    ),
+                    None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
+                },
+                None => Ok(not_callable(&callable)),
             },
         }
     }
