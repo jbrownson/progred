@@ -32,8 +32,35 @@ impl Widths {
 /// or reruns a projection.
 pub struct ChoiceLayout<Out> {
     widths: Widths,
-    extent: Extent,
     kind: ChoiceKind<Out>,
+}
+
+/// A layout whose choices are made: `ChoiceLayout::settle` leaves only fixed
+/// leaves and containers of settled children, each with its extent.
+struct Settled<Out> {
+    extent: Extent,
+    kind: SettledKind<Out>,
+}
+
+enum SettledKind<Out> {
+    Fixed(Measured<Out>),
+    Row {
+        alignment: crate::RowAlignment,
+        gap: f64,
+        children: Vec<Settled<Out>>,
+    },
+    Col {
+        baseline: usize,
+        gap: f64,
+        children: Vec<Settled<Out>>,
+    },
+    Layers {
+        children: Vec<Settled<Out>>,
+    },
+    Pad {
+        insets: Insets,
+        child: Box<Settled<Out>>,
+    },
 }
 
 type MeasureMap<Out> = Box<dyn FnOnce(Measured<Out>) -> Measured<Out>>;
@@ -165,7 +192,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
     pub fn fixed(measured: Measured<Out>) -> Self {
         Self {
             widths: Widths::fixed(measured.extent.width),
-            extent: Extent::default(),
             kind: ChoiceKind::Fixed(measured),
         }
     }
@@ -173,7 +199,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
     fn used(id: usize, widths: Widths) -> Self {
         Self {
             widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Use(id),
         }
     }
@@ -181,7 +206,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
     pub fn map(child: Self, map: impl FnOnce(Measured<Out>) -> Measured<Out> + 'static) -> Self {
         Self {
             widths: child.widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Map {
                 child: Box::new(child),
                 map: Box::new(map),
@@ -205,7 +229,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
         };
         Self {
             widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Row {
                 alignment,
                 gap,
@@ -227,7 +250,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
         };
         Self {
             widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Col {
                 baseline,
                 gap,
@@ -249,7 +271,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
         };
         Self {
             widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Layers { children },
         }
     }
@@ -263,7 +284,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
     ) -> Self {
         Self {
             widths: trigger.widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Attached {
                 trigger: Box::new(trigger),
                 content: Box::new(content),
@@ -276,7 +296,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
         let widths = child.widths.plus(insets.x0 + insets.x1);
         Self {
             widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Pad {
                 insets,
                 child: Box::new(child),
@@ -297,7 +316,6 @@ impl<Out: 'static> ChoiceLayout<Out> {
         };
         Self {
             widths,
-            extent: Extent::default(),
             kind: ChoiceKind::Alternatives { id, options },
         }
     }
@@ -420,16 +438,10 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Self
+    fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Settled<Out>
     where
         Out: crate::ObserveLayout,
     {
-        let widths = self.widths;
-        let settled = |kind| Self {
-            widths,
-            extent: settled_extent(&kind),
-            kind,
-        };
         match self.kind {
             ChoiceKind::Use(id) => shared[id]
                 .take()
@@ -439,15 +451,20 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 .into_iter()
                 .nth(choices[id])
                 .map(|option| option.settle(choices, shared))
-                .unwrap_or_else(|| Self::fixed(crate::leaf_into(Extent::default(), |_, _| {}))),
-            ChoiceKind::Map { child, map } => settled(ChoiceKind::Fixed(map(child
+                .unwrap_or_else(|| {
+                    Settled::new(SettledKind::Fixed(crate::leaf_into(
+                        Extent::default(),
+                        |_, _| {},
+                    )))
+                }),
+            ChoiceKind::Map { child, map } => Settled::new(SettledKind::Fixed(map(child
                 .settle(choices, shared)
                 .into_measured()))),
             ChoiceKind::Attached {
                 trigger,
                 content,
                 map,
-            } => settled(ChoiceKind::Fixed(map(
+            } => Settled::new(SettledKind::Fixed(map(
                 trigger.settle(choices, shared).into_measured(),
                 content.settle(choices, shared).into_measured(),
             ))),
@@ -455,7 +472,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 alignment,
                 gap,
                 children,
-            } => settled(ChoiceKind::Row {
+            } => Settled::new(SettledKind::Row {
                 alignment,
                 gap,
                 children: settle_all(children, choices, shared),
@@ -464,41 +481,60 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 baseline,
                 gap,
                 children,
-            } => settled(ChoiceKind::Col {
+            } => Settled::new(SettledKind::Col {
                 baseline,
                 gap,
                 children: settle_all(children, choices, shared),
             }),
-            ChoiceKind::Layers { children } => settled(ChoiceKind::Layers {
+            ChoiceKind::Layers { children } => Settled::new(SettledKind::Layers {
                 children: settle_all(children, choices, shared),
             }),
-            ChoiceKind::Pad { insets, child } => settled(ChoiceKind::Pad {
+            ChoiceKind::Pad { insets, child } => Settled::new(SettledKind::Pad {
                 insets,
                 child: Box::new(child.settle(choices, shared)),
             }),
-            fixed @ ChoiceKind::Fixed(_) => settled(fixed),
+            ChoiceKind::Fixed(measured) => Settled::new(SettledKind::Fixed(measured)),
+        }
+    }
+}
+
+impl<Out: crate::ObserveLayout + 'static> Settled<Out> {
+    fn new(kind: SettledKind<Out>) -> Self {
+        Self {
+            extent: match &kind {
+                SettledKind::Fixed(measured) => measured.extent,
+                SettledKind::Row {
+                    alignment,
+                    gap,
+                    children,
+                } => crate::row_extent(*gap, *alignment, children.iter().map(|child| child.extent)),
+                SettledKind::Col {
+                    baseline,
+                    gap,
+                    children,
+                } => crate::col_extent(*baseline, *gap, children.iter().map(|child| child.extent)),
+                SettledKind::Layers { children } => {
+                    crate::layers_extent(children.iter().map(|child| child.extent))
+                }
+                SettledKind::Pad { insets, child } => crate::padded_extent(*insets, child.extent),
+            },
+            kind,
         }
     }
 
-    fn into_measured(self) -> Measured<Out>
-    where
-        Out: crate::ObserveLayout,
-    {
+    fn into_measured(self) -> Measured<Out> {
         match self.kind {
-            ChoiceKind::Fixed(measured) => measured,
+            SettledKind::Fixed(measured) => measured,
             _ => crate::leaf_into(self.extent, move |placement, out| {
                 self.place(placement, out)
             }),
         }
     }
 
-    fn place(self, placement: uig::Placement, out: &mut Out)
-    where
-        Out: crate::ObserveLayout,
-    {
+    fn place(self, placement: uig::Placement, out: &mut Out) {
         match self.kind {
-            ChoiceKind::Fixed(measured) => crate::place_into(measured, placement, out),
-            ChoiceKind::Row {
+            SettledKind::Fixed(measured) => crate::place_into(measured, placement, out),
+            SettledKind::Row {
                 alignment,
                 gap,
                 children,
@@ -513,7 +549,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     |child, placement| out.layout_child(|out| child.place(placement, out)),
                 )
             }),
-            ChoiceKind::Col {
+            SettledKind::Col {
                 baseline,
                 gap,
                 children,
@@ -526,7 +562,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     |child, placement| out.layout_child(|out| child.place(placement, out)),
                 )
             }),
-            ChoiceKind::Layers { children } => out.layout(crate::Composition::Layers, |out| {
+            SettledKind::Layers { children } => out.layout(crate::Composition::Layers, |out| {
                 crate::place_layers(
                     self.extent,
                     placement,
@@ -535,34 +571,11 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     |child, placement| out.layout_child(|out| child.place(placement, out)),
                 )
             }),
-            ChoiceKind::Pad { insets, child } => {
+            SettledKind::Pad { insets, child } => {
                 let placement = crate::padded_placement(placement, insets, child.extent);
                 child.place(placement, out);
             }
-            _ => unreachable!("only the settled graph can place"),
         }
-    }
-}
-
-/// The extent of a node `settle` made: a fixed leaf or a container of settled children.
-fn settled_extent<Out>(kind: &ChoiceKind<Out>) -> Extent {
-    match kind {
-        ChoiceKind::Fixed(measured) => measured.extent,
-        ChoiceKind::Row {
-            alignment,
-            gap,
-            children,
-        } => crate::row_extent(*gap, *alignment, children.iter().map(|child| child.extent)),
-        ChoiceKind::Col {
-            baseline,
-            gap,
-            children,
-        } => crate::col_extent(*baseline, *gap, children.iter().map(|child| child.extent)),
-        ChoiceKind::Layers { children } => {
-            crate::layers_extent(children.iter().map(|child| child.extent))
-        }
-        ChoiceKind::Pad { insets, child } => crate::padded_extent(*insets, child.extent),
-        _ => unreachable!("choices and measurement wrappers have been settled"),
     }
 }
 
@@ -570,7 +583,7 @@ fn settle_all<Out: crate::ObserveLayout + 'static>(
     children: Vec<ChoiceLayout<Out>>,
     choices: &[usize],
     shared: &mut [Option<ChoiceLayout<Out>>],
-) -> Vec<ChoiceLayout<Out>> {
+) -> Vec<Settled<Out>> {
     children
         .into_iter()
         .map(|child| child.settle(choices, shared))
