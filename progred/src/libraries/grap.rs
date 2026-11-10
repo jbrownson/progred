@@ -471,9 +471,6 @@ fn call_completion<'a>(
     crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
 }
 
-/// Calls read as calls. Their function position is a shallow
-/// reference when it is a named cell; arguments retain Grap's contextual
-/// projection.
 /// A call, drawn as its function provides, else as a call.
 fn call_projection<W: Host>() -> Partial<W> {
     let call = crate::display::fold::folding(crate::display::runtime_partial(call_display));
@@ -491,13 +488,6 @@ fn call_projection<W: Host>() -> Partial<W> {
 fn call_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    call_with_function(input, None)
-}
-
-pub(crate) fn call_with_function<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    function_projection: Option<Partial<W>>,
-) -> Option<Layout<W>> {
     // A call's arguments are its parameters, so it takes no new field from
     // Enter; one being added some other way shows in the plain record view.
     (input.pending != Some(Pending::Field)).then_some(())?;
@@ -512,7 +502,7 @@ pub(crate) fn call_with_function<W: Host>(
         [Step::Key(FUNCTION)],
         Some(crate::display::first(
             input,
-            function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
+            crate::display::runtime_partial(expression),
         )),
         None,
     );

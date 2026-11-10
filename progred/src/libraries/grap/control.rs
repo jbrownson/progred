@@ -819,8 +819,6 @@ fn expression_list_display<W: Host>(
     )
 }
 
-/// What control adds to the Grap library: the names of its cells, its
-/// functions, and its projection, which goes before Grap's calls'.
 /// Control's names, its functions, and the projections its functions
 /// provide for calls of them and its unquote kind for unquotes.
 pub(super) fn contribution<W: Host>() -> (
@@ -858,7 +856,7 @@ pub(super) fn contribution<W: Host>() -> (
             "missing final expression",
         ),
     ];
-    let folding = |partial| crate::display::fold::folding(partial);
+    use crate::display::fold::folding;
     let provided = vec![
         (
             vocabulary::MATCH,

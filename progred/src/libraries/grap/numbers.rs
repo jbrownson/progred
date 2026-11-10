@@ -80,8 +80,6 @@ pub mod u64 {
     pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
 }
 
-/// What arithmetic adds to the Grap library: the names of its cells, its
-/// functions, and its projection, which goes before Grap's calls'.
 /// The numbers' names, their functions, the projections their operators
 /// provide for calls of them, and the numbers' own projection.
 pub(super) fn contribution<W: Host>() -> (
