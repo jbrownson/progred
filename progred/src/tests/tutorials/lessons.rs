@@ -264,7 +264,7 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
         &crate::display::CompletionKind::Value,
         "clouds",
         None,
-        Some(&crate::libraries::grap::slot_offers()),
+        Some(&crate::libraries::grap::test_support::slot_offers()),
     );
     assert!(
         offers

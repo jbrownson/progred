@@ -449,7 +449,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     let result_body = body(&e, a);
     let source_body = body(&source_entry, a);
     let expected = value.as_record().unwrap().get(&a).unwrap().clone();
-    doc.root = Some(crate::libraries::grap::evaluation(value));
+    doc.root = Some(crate::libraries::grap::test_support::evaluation(value));
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let before = driver.editor().model.doc.clone();
     let positions: Vec<_> = expected.as_list().unwrap().keys().cloned().collect();

@@ -64,15 +64,6 @@ fn says(expression: &Expression, kind: CellId) -> bool {
     expression.value().as_record().and_then(::grap::isa::of) == Some(kind)
 }
 
-/// An unquote of `expression`, as a quoted template holds one.
-#[cfg(test)]
-pub fn unquote(expression: Value) -> Value {
-    ::grap::isa::record(
-        vocabulary::kind::UNQUOTE,
-        [(vocabulary::UNQUOTE, expression)],
-    )
-}
-
 fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(
@@ -903,6 +894,9 @@ pub(super) fn contribution<W: Host>() -> (
     (names, functions(), provided)
 }
 
+#[cfg(test)]
+#[path = "tests/control/test_support.rs"]
+pub(crate) mod test_support;
 #[cfg(test)]
 #[path = "tests/control.rs"]
 mod tests;

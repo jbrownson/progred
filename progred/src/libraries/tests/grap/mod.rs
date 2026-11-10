@@ -1086,7 +1086,7 @@ fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
     let time = names["sun_time"];
     let libraries = core_libraries();
     let sources = src(&document, &libraries);
-    let everything = crate::libraries::grap::slot_offers();
+    let everything = crate::libraries::grap::test_support::slot_offers();
     let entries = completion_entries_with(
         &sources,
         &CompletionKind::Value,
@@ -1134,7 +1134,7 @@ fn call_offers_follow_resolved_definitions_without_evaluating_them() {
         root: root.clone(),
         cells: cells.clone(),
     };
-    let everything = crate::libraries::grap::slot_offers();
+    let everything = crate::libraries::grap::test_support::slot_offers();
     let offers = |document: &Document| {
         completion_entries_with(
             &src(document, &libraries),
@@ -1164,7 +1164,7 @@ fn built_in_call_completion_opens_its_first_argument() {
     use crate::libraries::grap::numbers::{f64::SUM, vocabulary::LEFT};
     let document = Document::default();
     let libraries = core_libraries();
-    let everything = crate::libraries::grap::slot_offers();
+    let everything = crate::libraries::grap::test_support::slot_offers();
     let entries = completion_entries_with(
         &src(&document, &libraries),
         &CompletionKind::Value,

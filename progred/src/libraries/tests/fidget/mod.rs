@@ -355,7 +355,7 @@ fn grap_quotes_a_field_that_fidget_evaluates() {
                     (vocabulary::FIELD, circle),
                     (
                         vocabulary::DELTA_X,
-                        crate::libraries::grap::control::unquote(offset),
+                        crate::libraries::grap::control::test_support::unquote(offset),
                     ),
                 ],
             ),

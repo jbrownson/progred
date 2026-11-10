@@ -126,7 +126,7 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         ),
         (
             "evaluate",
-            crate::libraries::grap::evaluation(number()),
+            crate::libraries::grap::test_support::evaluation(number()),
             vec![Step::Key(EXPRESSION)],
         ),
         (

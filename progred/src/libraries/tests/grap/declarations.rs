@@ -35,7 +35,7 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
         for (root, path, expression) in [
             (cell.into(), vec![], false),
             (
-                crate::libraries::grap::evaluation(cell.into()),
+                crate::libraries::grap::test_support::evaluation(cell.into()),
                 vec![Step::Key(EXPRESSION)],
                 true,
             ),

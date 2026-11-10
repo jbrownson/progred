@@ -48,18 +48,6 @@ pub mod vocabulary {
     }
 }
 
-/// `value` as `projection` draws it, in a pane.
-#[cfg(test)]
-pub(crate) fn projected(value: gid::Value, projection: gid::Value) -> gid::Value {
-    ::grap::isa::record(
-        vocabulary::kind::PROJECTED,
-        [
-            (vocabulary::VALUE, value),
-            (vocabulary::PROJECTION, projection),
-        ],
-    )
-}
-
 /// `value` as `viewport` draws it at a pane's size.
 pub fn sized(value: gid::Value, viewport: gid::Value) -> gid::Value {
     ::grap::isa::record(
@@ -230,6 +218,9 @@ pub fn library<W: Host>() -> Library<W> {
     )])
 }
 
+#[cfg(test)]
+#[path = "tests/presentation/test_support.rs"]
+pub(crate) mod test_support;
 #[cfg(test)]
 #[path = "tests/presentation/mod.rs"]
 pub(crate) mod tests;

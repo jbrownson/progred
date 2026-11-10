@@ -980,11 +980,11 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     let library = CellId::from_u128(3);
     let nested_projector = CellId::from_u128(4);
     let alias = CellId::from_u128(5);
-    let source = presentation::projected(
+    let source = presentation::test_support::projected(
         Value::from(b"source".to_vec()),
         Value::from(nested_projector),
     );
-    let declaration = presentation::projected(source.clone(), Value::from(projector));
+    let declaration = presentation::test_support::projected(source.clone(), Value::from(projector));
     let mut cells = Cells::new();
     cells.set_value(linked, declaration.clone());
     cells.set_value(alias, Value::from(linked));

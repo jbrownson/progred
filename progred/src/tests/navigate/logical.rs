@@ -327,7 +327,7 @@ fn logical_navigation_retains_jump_editing_targets() {
 
 #[test]
 fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
-    let root = crate::libraries::grap::evaluation(text::value("computed"));
+    let root = crate::libraries::grap::test_support::evaluation(text::value("computed"));
     let source = vec![Step::Key(::grap::vocabulary::EXPRESSION)];
     let mut world = crate::editor_of(root);
     world.model.selection = Some(make_selection(source.clone()));

@@ -22,7 +22,7 @@ pub fn at_display_partial() -> Value {
             [
                 (
                     layout::vocabulary::CONTENT,
-                    control::unquote(Value::from(binder)),
+                    control::test_support::unquote(Value::from(binder)),
                 ),
                 (
                     layout::vocabulary::PAINT,

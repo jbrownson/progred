@@ -288,7 +288,7 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
 #[test]
 fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source() {
     let source = Value::from(b"source".to_vec());
-    let value = super::projected(source, Value::from(LEFT_VALUE));
+    let value = super::test_support::projected(source, Value::from(LEFT_VALUE));
     let result = Value::from(b"projected".to_vec());
     assert!(
         matches!((projected(&value, &EvaluatesTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),

@@ -114,7 +114,10 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
     cells.set_value(ITEM, grap::lambda([LABEL], item));
     Document {
         cells,
-        root: Some(presentation::projected(Value::record([]), projection)),
+        root: Some(presentation::test_support::projected(
+            Value::record([]),
+            projection,
+        )),
     }
 }
 

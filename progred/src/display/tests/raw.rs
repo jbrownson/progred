@@ -68,7 +68,7 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
             &CompletionKind::Value,
             "lambda",
             None,
-            Some(&crate::libraries::grap::slot_offers()),
+            Some(&crate::libraries::grap::test_support::slot_offers()),
         )
         .iter()
         .any(|entry| entry.display == "new lambda")

@@ -179,7 +179,7 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
                 Value::record(["start", "end"].map(|name| {
                     (
                         names[name],
-                        crate::libraries::grap::control::unquote(names[name].into()),
+                        crate::libraries::grap::control::test_support::unquote(names[name].into()),
                     )
                 })),
             )],

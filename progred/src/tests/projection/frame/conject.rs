@@ -59,7 +59,7 @@ fn evaluated_output_is_tinted_without_tinting_its_expression() {
     use crate::libraries::presentation::vocabulary::RESULT;
     let child = new_cell_id();
     let value = Value::record([(child, Value::list([text::value("result")]))]);
-    let mut world = world(crate::libraries::grap::evaluation(value));
+    let mut world = world(crate::libraries::grap::test_support::evaluation(value));
     let frame = editing_frame(&mut world);
     let result = stop(&frame, &[Step::Key(RESULT), Step::Computed]).rect;
     let expression = stop(&frame, &[Step::Key(grap::vocabulary::EXPRESSION)]).rect;
@@ -72,8 +72,8 @@ fn evaluated_output_is_tinted_without_tinting_its_expression() {
 #[test]
 fn nested_computed_results_do_not_stack_readonly_tints() {
     use crate::libraries::presentation::vocabulary::RESULT;
-    let mut world = world(crate::libraries::grap::evaluation(
-        crate::libraries::grap::evaluation(text::value("nested")),
+    let mut world = world(crate::libraries::grap::test_support::evaluation(
+        crate::libraries::grap::test_support::evaluation(text::value("nested")),
     ));
     let frame = editing_frame(&mut world);
     let outer = stop(&frame, &[Step::Key(RESULT), Step::Computed]).rect;
@@ -105,7 +105,9 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
     use crate::libraries::presentation::vocabulary::RESULT;
     let child = new_cell_id();
     let value = Value::record([(child, Value::list([f64::value(1.0)]))]);
-    let mut world = world(crate::libraries::grap::evaluation(value.clone()));
+    let mut world = world(crate::libraries::grap::test_support::evaluation(
+        value.clone(),
+    ));
     let result = [Step::Key(RESULT), Step::Computed];
     let child_path = [Step::Key(RESULT), Step::Computed, Step::Key(child)];
     let before = world.model.doc.clone();
@@ -155,7 +157,7 @@ fn nested_result_evaluations_use_their_own_allowance() {
         [
             (
                 grap::vocabulary::EXPRESSION,
-                crate::libraries::grap::evaluation(expression),
+                crate::libraries::grap::test_support::evaluation(expression),
             ),
             (layout::vocabulary::FUEL, f64::value(3.0)),
         ],

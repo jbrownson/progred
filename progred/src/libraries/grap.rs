@@ -27,6 +27,9 @@ pub mod control;
 pub mod notebook;
 pub mod numbers;
 mod suggestions;
+#[cfg(test)]
+#[path = "tests/grap/test_support.rs"]
+pub(crate) mod test_support;
 
 pub(crate) fn expression<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
@@ -172,15 +175,6 @@ pub mod vocabulary {
         /// expression}`.
         pub const EVALUATION: CellId = CellId::from_u128(0x549dd85073474d6296d773c8df9c0526);
     }
-}
-
-/// `expression` shown with its result.
-#[cfg(test)]
-pub fn evaluation(expression: Value) -> Value {
-    ::grap::isa::record(
-        vocabulary::kind::EVALUATION,
-        [(::grap::vocabulary::EXPRESSION, expression)],
-    )
 }
 
 /// A parameter is a cell, with no name of its own called what its list
@@ -951,12 +945,6 @@ fn function_completion<'a>(
             .is_some_and(|(_, call)| then(read, call, staged))
     });
     crate::libraries::completion::insert(function, function.into(), Some(continuation))
-}
-
-/// What a Grap slot offers, for tests that read its list without a picker.
-#[cfg(test)]
-pub(crate) fn slot_offers() -> crate::display::CompletionProvider {
-    std::rc::Rc::new(suggestions::offers)
 }
 
 #[cfg(test)]
