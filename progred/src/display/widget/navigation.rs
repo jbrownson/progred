@@ -94,13 +94,7 @@ pub(crate) fn part_landmark<World: 'static, H: 'static>(
         pass.scope(
             |pass| inner.place_into(pass),
             move |mut output| {
-                let arrival = match output.landmark_select.take() {
-                    Some((at, arrive)) if at == path => Some(arrive),
-                    stray => {
-                        debug_assert!(stray.is_none(), "arrival override at another occurrence");
-                        None
-                    }
-                };
+                let arrival = take_arrival(&mut output, &path);
                 let tab_stop = output.tab_stop.take().is_some_and(|at| at == path);
                 if arrival.is_some() || tab_stop {
                     output.landmarks.push(Landmark {
@@ -144,13 +138,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                 pass.navigation.end_landmark();
             },
             move |mut output| {
-                let select = match output.landmark_select.take() {
-                    Some((at, arrive)) if at == path => arrive,
-                    stray => {
-                        debug_assert!(stray.is_none(), "arrival override at another occurrence");
-                        select
-                    }
-                };
+                let select = take_arrival(&mut output, &path).unwrap_or(select);
                 let tab_stop = match output.tab_stop.take() {
                     Some(at) => {
                         debug_assert!(at == path, "tab stop at another occurrence");
@@ -171,4 +159,19 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
             },
         );
     })
+}
+
+/// The arrival that what's drawn at `path` named for itself, taken from
+/// `output`. One named at another occurrence is dropped.
+fn take_arrival<World, H>(
+    output: &mut super::frame::HoverOutput<World, H>,
+    path: &Trail,
+) -> Option<Select<World>> {
+    match output.landmark_select.take() {
+        Some((at, arrive)) if at == *path => Some(arrive),
+        stray => {
+            debug_assert!(stray.is_none(), "arrival override at another occurrence");
+            None
+        }
+    }
 }
