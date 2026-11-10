@@ -265,7 +265,7 @@ impl RuntimeValue {
             }
             RuntimeValueKind::Closure(closure) => closure_keys(closure)
                 .contains(&field)
-                .then(|| self.to_value().as_record()?.get(&field).cloned())
+                .then(|| self.as_value().as_record()?.get(&field).cloned())
                 .flatten()
                 .map(Self::from),
             RuntimeValueKind::List(_) => None,
