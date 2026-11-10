@@ -38,7 +38,7 @@ impl Site {
     /// Where this occurrence is stored, if anywhere: what a jump to it
     /// draws.
     pub(crate) fn location(&self) -> Option<crate::location::Location<'static>> {
-        crate::occurrence::location(&self.path.to_vec())
+        self.path.location()
     }
 
     /// What hovering this occurrence shows.

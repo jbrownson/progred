@@ -224,7 +224,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
     }
 
     fn location(&self) -> Option<Location<'static>> {
-        crate::occurrence::location(&self.path.to_vec())
+        self.path.location()
     }
 
     fn focused(&self) -> bool {
@@ -256,7 +256,8 @@ impl crate::display::Toolkit for Occurrence<'_> {
     }
 
     fn trace_below(&self, steps: &[gid::Step]) -> Option<SourceTrace> {
-        crate::occurrence::location(&self.below(steps).to_vec())
+        self.below(steps)
+            .location()
             .map(|location| SourceTrace::from_location(&self.cx.sources, &location))
     }
 }
