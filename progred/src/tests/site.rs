@@ -51,12 +51,7 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
             selection_capability::vocabulary::NO_SELECTION,
         ),
     ] {
-        let staged = RefCell::new(PendingChanges {
-            annotation: None,
-            annotation_changed: false,
-            selection: None,
-            selection_changed: false,
-        });
+        let staged = RefCell::new(PendingChanges::unchanged(None, None));
         let foreign = |function,
                        context: &mut grap::Context<'_>,
                        call: &grap::Expression,
