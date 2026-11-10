@@ -113,12 +113,7 @@ pub(crate) fn prepare(
     }?;
     let annotation = annotations.at(&path).cloned();
     let selection = Some((selection.path().to_vec(), selection.payload()));
-    let mut effects = crate::site::PendingChanges {
-        annotation,
-        annotation_changed: false,
-        selection,
-        selection_changed: false,
-    };
+    let mut effects = crate::site::PendingChanges::unchanged(annotation, selection);
     if let Some(function) = on_commit {
         function(
             &crate::editing::Read {

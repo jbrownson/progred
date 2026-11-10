@@ -37,10 +37,6 @@ enum Token {
     Binder(String),
 }
 
-fn as_cell_id(token: &str) -> Option<CellId> {
-    CellId::read(token)
-}
-
 fn valid_binder(token: &str) -> bool {
     let mut bytes = token.bytes();
     matches!(bytes.next(), Some(b) if b.is_ascii_alphabetic() || b == b'_')
@@ -144,7 +140,7 @@ impl Parser<'_> {
     /// use — create-on-reference at the file layer.
     fn token(&mut self) -> Result<Token, String> {
         let token = self.bare()?;
-        if let Some(cell) = as_cell_id(token) {
+        if let Some(cell) = CellId::read(token) {
             return Ok(Token::CellId(cell));
         }
         if !valid_binder(token) {
@@ -254,12 +250,12 @@ impl Parser<'_> {
                         if !valid_binder(&binder) {
                             return Err(format!("`{binder}` is not a usable binder"));
                         }
-                        if as_cell_id(&binder).is_some() {
+                        if CellId::read(&binder).is_some() {
                             return Err(format!("`{binder}` spells a cell id, not a binder"));
                         }
                         p.eat(':')?;
                         let token = p.bare()?;
-                        let cell = as_cell_id(token).ok_or_else(|| {
+                        let cell = CellId::read(token).ok_or_else(|| {
                             format!("`binders` maps binders to cell-id literals, got `{token}`")
                         })?;
                         if p.binders.insert(binder.clone(), cell).is_some() {
@@ -484,7 +480,7 @@ fn derive_binder(name: &str) -> String {
     {
         out.insert(0, '_');
     }
-    if as_cell_id(&out).is_some() {
+    if CellId::read(&out).is_some() {
         out.insert(0, '_');
     }
     out

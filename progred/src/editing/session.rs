@@ -13,7 +13,7 @@ use crate::workspace::View;
 use kurbo::Point;
 use parley::{FontContext, LayoutContext};
 use peniko::Brush;
-use puri::edit::TextClipboard;
+use puri::edit::{EditCtx, LineEditState, TextClipboard};
 use std::rc::Rc;
 
 /// Its fields are the core's, which acts on the model through them.
@@ -32,6 +32,19 @@ pub(crate) struct TextTools<'a> {
     pub(crate) fonts: &'a mut FontContext,
     pub(crate) layouts: &'a mut LayoutContext<Brush>,
     pub(crate) clipboard: &'a mut dyn TextClipboard,
+}
+
+impl TextTools<'_> {
+    /// These tools around the line `state` they edit, as an editing
+    /// operation takes them.
+    pub(crate) fn editing<'a>(&'a mut self, state: &'a mut LineEditState) -> EditCtx<'a> {
+        EditCtx {
+            state,
+            fonts: self.fonts,
+            layouts: self.layouts,
+            clipboard: self.clipboard,
+        }
+    }
 }
 
 impl Session<'_> {

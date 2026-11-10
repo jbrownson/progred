@@ -5,7 +5,6 @@ use crate::location::Location;
 use crate::occurrence::Step;
 use crate::{selection, sources::Sources};
 use gid::Value;
-use puri::edit::EditCtx;
 use puri::keyboard::CommandModifier;
 use ui_events::keyboard::KeyboardEvent;
 
@@ -55,12 +54,7 @@ fn edit_line(
     });
     let (handled, record) = match selected {
         Some(selected) => line_edit(&mut model.doc, libraries, selected, line, |state| {
-            operation(EditCtx {
-                state,
-                fonts: text.fonts,
-                layouts: text.layouts,
-                clipboard: text.clipboard,
-            })
+            operation(text.editing(state))
         }),
         None => (false, false),
     };

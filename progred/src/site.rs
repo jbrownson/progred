@@ -44,6 +44,17 @@ pub struct PendingChanges {
 pub type Continuation = Rc<dyn Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool>;
 
 impl PendingChanges {
+    /// What a handler starts from: the annotation and selection there are,
+    /// neither changed yet.
+    pub(crate) fn unchanged(annotation: Option<Value>, selection: Option<(Path, Value)>) -> Self {
+        Self {
+            annotation,
+            annotation_changed: false,
+            selection,
+            selection_changed: false,
+        }
+    }
+
     pub fn select(&mut self, path: Path, payload: Value) {
         if !absent::is_absent(&payload) {
             self.selection = Some((path, payload));
@@ -131,12 +142,7 @@ pub(crate) fn apply_scoped_event(
         .pane_at(view, &path)
         .and_then(|state| state.annotations.at(&path))
         .cloned();
-    let mut staged = PendingChanges {
-        annotation,
-        annotation_changed: false,
-        selection: current,
-        selection_changed: false,
-    };
+    let mut staged = PendingChanges::unchanged(annotation, current);
     let handled = grap(function, [(event::vocabulary::EVENT, event)])(
         &crate::editing::Read {
             sources: session.sources(),
@@ -201,12 +207,7 @@ fn evaluate_with(
     selection: Option<(Path, Value)>,
     apply: impl FnOnce(grap::ForeignFunctions<'_>) -> grap::Evaluation,
 ) -> Option<PendingChanges> {
-    let staged = RefCell::new(PendingChanges {
-        annotation,
-        annotation_changed: false,
-        selection,
-        selection_changed: false,
-    });
+    let staged = RefCell::new(PendingChanges::unchanged(annotation, selection));
     let evaluation = {
         let call = |function,
                     context: &mut grap::Context<'_>,

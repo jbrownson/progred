@@ -6,7 +6,7 @@ use crate::selection::{self, Stage};
 use crate::site::Continuation;
 use crate::sources::Sources;
 use gid::{CellId, Value};
-use puri::edit::{EditCtx, EditOperation};
+use puri::edit::EditOperation;
 
 /// A pending value or new field's label, which a dispatch's session lends.
 /// Committing closes it, so the commits consume it; each declines, changing
@@ -175,16 +175,7 @@ impl Picking<'_, '_> {
             .selection
             .as_mut()
             .filter(|selection| selection.writable(&sources))
-            .is_some_and(|selection| {
-                selection.edit_query(|state| {
-                    operation(EditCtx {
-                        state,
-                        fonts: text.fonts,
-                        layouts: text.layouts,
-                        clipboard: text.clipboard,
-                    })
-                })
-            })
+            .is_some_and(|selection| selection.edit_query(|state| operation(text.editing(state))))
     }
 
     /// Scrolls the card and chooses its offer at `choice`.

@@ -212,7 +212,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
     }
 
     fn site(&self) -> crate::editing::Site {
-        self.cx.site(self.path.clone())
+        crate::editing::Site::new(self.path.clone())
     }
 
     fn styles(&self) -> &Styles {
@@ -654,11 +654,6 @@ fn tree_hovered(hover: &Attribution) -> Option<&Hover> {
 }
 
 impl Cx<'_> {
-    /// The occurrence at `path`, as a place to act.
-    pub(crate) fn site(&self, path: Trail) -> crate::editing::Site {
-        crate::editing::Site::new(path)
-    }
-
     /// The display name at this projection; with the name library off,
     /// labels fall back to the short id.
     fn name(&self, cell: CellId) -> Option<crate::display::Name<'_>> {
@@ -997,7 +992,9 @@ fn prepare_value(
                 let scale = cx.styles.scale;
                 let palette = cx.styles.palette;
                 let path = path.clone();
-                let select = crate::display::widget::navigation::arrival(cx.site(path.clone()));
+                let select = crate::display::widget::navigation::arrival(
+                    crate::editing::Site::new(path.clone()),
+                );
                 ChoiceLayout::map(inner, move |inner| {
                     crate::display::widget::navigation::part_landmark(
                         highlighted(palette, selected, scale, path.clone(), None, inner),
@@ -1037,14 +1034,15 @@ fn prepare_value(
                 let selected_value = value.filter(|_| selected).cloned();
                 let scale = cx.styles.scale;
                 let palette = cx.styles.palette;
-                let select =
-                    crate::display::widget::navigation::arrival(cx.site(landmark_path.clone()));
+                let select = crate::display::widget::navigation::arrival(
+                    crate::editing::Site::new(landmark_path.clone()),
+                );
                 let target = value.map(|value| {
                     (
                         value.clone(),
-                        crate::display::widget::navigation::selecting(
-                            cx.site(landmark_path.clone()),
-                        ),
+                        crate::display::widget::navigation::selecting(crate::editing::Site::new(
+                            landmark_path.clone(),
+                        )),
                     )
                 });
                 ChoiceLayout::map(inner, move |inner| {
@@ -1118,7 +1116,7 @@ fn value_layout(
             .and_then(|step| step.data())
             .map(crate::display::Pending::Child)
     };
-    let occurrence = || cx.site(path.clone());
+    let occurrence = || crate::editing::Site::new(path.clone());
     let input = crate::display::ProjectionInput {
         env: &Occurrence {
             cx,
