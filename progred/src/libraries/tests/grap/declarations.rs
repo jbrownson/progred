@@ -8,7 +8,7 @@ use crate::hover::Hover;
 use crate::libraries::grap::control::vocabulary as control;
 use crate::libraries::{f64, text};
 use crate::projection::test_support::*;
-use crate::selection::{pending_edge, pending_into};
+use crate::selection::{Insertion, pending_edge, pending_into};
 use gid::Path;
 use kurbo::Point;
 use puri::hover::Claim;
@@ -400,7 +400,8 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         let sources = src(&doc, &libraries);
         let read = crate::editing::Read { sources };
         let list_path = crate::occurrence::of(&binder_path[..1]);
-        let pending = pending_into(&read, &crate::test_document(), &list_path, true).unwrap();
+        let pending =
+            pending_into(&read, &crate::test_document(), &list_path, Insertion::After).unwrap();
         let missing_path = pending.path().to_vec();
         assert!(crate::occurrence::read(&sources, &missing_path).is_none());
         let mut world = crate::test_editor(doc.clone());

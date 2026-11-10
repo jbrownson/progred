@@ -372,14 +372,22 @@ pub(crate) fn pending_follow(read: &Read<'_>, view: &Rc<View>, path: &[Step]) ->
     Some(pending_value(view, followed))
 }
 
+/// Which side of what's there a new pending goes on: before an element or
+/// a list's elements, or after them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Insertion {
+    Before,
+    After,
+}
+
 /// A pending sibling next to the element at `path` (which must sit at
-/// an element step), minted between it and its neighbor. The list
-/// projection's gesture.
+/// an element step), on that `side` of it, minted between it and its
+/// neighbor. The list projection's gesture.
 fn pending_beside(
     read: &Read<'_>,
     view: &Rc<View>,
     path: &[Step],
-    after: bool,
+    side: Insertion,
 ) -> Option<Selection> {
     let (parent_path, position) = match path {
         [parent_path @ .., Step::Element(position)] => Some((parent_path, position)),
@@ -392,10 +400,11 @@ fn pending_beside(
     read.writable(parent_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let index = positions.iter().position(|p| *p == position)?;
-    let fresh = if after {
-        position::between(Some(position), positions.get(index + 1).copied())?
-    } else {
-        position::between(index.checked_sub(1).map(|i| positions[i]), Some(position))?
+    let fresh = match side {
+        Insertion::After => position::between(Some(position), positions.get(index + 1).copied())?,
+        Insertion::Before => {
+            position::between(index.checked_sub(1).map(|i| positions[i]), Some(position))?
+        }
     };
     let mut fresh_path = parent_path.to_vec();
     fresh_path.push(Step::Element(fresh));
@@ -403,15 +412,15 @@ fn pending_beside(
 }
 
 /// A pending element inside the list at `path` — inline, or a link's
-/// cell value, normalized through Follow — appended at the `end`, as
-/// "add to this list" does, or else prepended at the front. Only lists
+/// cell value, normalized through Follow — appended after its elements, as
+/// "add to this list" does, or else prepended before them. Only lists
 /// take elements, by type, and the owning cell must be writable, as in
 /// [`pending_edge`].
 pub(crate) fn pending_into(
     read: &Read<'_>,
     view: &Rc<View>,
     path: &[Step],
-    end: bool,
+    side: Insertion,
 ) -> Option<Selection> {
     let value = read.resolve_path(path)?;
     let (list_path, elements) = match value {
@@ -426,10 +435,9 @@ pub(crate) fn pending_into(
     };
     read.writable(&list_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
-    let fresh = if end {
-        position::between(positions.last().copied(), None)?
-    } else {
-        position::between(None, positions.first().copied())?
+    let fresh = match side {
+        Insertion::After => position::between(positions.last().copied(), None)?,
+        Insertion::Before => position::between(None, positions.first().copied())?,
     };
     let mut fresh_path = list_path;
     fresh_path.push(Step::Element(fresh));
@@ -437,8 +445,8 @@ pub(crate) fn pending_into(
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
-/// enumeration you are in. An element pends a sibling (before with
-/// shift); a field value pends a new field on its parent; where the
+/// enumeration you are in. An element pends a sibling on that `side` (before
+/// with shift); a field value pends a new field on its parent; where the
 /// selection's area `starts`, and where a jump or computed value starts,
 /// nothing drawn is beside it, so it falls within — a field on a record, an
 /// appended element on a list. A cell's whole value is drawn where its
@@ -448,38 +456,37 @@ pub(crate) fn pending_enter(
     view: &Rc<View>,
     path: &[Step],
     starts: &[Step],
-    before: bool,
+    side: Insertion,
 ) -> Option<Selection> {
     match path {
-        _ if path == starts => pending_insert(read, view, path, before),
-        [reference @ .., Step::Follow] => pending_enter(read, view, reference, starts, before),
-        [.., Step::Jump(_) | Step::Computed] => pending_insert(read, view, path, before),
-        _ => pending_beside(read, view, path, !before)
+        _ if path == starts => pending_insert(read, view, path, side),
+        [reference @ .., Step::Follow] => pending_enter(read, view, reference, starts, side),
+        [.., Step::Jump(_) | Step::Computed] => pending_insert(read, view, path, side),
+        _ => pending_beside(read, view, path, side)
             .or_else(|| {
                 path.split_last()
                     .and_then(|(_, parent)| pending_edge(read, view, parent.to_vec()))
             })
             .or_else(|| pending_edge(read, view, path.to_vec()))
-            .or_else(|| pending_into(read, view, path, true)),
+            .or_else(|| pending_into(read, view, path, Insertion::After)),
     }
 }
 
 /// The command chord: author WITHIN the selection — a new field on
 /// the selected record or cell, an element appended into a list, or
-/// a bare cell's first value. With shift, the front instead —
+/// a bare cell's first value. Before, as with shift, the front instead —
 /// prepend. Atoms other than links have no within and decline.
 pub(crate) fn pending_insert(
     read: &Read<'_>,
     view: &Rc<View>,
     path: &[Step],
-    front: bool,
+    side: Insertion,
 ) -> Option<Selection> {
-    if front {
-        pending_into(read, view, path, false)
-    } else {
-        pending_edge(read, view, path.to_vec())
-            .or_else(|| pending_into(read, view, path, true))
-            .or_else(|| pending_follow(read, view, path))
+    match side {
+        Insertion::Before => pending_into(read, view, path, side),
+        Insertion::After => pending_edge(read, view, path.to_vec())
+            .or_else(|| pending_into(read, view, path, side))
+            .or_else(|| pending_follow(read, view, path)),
     }
 }
 

@@ -84,7 +84,7 @@ fn a_shadowing_document_definition_stays_editable() {
         },
         &crate::test_document(),
         &[],
-        true,
+        Insertion::After,
     )
     .unwrap();
     assert_eq!(pending.path().first(), Some(&Step::Follow));
@@ -203,7 +203,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         &sources,
         &crate::test_document(),
         &[Step::Follow, key("tags").into()],
-        true,
+        Insertion::After,
     )
     .unwrap();
     assert!(matches!(into.path().last(), Some(Step::Element(_))));
@@ -211,13 +211,13 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // The within chord: fields on records, elements into lists,
     // first values into bare cells.
-    assert!(pending_insert(&sources, &crate::test_document(), &[], false).is_some());
+    assert!(pending_insert(&sources, &crate::test_document(), &[], Insertion::After).is_some());
     assert!(
         pending_insert(
             &sources,
             &crate::test_document(),
             &[Step::Follow, key("tags").into()],
-            false
+            Insertion::After
         )
         .is_some()
     );
@@ -226,7 +226,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
             &sources,
             &crate::test_document(),
             &[Step::Follow, key("material").into()],
-            false
+            Insertion::After
         )
         .is_some()
     );
@@ -235,7 +235,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
             &sources,
             &crate::test_document(),
             &[Step::Follow, key("s").into()],
-            false
+            Insertion::After
         )
         .is_some()
     );

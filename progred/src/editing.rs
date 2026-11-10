@@ -155,10 +155,15 @@ pub(crate) fn enter_pending(
                     .path(),
             );
             let view = current.view();
-            if within {
-                selection::pending_insert(&read, view, current.path(), shift)
+            let side = if shift {
+                selection::Insertion::Before
             } else {
-                selection::pending_enter(&read, view, current.path(), &starts, shift)
+                selection::Insertion::After
+            };
+            if within {
+                selection::pending_insert(&read, view, current.path(), side)
+            } else {
+                selection::pending_enter(&read, view, current.path(), &starts, side)
             }
             .map(|pending| pending.with_origin(current.path().to_vec()))
         }
