@@ -180,6 +180,41 @@ fn background_unavailable<W: Host>(
     )
 }
 
+/// A 3D path preview of `model`: what `draw` makes each frame of the work the
+/// background tasks do, or the absence it meets in place, under the volume's
+/// interaction.
+fn path_preview_layout<W: Host>(
+    input: &crate::display::host::ProjectionInput<'_, W, RuntimeValue>,
+    model: crate::libraries::fidget::VolumePreview,
+    draw: impl Fn(
+        &crate::display::widget::Context<'_, '_, W, W::Hover>,
+        &incremental::background::Tasks,
+        &crate::libraries::fidget::VolumePreview,
+    ) -> computation::Outcome<crate::display::host::Layout<W>>
+    + 'static,
+) -> crate::display::host::Layout<W> {
+    crate::libraries::fidget::interactive_volume(
+        crate::display::host::Layout::program(Rc::new(move |context, build| {
+            match &context.viewing().computations().tasks {
+                None => background_unavailable(&model),
+                Some(tasks) => {
+                    draw(context, tasks, &model).unwrap_or_else(presentation::result_layout)
+                }
+            }
+            .measure(context, build)
+        })),
+        input,
+    )
+}
+
+/// A model's `drawing`, absent as an invalid field where it has none.
+fn drawn<W: Host>(
+    drawing: Option<crate::display::host::Layout<W>>,
+) -> computation::Outcome<crate::display::host::Layout<W>> {
+    drawing
+        .ok_or_else(|| ::grap::absent::value(crate::libraries::fidget::vocabulary::INVALID_FIELD))
+}
+
 fn argument(call: &Expression, field: CellId) -> Result<Expression, Error> {
     call.field(field)
         .ok_or_else(|| Error::Invalid(call.missing_runtime_argument(field)))
@@ -402,6 +437,25 @@ const PATH_PREVIEW_PARAMETERS: [CellId; 4] = [
     crate::libraries::fidget::vocabulary::COLOR,
 ];
 
+/// The function of a 3D path preview of `kind`, over the model `model` makes
+/// of the call.
+fn path_preview(
+    kind: CellId,
+    model: fn(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
+) -> ForeignFunction<'static> {
+    ForeignFunction::new(move |context, call, environment| {
+        runtime_result(fidget::preview_with(
+            context,
+            call,
+            environment,
+            kind,
+            model,
+        ))
+    })
+    .parameters(PATH_PREVIEW_PARAMETERS)
+    .cacheable()
+}
+
 fn functions() -> ForeignFunctions<'static> {
     ForeignFunctions::default()
         .register(START_AT, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))
@@ -424,21 +478,24 @@ fn functions() -> ForeignFunctions<'static> {
         .register(SEQUENCE, absent::outside_scope(OUTPUT_REQUIRED, [PROGRAM]))
         .register(
             PREVIEW_3D,
-            ForeignFunction::new(fidget::preview)
-                .parameters(PATH_PREVIEW_PARAMETERS)
-                .cacheable(),
+            path_preview(
+                kind::PATHS_VOLUME_PREVIEW,
+                crate::libraries::fidget::preview_3d_function,
+            ),
         )
         .register(
             PREVIEW_MESH,
-            ForeignFunction::new(mesh::preview)
-                .parameters(PATH_PREVIEW_PARAMETERS)
-                .cacheable(),
+            path_preview(
+                kind::PATHS_MESH_PREVIEW,
+                crate::libraries::fidget::mesh::preview,
+            ),
         )
         .register(
             PREVIEW_REFINED,
-            ForeignFunction::new(refined::preview)
-                .parameters(PATH_PREVIEW_PARAMETERS)
-                .cacheable(),
+            path_preview(
+                kind::PATHS_REFINED_PREVIEW,
+                crate::libraries::fidget::mesh::preview,
+            ),
         )
         .register(
             POINT,

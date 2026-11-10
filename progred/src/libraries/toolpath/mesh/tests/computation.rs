@@ -3,6 +3,7 @@ use crate::libraries::grap::control;
 use crate::library::Definitions;
 use gid::{Document, Value, new_cell_id};
 use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 fn preview() -> fidget::VolumePreview {

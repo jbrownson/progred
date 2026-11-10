@@ -10,6 +10,18 @@ use std::sync::Arc;
 
 pub(super) type Outcome<T> = Result<T, Value>;
 
+/// The outcome that reading a memo of one gave, a failure to compute it
+/// being an absence too.
+pub(super) fn outcome<T>(
+    read: &Result<std::rc::Rc<Outcome<T>>, incremental::Error>,
+) -> Outcome<&T> {
+    read.as_ref()
+        .map_err(|error| memo::failure(*error))?
+        .as_ref()
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
 pub(super) struct Recorded {
     pub path: Arc<Recording>,
     pub evaluation: ::grap::Evaluation,

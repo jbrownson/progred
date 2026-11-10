@@ -1,9 +1,9 @@
 //! Async implicit surfaces combined with mesh paths and cutters.
 
+use super::computation::outcome;
 use super::mesh::computation::PathStyle;
 use super::playback;
-use super::{Error, argument, invalid, number, present, runtime_result, vocabulary::*};
-use crate::computations::memo;
+use super::{Error, argument, invalid, number, present, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{color, f64, fidget, layout, presentation};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
@@ -42,20 +42,6 @@ pub(super) fn progress_bar<W: Host>(
             })
         }),
     )
-}
-
-pub(super) fn preview(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    runtime_result(preview_with(
-        context,
-        call,
-        environment,
-        kind::PATHS_VOLUME_PREVIEW,
-        fidget::preview_3d_function,
-    ))
 }
 
 pub(super) fn preview_with(
@@ -139,71 +125,51 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     };
     let state = input.state.cloned();
     let scale = input.scale_factor;
-    let drawing = Layout::program(Rc::new(move |context, build| {
-        let computations = context.viewing().computations();
-        match &computations.tasks {
-            None => super::background_unavailable(&model),
-            Some(tasks) => {
-                let site = context.site();
-                let interaction = fidget::interaction::Interaction::at(computations, &site);
-                let computation = site.memo(computations, || {
-                    computation::Computation::new(
-                        computations,
-                        tasks,
-                        program.clone(),
-                        fuel,
-                        settings.clone(),
-                        interaction.permitted.clone(),
-                    )
-                });
-                computation.program.update(program.clone(), fuel);
-                computation.settings.set(settings.clone());
-                let image = computations.runtime.read(&computation.image);
-                let paths = computations.runtime.read(&computation.paths);
-                let result = image
-                    .as_ref()
-                    .map_err(|error| memo::failure(*error))
-                    .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone))
-                    .and_then(|image| {
-                        let paths = paths
-                            .as_ref()
-                            .map_err(|e| memo::failure(*e))?
-                            .as_ref()
-                            .as_ref()
-                            .map_err(Clone::clone)?;
-                        let frame = match image {
-                            ViewImage::Current(frame) | ViewImage::Refining(frame, _) => {
-                                Some(frame)
-                            }
-                            ViewImage::Awaiting(_) => None,
-                        };
-                        let surface = frame.map(|frame| puri::mesh::Surface {
-                            frame: frame.clone(),
-                            mesh_start: paths.indices.len(),
-                        });
-                        let drawing = fidget::mesh::drawing_surface(
-                            paths,
-                            surface,
-                            &model,
-                            state.as_ref(),
-                            scale,
-                        )
-                        .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
-                        Ok((image, drawing))
-                    });
-                result
-                    .map(|(image, drawing)| match image {
-                        ViewImage::Current(_) => drawing,
-                        ViewImage::Refining(_, progress) | ViewImage::Awaiting(progress) => {
-                            progress_bar(drawing, *progress)
-                        }
-                    })
-                    .unwrap_or_else(presentation::result_layout)
-            }
-        }
-        .measure(context, build)
-    }));
-    Some(fidget::interactive_volume(drawing, input))
+    Some(super::path_preview_layout(
+        input,
+        model,
+        move |context, tasks, model| {
+            let computations = context.viewing().computations();
+            let site = context.site();
+            let interaction = fidget::interaction::Interaction::at(computations, &site);
+            let computation = site.memo(computations, || {
+                computation::Computation::new(
+                    computations,
+                    tasks,
+                    program.clone(),
+                    fuel,
+                    settings.clone(),
+                    interaction.permitted.clone(),
+                )
+            });
+            computation.program.update(program.clone(), fuel);
+            computation.settings.set(settings.clone());
+            let image = computations.runtime.read(&computation.image);
+            let paths = computations.runtime.read(&computation.paths);
+            let image = outcome(&image)?;
+            let paths = outcome(&paths)?;
+            let frame = match image {
+                ViewImage::Current(frame) | ViewImage::Refining(frame, _) => Some(frame),
+                ViewImage::Awaiting(_) => None,
+            };
+            let drawing = super::drawn(fidget::mesh::drawing_surface(
+                paths,
+                frame.map(|frame| puri::mesh::Surface {
+                    frame: frame.clone(),
+                    mesh_start: paths.indices.len(),
+                }),
+                model,
+                state.as_ref(),
+                scale,
+            ))?;
+            Ok(match image {
+                ViewImage::Current(_) => drawing,
+                ViewImage::Refining(_, progress) | ViewImage::Awaiting(progress) => {
+                    progress_bar(drawing, *progress)
+                }
+            })
+        },
+    ))
 }
 
 #[cfg(test)]
