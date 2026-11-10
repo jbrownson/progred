@@ -177,7 +177,6 @@ fn f64_parts() -> Parts {
     );
     parts.names.extend(
         [
-            (f64::LERP, "lerp"),
             (f64::START, "start"),
             (f64::END, "end"),
             (f64::AMOUNT, "amount"),
