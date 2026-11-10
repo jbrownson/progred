@@ -3,6 +3,8 @@
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::rc::{Rc, Weak};
 use std::sync::{
     Arc,
@@ -337,7 +339,7 @@ impl<T: 'static> Dependency for MemoNode<T> {
 pub struct Source<S, K, V> {
     snapshot: Input<S>,
     select: Rc<dyn Fn(&S, &K) -> V>,
-    entries: Rc<RefCell<Vec<(K, Weak<Selected<S, K, V>>)>>>,
+    entries: Rc<RefCell<HashMap<K, Weak<Selected<S, K, V>>>>>,
 }
 
 impl<S, K, V> Clone for Source<S, K, V> {
@@ -359,7 +361,7 @@ struct Selected<S, K, V> {
     changed: Cell<u64>,
 }
 
-impl<S: 'static, K: Clone + Eq + 'static, V: Clone + PartialEq + 'static> Source<S, K, V> {
+impl<S: 'static, K: Clone + Eq + Hash + 'static, V: Clone + PartialEq + 'static> Source<S, K, V> {
     pub fn new(snapshot: Input<S>, select: impl Fn(&S, &K) -> V + 'static) -> Self {
         Self {
             snapshot,
@@ -370,11 +372,11 @@ impl<S: 'static, K: Clone + Eq + 'static, V: Clone + PartialEq + 'static> Source
 
     pub fn read(&self, key: K, read: &mut Read) -> V {
         let mut entries = self.entries.borrow_mut();
-        entries.retain(|(_, entry)| entry.strong_count() != 0);
         let node = entries
-            .iter()
-            .find_map(|(k, entry)| (k == &key).then(|| entry.upgrade()).flatten())
+            .get(&key)
+            .and_then(Weak::upgrade)
             .unwrap_or_else(|| {
+                entries.retain(|_, entry| entry.strong_count() != 0);
                 let revision = self.snapshot.0.changed.get();
                 let node = Rc::new(Selected {
                     snapshot: self.snapshot.clone(),
@@ -384,7 +386,7 @@ impl<S: 'static, K: Clone + Eq + 'static, V: Clone + PartialEq + 'static> Source
                     verified: Cell::new(revision),
                     changed: Cell::new(revision),
                 });
-                entries.push((key, Rc::downgrade(&node)));
+                entries.insert(key, Rc::downgrade(&node));
                 node
             });
         node.refresh();
