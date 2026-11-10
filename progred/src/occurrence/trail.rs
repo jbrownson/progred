@@ -89,7 +89,6 @@ impl Trail {
     }
 
     /// The step that reached this occurrence, none at the root.
-    #[cfg(test)]
     pub fn last(&self) -> Option<&Step> {
         self.link.as_ref().map(|link| &link.step)
     }

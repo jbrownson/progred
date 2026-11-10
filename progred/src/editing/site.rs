@@ -30,6 +30,12 @@ impl Site {
         }
     }
 
+    /// The occurrence this one is drawn within and the step from it to here,
+    /// unless this is its view's root.
+    pub(crate) fn parent(&self) -> Option<(Self, &crate::occurrence::Step)> {
+        Some((Self::new(self.path.parent()?.clone()), self.path.last()?))
+    }
+
     /// Whether `selection` is at this occurrence.
     pub(crate) fn holds(&self, selection: &crate::selection::Selection) -> bool {
         self.path.view() == selection.view() && self.path == selection.path()

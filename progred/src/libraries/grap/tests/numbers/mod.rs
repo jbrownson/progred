@@ -56,6 +56,53 @@ fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
 }
 
 #[test]
+fn operators_typed_in_a_line_group_as_the_line_reads() {
+    use crate::libraries::f32;
+    use crate::libraries::grap::numbers::f32::{MULTIPLY, SUM as ADD};
+    let call = |operator: gid::CellId, left: Value, right: Value| {
+        ::grap::call(operator.into(), [(LEFT, left), (RIGHT, right)])
+    };
+    let n = f32::value;
+    let typed = |text: &str| {
+        let mut driver = Driver::of(n(1.0));
+        driver.select::<Step>(&[]);
+        for part in text.split(' ') {
+            driver.type_text(part);
+            if part.parse::<f64>().is_ok() {
+                driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+            }
+        }
+        driver.value(&[])
+    };
+    // A product binds tighter than the sum it follows, and takes its operand.
+    assert_eq!(
+        typed("+ 2 * 3"),
+        call(ADD, n(1.0), call(MULTIPLY, n(2.0), n(3.0)))
+    );
+    // A sum after a product, or after another sum, takes all that came before.
+    assert_eq!(
+        typed("* 2 + 3"),
+        call(ADD, call(MULTIPLY, n(1.0), n(2.0)), n(3.0))
+    );
+    assert_eq!(
+        typed("+ 2 * 3 + 4"),
+        call(
+            ADD,
+            call(ADD, n(1.0), call(MULTIPLY, n(2.0), n(3.0))),
+            n(4.0)
+        )
+    );
+    // A left operand ends nothing: an operator after it takes it alone.
+    let mut driver = Driver::of(call(ADD, n(1.0), n(2.0)));
+    driver.select(&[Step::Key(LEFT)]);
+    driver.type_text("*");
+    assert_eq!(
+        driver.value(&[Step::Key(LEFT)]),
+        ::grap::call(MULTIPLY.into(), [(LEFT, n(1.0))])
+    );
+}
+
+#[test]
 fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)

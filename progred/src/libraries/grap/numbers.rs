@@ -309,7 +309,7 @@ impl Parts {
             crate::display::runtime_partial(move |input| {
                 let layout = arithmetic.representation.display(input)?;
                 Some(if input.writable && input.selection.is_some() {
-                    typed_operators::<_, N>(layout, symbols.clone())
+                    typed_operators::<_, N>(layout, symbols.clone(), infix.clone())
                 } else {
                     layout
                 })
@@ -378,21 +378,22 @@ fn conversion<From: Parse + 'static, N: 'static>(
 }
 
 /// A selected number takes its type's single-character operators as typing:
-/// one typed at the end of a whole number makes the number its left operand,
+/// one typed at the end of a whole number makes what it ends the left operand,
 /// with the right operand's picker open. A sign or exponent that doesn't yet
 /// make a number still goes into its text.
 fn typed_operators<W: Host, N: std::str::FromStr + 'static>(
     child: Layout<W>,
     symbols: Rc<[(&'static str, CellId)]>,
+    infix: Rc<[(CellId, Precedence)]>,
 ) -> Layout<W> {
     crate::display::widget::after(
         child,
         Rc::new(move |context| {
             let site = context.site();
-            let symbols = symbols.clone();
+            let (symbols, infix) = (symbols.clone(), infix.clone());
             Box::new(move |output, _| {
                 output.handler().on_key(move |world: &mut W, event| {
-                    wrap_typed::<N>(&mut world.session(), event, &site, &symbols)
+                    wrap_typed::<N>(&mut world.session(), event, &site, &symbols, &infix)
                 });
             })
         }),
@@ -404,21 +405,62 @@ fn wrap_typed<N: std::str::FromStr>(
     event: &ui_events::keyboard::KeyboardEvent,
     site: &crate::editing::Site,
     symbols: &[(&'static str, CellId)],
+    infix: &[(CellId, Precedence)],
 ) -> bool {
     typed_operator(event, symbols).is_some_and(|operator| {
-        let mut edit = site.open(session);
-        let wrapped = ends_a_number::<N>(edit.selected())
-            && edit.value().cloned().is_some_and(|left| {
-                edit.replace(::grap::call(
-                    Value::from(operator),
-                    [(vocabulary::LEFT, left)],
-                ))
-            });
+        if !ends_a_number::<N>(site.open(session).selected()) {
+            return false;
+        }
+        let ended = left_operand(session, site.clone(), precedence_of(infix, operator), infix);
+        let mut edit = ended.open(session);
+        let wrapped = edit.value().cloned().is_some_and(|left| {
+            edit.replace(::grap::call(
+                Value::from(operator),
+                [(vocabulary::LEFT, left)],
+            ))
+        });
         if wrapped {
             edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
         }
         wrapped
     })
+}
+
+/// What an operator binding as `typed` takes as its left operand when typed
+/// after the number at `site`: the number, or the infix call it ends that
+/// binds at least as tightly, as the same symbols written in a line would
+/// group. So `1 + 2` then `*` multiplies the 2, and `1 * 2` then `+` adds to
+/// the product.
+fn left_operand(
+    session: &mut crate::editing::Session<'_>,
+    site: crate::editing::Site,
+    typed: Option<Precedence>,
+    infix: &[(CellId, Precedence)],
+) -> crate::editing::Site {
+    let ends_tighter = site.parent().and_then(|(parent, step)| {
+        let binds = parent
+            .open(session)
+            .value()
+            .and_then(Value::as_record)
+            .filter(|fields| ::grap::isa::of(fields) == Some(::grap::vocabulary::kind::CALL))
+            .and_then(|fields| fields.get(&::grap::vocabulary::FUNCTION)?.as_cell())
+            .and_then(|function| precedence_of(infix, function));
+        (*step == crate::occurrence::Step::Key(vocabulary::RIGHT)
+            && binds.is_some()
+            && binds >= typed)
+            .then_some(parent)
+    });
+    match ends_tighter {
+        Some(parent) => left_operand(session, parent, typed, infix),
+        None => site,
+    }
+}
+
+fn precedence_of(infix: &[(CellId, Precedence)], operator: CellId) -> Option<Precedence> {
+    infix
+        .iter()
+        .find(|(cell, _)| *cell == operator)
+        .map(|&(_, precedence)| precedence)
 }
 
 /// The operator among `symbols` that an unmodified keypress types.
