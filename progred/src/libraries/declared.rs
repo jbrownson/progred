@@ -5,7 +5,7 @@
 use crate::display::host::{Host, Layout, Partial};
 use crate::libraries::presentation::vocabulary;
 use crate::libraries::{Library, layout, name};
-use gid::{CellId, Step};
+use gid::CellId;
 
 pub const ID: CellId = CellId::from_u128(0x0ab7c6ce75b78c779291147f380cb6c4);
 
@@ -94,9 +94,7 @@ fn projection<W: Host>() -> Partial<W> {
                     )),
                     None => Some(evaluation.result)
                         .filter(|result| result.absent_reason().is_none())
-                        .map(|result| {
-                            crate::display::at([Step::Key(vocabulary::RESULT)], result, None, None)
-                        }),
+                        .map(crate::libraries::presentation::result_layout),
                 }
                 .map(|layout| {
                     let occurrence = occurrence.clone();
