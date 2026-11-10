@@ -596,23 +596,12 @@ impl Editor {
                 .and_then(|value| crate::spine::without(value, area.path())),
         );
         if let Some((place, value)) = closed
-            && self.write_view(&place, value)
+            && crate::editing::write(&mut self.session(), &place, value)
         {
             self.model.selection = None;
             self.sync_views();
             self.refresh_title();
         }
-    }
-
-    /// Writes `value` at the place a view shows, as an undo step.
-    fn write_view(&mut self, place: &crate::location::Location<'_>, value: gid::Value) -> bool {
-        let before = self.model.snapshot();
-        let written =
-            crate::location::set_value(&mut self.model.doc, &self.stack.libraries, place, value);
-        if written {
-            self.model.history.record(before);
-        }
-        written
     }
 
     /// Moves the selected pane one place along its row or column, keeping
@@ -641,7 +630,7 @@ impl Editor {
             Some((area.view.place(&[])?, value, path, below, interpreted))
         });
         if let Some((place, value, path, below, interpreted)) = next
-            && self.write_view(&place, value)
+            && crate::editing::write(&mut self.session(), &place, value)
         {
             let next_area = Area::part(area.view.clone(), path);
             self.model.workspace.retarget(&area, next_area.clone());
