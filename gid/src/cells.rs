@@ -26,7 +26,7 @@ impl Cells {
 
     /// Makes the cell bare.
     pub fn clear_value(&mut self, cell: CellId) {
-        self.data = self.data.without(&cell);
+        self.data.remove(&cell);
     }
 
     pub fn cells(&self) -> impl Iterator<Item = &CellId> {
