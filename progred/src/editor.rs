@@ -76,7 +76,7 @@ pub(crate) enum AfterDiscard {
 /// How finished Progred is, and the commit this build came from when it was
 /// told: in the web editor's menu bar and window titles, so a screenshot
 /// says which version it shows.
-pub(crate) fn stage() -> String {
+pub(crate) fn version() -> String {
     match option_env!("PROGRED_COMMIT").filter(|commit| !commit.is_empty()) {
         Some(commit) => format!("pre-alpha {commit}"),
         None => "pre-alpha".to_owned(),
@@ -439,14 +439,14 @@ impl Editor {
                     .unwrap_or_else(|| path.display().to_string()),
                 None => "Untitled".to_string(),
             },
-            stage()
+            version()
         );
         #[cfg(not(target_os = "macos"))]
         {
             let dirty = if self.model.dirty() { " •" } else { "" };
             match &self.doc_path {
-                Some(path) => format!("Progred {} — {}{dirty}", stage(), path.display()),
-                None => format!("Progred {} — untitled{dirty}", stage()),
+                Some(path) => format!("Progred {} — {}{dirty}", version(), path.display()),
+                None => format!("Progred {} — untitled{dirty}", version()),
             }
         }
     }
@@ -721,7 +721,7 @@ impl Editor {
                 }
             }
             DocCommand::CopyVersion => {
-                self.text_clipboard.copy(stage(), None, None);
+                self.text_clipboard.copy(version(), None, None);
             }
         }
     }

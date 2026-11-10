@@ -406,7 +406,7 @@ fn the_version_copies_from_the_bar_and_the_help_menu() {
     driver.click_at(point_for(&driver, Hover::Stage));
     assert_eq!(
         driver.runner.editor.text_clipboard.get_text(),
-        Some(crate::editor::stage())
+        Some(crate::editor::version())
     );
     assert_eq!(driver.runner.editor.menu.open(), None);
 
@@ -419,6 +419,6 @@ fn the_version_copies_from_the_bar_and_the_help_menu() {
     ));
     assert_eq!(
         driver.runner.editor.text_clipboard.get_text(),
-        Some(crate::editor::stage())
+        Some(crate::editor::version())
     );
 }

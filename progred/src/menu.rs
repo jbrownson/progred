@@ -708,7 +708,7 @@ mod view {
         // which a click copies.
         let stage = {
             let scale = description.scale;
-            let text = placed::text(tcx, &crate::editor::stage(), &styles.dim);
+            let text = placed::text(tcx, &crate::editor::version(), &styles.dim);
             let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
             let horizontal = 10.0 * scale;
             let content = placed::decorate(
