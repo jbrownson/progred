@@ -224,12 +224,6 @@ impl Environment {
     }
 }
 
-impl From<Environment> for Value {
-    fn from(environment: Environment) -> Self {
-        Value::from(&environment)
-    }
-}
-
 impl From<&Environment> for Value {
     fn from(environment: &Environment) -> Self {
         reify::environment(environment)

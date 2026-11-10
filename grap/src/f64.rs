@@ -4,7 +4,7 @@
 //! expressible as an ordinary external library, which would evaluate
 //! correctly and merely lose the fast paths.
 
-use gid::{CellId, Record, Value};
+use gid::{CellId, Value};
 
 pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
 /// Why a value isn't an f64, carrying it.
@@ -15,11 +15,11 @@ pub fn value(number: f64) -> Value {
 }
 
 pub fn read(value: &Value) -> Option<f64> {
-    read_record(value.as_record()?)
-}
-
-pub fn read_record(fields: &Record) -> Option<f64> {
-    fields.get(&F64).and_then(Value::as_blob).and_then(decode)
+    value
+        .as_record()?
+        .get(&F64)
+        .and_then(Value::as_blob)
+        .and_then(decode)
 }
 
 /// `number` as a count or an index: whole, not negative, and small

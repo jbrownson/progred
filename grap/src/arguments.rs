@@ -209,6 +209,9 @@ impl Parse for gid::Value {
 
 impl Parse for bool {
     fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
-        crate::logic::read(&value.to_value()).ok_or_else(|| not(crate::logic::NOT_BOOL, value))
+        value
+            .field(crate::logic::BOOL)
+            .and_then(|field| crate::logic::decode(field.as_value()))
+            .ok_or_else(|| not(crate::logic::NOT_BOOL, value))
     }
 }

@@ -3,7 +3,7 @@
 //! containers, and environments, and readers borrow it without decoding;
 //! it remains an ordinary convention an external library could own.
 
-use gid::{CellId, Record, Value};
+use gid::{CellId, Value};
 
 pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
 
@@ -12,11 +12,7 @@ pub fn value(text: impl Into<String>) -> Value {
 }
 
 pub fn read(value: &Value) -> Option<&str> {
-    read_record(value.as_record()?)
-}
-
-pub fn read_record(fields: &Record) -> Option<&str> {
-    fields.get(&UTF8)?.as_blob().and_then(decode)
+    value.as_record()?.get(&UTF8)?.as_blob().and_then(decode)
 }
 
 /// The `utf8` field holding `text`.

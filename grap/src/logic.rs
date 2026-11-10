@@ -3,7 +3,7 @@
 //! knowledge is an accelerator only: the convention must remain expressible
 //! as an ordinary external library.
 
-use gid::{CellId, Record, Value};
+use gid::{CellId, Value};
 
 pub const BOOL: CellId = CellId::from_u128(0xb2d13b64336a9e808133d0c7d5e4981e);
 pub const TRUE: CellId = CellId::from_u128(0x04831f9b704935059231eb111770e62e);
@@ -16,11 +16,7 @@ pub fn value(value: bool) -> Value {
 }
 
 pub fn read(value: &Value) -> Option<bool> {
-    read_record(value.as_record()?)
-}
-
-pub fn read_record(fields: &Record) -> Option<bool> {
-    decode(fields.get(&BOOL)?)
+    decode(value.as_record()?.get(&BOOL)?)
 }
 
 /// The `bool` field holding `value`.

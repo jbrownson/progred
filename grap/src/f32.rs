@@ -2,7 +2,7 @@
 //! bytes under the f32 tag. Privileged knowledge is an accelerator only: the
 //! convention must remain expressible as an ordinary external library.
 
-use gid::{CellId, Record, Value};
+use gid::{CellId, Value};
 
 pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
 /// Why a value isn't an f32, carrying it.
@@ -13,11 +13,11 @@ pub fn value(number: f32) -> Value {
 }
 
 pub fn read(value: &Value) -> Option<f32> {
-    read_record(value.as_record()?)
-}
-
-pub fn read_record(fields: &Record) -> Option<f32> {
-    fields.get(&F32).and_then(Value::as_blob).and_then(decode)
+    value
+        .as_record()?
+        .get(&F32)
+        .and_then(Value::as_blob)
+        .and_then(decode)
 }
 
 /// The `f32` field holding `number`.
