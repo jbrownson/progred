@@ -65,6 +65,7 @@ impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::frame:
 }
 
 pub use crate::display::recording::{Recordable, Recorded, record};
+use crate::display::widget::project::Stop;
 use crate::display::{Partial, widget};
 use ::grap::RuntimeValue;
 use gid::{CellId, Step, Value};
@@ -159,7 +160,7 @@ pub enum ProjectionCall<W, H> {
         steps: Vec<Step>,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-        part: bool,
+        stop: Stop,
     },
     Jump {
         steps: Vec<Step>,
@@ -212,13 +213,13 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         steps: &[Step],
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
-        part: bool,
+        stop: Stop,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::Descend {
             steps: steps.to_vec(),
             projection,
             default_projection,
-            part,
+            stop,
         })
     }
     fn descend_raw(
@@ -538,7 +539,7 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: &[Step],
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
-        _: bool,
+        _: Stop,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected descent")
     }

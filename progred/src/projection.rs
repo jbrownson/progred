@@ -12,6 +12,7 @@ pub(crate) mod viewport;
 
 use crate::annotations::{Annotations, Node};
 use crate::display::widget::placed::{before, decorate};
+use crate::display::widget::project::Stop;
 use crate::display::widget::source::{Secondary, SourceTrace};
 use crate::display::widget::style::{
     Styles, highlight_outline, hover_highlight, primary_highlight, secondary_highlight,
@@ -450,7 +451,7 @@ impl ProjectionScope<'_, '_> {
         steps: &[gid::Step],
         current: Option<Partial>,
         default: Option<Partial>,
-        part: bool,
+        stop: Stop,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = self.cx;
         let mut path = self.path.clone();
@@ -499,7 +500,7 @@ impl ProjectionScope<'_, '_> {
             },
             current.as_ref(),
             default.as_ref(),
-            part,
+            stop,
             tcx,
             build,
         )
@@ -514,9 +515,9 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         steps: &[gid::Step],
         current: Option<Partial>,
         default: Option<Partial>,
-        part: bool,
+        stop: Stop,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        self.descend_path(text, build, steps, current, default, part)
+        self.descend_path(text, build, steps, current, default, stop)
     }
     #[cfg(any(test, target_arch = "wasm32"))]
     fn descend_raw(
@@ -538,7 +539,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             std::slice::from_ref(&step),
             Some(nothing.clone()),
             Some(nothing),
-            false,
+            Stop::Own,
         )
     }
     fn jump(
@@ -597,7 +598,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             },
             current.as_ref(),
             default.as_ref(),
-            false,
+            Stop::Own,
             text,
             build,
         )
@@ -630,7 +631,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             },
             current.as_ref(),
             default.as_ref(),
-            false,
+            Stop::Own,
             text,
             build,
         )
@@ -805,7 +806,7 @@ fn prepare_project(
         },
         None,
         None,
-        false,
+        Stop::Own,
         tcx,
         &mut build,
     );
@@ -906,14 +907,14 @@ fn ground_with(
 }
 
 /// The occurrence `scope` describes, drawn with `current_projection` when
-/// given, its children with `default_projection`; as a `part`, with no stop
-/// of its own unless a control drawn for it declares one, so it joins the
-/// stop of the occurrence that walked to it.
+/// given, its children with `default_projection`; where `stop` joins it to
+/// the occurrence that walked to it, with no stop of its own unless a control
+/// drawn for it declares one.
 fn prepare_value(
     scope: ProjectionScope<'_, '_>,
     current_projection: Option<&Partial>,
     default_projection: Option<&Partial>,
-    part: bool,
+    stop: Stop,
     tcx: &mut TextCtx,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -987,88 +988,96 @@ fn prepare_value(
                 layout,
                 build,
             );
-            if part {
-                let selected = cx.selected(path);
-                let scale = cx.styles.scale;
-                let palette = cx.styles.palette;
-                let path = path.clone();
-                let select = crate::display::widget::navigation::arrival(
-                    crate::editing::Site::new(path.clone()),
-                );
-                ChoiceLayout::map(inner, move |inner| {
-                    crate::display::widget::navigation::part_landmark(
-                        highlighted(palette, selected, scale, path.clone(), None, inner),
-                        path,
-                        select,
-                        selected,
-                    )
-                })
-            } else {
-                let landmark_path = path.clone();
-                // What this projection shares with others of the same location;
-                // the frame marks those sharing the selected or hovered one's.
-                // Where the path past the nearest followed cell, or from the root,
-                // is the data's own, it says what's shared without reading it.
-                // An empty place shares its location too, so a hole drawn in two
-                // places is one hole.
-                let descends = path.data_from(ancestors.enclosing.map_or(0, |(_, start)| start));
-                let cell = value.and_then(grap::RuntimeValue::as_cell);
-                let secondary = if descends {
-                    Some(Secondary::from_context(
-                        landmark_path.clone(),
-                        cell,
-                        ancestors.enclosing,
-                    ))
-                } else if let Some(cell) = cell {
-                    // A reference names its cell even in a computed result.
-                    Some(Secondary::Cell(cell))
-                } else {
-                    path.location().map(|location| {
-                        Secondary::from_location(&cx.sources, &location, path.view())
-                    })
-                };
-                // A landmark, not a target: highlight and keyboard reach span
-                // the full bounds, while clicks belong to the content each arm
-                // claimed above — structural whitespace deselects.
-                let selected = cx.selected(path);
-                let selected_value = value.filter(|_| selected).cloned();
-                let scale = cx.styles.scale;
-                let palette = cx.styles.palette;
-                let select = crate::display::widget::navigation::arrival(
-                    crate::editing::Site::new(landmark_path.clone()),
-                );
-                let target = value.map(|value| {
-                    (
-                        value.clone(),
-                        crate::display::widget::navigation::selecting(crate::editing::Site::new(
-                            landmark_path.clone(),
-                        )),
-                    )
-                });
-                ChoiceLayout::map(inner, move |inner| {
-                    let placed = crate::display::widget::navigation::landmark(
-                        highlighted(
-                            palette,
-                            selected,
-                            scale,
-                            landmark_path.clone(),
-                            secondary.clone(),
-                            inner,
-                        ),
-                        landmark_path.clone(),
-                        select,
-                        secondary,
-                        selected,
+            match stop {
+                Stop::Joined => {
+                    let selected = cx.selected(path);
+                    let scale = cx.styles.scale;
+                    let palette = cx.styles.palette;
+                    let path = path.clone();
+                    let select = crate::display::widget::navigation::arrival(
+                        crate::editing::Site::new(path.clone()),
                     );
-                    let placed = match selected_value {
-                        Some(value) => bind_selection(placed, landmark_path.clone(), value, scale),
-                        None => placed,
+                    ChoiceLayout::map(inner, move |inner| {
+                        crate::display::widget::navigation::part_landmark(
+                            highlighted(palette, selected, scale, path.clone(), None, inner),
+                            path,
+                            select,
+                            selected,
+                        )
+                    })
+                }
+                Stop::Own => {
+                    let landmark_path = path.clone();
+                    // What this projection shares with others of the same location;
+                    // the frame marks those sharing the selected or hovered one's.
+                    // Where the path past the nearest followed cell, or from the root,
+                    // is the data's own, it says what's shared without reading it.
+                    // An empty place shares its location too, so a hole drawn in two
+                    // places is one hole.
+                    let descends =
+                        path.data_from(ancestors.enclosing.map_or(0, |(_, start)| start));
+                    let cell = value.and_then(grap::RuntimeValue::as_cell);
+                    let secondary = if descends {
+                        Some(Secondary::from_context(
+                            landmark_path.clone(),
+                            cell,
+                            ancestors.enclosing,
+                        ))
+                    } else if let Some(cell) = cell {
+                        // A reference names its cell even in a computed result.
+                        Some(Secondary::Cell(cell))
+                    } else {
+                        path.location().map(|location| {
+                            Secondary::from_location(&cx.sources, &location, path.view())
+                        })
                     };
-                    match target {
-                        Some((value, select)) => pick_target(landmark_path, value, select, placed),
-                        None => placed,
-                    }
-                })
+                    // A landmark, not a target: highlight and keyboard reach span
+                    // the full bounds, while clicks belong to the content each arm
+                    // claimed above — structural whitespace deselects.
+                    let selected = cx.selected(path);
+                    let selected_value = value.filter(|_| selected).cloned();
+                    let scale = cx.styles.scale;
+                    let palette = cx.styles.palette;
+                    let select = crate::display::widget::navigation::arrival(
+                        crate::editing::Site::new(landmark_path.clone()),
+                    );
+                    let target = value.map(|value| {
+                        (
+                            value.clone(),
+                            crate::display::widget::navigation::selecting(
+                                crate::editing::Site::new(landmark_path.clone()),
+                            ),
+                        )
+                    });
+                    ChoiceLayout::map(inner, move |inner| {
+                        let placed = crate::display::widget::navigation::landmark(
+                            highlighted(
+                                palette,
+                                selected,
+                                scale,
+                                landmark_path.clone(),
+                                secondary.clone(),
+                                inner,
+                            ),
+                            landmark_path.clone(),
+                            select,
+                            secondary,
+                            selected,
+                        );
+                        let placed = match selected_value {
+                            Some(value) => {
+                                bind_selection(placed, landmark_path.clone(), value, scale)
+                            }
+                            None => placed,
+                        };
+                        match target {
+                            Some((value, select)) => {
+                                pick_target(landmark_path, value, select, placed)
+                            }
+                            None => placed,
+                        }
+                    })
+                }
             }
         }
     };

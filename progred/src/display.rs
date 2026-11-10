@@ -7,6 +7,7 @@ pub use puri::delim::Delim;
 use puri::draw::Leaf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use widget::project::Stop;
 
 pub mod builder;
 pub mod fold;
@@ -904,7 +905,7 @@ pub fn descend<World: 'static, Hover: 'static>(
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    walk(steps, overriding, default, false)
+    walk(steps, overriding, default, Stop::Own)
 }
 
 /// [`descend`], what's reached drawn as part of this occurrence: no stop,
@@ -915,14 +916,14 @@ pub fn part<World: 'static, Hover: 'static>(
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    walk(steps, overriding, default, true)
+    walk(steps, overriding, default, Stop::Joined)
 }
 
 fn walk<World: 'static, Hover: 'static>(
     steps: impl AsRef<[Step]> + 'static,
     overriding: Option<Partial<World, Hover>>,
     default: Option<Partial<World, Hover>>,
-    part: bool,
+    stop: Stop,
 ) -> Layout<World, Hover> {
     Layout::program(Rc::new(move |context, build| {
         context.project.descend(
@@ -931,7 +932,7 @@ fn walk<World: 'static, Hover: 'static>(
             steps.as_ref(),
             overriding.clone(),
             default.clone(),
-            part,
+            stop,
         )
     }))
 }

@@ -4,6 +4,7 @@ use crate::projection::test_support::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshared};
+use crate::display::widget::project::Stop;
 use crate::identity::short_id;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 use crate::library::Libraries;
@@ -243,18 +244,22 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             let ProjectionCall::Descend {
                 steps,
                 projection: Some(projection),
-                part,
+                stop,
                 ..
             } = &inspect(child)
             else {
                 panic!("a declaration follows the cell definition");
             };
             assert_eq!(*steps, [Step::Follow]);
-            assert!(*part, "the cell and its definition are one thing");
+            assert_eq!(
+                *stop,
+                Stop::Joined,
+                "the cell and its definition are one thing"
+            );
             let ProjectionCall::Descend {
                 steps,
                 projection: Some(projection),
-                part,
+                stop,
                 ..
             } = &inspect(
                 &(projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
@@ -264,7 +269,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                 panic!("the compact definition descends to its actual name");
             };
             assert_eq!(*steps, [Step::Key(name::vocabulary::NAME)]);
-            assert!(!*part, "the name is a stop of its own");
+            assert_eq!(*stop, Stop::Own, "the name is a stop of its own");
             let value = env
                 .0
                 .as_record()
