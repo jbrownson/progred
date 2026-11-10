@@ -2,7 +2,7 @@
 //! constructors and what's typed read as a value. Raw's holes list the
 //! offers, and a projection can offer them among its own, as Grap's slots do.
 
-use crate::display::fold::{cell_starts_closed, foldable};
+use crate::display::fold::{cell_starts_closed, foldable, starting_open};
 use crate::display::host::{Layout, ProjectionInput};
 use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
@@ -37,23 +37,31 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
         ::grap::Shape::Cell(cell) => cell_view(input, cell),
         ::grap::Shape::List(positions) => {
             let empty = positions.is_empty();
-            let open = crate::display::structure::list_layout_at(input, positions, None);
-            if empty {
-                open
-            } else {
-                foldable(Delim::Bracket, None, |_| false, open)
-            }
+            folding_unless(
+                empty,
+                Delim::Bracket,
+                crate::display::structure::list_layout_at(input, positions, None),
+            )
         }
         ::grap::Shape::Record(labels) => {
             let empty = labels.is_empty();
-            let open = crate::display::structure::Fields::default().record_of(input, labels);
-            if empty {
-                open
-            } else {
-                foldable(Delim::Brace, None, |_| false, open)
-            }
+            folding_unless(
+                empty,
+                Delim::Brace,
+                crate::display::structure::Fields::default().record_of(input, labels),
+            )
         }
     })
+}
+
+/// `open` folding between `delim`, starting open, unless it's `empty`, with
+/// nothing to fold away.
+fn folding_unless<W: Host>(empty: bool, delim: Delim, open: Layout<W>) -> Layout<W> {
+    if empty {
+        open
+    } else {
+        starting_open(delim, open)
+    }
 }
 
 /// The most bytes a blob shows whole; a longer one shows its first eight

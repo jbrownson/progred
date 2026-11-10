@@ -144,6 +144,11 @@ fn key(command: puri::keyboard::CommandModifier, event: &KeyboardEvent) -> Optio
 /// starting open.
 pub fn folding<W: Host>(partial: Partial<W>) -> Partial<W> {
     crate::display::runtime_partial(move |input| {
-        partial(input).map(|open| foldable(Delim::Brace, None, |_| false, open))
+        partial(input).map(|open| starting_open(Delim::Brace, open))
     })
+}
+
+/// `open` folding between `delim`, with no name, starting open.
+pub fn starting_open<W: Host>(delim: Delim, open: Layout<W>) -> Layout<W> {
+    foldable(delim, None, |_| false, open)
 }

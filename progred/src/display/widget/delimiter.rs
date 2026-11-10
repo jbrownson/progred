@@ -47,32 +47,25 @@ pub fn bracket<World: 'static, Hover: 'static>(
     delim: Delim,
     child: Layout<World, Hover>,
 ) -> Layout<World, Hover> {
-    crate::display::row(
-        0.0,
-        [
-            Layout::widget(fill_height(side(delim, delim::Side::Open))),
-            child,
-            Layout::widget(fill_height(side(delim, delim::Side::Close))),
-        ],
-    )
+    bracketed(delim, child, |side| side)
 }
 
 pub fn selectable_bracket<W: Host>(
     delim: Delim,
     child: crate::display::host::Layout<W>,
 ) -> crate::display::host::Layout<W> {
+    bracketed(delim, child, selectable_widget)
+}
+
+/// `child` between `delim`'s two sides, each as `side_widget` makes it.
+fn bracketed<World: 'static, Hover: 'static>(
+    delim: Delim,
+    child: Layout<World, Hover>,
+    side_widget: impl Fn(Widget<World, Hover>) -> Widget<World, Hover>,
+) -> Layout<World, Hover> {
+    let end = |at| Layout::widget(fill_height(side_widget(side(delim, at))));
     crate::display::row(
         0.0,
-        [
-            Layout::widget(fill_height(selectable_widget(side(
-                delim,
-                delim::Side::Open,
-            )))),
-            child,
-            Layout::widget(fill_height(selectable_widget(side(
-                delim,
-                delim::Side::Close,
-            )))),
-        ],
+        [end(delim::Side::Open), child, end(delim::Side::Close)],
     )
 }
