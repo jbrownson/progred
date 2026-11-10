@@ -3,7 +3,7 @@ use super::{Library, absent, layout, name, presentation};
 use crate::computations::memo;
 use crate::display::Host;
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    Context, Early, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
     SourceOrigin,
 };
 use gid::{CellId, Value};
@@ -61,7 +61,7 @@ fn children<S: Sink>(
     environment: &Environment,
     output: &Output<S>,
 ) -> Result<RuntimeValue, Halt> {
-    if let Some(elements) = expression.elements().map(<[_]>::to_vec) {
+    if let Some(elements) = expression.elements() {
         for child in elements {
             context.burn()?;
             let result = if child.elements().is_some() {
@@ -73,7 +73,7 @@ fn children<S: Sink>(
                     output,
                 )?
             } else {
-                context.eval(child, environment)?
+                context.eval(child.clone(), environment)?
             };
             if result.absent_reason().is_some() {
                 return Ok(result);
@@ -94,43 +94,33 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions<'stati
     ForeignFunctions::default()
         .register(
             GROUP,
-            ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = call.field(CHILDREN) else {
-                    return Ok(call.missing_runtime_argument(CHILDREN));
-                };
-                group(
+            ForeignFunction::early(move |context, call, environment| {
+                Ok(group(
                     context,
-                    expression,
+                    call.argument(CHILDREN)?,
                     call.source_origin(),
                     environment,
                     &group_output,
-                )
+                )?)
             })
             .cacheable(),
         )
         .register(
             MAP,
-            ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = call.field(CHILDREN) else {
-                    return Ok(call.missing_runtime_argument(CHILDREN));
-                };
-                let Some(map) = call.field(MAPPING) else {
-                    return Ok(call.missing_runtime_argument(MAPPING));
-                };
-                let map = context.prepare_callable(map, environment)?;
+            ForeignFunction::early(move |context, call, environment| {
+                let expression = call.argument(CHILDREN)?;
+                let map = context.prepare_callable(call.argument(MAPPING)?, environment)?;
                 map_output.maps.borrow_mut().push(map);
                 let result = children(context, expression, environment, &map_output);
                 map_output.maps.borrow_mut().pop();
-                result
+                Ok(result?)
             })
             .cacheable(),
         )
         .register(
             LEAF,
-            ForeignFunction::new(move |context, call, environment| {
-                let Some(expression) = call.field(VALUE) else {
-                    return Ok(call.missing_runtime_argument(VALUE));
-                };
+            ForeignFunction::early(move |context, call, environment| {
+                let expression = call.argument(VALUE)?;
                 let source = call.source_origin();
                 let maps = output
                     .maps
@@ -139,24 +129,18 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions<'stati
                     .rev()
                     .cloned()
                     .collect::<Vec<_>>();
+                // The first absent, the leaf's own or a mapping's, is the
+                // answer, and nothing is emitted.
                 let value = maps.iter().try_fold(
-                    context.eval(expression, environment)?,
+                    context.eval(expression, environment)?.present()?,
                     |value, map| {
-                        if value.absent_reason().is_some() {
-                            Ok(value)
-                        } else {
-                            context.call_prepared(map, [(VALUE, value)])
-                        }
+                        Ok::<_, Early>(context.call_prepared(map, [(VALUE, value)])?.present()?)
                     },
                 )?;
-                Ok(if value.absent_reason().is_some() {
-                    value
-                } else {
-                    context.effect(|| {
-                        output.sink.borrow_mut().leaf(value, source);
-                        RuntimeValue::record([])
-                    })
-                })
+                Ok(context.effect(|| {
+                    output.sink.borrow_mut().leaf(value, source);
+                    RuntimeValue::record([])
+                }))
             })
             .cacheable(),
         )
@@ -232,13 +216,17 @@ impl Sink for Collector {
     }
 }
 
+/// What the program a `collect tree` call names builds: its tree, or why
+/// there's none; or, early, why the call has no program.
 fn collect(
     context: &mut Context,
-    program: &::grap::PreparedCallable,
-) -> Result<Result<Built, RuntimeValue>, Halt> {
+    call: &Expression,
+    environment: &Environment,
+) -> Result<Result<Built, RuntimeValue>, Early> {
+    let program = context.prepare_callable(call.argument(PROGRAM)?, environment)?;
     let sink = Rc::new(RefCell::new(Collector::default()));
     let result = interpret(context, sink.clone(), |context| {
-        context.call_prepared(program, [])
+        context.call_prepared(&program, [])
     })?;
     if result.absent_reason().is_some() {
         Ok(Err(result))
@@ -257,19 +245,23 @@ fn evaluate(
     fuel: usize,
 ) -> (::grap::Evaluation, Option<Result<Built, RuntimeValue>>) {
     let built = RefCell::new(None);
-    let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-        let Some(expression) = call.field(PROGRAM) else {
-            return Ok(call.missing_runtime_argument(PROGRAM));
+    let emit =
+        |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| match collect(
+            context,
+            call,
+            environment,
+        ) {
+            Ok(result) => {
+                let value = result
+                    .as_ref()
+                    .map(|built| built.items.clone())
+                    .unwrap_or_else(Clone::clone);
+                built.replace(Some(result));
+                Ok(value)
+            }
+            Err(Early::Answer(answer)) => Ok(answer),
+            Err(Early::Halt(halt)) => Err(halt),
         };
-        let callable = context.prepare_callable(expression, environment)?;
-        let result = collect(context, &callable)?;
-        let value = result
-            .as_ref()
-            .map(|built| built.items.clone())
-            .unwrap_or_else(Clone::clone);
-        built.replace(Some(result));
-        Ok(value)
-    };
     let expression = RuntimeValue::record([
         (
             ::grap::isa::ISA,
@@ -368,12 +360,8 @@ pub fn library<W: Host>() -> Library<W> {
         )
         .register(
             COLLECT,
-            ForeignFunction::new(|context, call, environment| {
-                let Some(program) = call.field(PROGRAM) else {
-                    return Ok(call.missing_runtime_argument(PROGRAM));
-                };
-                let program = context.prepare_callable(program, environment)?;
-                Ok(match collect(context, &program)? {
+            ForeignFunction::early(|context, call, environment| {
+                Ok(match collect(context, call, environment)? {
                     Ok(built) => built.items,
                     Err(error) => error,
                 })
