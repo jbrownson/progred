@@ -641,7 +641,7 @@ fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
         .record(input)?;
     Some(match bindings.is_empty() {
         true => open,
-        false => crate::display::fold::foldable(Delim::Brace, None, |_| false, open),
+        false => crate::display::fold::starting_open(Delim::Brace, open),
     })
 }
 
