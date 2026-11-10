@@ -227,7 +227,11 @@ fn occurrences_in_different_views_have_independent_root_lifetimes() {
     let first = computations.at(&document, || computations.runtime.input(1));
     let second = computations.at(&pane, || computations.runtime.input(2));
     first.set(3);
-    assert_eq!(*second.observed().0, 2);
+    let unchanged = computations.runtime.memo({
+        let second = second.clone();
+        move |read| Ok(*second.read(read))
+    });
+    assert_eq!(*computations.runtime.read(&unchanged).unwrap(), 2);
     assert!(Rc::ptr_eq(
         &first,
         &computations.at(&document, || unreachable!())

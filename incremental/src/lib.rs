@@ -117,19 +117,8 @@ impl<T> Clone for Input<T> {
 
 impl<T: 'static> Input<T> {
     pub fn read(&self, read: &mut Read) -> Rc<T> {
-        let (value, observation) = self.observed();
-        read.record(observation);
-        value
-    }
-
-    pub fn observed(&self) -> (Rc<T>, Observation) {
-        (
-            self.0.value.borrow().clone(),
-            Observation(Observed {
-                node: self.0.clone(),
-                version: self.0.changed.get(),
-            }),
-        )
+        read.observe(self.0.clone(), self.0.changed.get());
+        self.0.value.borrow().clone()
     }
 
     pub fn set(&self, value: T)
@@ -170,8 +159,6 @@ struct Observed {
     version: u64,
 }
 
-pub struct Observation(Observed);
-
 pub struct Read {
     runtime: Runtime,
     revision: u64,
@@ -184,9 +171,6 @@ pub struct Read {
 }
 
 impl Read {
-    pub fn record(&mut self, observation: Observation) {
-        self.observe(observation.0.node, observation.0.version);
-    }
     fn new(runtime: &Runtime, cancellation: &Cancellation) -> Self {
         Self {
             runtime: runtime.clone(),

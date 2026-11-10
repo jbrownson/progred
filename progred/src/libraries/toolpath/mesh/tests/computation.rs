@@ -492,7 +492,11 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
         ),
     ]);
     let set_playback = |value: &Value| {
-        let mut settings = (*graph.settings.observed().0).clone();
+        let current = computations.runtime.memo({
+            let settings = graph.settings.clone();
+            move |read| Ok(settings.read(read))
+        });
+        let mut settings = (**computations.runtime.read(&current).unwrap()).clone();
         settings.style.playback = Some(playback::Settings::read(value).unwrap());
         graph.settings.set(settings);
         computations.runtime.read(&graph.geometry).unwrap()
