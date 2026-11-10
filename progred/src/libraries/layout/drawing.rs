@@ -45,19 +45,16 @@ fn record(program: grap::RuntimeValue, origin: Option<grap::SourceOrigin>, fuel:
         let draw = |function,
                     context: &mut grap::Context<'_>,
                     call: &grap::Expression,
-                    environment: &grap::Environment| {
+                    environment: &grap::Environment|
+         -> Result<Value, grap::Early> {
             match function {
                 vocabulary::PATH => Ok(context.effect(|| {
                     *path.borrow_mut() = BezPath::new();
                     unit.clone()
                 })),
                 vocabulary::MOVE_TO | vocabulary::LINE_TO => {
-                    let Some(x) = call.field(vocabulary::X) else {
-                        return Ok(call.missing_argument(vocabulary::X));
-                    };
-                    let Some(y) = call.field(vocabulary::Y) else {
-                        return Ok(call.missing_argument(vocabulary::Y));
-                    };
+                    let x = call.argument(vocabulary::X)?;
+                    let y = call.argument(vocabulary::Y)?;
                     Ok(
                         match (
                             number(context, x, environment)?,
@@ -80,11 +77,8 @@ fn record(program: grap::RuntimeValue, origin: Option<grap::SourceOrigin>, fuel:
                     unit.clone()
                 })),
                 vocabulary::FILL => {
-                    let Some(paint) =
-                        evaluated_field(context, call, environment, vocabulary::PAINT)?
-                    else {
-                        return Ok(call.missing_argument(vocabulary::PAINT));
-                    };
+                    let paint =
+                        context.eval_to_value(call.argument(vocabulary::PAINT)?, environment)?;
                     let shape = match call.field(vocabulary::SHAPE) {
                         Some(shape) => evaluated_shape(&context.eval(shape, environment)?),
                         None => Some(puri::draw::Shape::Path(path.borrow().clone())),
@@ -110,7 +104,19 @@ fn record(program: grap::RuntimeValue, origin: Option<grap::SourceOrigin>, fuel:
             }
         };
         let evaluation = grap::Evaluator::new(host, fuel)
-            .functions(grap::ForeignFunctions::shared(&functions, &draw))
+            .functions(grap::ForeignFunctions::shared(
+                &functions,
+                |function, context, call, environment| match draw(
+                    function,
+                    context,
+                    call,
+                    environment,
+                ) {
+                    Ok(drawn) => Ok(grap::RuntimeValue::from(drawn)),
+                    Err(grap::Early::Answer(answer)) => Ok(answer),
+                    Err(grap::Early::Halt(halt)) => Err(halt),
+                },
+            ))
             .observer(&tracer)
             .evaluate_runtime(&program, origin.clone());
         evaluation.halt.is_none() && !evaluation.result.declines()
@@ -124,17 +130,6 @@ fn invalid_drawing(call: &grap::Expression) -> Value {
         ::grap::absent::VALUE,
         call.value().clone(),
     )
-}
-
-fn evaluated_field(
-    context: &mut grap::Context,
-    call: &grap::Expression,
-    environment: &grap::Environment,
-    field: CellId,
-) -> Result<Option<Value>, grap::Halt> {
-    call.field(field)
-        .map(|value| context.eval_to_value(value, environment))
-        .transpose()
 }
 
 fn number(
