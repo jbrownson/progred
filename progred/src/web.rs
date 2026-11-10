@@ -84,12 +84,15 @@ pub(crate) fn report_content_height(height: f64) {
 
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_theme(theme: &str) -> Result<(), wasm_bindgen::JsValue> {
-    let palette = theme
+    palette(theme).map(|palette| send(UserEvent::PaletteChanged(palette)))
+}
+
+/// The palette of the theme the page names.
+fn palette(theme: &str) -> Result<style::Palette, wasm_bindgen::JsValue> {
+    theme
         .parse::<style::Theme>()
-        .map_err(wasm_bindgen::JsValue::from_str)?
-        .palette();
-    send(UserEvent::PaletteChanged(palette));
-    Ok(())
+        .map(style::Theme::palette)
+        .map_err(wasm_bindgen::JsValue::from_str)
 }
 
 /// Called by the JS host on the page thread, never on the computation worker.
@@ -208,12 +211,7 @@ pub fn start_editor(
         } else {
             puri::keyboard::CommandModifier::Control
         },
-        theme
-            .as_deref()
-            .unwrap_or("light")
-            .parse::<style::Theme>()
-            .map_err(wasm_bindgen::JsValue::from_str)?
-            .palette(),
+        palette(theme.as_deref().unwrap_or("light"))?,
         on_change,
     );
     Ok(())

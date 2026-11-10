@@ -27,18 +27,17 @@ extern "C" {
     fn worker_wake(channel: &str);
 }
 
+fn channel() -> &'static str {
+    CHANNEL.get().expect("worker channel initialized")
+}
+
 pub fn wake() {
-    worker_wake(CHANNEL.get().expect("worker channel initialized"));
+    worker_wake(channel());
 }
 
 pub fn executor() -> Executor {
     // A second box gives the trait object a thin pointer for postMessage.
-    Executor::new(|job| {
-        submit_job(
-            Box::into_raw(Box::new(job)) as usize,
-            CHANNEL.get().expect("worker channel initialized"),
-        )
-    })
+    Executor::new(|job| submit_job(Box::into_raw(Box::new(job)) as usize, channel()))
 }
 
 /// # Safety
