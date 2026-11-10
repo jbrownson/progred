@@ -6,7 +6,8 @@
 use crate::display::Host;
 use crate::libraries::{Library, f64, name};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    Context, Early, Environment, Expression, ForeignFunction, ForeignFunctions, PreparedCallable,
+    RuntimeValue,
 };
 use gid::Value;
 
@@ -29,18 +30,6 @@ use vocabulary::*;
 
 fn invalid() -> RuntimeValue {
     ::grap::absent::value(INVALID).into()
-}
-
-fn evaluated(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    field: gid::CellId,
-) -> Result<RuntimeValue, Halt> {
-    match call.field(field) {
-        Some(expression) => context.eval(expression, environment),
-        None => Ok(call.missing_runtime_argument(field)),
-    }
 }
 
 /// A count or an index a range can step through exactly: whole, not
@@ -81,56 +70,69 @@ fn range_step(
     }
 }
 
-fn consume(
+/// The sequence a call's `items` evaluates to, ready to step; or, early,
+/// why there's none.
+fn items(
     context: &mut Context,
     call: &Expression,
-    env: &Environment,
-    collect: bool,
-) -> Result<RuntimeValue, Halt> {
-    let sequence = evaluated(context, call, env, ITEMS)?;
-    if sequence.absent_reason().is_some() {
-        Ok(sequence)
-    } else {
-        let mut sequence = context.prepare_runtime_callable(sequence, env);
-        let action = if collect {
-            None
-        } else {
-            let Some(expression) = call.field(ACTION) else {
-                return Ok(call.missing_runtime_argument(ACTION));
-            };
-            Some(context.prepare_callable(expression, env)?)
-        };
-        let mut collected = Vec::new();
-        loop {
-            let step = context.call_prepared(&sequence, [])?;
-            if step.absent_reason().is_some() {
-                break Ok(step);
-            }
-            if step.record_len().is_none() {
-                break Ok(invalid());
-            }
-            if let Some(item) = step.field(ITEM) {
-                if let Some(action) = &action {
-                    let result = context.call_prepared(action, [(ITEM, item)])?;
-                    if result.absent_reason().is_some() {
-                        break Ok(result);
-                    }
-                } else {
-                    collected.push(item);
-                }
-            }
-            match step.field(NEXT) {
-                Some(next) => sequence = context.prepare_runtime_callable(next, env),
-                None => {
-                    break Ok(if collect {
-                        RuntimeValue::list(collected)
-                    } else {
-                        RuntimeValue::record([])
-                    });
-                }
-            }
+    environment: &Environment,
+) -> Result<PreparedCallable, Early> {
+    let sequence = context.eval_argument(call, ITEMS, environment)?.present()?;
+    Ok(context.prepare_runtime_callable(sequence, environment))
+}
+
+/// Steps through `sequence` to its end, handing each step's item to `item`;
+/// an absent step, or one that isn't a record, is the early answer.
+fn each(
+    context: &mut Context,
+    mut sequence: PreparedCallable,
+    environment: &Environment,
+    mut item: impl FnMut(&mut Context, RuntimeValue) -> Result<(), Early>,
+) -> Result<(), Early> {
+    loop {
+        let step = context.call_prepared(&sequence, [])?.present()?;
+        if step.record_len().is_none() {
+            break Err(invalid().into());
+        }
+        if let Some(value) = step.field(ITEM) {
+            item(context, value)?;
+        }
+        match step.field(NEXT) {
+            Some(next) => sequence = context.prepare_runtime_callable(next, environment),
+            None => break Ok(()),
         }
     }
+}
+
+/// `for each {items, action}`: the action applied to each item, stopping at
+/// the first absent result, which is the answer.
+fn for_each(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Early> {
+    let sequence = items(context, call, environment)?;
+    let action = context.prepare_callable(call.argument(ACTION)?, environment)?;
+    each(context, sequence, environment, |context, item| {
+        context.call_prepared(&action, [(ITEM, item)])?.present()?;
+        Ok(())
+    })?;
+    Ok(RuntimeValue::record([]))
+}
+
+/// `collect {items}`: the sequence's items as a list.
+fn collect(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Early> {
+    let sequence = items(context, call, environment)?;
+    let mut collected = Vec::new();
+    each(context, sequence, environment, |_, item| {
+        collected.push(item);
+        Ok(())
+    })?;
+    Ok(RuntimeValue::list(collected))
 }
 
 fn functions() -> ForeignFunctions<'static> {
@@ -145,13 +147,13 @@ fn functions() -> ForeignFunctions<'static> {
         )
         .register(
             FOR_EACH,
-            ForeignFunction::new(|cx, call, env| consume(cx, call, env, false))
+            ForeignFunction::early(for_each)
                 .parameters([ITEMS, ACTION])
                 .cacheable(),
         )
         .register(
             COLLECT,
-            ForeignFunction::new(|cx, call, env| consume(cx, call, env, true))
+            ForeignFunction::early(collect)
                 .parameters([ITEMS])
                 .cacheable(),
         )

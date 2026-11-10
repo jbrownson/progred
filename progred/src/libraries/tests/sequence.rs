@@ -129,7 +129,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
             ForeignFunction::new({
                 let log = log.clone();
                 move |cx, call, env| {
-                    let index = evaluated(cx, call, env, INDEX)?.as_f64().unwrap();
+                    let index = cx.eval(call.field(INDEX).unwrap(), env)?.as_f64().unwrap();
                     cx.effect(|| log.borrow_mut().push(("pull", index)));
                     let next = cx.closure_value(
                         [],
@@ -150,7 +150,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
                 let log = log.clone();
                 let failure = failure.clone();
                 move |cx, call, env| {
-                    let index = evaluated(cx, call, env, ITEM)?.as_f64().unwrap();
+                    let index = cx.eval(call.field(ITEM).unwrap(), env)?.as_f64().unwrap();
                     cx.effect(|| log.borrow_mut().push(("action", index)));
                     Ok(if index == 2.0 {
                         failure.clone().into()
