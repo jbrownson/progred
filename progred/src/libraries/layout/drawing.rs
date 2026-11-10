@@ -171,7 +171,7 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::draw::Shape> {
         );
         (radius >= 0.0).then(|| puri::draw::Shape::Circle(Circle::new((x, y), radius)))
     } else {
-        read_shape(&value.to_value())
+        read_shape(value.as_value())
     }
 }
 

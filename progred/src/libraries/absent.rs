@@ -89,7 +89,7 @@ fn callers<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
             2.0,
             [
                 toggle,
-                match input.env.stack(&call, &value.to_value()) {
+                match input.env.stack(&call, value.as_value()) {
                     // The call itself is first; with nothing after it, it's
                     // the evaluation's own.
                     Some(stack) if stack.len() < 2 => crate::display::dim("nothing: it's the top"),
@@ -138,7 +138,7 @@ fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> 
 /// call drawn in its code. Drawn as a part of what holds it, it's the call,
 /// one stop.
 fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let call = location(::grap::source::read(&input.value?.to_value())?)?;
+    let call = location(::grap::source::read(input.value?.as_value())?)?;
     Some(crate::display::jump([], call, None, None))
 }
 

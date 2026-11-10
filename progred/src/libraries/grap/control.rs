@@ -442,7 +442,7 @@ fn matches_pattern(
                     .and_then(Value::as_cell)
                 {
                     Some(binder) => match bindings.iter().find(|(bound, _)| *bound == binder) {
-                        Some((_, bound)) => Ok(bound.to_value() == value.to_value()),
+                        Some((_, bound)) => Ok(bound.as_value() == value.as_value()),
                         None => {
                             bindings.push((binder, value.clone()));
                             Ok(true)
