@@ -6,7 +6,7 @@ use crate::display::widget::frame::{Cursor, ViewRegion};
 use crate::display::widget::navigation::{Geometry, Landmark, landmark_at};
 use crate::display::widget::source::SourceTrace;
 use crate::display::widget::view::Area;
-use crate::display::widget::{container, placed, style, view};
+use crate::display::widget::{self, container, placed, style, view};
 use crate::hover;
 use crate::menu;
 use crate::model::Model;
@@ -864,7 +864,7 @@ fn divider_rule(
             );
             p.handler().on_pointer_down(move |app: &mut Editor, event| {
                 is_primary_contact(event)
-                    && hit.contains(Point::new(event.state.position.x, event.state.position.y))
+                    && hit.contains(widget::at(&event.state))
                     && app.model.workspace.start_resize(
                         down_divider.clone(),
                         Vec2::new(
@@ -1046,14 +1046,14 @@ fn project_frame(
                 let rect = placement.rect;
                 let headings = Rect::new(0.0, 0.0, menu_heading_width, content_viewport.y0);
                 p.handler().on_pointer_down(move |app: &mut Editor, event| {
-                    let point = Point::new(event.state.position.x, event.state.position.y);
+                    let point = widget::at(&event.state);
                     is_primary_contact(event)
                         && !headings.contains(point)
                         && !rect.contains(point)
                         && app.menu.close()
                 });
                 p.handler().on_scroll(move |_: &mut Editor, event| {
-                    if rect.contains(Point::new(event.state.position.x, event.state.position.y)) {
+                    if rect.contains(widget::at(&event.state)) {
                         ScrollOutcome::consume(event)
                     } else {
                         ScrollOutcome::pass(event)

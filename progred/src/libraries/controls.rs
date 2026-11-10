@@ -243,7 +243,7 @@ fn slider_control<W: Host>(
                 output
                     .handler()
                     .on_pointer_down(move |world: &mut W, event| {
-                        let point = Point::new(event.state.position.x, event.state.position.y);
+                        let point = widget::at(&event.state);
                         if !puri::interact::is_primary_contact(event) || !placement.contains(point)
                         {
                             return false;

@@ -5,7 +5,6 @@
 use crate::display::host::{Host, Layout};
 use crate::display::widget;
 use crate::site::event as grap_event;
-use kurbo::Point;
 use puri::handler::{Event, EventOutcome, HasHandler};
 use std::rc::Rc;
 use ui_events::pointer::PointerState;
@@ -21,9 +20,7 @@ pub fn on_event<W: Host>(child: Layout<W>, function: impl Into<::grap::RuntimeVa
             Box::new(move |output, placement| {
                 let command = output.input.command_modifier;
                 output.handler().on(move |world, event, _| {
-                    let within = |pointer: &PointerState| {
-                        placement.contains(Point::new(pointer.position.x, pointer.position.y))
-                    };
+                    let within = |pointer: &PointerState| placement.contains(widget::at(pointer));
                     let mut run = |value| {
                         site.open(&mut world.session())
                             .run_handler(function.clone(), value)
