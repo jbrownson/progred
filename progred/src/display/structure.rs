@@ -271,9 +271,7 @@ impl<W: Host> Fields<W> {
         queried: [CellId; N],
         draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
     ) -> Option<Layout<W>> {
-        let fields = input.value?;
-        let content = draw(queried.map(|key| fields.field(key)))?;
-        Some(self.after(input, |key| queried.contains(&key), content))
+        self.form_drawing(input, &[], queried, draw)
     }
 
     /// [`Fields::form`] for a record of `kind`, as its `isa` says, declining
@@ -286,12 +284,24 @@ impl<W: Host> Fields<W> {
         queried: [CellId; N],
         draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
     ) -> Option<Layout<W>> {
+        (input.value?.kind() == Some(kind)).then_some(())?;
+        self.form_drawing(input, &[::grap::isa::ISA], queried, draw)
+    }
+
+    /// A form `draw` makes of the `queried` fields' values, followed by the
+    /// fields neither queried nor among `drawn`, which it draws too.
+    fn form_drawing<const N: usize>(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: &[CellId],
+        queried: [CellId; N],
+        draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+    ) -> Option<Layout<W>> {
         let fields = input.value?;
-        (fields.kind() == Some(kind)).then_some(())?;
         let content = draw(queried.map(|key| fields.field(key)))?;
         Some(self.after(
             input,
-            |key| key == ::grap::isa::ISA || queried.contains(&key),
+            |key| drawn.contains(&key) || queried.contains(&key),
             content,
         ))
     }
