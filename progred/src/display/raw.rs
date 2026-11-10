@@ -108,13 +108,13 @@ fn cell_view<W: Host>(
 
 /// Raw's picker for a hole of `kind`, its brackets making its constructors.
 pub fn picker<W: Host>(kind: CompletionKind) -> Picker<W> {
-    Picker::new(kind, Rc::new(entries)).with_keys(keys(kind))
+    Picker::new(kind, Rc::new(entries)).with_keys(move || keys(kind))
 }
 
 /// The picker of a document's empty root: Raw's, led by what the libraries
 /// start a document as.
 pub fn start_picker<W: Host>() -> Picker<W> {
-    Picker::new(CompletionKind::Value, start()).with_keys(keys(CompletionKind::Value))
+    Picker::new(CompletionKind::Value, start()).with_keys(|| keys(CompletionKind::Value))
 }
 
 /// What the libraries start a document as, then Raw's [`entries`].

@@ -12,7 +12,7 @@ use crate::display::{Host, Toolkit};
 use crate::hover::Hover;
 use crate::location::Location;
 use crate::selection::{Selection, Stage};
-use kurbo::{Insets, Point};
+use kurbo::Insets;
 use measured::{Measured, min_width, pad};
 use puri::edit::{EditOperation, LineEditDescription, LineEditPresentation, LineEditState};
 use puri::handler::HasHandler;
@@ -29,7 +29,7 @@ pub struct Picker<W> {
     pub offers: HoleOffers<W>,
     /// Typed into an empty query, each chooses its offer at once, as Raw's
     /// brackets make its constructors. Elsewhere a delimiter is text.
-    pub keys: Vec<(&'static str, Completion)>,
+    pub keys: Rc<dyn Fn() -> Vec<(&'static str, Completion)>>,
 }
 
 impl<W> Clone for Picker<W> {
@@ -47,12 +47,17 @@ impl<W> Picker<W> {
         Self {
             kind,
             offers,
-            keys: Vec::new(),
+            keys: Rc::new(Vec::new),
         }
     }
 
-    pub fn with_keys(self, keys: Vec<(&'static str, Completion)>) -> Self {
-        Self { keys, ..self }
+    /// The keys are asked for only by the hole that's selected with nothing
+    /// typed, so the others build none.
+    pub fn with_keys(self, keys: impl Fn() -> Vec<(&'static str, Completion)> + 'static) -> Self {
+        Self {
+            keys: Rc::new(keys),
+            ..self
+        }
     }
 }
 
@@ -224,7 +229,7 @@ fn located_query<W: Host>(
         p.occlude(placement);
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(super::at(&event.state))
                 && edit_query(ctx, &|edit| {
                     edit.state.pointer_down(
                         &presentation,
@@ -240,7 +245,7 @@ fn located_query<W: Host>(
     });
     // Raw's bracket keys act while nothing's typed.
     let keys = (query.text().is_empty() && query.preedit_parts().is_none())
-        .then(|| picker.keys.clone())
+        .then(|| (picker.keys)())
         .filter(|keys| !keys.is_empty());
     // Tab commits what's been typed, as Enter would, then moves on to the
     // next empty slot, unless the commit opened one of its own, such as a new
