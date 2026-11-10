@@ -8,7 +8,4 @@ set -eu
 
 tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-case $(uname -s) in
-    Darwin) exec "$tool_dir/sandbox-cargo" proc-macro-srv "$@" ;;
-    *) exec "$tool_dir/linux-cargo" proc-macro-srv "$@" ;;
-esac
+exec "$tool_dir/rust-analyzer-cargo" proc-macro-srv "$@"
