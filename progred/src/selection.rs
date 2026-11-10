@@ -14,8 +14,8 @@ use std::rc::Rc;
 /// Editing state beside the selection: the live line editor
 /// (caret, anchor, IME preedit, drag — and the text in motion), plus
 /// whether that state is a query and its undo grouping.
-pub(crate) struct Editor {
-    pub(crate) line: LineEditState,
+struct MountedLine {
+    line: LineEditState,
     query: bool,
     /// Whether this editor's write-through run has recorded its undo
     /// step: the run is the editor's lifetime, so the first write
@@ -34,7 +34,7 @@ pub struct Selection {
     /// parent record's for a label stage.
     path: Path,
     payload: Value,
-    editor: Option<Editor>,
+    editor: Option<MountedLine>,
     /// Where a picker opened from a key was opened, for stepping back to.
     origin: Option<Path>,
 }
@@ -332,10 +332,10 @@ fn stage_of(payload: &Value) -> Stage {
 /// The live editor `payload` describes over `text`, a query's or a value's,
 /// and the payload without that description: the editor owns it once
 /// mounted.
-fn mount(payload: &Value, text: &str, query: bool) -> (Value, Editor) {
+fn mount(payload: &Value, text: &str, query: bool) -> (Value, MountedLine) {
     (
         payload::without_editor(payload),
-        Editor {
+        MountedLine {
             line: payload::editor_line(payload, text),
             query,
             recorded: false,
