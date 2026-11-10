@@ -1453,8 +1453,9 @@ the cube example fell from 19 ms a frame to 0.35 ms on a Linux VM in November
 frame, on the GPU natively and otherwise on the CPU, about 27 ms a frame for
 the spheres example on that VM, which is every frame in a browser.
 
-The owner is willing to unify them (November 2026). Two things stand in the
-way of simply moving both onto the toolpath previews' pipeline:
+Unifying them was looked at in November 2026 and judged not worth the time:
+the previews perform well as they are. Two things stand in the way of simply
+moving both onto the toolpath previews' pipeline:
 
 - That pipeline is CPU only, because Fidget's GPU interpreter can't run the
   cut stock's field (see [toolpaths](toolpaths.md)). Fidget's own fields run
