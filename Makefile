@@ -13,7 +13,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test verify test-vendor test-gpu test-web-gpu perf sweep audit outdated sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test verify test-scripts test-vendor test-gpu test-web-gpu perf sweep audit outdated sandbox-app
 
 help:
 	@echo "Development:"
@@ -106,6 +106,14 @@ TEST := test --workspace --tests $(VENDORED:%=--exclude %)
 
 test:
 	$(NATIVE_CARGO) $(TEST) $(if $(ARGS),-- $(ARGS))
+	$(if $(ARGS),,@$(MAKE) --no-print-directory test-scripts)
+
+# The website's and the tools' own tests, which need no build. `make test`
+# runs them after Cargo's unless ARGS filters it.
+test-scripts:
+	python3 -B -m unittest discover -s website -p 'test_*.py'
+	python3 -B tools/test-dev-native.py
+	node --test website/test_*.cjs
 
 # Verus's proofs of the files tools/verus-settings.sh lists. ARGS go to Verus,
 # such as ARGS='--expand-errors'.

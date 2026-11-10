@@ -81,8 +81,15 @@ while True:
 
 class DevelopmentTests(unittest.TestCase):
     def test_make_dry_run_does_not_enter_the_loop(self):
+        # Run from `make test`, this make would otherwise take itself for a
+        # recursive one and announce the directory it enters.
+        apart = {
+            name: value
+            for name, value in os.environ.items()
+            if name not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
+        }
         result = subprocess.run(
-            ["make", "-n", "dev"], cwd=ROOT, capture_output=True, text=True, timeout=3,
+            ["make", "-n", "dev"], cwd=ROOT, capture_output=True, text=True, timeout=3, env=apart,
         )
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "./tools/dev-native")
