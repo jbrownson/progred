@@ -9,13 +9,15 @@ mod normals;
 
 fn sphere_preview() -> VolumePreview {
     VolumePreview {
-        objects: vec![SceneObject {
-            tree: Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.25,
-            color: [64, 180, 240],
-        }],
+        shape: Shape {
+            objects: vec![SceneObject {
+                tree: Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.25,
+                color: [64, 180, 240],
+            }],
+            min: Vector3::repeat(-1.0),
+            max: Vector3::repeat(1.0),
+        },
         size: Size::new(100.0, 100.0),
-        min: Vector3::repeat(-1.0),
-        max: Vector3::repeat(1.0),
     }
 }
 
@@ -37,7 +39,7 @@ fn cancellation_does_not_publish_a_partial_mesh() {
     cancel.cancel();
     let mut geometry = Geometry::default();
     assert_eq!(
-        Shape::from(&sphere_preview()).append(&mut geometry, 4, &cancel),
+        sphere_preview().shape.append(&mut geometry, 4, &cancel),
         Err(incremental::Error::Cancelled)
     );
     assert!(geometry.vertices.is_empty());
@@ -59,7 +61,10 @@ fn mesh_function_returns_an_ordinary_declaration() {
     let result = call(vec![(presentation::vocabulary::VALUE, f32::value(1.0))]);
     let fields = of_kind(result.as_value(), vocabulary::kind::MESH_PREVIEW).unwrap();
     assert_eq!(depth(fields.get(&vocabulary::MESH_DEPTH)), Some(6));
-    assert_eq!(volume_preview_fields(fields).unwrap().objects.len(), 1);
+    assert_eq!(
+        volume_preview_fields(fields).unwrap().shape.objects.len(),
+        1
+    );
     let invalid = call(vec![
         (presentation::vocabulary::VALUE, f32::value(1.0)),
         (vocabulary::MESH_DEPTH, crate::libraries::u64::value(0)),
@@ -73,10 +78,10 @@ fn mesh_function_returns_an_ordinary_declaration() {
 #[test]
 fn meshing_handles_empty_and_constant_fields() {
     let mut preview = sphere_preview();
-    preview.objects.clear();
+    preview.shape.objects.clear();
     assert!(generate(&preview, 3).unwrap().indices.is_empty());
     for constant in [0.0, 1.0, -1.0] {
-        preview.objects = vec![SceneObject {
+        preview.shape.objects = vec![SceneObject {
             tree: Tree::constant(constant),
             color: [255; 3],
         }];
@@ -95,8 +100,9 @@ fn model_changes_and_colors_are_used_on_every_generation() {
             .iter()
             .all(|i| (*i as usize) < first.vertices.len())
     );
-    preview.objects[0].tree = Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.0625;
-    preview.objects[0].color = [200, 30, 20];
+    preview.shape.objects[0].tree =
+        Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.0625;
+    preview.shape.objects[0].color = [200, 30, 20];
     let second = generate(&preview, 4).unwrap();
     let radius = |geometry: &Geometry| {
         geometry
@@ -217,7 +223,7 @@ fn depth_buffer_keeps_the_front_object_independent_of_order() {
 #[test]
 fn mesh_and_implicit_views_agree_on_framing_and_flat_surface_lighting() {
     let mut preview = sphere_preview();
-    preview.objects[0].tree = (Tree::z() - 0.1)
+    preview.shape.objects[0].tree = (Tree::z() - 0.1)
         .max(-Tree::z() - 0.7)
         .max(Tree::x().abs() - 0.75)
         .max(Tree::y().abs() - 0.75);
@@ -249,7 +255,7 @@ fn mesh_and_implicit_views_agree_on_framing_and_flat_surface_lighting() {
             }
             let mesh = cpu::render(&geometry, &mesh_view).unwrap();
             let implicit = cpu_volume(
-                &preview.objects,
+                &preview.shape.objects,
                 &voxel_view,
                 &incremental::Cancellation::default(),
             )

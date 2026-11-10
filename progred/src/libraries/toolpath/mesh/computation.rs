@@ -17,7 +17,7 @@ pub(crate) struct PathStyle {
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct Settings {
-    pub shape: fidget::mesh::Shape,
+    pub shape: fidget::Shape,
     pub style: PathStyle,
 }
 
@@ -32,7 +32,7 @@ pub(crate) struct ViewGeometry {
 #[derive(Clone, PartialEq)]
 struct Surface {
     /// The model's shape, which the solid's objects are meshed within.
-    model: fidget::mesh::Shape,
+    model: fidget::Shape,
     solid: playback::Solid,
     depth: u8,
 }
@@ -199,10 +199,7 @@ fn updating_color(color: [f32; 3]) -> [f32; 3] {
     color.map(|channel| 0.25 * channel + 0.75 * gray)
 }
 
-fn remaining_shape(
-    mut model: fidget::mesh::Shape,
-    solid: playback::Solid,
-) -> Outcome<fidget::mesh::Shape> {
+fn remaining_shape(mut model: fidget::Shape, solid: playback::Solid) -> Outcome<fidget::Shape> {
     model.objects = solid.objects()?;
     Ok(model)
 }

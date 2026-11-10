@@ -19,7 +19,7 @@ impl Request {
             .view()
             .refinements(first_max_edge, final_depth_multiplier)
         {
-            Some(views) => match SoftwareScene::new(&self.preview.objects, cancel)? {
+            Some(views) => match SoftwareScene::new(&self.preview.shape.objects, cancel)? {
                 Some(scene) => whole_passes(&scene, &views, cancel, publish),
                 None => Ok(None),
             },

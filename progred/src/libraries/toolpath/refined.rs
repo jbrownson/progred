@@ -78,7 +78,7 @@ impl Computation {
             move |read| {
                 let settings = settings.read(read);
                 Ok(mesh::computation::Settings {
-                    shape: (&settings.request.preview).into(),
+                    shape: settings.request.preview.shape.clone(),
                     style: settings.style.clone(),
                 })
             }

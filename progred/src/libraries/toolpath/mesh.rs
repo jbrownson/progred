@@ -43,7 +43,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let settings = computation::Settings {
-        shape: (&model).into(),
+        shape: model.shape.clone(),
         style,
     };
     let drawing = Layout::program(Rc::new(move |context, build| {

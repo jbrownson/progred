@@ -290,13 +290,13 @@ fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
         "render uses the latest camera"
     );
 
-    next.request.preview.objects[0].color = [1, 2, 3];
+    next.request.preview.shape.objects[0].color = [1, 2, 3];
     settings_input.set(next.clone());
     read();
     let job = queue.lock().unwrap().pop_front().unwrap();
     let worker = std::thread::spawn(job);
     let cancel = receive.recv_timeout(Duration::from_secs(5)).unwrap();
-    next.request.preview.objects[0].color = [4, 5, 6];
+    next.request.preview.shape.objects[0].color = [4, 5, 6];
     settings_input.set(next);
     read();
     assert!(
@@ -403,7 +403,7 @@ fn implicit_playback_contains_only_stock_not_paths_or_visible_cutter() {
     let expected = playback.removal().unwrap().remaining(&path).unwrap();
     settings.style.playback = Some(playback);
     let rendered = playback::Solid::new(
-        &settings.request.preview.objects,
+        &settings.request.preview.shape.objects,
         &path,
         settings.style.playback.as_ref(),
     )

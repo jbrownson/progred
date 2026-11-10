@@ -114,7 +114,7 @@ fn tiled_progression_matches_whole_pass_reference_and_propagates_cancellation() 
 #[test]
 fn final_only_tiles_keep_final_quality_with_one_progress_interval() {
     let mut request = super::super::tests::request(81.0, 53.0);
-    request.preview.objects = vec![
+    request.preview.shape.objects = vec![
         SceneObject {
             tree: Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.6,
             color: [200, 100, 50],
@@ -190,7 +190,7 @@ fn final_only_tiles_validate_depth_and_propagate_cancellation() {
 fn assembly_matches_renderer_at_every_pixel_with_parallel_out_of_order_tiles() {
     let request = super::super::tests::request(41.0, 27.0);
     let cancel = incremental::Cancellation::default();
-    let scene = SoftwareScene::new(&request.preview.objects, &cancel)
+    let scene = SoftwareScene::new(&request.preview.shape.objects, &cancel)
         .unwrap()
         .unwrap();
     let view = request.view().view_at(request.pixels);

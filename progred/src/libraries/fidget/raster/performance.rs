@@ -11,15 +11,18 @@ pub(crate) fn profile(
     controls: bool,
 ) -> Json {
     let preview = VolumePreview {
-        objects: vec![stock],
+        shape: Shape {
+            objects: vec![stock],
+            min: Vector3::repeat(-0.85),
+            max: Vector3::repeat(0.85),
+        },
         size: Size::new(width.into(), height.into()),
-        min: Vector3::repeat(-0.85),
-        max: Vector3::repeat(0.85),
     };
     let cancel = incremental::Cancellation::default();
     let mut geometry = puri::mesh::Geometry::default();
     let start = Instant::now();
-    mesh::Shape::from(&preview)
+    preview
+        .shape
         .append(&mut geometry, 6, &cancel)
         .unwrap()
         .unwrap();
@@ -83,6 +86,7 @@ fn control(preview: &VolumePreview, view: &VolumeView, parallel: bool) -> Json {
     };
     let start = Instant::now();
     let shapes = preview
+        .shape
         .objects
         .iter()
         .map(|o| VmShape::from(o.tree.clone()).try_into().ok().unwrap())

@@ -19,7 +19,7 @@ fn raster(preview: &VolumePreview, state: Option<&Value>) -> puri::mesh::DepthIm
 fn implicit_depth_matches_mesh_camera_and_pixel_centers() {
     let center = Vector3::new(0.18, -0.12, 0.15);
     let mut preview = sphere_preview();
-    preview.objects[0].tree = (Tree::x() - center.x).square()
+    preview.shape.objects[0].tree = (Tree::x() - center.x).square()
         + (Tree::y() - center.y).square()
         + (Tree::z() - center.z).square()
         - 0.25;

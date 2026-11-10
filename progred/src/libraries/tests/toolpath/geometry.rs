@@ -160,7 +160,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
             )],
         );
         let model = fidget::mesh::read(preview.result.as_value()).unwrap().0;
-        let shape = VmShape::from(model.objects[0].tree.clone());
+        let shape = VmShape::from(model.shape.objects[0].tree.clone());
         let tape = shape.ez_float_slice_tape();
         let mut evaluator = VmShape::new_float_slice_eval();
         let mut sample = |p: [f64; 3]| {

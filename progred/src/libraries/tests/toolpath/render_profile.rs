@@ -68,7 +68,7 @@ fn volume(objects: Vec<SceneObject>, height: f64) -> implicit::VolumePreview {
         ],
     ))
     .unwrap();
-    preview.objects = objects;
+    preview.shape.objects = objects;
     preview
 }
 
@@ -375,7 +375,8 @@ fn cam_render_profile() {
             if std::env::var("CAM_MESH").is_ok() {
                 let start = Instant::now();
                 let mut geometry = puri::mesh::Geometry::default();
-                implicit::mesh::Shape::from(&preview(vec![object]))
+                preview(vec![object])
+                    .shape
                     .append(&mut geometry, 6, &Default::default())
                     .unwrap()
                     .unwrap();
@@ -435,9 +436,10 @@ fn cam_render_profile() {
     }
     let mesh = std::env::var("CAM_MESH").is_ok();
     if mesh {
-        let shape = implicit::mesh::Shape::from(&preview(vec![
+        let shape = preview(vec![
             settings.removal().unwrap().remaining(&recording).unwrap(),
-        ]));
+        ])
+        .shape;
         let start = Instant::now();
         let mut geometry = puri::mesh::Geometry::default();
         shape

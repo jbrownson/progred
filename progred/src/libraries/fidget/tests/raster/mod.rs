@@ -19,13 +19,15 @@ fn render_cancellation_shares_the_callers_flag() {
 pub(super) fn request(width: f64, height: f64) -> Request {
     Request::new(
         VolumePreview {
-            objects: vec![SceneObject {
-                tree: Tree::z(),
-                color: [200, 100, 50],
-            }],
+            shape: Shape {
+                objects: vec![SceneObject {
+                    tree: Tree::z(),
+                    color: [200, 100, 50],
+                }],
+                min: Vector3::repeat(-1.0),
+                max: Vector3::repeat(1.0),
+            },
             size: Size::new(width, height),
-            min: Vector3::repeat(-1.0),
-            max: Vector3::repeat(1.0),
         },
         None,
         1.0,
@@ -37,7 +39,7 @@ pub(super) fn request(width: f64, height: f64) -> Request {
 fn prepared_scene_matches_fresh_compilation_across_views_and_cancellation() {
     let mut request = request(41.0, 27.0);
     let preparation = incremental::Cancellation::default();
-    let scene = SoftwareScene::new(&request.preview.objects, &preparation)
+    let scene = SoftwareScene::new(&request.preview.shape.objects, &preparation)
         .unwrap()
         .unwrap();
     // The prepared result must not retain the preparation job's cancel flag.
@@ -132,7 +134,7 @@ fn progressive_images_match_final_quality_and_stop_on_cancellation() {
     assert_eq!(
         final_image.data.data(),
         cpu_volume(
-            &request.preview.objects,
+            &request.preview.shape.objects,
             &request.view().view_at(request.pixels),
             &cancel
         )
@@ -154,8 +156,9 @@ fn progress_counts_finished_scene_pixels_and_resets_for_each_refinement() {
     let mut request = request(41.0, 27.0);
     request
         .preview
+        .shape
         .objects
-        .push(request.preview.objects[0].clone());
+        .push(request.preview.shape.objects[0].clone());
     let cancel = incremental::Cancellation::default();
     let reports = Mutex::new(Vec::new());
     let progress = |p| reports.lock().unwrap().push(p);
@@ -214,7 +217,7 @@ fn native_image_is_published_before_depth_refinement_and_can_cancel_it() {
     let refined = refine_depth(request.view().view_at(request.pixels), 4).unwrap();
     assert_eq!(
         final_image.data.data(),
-        cpu_volume(&request.preview.objects, &refined, &cancel).unwrap()
+        cpu_volume(&request.preview.shape.objects, &refined, &cancel).unwrap()
     );
 
     let cancelled = request.render_software_progressive(128, 4, &cancel, &mut |image| {
@@ -229,8 +232,8 @@ fn native_image_is_published_before_depth_refinement_and_can_cancel_it() {
 fn software_lighting_is_independent_of_sampling_density() {
     // Small odd sizes still give four halvings and a depth refinement.
     let mut request = request(42.0, 94.0);
-    request.preview.objects[0].tree = Tree::x() * 0.3 + Tree::y() * 0.2 + Tree::z();
-    let shape = VmShape::from(request.preview.objects[0].tree.clone());
+    request.preview.shape.objects[0].tree = Tree::x() * 0.3 + Tree::y() * 0.2 + Tree::z();
+    let shape = VmShape::from(request.preview.shape.objects[0].tree.clone());
     for camera in [
         Camera {
             yaw: 0.0,
@@ -271,7 +274,7 @@ fn software_lighting_is_independent_of_sampling_density() {
 #[test]
 fn software_backend_preserves_the_vm_shaded_result() {
     let mut request = request(96.0, 72.0);
-    request.preview.objects[0].tree =
+    request.preview.shape.objects[0].tree =
         (Tree::x().square() + Tree::y().square() + Tree::z().square() - 0.25).max(Tree::z());
     let view = request.view().view_at(request.pixels);
     let config = VoxelRenderConfig {
@@ -279,17 +282,17 @@ fn software_backend_preserves_the_vm_shaded_result() {
         world_to_model: view.world_to_model,
     };
     let geometry = config.run(
-        VmShape::from(request.preview.objects[0].tree.clone())
+        VmShape::from(request.preview.shape.objects[0].tree.clone())
             .try_into()
             .unwrap(),
     );
     let shade = shading(&config);
     let expected: Vec<_> = geometry
         .iter()
-        .flat_map(|pixel| shade(*pixel, request.preview.objects[0].color))
+        .flat_map(|pixel| shade(*pixel, request.preview.shape.objects[0].color))
         .collect();
     assert_eq!(
-        cpu_volume(&request.preview.objects, &view, &Default::default()).unwrap(),
+        cpu_volume(&request.preview.shape.objects, &view, &Default::default()).unwrap(),
         expected
     );
 }
@@ -298,13 +301,15 @@ fn software_backend_preserves_the_vm_shaded_result() {
 fn software_request_renders_on_a_worker_and_honors_cancellation() {
     let request = Request::new(
         VolumePreview {
-            objects: vec![SceneObject {
-                tree: Tree::z(),
-                color: [200, 100, 50],
-            }],
+            shape: Shape {
+                objects: vec![SceneObject {
+                    tree: Tree::z(),
+                    color: [200, 100, 50],
+                }],
+                min: Vector3::repeat(-1.0),
+                max: Vector3::repeat(1.0),
+            },
             size: Size::new(24.0, 16.0),
-            min: Vector3::repeat(-1.0),
-            max: Vector3::repeat(1.0),
         },
         None,
         2.0,
@@ -328,7 +333,7 @@ fn software_request_renders_on_a_worker_and_honors_cancellation() {
         );
 
         let mut empty = request.clone();
-        empty.preview.objects.clear();
+        empty.preview.shape.objects.clear();
         let image = render(&empty).unwrap().unwrap();
         assert!(image.data.data().iter().all(|&b| b == 0));
 

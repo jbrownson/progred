@@ -47,34 +47,12 @@ pub(crate) fn preview(
 
 fn generate(preview: &VolumePreview, depth: u8) -> Option<Mesh> {
     let mut geometry = Geometry::default();
-    volume::mesh::append(
-        &mut geometry,
-        &preview.objects,
-        preview.min,
-        preview.max,
-        depth,
-        &incremental::Cancellation::default(),
-    )
-    .ok()
-    .flatten()
-    .map(|()| geometry.into())
-}
-
-#[derive(Clone, PartialEq)]
-pub(crate) struct Shape {
-    pub objects: Vec<SceneObject>,
-    min: Vector3<f32>,
-    max: Vector3<f32>,
-}
-
-impl From<&VolumePreview> for Shape {
-    fn from(preview: &VolumePreview) -> Self {
-        Self {
-            objects: preview.objects.clone(),
-            min: preview.min,
-            max: preview.max,
-        }
-    }
+    preview
+        .shape
+        .append(&mut geometry, depth, &incremental::Cancellation::default())
+        .ok()
+        .flatten()
+        .map(|()| geometry.into())
 }
 
 impl Shape {
@@ -89,7 +67,7 @@ impl Shape {
 }
 
 fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Option<View> {
-    let (center, radius) = framing(preview.min, preview.max);
+    let (center, radius) = framing(preview.shape.min, preview.shape.max);
     (radius.is_finite() && radius > 0.0).then(|| {
         // Match the implicit view's vertical framing, independent of pane width.
         let vertical_scale = camera.zoom / radius;

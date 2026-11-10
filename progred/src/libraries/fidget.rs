@@ -655,12 +655,18 @@ fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
         .collect()
 }
 
+/// The objects of a scene, within the box from `min` to `max`.
 #[derive(Clone, PartialEq)]
-pub(crate) struct VolumePreview {
+pub(crate) struct Shape {
     pub(crate) objects: Vec<SceneObject>,
-    size: Size,
     min: Vector3<f32>,
     max: Vector3<f32>,
+}
+
+#[derive(Clone, PartialEq)]
+pub(crate) struct VolumePreview {
+    pub(crate) shape: Shape,
+    size: Size,
 }
 
 pub(crate) fn volume_preview(value: &Value) -> Option<VolumePreview> {
@@ -669,23 +675,26 @@ pub(crate) fn volume_preview(value: &Value) -> Option<VolumePreview> {
 
 fn volume_preview_fields(fields: &gid::Record) -> Option<VolumePreview> {
     let preview = VolumePreview {
-        objects: scene_objects(fields.get(&vocabulary::FIELD)?).ok()?,
+        shape: Shape {
+            objects: scene_objects(fields.get(&vocabulary::FIELD)?).ok()?,
+            min: Vector3::new(
+                f32::read(fields.get(&vocabulary::MIN_X)?)?,
+                f32::read(fields.get(&vocabulary::MIN_Y)?)?,
+                f32::read(fields.get(&vocabulary::MIN_Z)?)?,
+            ),
+            max: Vector3::new(
+                f32::read(fields.get(&vocabulary::MAX_X)?)?,
+                f32::read(fields.get(&vocabulary::MAX_Y)?)?,
+                f32::read(fields.get(&vocabulary::MAX_Z)?)?,
+            ),
+        },
         size: preview_size(fields)?,
-        min: Vector3::new(
-            f32::read(fields.get(&vocabulary::MIN_X)?)?,
-            f32::read(fields.get(&vocabulary::MIN_Y)?)?,
-            f32::read(fields.get(&vocabulary::MIN_Z)?)?,
-        ),
-        max: Vector3::new(
-            f32::read(fields.get(&vocabulary::MAX_X)?)?,
-            f32::read(fields.get(&vocabulary::MAX_Y)?)?,
-            f32::read(fields.get(&vocabulary::MAX_Z)?)?,
-        ),
     };
     preview
+        .shape
         .min
         .iter()
-        .zip(preview.max.iter())
+        .zip(preview.shape.max.iter())
         .all(|(min, max)| min.is_finite() && max.is_finite() && min < max)
         .then_some(preview)
 }
@@ -700,7 +709,7 @@ fn volume_view(
     camera: Camera,
     raster_size: PixelRenderSize,
 ) -> VolumeView {
-    volume_view_bounds(preview.min, preview.max, camera, raster_size)
+    volume_view_bounds(preview.shape.min, preview.shape.max, camera, raster_size)
 }
 
 /// The center of the box from `min` to `max`, and the radius a view frames
@@ -776,7 +785,7 @@ impl PreviewRenderer {
         raster_size: PixelRenderSize,
     ) -> Option<Vec<u8>> {
         let view = volume_view(preview, camera, raster_size);
-        if preview.objects.is_empty() {
+        if preview.shape.objects.is_empty() {
             return Some(vec![
                 0;
                 raster_size.width() as usize
@@ -785,10 +794,10 @@ impl PreviewRenderer {
             ]);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = gpu_render(&mut self.gpu, &preview.objects, &view) {
+        if let Some(image) = gpu_render(&mut self.gpu, &preview.shape.objects, &view) {
             return Some(image);
         }
-        cpu_volume(&preview.objects, &view, &Default::default())
+        cpu_volume(&preview.shape.objects, &view, &Default::default())
     }
 }
 

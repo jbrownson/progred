@@ -109,7 +109,7 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
         .unwrap()
     };
     let mut props = Settings {
-        shape: (&preview()).into(),
+        shape: preview().shape,
         style: PathStyle {
             radius: 0.01,
             color: [20, 150, 230],
@@ -278,7 +278,7 @@ fn path_appearance_changes_retain_the_stock_mesh() {
         .unwrap()
     };
     let mut props = Settings {
-        shape: (&preview()).into(),
+        shape: preview().shape,
         style: PathStyle {
             radius: 0.01,
             color: [20, 150, 230],
@@ -397,7 +397,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     let program = crate::libraries::toolpath::tests::tool_program(program);
     let model = preview();
     let settings = Settings {
-        shape: (&model).into(),
+        shape: model.shape.clone(),
         style: PathStyle {
             radius: 0.01,
             color: [255, 120, 20],

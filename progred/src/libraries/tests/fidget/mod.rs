@@ -403,10 +403,10 @@ fn grap_constructs_a_three_dimensional_preview() {
     let value = evaluate(&expression);
     let preview = volume_preview(&value).expect("3D preview value");
 
-    assert_eq!(preview.min, Vector3::new(-80.0, -80.0, -80.0));
-    assert_eq!(preview.max, Vector3::new(80.0, 80.0, 80.0));
-    assert!(sample(preview.objects[0].tree.clone(), 0.0, 0.0, 0.0) < 0.0);
-    assert!(sample(preview.objects[0].tree.clone(), 80.0, 0.0, 0.0) > 0.0);
+    assert_eq!(preview.shape.min, Vector3::new(-80.0, -80.0, -80.0));
+    assert_eq!(preview.shape.max, Vector3::new(80.0, 80.0, 80.0));
+    assert!(sample(preview.shape.objects[0].tree.clone(), 0.0, 0.0, 0.0) < 0.0);
+    assert!(sample(preview.shape.objects[0].tree.clone(), 80.0, 0.0, 0.0) > 0.0);
 }
 
 #[test]
@@ -435,7 +435,7 @@ fn rectangular_previews_preserve_pixel_scale_and_render_at_native_resolution() {
             let x = screen.fixed_view::<3, 1>(0, 0).norm();
             let y = screen.fixed_view::<3, 1>(0, 1).norm();
             assert!((x - y).abs() < 0.00001, "square pixels must stay square");
-            let rgba = cpu_volume(&preview.objects, &view, &Default::default()).unwrap();
+            let rgba = cpu_volume(&preview.shape.objects, &view, &Default::default()).unwrap();
             assert_eq!(
                 rgba.len(),
                 raster.width() as usize * raster.height() as usize * 4
@@ -493,7 +493,7 @@ fn cpu_previews_support_constant_fields() {
         ));
         let preview = volume_preview(&value).unwrap();
         let view = volume_view(&preview, Camera::default(), PixelRenderSize::from(64));
-        let rgba = cpu_volume(&preview.objects, &view, &Default::default()).unwrap();
+        let rgba = cpu_volume(&preview.shape.objects, &view, &Default::default()).unwrap();
         assert_eq!(rgba.len(), 64 * 64 * 4);
         assert!(
             rgba.chunks_exact(4)
@@ -555,10 +555,12 @@ fn camera_gestures_update_open_projection_state() {
 #[test]
 fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
     let preview = VolumePreview {
-        objects: vec![],
+        shape: Shape {
+            objects: vec![],
+            min: Vector3::repeat(-1.0),
+            max: Vector3::repeat(1.0),
+        },
         size: Size::new(256.0, 256.0),
-        min: Vector3::repeat(-1.0),
-        max: Vector3::repeat(1.0),
     };
     let view = volume_view(
         &preview,
@@ -575,7 +577,8 @@ fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
     let screen_to_model = view.world_to_model * view.size.screen_to_world();
     assert!((screen_to_model[(0, 0)] - screen_to_model[(2, 2)]).abs() < 0.0001);
     assert!(
-        (screen_to_model[(2, 3)].abs() - preview.max.z * 1.05_f32 * 3.0_f32.sqrt()).abs() < 0.0001
+        (screen_to_model[(2, 3)].abs() - preview.shape.max.z * 1.05_f32 * 3.0_f32.sqrt()).abs()
+            < 0.0001
     );
 }
 

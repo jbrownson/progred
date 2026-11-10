@@ -193,8 +193,8 @@ impl Request {
 
     pub fn view(&self) -> ViewRequest {
         ViewRequest {
-            min: self.preview.min,
-            max: self.preview.max,
+            min: self.preview.shape.min,
+            max: self.preview.shape.max,
             camera: self.camera,
             pixels: self.pixels,
         }
@@ -210,7 +210,7 @@ impl Request {
         publish: &mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
         progress: Option<&(dyn Fn(Progress) + Sync)>,
     ) -> Result<Option<DepthImage>, incremental::Error> {
-        match SoftwareScene::new(&self.preview.objects, cancel)? {
+        match SoftwareScene::new(&self.preview.shape.objects, cancel)? {
             Some(scene) => self.view().render(
                 &scene,
                 passes,

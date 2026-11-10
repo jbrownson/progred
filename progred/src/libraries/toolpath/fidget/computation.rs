@@ -157,7 +157,7 @@ fn image_with<S: Send + Sync + 'static>(
             let settings = settings.read(read);
             Ok(record.path().map(|_| {
                 playback::Solid::new(
-                    &settings.request.preview.objects,
+                    &settings.request.preview.shape.objects,
                     &record.path,
                     settings.style.playback.as_ref(),
                 )
