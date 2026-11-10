@@ -93,6 +93,11 @@ fn decoded_color(encoded: Encoded) -> Color {
 
 fn parse(spelling: &str) -> Option<Encoded> {
     let bytes = spelling.trim();
+    // Digits only: from_str_radix alone would take a sign, reading `+1+2+3`.
+    bytes
+        .bytes()
+        .all(|byte| byte.is_ascii_hexdigit())
+        .then_some(())?;
     let byte = |at| u8::from_str_radix(bytes.get(at..at + 2)?, 16).ok();
     let nibble = |at| {
         let nibble = u8::from_str_radix(bytes.get(at..at + 1)?, 16).ok()?;
