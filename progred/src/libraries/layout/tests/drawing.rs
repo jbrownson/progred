@@ -5,7 +5,7 @@ use crate::display::widget::style;
 use crate::library::Libraries;
 use crate::location::Location;
 use crate::sources::Sources;
-use gid::{Cells, new_cell_id};
+use gid::{CellId, Cells, new_cell_id};
 use kurbo::Point;
 
 #[test]

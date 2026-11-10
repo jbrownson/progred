@@ -6,7 +6,7 @@
 use super::{coordinate, read_paint, read_shape, vocabulary};
 use crate::display::Host;
 use crate::display::widget::recorded::{Record, Recorder};
-use gid::{CellId, Step, Value};
+use gid::{Step, Value};
 use kurbo::{Affine, BezPath, Circle, Rect};
 use std::cell::RefCell;
 use std::rc::Rc;
