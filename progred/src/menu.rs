@@ -315,11 +315,13 @@ fn step(enabled: &[bool], from: Option<usize>, delta: isize) -> Option<usize> {
         .find(|at| enabled.get(*at).copied().unwrap_or(false))
 }
 
+/// The command among `menus` whose shortcut `event` presses.
 pub fn shortcut(
     event: &KeyboardEvent,
     command: puri::keyboard::CommandModifier,
+    menus: &[Menu],
 ) -> Option<Command> {
-    command::shortcut(event, command, commands(&definition([], [])))
+    command::shortcut(event, command, commands(menus))
 }
 
 mod view {

@@ -2,6 +2,11 @@ use super::*;
 use crate::test_support::key_down;
 use ui_events::keyboard::{KeyState, Modifiers, NamedKey};
 
+/// The fixed menus' command for `event`.
+fn shortcut(event: &KeyboardEvent, command: puri::keyboard::CommandModifier) -> Option<Command> {
+    super::shortcut(event, command, &definition([], []))
+}
+
 #[test]
 fn shortcuts_are_drawn_application_commands() {
     assert_eq!(

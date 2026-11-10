@@ -739,20 +739,16 @@ impl Editor {
         geometry: Geometry<'_, Editor>,
     ) -> bool {
         let availability = self.menu_availability();
-        let navigation = match menu::shortcut(event, self.command_modifier)
+        let menus = menu::definition(
+            self.stack.switchable().map(|(library, _)| library),
+            crate::libraries::name::library_names(&self.stack.libraries)
+                .map(|(library, _)| library),
+        );
+        let navigation = match menu::shortcut(event, self.command_modifier, &menus)
             .filter(|command| availability.enabled(*command))
         {
             Some(command) => menu::Navigation::Activate(command),
-            None => menu::navigate(
-                &mut self.menu,
-                &menu::definition(
-                    self.stack.switchable().map(|(library, _)| library),
-                    crate::libraries::name::library_names(&self.stack.libraries)
-                        .map(|(library, _)| library),
-                ),
-                availability,
-                event,
-            ),
+            None => menu::navigate(&mut self.menu, &menus, availability, event),
         };
         match navigation {
             menu::Navigation::Activate(command) => {

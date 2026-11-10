@@ -44,7 +44,7 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
                 ..Default::default()
             };
             assert_eq!(
-                crate::menu::shortcut(&undo, command),
+                crate::menu::shortcut(&undo, command, &crate::menu::definition([], [])),
                 expected.then_some(crate::command::Command::Doc(
                     crate::command::DocCommand::Undo
                 ))
