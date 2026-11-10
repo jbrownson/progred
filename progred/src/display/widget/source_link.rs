@@ -105,8 +105,13 @@ fn drawn_source<'a, World>(
     landmarks: &'a [super::navigation::Landmark<World>],
     hover: &Hover,
 ) -> Option<&'a super::navigation::Landmark<World>> {
-    hover_source(sources, landmarks, hover)
-        .and_then(|source| source_landmark(sources, landmarks, &source))
+    match hover {
+        Hover::Source(source) => source_landmark(sources, landmarks, source),
+        Hover::Calls(calls) => {
+            call_source(sources, landmarks, calls).and_then(|(_, landmark)| landmark)
+        }
+        _ => None,
+    }
 }
 
 /// Source availability is a property of this projection, not of evaluation or
@@ -118,10 +123,7 @@ pub(crate) fn hover_source<World>(
 ) -> Option<SourceTrace> {
     match hover {
         Hover::Source(source) => Some(source.clone()),
-        Hover::Calls(calls) => calls
-            .sources()
-            .find(|source| source_landmark(sources, landmarks, source).is_some())
-            .or_else(|| calls.sources().next()),
+        Hover::Calls(calls) => call_source(sources, landmarks, calls).map(|(source, _)| source),
         _ => None,
     }
 }
@@ -131,11 +133,41 @@ pub(crate) fn source_landmark<'a, World>(
     landmarks: &'a [super::navigation::Landmark<World>],
     source: &SourceTrace,
 ) -> Option<&'a super::navigation::Landmark<World>> {
-    landmarks.iter().find(|landmark| {
-        landmark.area.is_some()
-            && landmark
+    drawn(sources, landmarks).find_map(|(trace, landmark)| (trace == *source).then_some(landmark))
+}
+
+/// The first of `calls`' sources that's drawn, with its landmark, or else
+/// their first source. The landmarks' sources are resolved once,
+/// whatever the number of calls.
+fn call_source<'a, World>(
+    sources: &Sources<'_>,
+    landmarks: &'a [super::navigation::Landmark<World>],
+    calls: &crate::hover::SourceCalls,
+) -> Option<(SourceTrace, Option<&'a super::navigation::Landmark<World>>)> {
+    let drawn = drawn(sources, landmarks).collect::<Vec<_>>();
+    calls
+        .sources()
+        .find_map(|source| {
+            drawn
+                .iter()
+                .find_map(|(trace, landmark)| (*trace == source).then_some(*landmark))
+                .map(|landmark| (source, Some(landmark)))
+        })
+        .or_else(|| calls.sources().next().map(|source| (source, None)))
+}
+
+/// The landmarks drawn in a view, each with the source it shows.
+fn drawn<'a, World>(
+    sources: &Sources<'_>,
+    landmarks: &'a [super::navigation::Landmark<World>],
+) -> impl Iterator<Item = (SourceTrace, &'a super::navigation::Landmark<World>)> {
+    landmarks
+        .iter()
+        .filter(|landmark| landmark.area.is_some())
+        .filter_map(|landmark| {
+            landmark
                 .path
                 .location()
-                .is_some_and(|location| SourceTrace::from_location(sources, &location) == *source)
-    })
+                .map(|location| (SourceTrace::from_location(sources, &location), landmark))
+        })
 }
