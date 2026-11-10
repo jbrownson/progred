@@ -121,6 +121,16 @@ pub(super) fn display<W: Host>(
     }))
 }
 
+/// `field`'s argument, evaluated; a missing one is invalid.
+fn evaluated(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    field: CellId,
+) -> Result<RuntimeValue, BuildError> {
+    Ok(context.eval(call.field(field).ok_or(BuildError::Invalid)?, environment)?)
+}
+
 /// `field`'s argument, read by `read`; a missing or unreadable one is invalid.
 fn argument<T>(
     context: &mut Context,
@@ -129,12 +139,21 @@ fn argument<T>(
     field: CellId,
     read: impl FnOnce(&RuntimeValue) -> Option<T>,
 ) -> Result<T, BuildError> {
-    match call.field(field) {
-        Some(expression) => {
-            read(&context.eval(expression, environment)?).ok_or(BuildError::Invalid)
-        }
-        None => Err(BuildError::Invalid),
-    }
+    optional_argument(context, call, environment, field, read)?.ok_or(BuildError::Invalid)
+}
+
+/// `field`'s argument, read by `read`, when the call has one; an unreadable
+/// one is invalid.
+fn optional_argument<T>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    field: CellId,
+    read: impl FnOnce(&RuntimeValue) -> Option<T>,
+) -> Result<Option<T>, BuildError> {
+    call.field(field)
+        .map(|expression| read(&context.eval(expression, environment)?).ok_or(BuildError::Invalid))
+        .transpose()
 }
 
 /// `field`'s argument as a finite number; `default`, if given, stands in for
@@ -146,13 +165,27 @@ fn number_argument(
     field: CellId,
     default: Option<f64>,
 ) -> Result<f64, BuildError> {
-    match call.field(field) {
-        Some(expression) => context
-            .eval_f64(expression, environment)?
-            .filter(|value| value.is_finite())
-            .ok_or(BuildError::Invalid),
-        None => default.ok_or(BuildError::Invalid),
-    }
+    optional_number(context, call, environment, field)?
+        .or(default)
+        .ok_or(BuildError::Invalid)
+}
+
+/// `field`'s argument as a finite number, when the call has one; one that
+/// isn't a finite number is invalid.
+fn optional_number(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    field: CellId,
+) -> Result<Option<f64>, BuildError> {
+    call.field(field)
+        .map(|expression| {
+            context
+                .eval_f64(expression, environment)?
+                .filter(|value| value.is_finite())
+                .ok_or(BuildError::Invalid)
+        })
+        .transpose()
 }
 
 fn read_steps(value: &RuntimeValue) -> Option<Vec<Step>> {
@@ -243,10 +276,7 @@ fn row<W: Host>(
 ) -> Result<Layout<W>, BuildError> {
     let gap = number_argument(context, call, environment, GAP, Some(0.0))?;
     // A row given a baseline aligns tops, as a column does.
-    let baseline = match call.field(BASELINE) {
-        Some(_) => Some(number_argument(context, call, environment, BASELINE, None)?),
-        None => None,
-    };
+    let baseline = optional_number(context, call, environment, BASELINE)?;
     let children = children(context, call, environment, output)?;
     Ok(match baseline {
         Some(baseline) => crate::display::aligned_row(
@@ -320,12 +350,10 @@ fn text<W: Host>(
     call: &Expression,
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
-    let paint = match call.field(PAINT) {
-        Some(_) => argument(context, call, environment, PAINT, |value| {
-            read_paint(value.as_value())
-        })?,
-        None => Paint::Face(Face::Ink),
-    };
+    let paint = optional_argument(context, call, environment, PAINT, |value| {
+        read_paint(value.as_value())
+    })?
+    .unwrap_or(Paint::Face(Face::Ink));
     let text = argument(context, call, environment, CONTENT, |value| {
         value.as_text().map(str::to_owned)
     })?;
@@ -377,10 +405,9 @@ fn at<W: Host>(
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
-    let value = call.field(VALUE).ok_or(BuildError::Invalid)?;
     Ok(crate::display::at(
         steps,
-        context.eval(value, environment)?,
+        evaluated(context, call, environment, VALUE)?,
         None,
         None,
     ))
@@ -409,8 +436,7 @@ fn drawing<W: Host>(
         Some(crate::sources::DEFAULT_FUEL as f64),
     )?)
     .ok_or(BuildError::Invalid)?;
-    let program = call.field(PROGRAM).ok_or(BuildError::Invalid)?;
-    let program = context.eval(program, environment)?;
+    let program = evaluated(context, call, environment, PROGRAM)?;
     // An evaluated program has no stored location.
     Ok(super::drawing::program(extent, fuel, None, program))
 }
@@ -422,8 +448,7 @@ fn pickable<W: Host>(
     output: &RefCell<Vec<Layout<W>>>,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Result<Layout<W>, BuildError> {
-    let value = call.field(VALUE).ok_or(BuildError::Invalid)?;
-    let value = context.eval(value, environment)?;
+    let value = evaluated(context, call, environment, VALUE)?;
     single_child(context, call, environment, output)
         .map(|child| crate::display::pickable(child, W::Hover::from(site().hover()), value))
 }
@@ -434,8 +459,7 @@ fn on_event<W: Host>(
     environment: &Environment,
     output: &RefCell<Vec<Layout<W>>>,
 ) -> Result<Layout<W>, BuildError> {
-    let handler = call.field(HANDLER).ok_or(BuildError::Invalid)?;
-    let handler = context.eval(handler, environment)?;
+    let handler = evaluated(context, call, environment, HANDLER)?;
     single_child(context, call, environment, output).map(|child| super::on_event(child, handler))
 }
 
