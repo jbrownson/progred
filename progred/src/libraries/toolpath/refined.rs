@@ -3,7 +3,8 @@
 
 use super::{
     computation::{Outcome, Program},
-    fidget as implicit, mesh,
+    fidget::{self as implicit, computation::ViewImage},
+    mesh,
     vocabulary::*,
 };
 use crate::computations::{Computations, memo};
@@ -120,17 +121,23 @@ impl Computation {
                     View::Mesh(geometry, None)
                 } else {
                     match image.as_ref() {
-                        Ok(image) => match (&image.image, image.stale) {
-                            (Some(frame), false) => View::Implicit(
-                                Ok(Refinement {
-                                    frame: frame.clone(),
-                                    pending: image.pending,
-                                    progress: image.progress,
-                                }),
-                                geometry,
-                            ),
-                            _ => View::Mesh(geometry, image.progress),
-                        },
+                        Ok(ViewImage::Current(frame)) => View::Implicit(
+                            Ok(Refinement {
+                                frame: frame.clone(),
+                                pending: false,
+                                progress: None,
+                            }),
+                            geometry,
+                        ),
+                        Ok(ViewImage::Refining(frame, progress)) => View::Implicit(
+                            Ok(Refinement {
+                                frame: frame.clone(),
+                                pending: true,
+                                progress: *progress,
+                            }),
+                            geometry,
+                        ),
+                        Ok(ViewImage::Awaiting(progress)) => View::Mesh(geometry, *progress),
                         // A current error is a result too; don't hide it behind old geometry.
                         Err(error) => View::Implicit(Err(error.clone()), geometry),
                     }

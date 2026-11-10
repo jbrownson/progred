@@ -13,11 +13,14 @@ pub(crate) struct Settings {
     pub style: PathStyle,
 }
 
-pub(crate) struct ViewImage {
-    pub image: Option<DepthImage>,
-    pub pending: bool,
-    pub stale: bool,
-    pub progress: Option<Progress>,
+/// The image of the current scene and view, as far as it's rendered.
+pub(crate) enum ViewImage {
+    /// The finished image.
+    Current(DepthImage),
+    /// The passes rendered so far, and the progress of the rest.
+    Refining(DepthImage, Option<Progress>),
+    /// No image yet, and the progress towards one.
+    Awaiting(Option<Progress>),
 }
 
 pub(super) struct Computation {
@@ -231,25 +234,18 @@ fn image_with<S: Send + Sync + 'static>(
             Ok(match failure {
                 Some(failure) => Err(failure),
                 None => match &*availability {
-                    Availability::Ready(image) | Availability::Refining(image) => image
+                    Availability::Ready(image) => image
                         .as_ref()
                         .as_ref()
-                        .map(|image| ViewImage {
-                            image: Some(image.clone()),
-                            pending: matches!(&*availability, Availability::Refining(_)),
-                            stale: false,
-                            progress,
-                        })
+                        .map(|image| ViewImage::Current(image.clone()))
                         .map_err(Clone::clone),
-                    Availability::Pending { previous } => Ok(ViewImage {
-                        image: previous
-                            .as_deref()
-                            .and_then(|result| result.as_ref().ok())
-                            .cloned(),
-                        pending: true,
-                        stale: previous.is_some(),
-                        progress,
-                    }),
+                    Availability::Refining(image) => image
+                        .as_ref()
+                        .as_ref()
+                        .map(|image| ViewImage::Refining(image.clone(), progress))
+                        .map_err(Clone::clone),
+                    // An image of a previous scene or view isn't one of this.
+                    Availability::Pending { .. } => Ok(ViewImage::Awaiting(progress)),
                 },
             })
         },

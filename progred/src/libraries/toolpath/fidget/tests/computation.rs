@@ -167,12 +167,18 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
     };
     let first = read();
     let first = &first.as_ref().as_ref().unwrap();
-    assert!(first.pending && first.image.is_none());
+    assert!(matches!(first, ViewImage::Awaiting(_)));
     finish();
-    assert!(read().as_ref().as_ref().unwrap().pending);
+    assert!(!matches!(
+        read().as_ref().as_ref().unwrap(),
+        ViewImage::Current(_)
+    ));
     finish();
     let ready = read();
-    assert!(!ready.as_ref().as_ref().unwrap().pending);
+    assert!(matches!(
+        ready.as_ref().as_ref().unwrap(),
+        ViewImage::Current(_)
+    ));
     assert!(Rc::ptr_eq(&ready, &read()));
 
     doc.cells.set_value(new_cell_id(), f64::value(9.0));
@@ -184,13 +190,18 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
     graph.settings.set(settings(30.0));
     let pending = read();
     let pending = &pending.as_ref().as_ref().unwrap();
-    assert!(pending.pending);
-    assert_eq!(pending.image.as_ref().unwrap().image.data.data()[0], 1);
+    assert!(matches!(pending, ViewImage::Awaiting(_)));
     graph.settings.set(settings(60.0));
-    assert!(read().as_ref().as_ref().unwrap().pending);
+    assert!(!matches!(
+        read().as_ref().as_ref().unwrap(),
+        ViewImage::Current(_)
+    ));
     assert_eq!(queue.lock().unwrap().len(), 1);
     finish();
-    assert!(!read().as_ref().as_ref().unwrap().pending);
+    assert!(matches!(
+        read().as_ref().as_ref().unwrap(),
+        ViewImage::Current(_)
+    ));
     {
         let rendered = rendered.lock().unwrap();
         assert_eq!(
@@ -204,7 +215,10 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
 
     doc.cells.set_value(endpoint, f64::value(0.75));
     computations.begin(Rc::new(doc.clone()), stack.libraries.clone());
-    assert!(read().as_ref().as_ref().unwrap().pending);
+    assert!(!matches!(
+        read().as_ref().as_ref().unwrap(),
+        ViewImage::Current(_)
+    ));
     finish();
     read();
     finish();
@@ -354,7 +368,10 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
     );
     let read = || computations.runtime.read(&graph.image).unwrap();
     let initial = read();
-    assert!(initial.as_ref().as_ref().unwrap().image.is_none());
+    assert!(matches!(
+        initial.as_ref().as_ref().unwrap(),
+        ViewImage::Awaiting(_)
+    ));
     let prepare = queue.lock().unwrap().pop_front().unwrap();
     std::thread::spawn(prepare).join().unwrap();
     assert!(computations.poll());
@@ -365,27 +382,27 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
     assert!(computations.poll());
     let partial = read();
     let partial = &partial.as_ref().as_ref().unwrap();
-    assert!(partial.pending && !partial.stale && partial.image.is_some());
-    assert_eq!(
-        partial.progress,
-        Some(Progress {
-            completed: 3,
-            total: 10
-        })
-    );
+    assert!(matches!(
+        partial,
+        ViewImage::Refining(
+            _,
+            Some(Progress {
+                completed: 3,
+                total: 10
+            })
+        )
+    ));
     resume.send(()).unwrap();
     worker.join().unwrap();
     assert!(computations.poll());
     let final_image = read();
     let final_image = &final_image.as_ref().as_ref().unwrap();
-    assert!(!final_image.pending && !final_image.stale);
-    assert_eq!(final_image.progress, None);
+    assert!(matches!(final_image, ViewImage::Current(_)));
 
     graph.settings.set(settings(30.0));
     let pending = read();
     let pending = &pending.as_ref().as_ref().unwrap();
-    assert!(pending.pending && pending.stale && pending.image.is_some());
-    assert_eq!(pending.progress, None);
+    assert!(matches!(pending, ViewImage::Awaiting(None)));
 }
 
 #[test]

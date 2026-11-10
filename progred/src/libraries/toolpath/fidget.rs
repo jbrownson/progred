@@ -13,6 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub(super) mod computation;
+use computation::ViewImage;
 
 /// Overlay only: progress never changes the viewport's size or input handling.
 pub(super) fn progress_bar<W: Host>(
@@ -170,11 +171,15 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                             .as_ref()
                             .as_ref()
                             .map_err(Clone::clone)?;
-                        let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
-                            puri::mesh::Surface {
-                                frame: frame.clone(),
-                                mesh_start: paths.indices.len(),
+                        let frame = match image {
+                            ViewImage::Current(frame) | ViewImage::Refining(frame, _) => {
+                                Some(frame)
                             }
+                            ViewImage::Awaiting(_) => None,
+                        };
+                        let surface = frame.map(|frame| puri::mesh::Surface {
+                            frame: frame.clone(),
+                            mesh_start: paths.indices.len(),
                         });
                         let drawing = fidget::mesh::drawing_surface(
                             paths,
@@ -187,11 +192,10 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                         Ok((image, drawing))
                     });
                 result
-                    .map(|(image, drawing)| {
-                        if image.pending {
-                            progress_bar(drawing, image.progress)
-                        } else {
-                            drawing
+                    .map(|(image, drawing)| match image {
+                        ViewImage::Current(_) => drawing,
+                        ViewImage::Refining(_, progress) | ViewImage::Awaiting(progress) => {
+                            progress_bar(drawing, *progress)
                         }
                     })
                     .unwrap_or_else(presentation::result_layout)
