@@ -8,7 +8,7 @@ fn field(input: &ProjectionInput<'_>) -> Option<Layout> {
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::{ProjectionCall, inspect, unshared};
 use crate::display::{Env, Pending};
-use crate::libraries::fidget::{axis, binary, node, unary};
+use crate::libraries::fidget::tests::nodes::{axis, binary, node, unary};
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 
 struct Names;

@@ -6,6 +6,8 @@ use crate::libraries::test_widgets::projection_input;
 use crate::test_values::call;
 
 mod cube;
+pub(super) mod nodes;
+use nodes::{axis, binary, node, unary};
 
 fn evaluate(expression: &Value) -> Value {
     let library = library::<crate::Editor>();

@@ -175,26 +175,6 @@ fn node_kind(fields: &gid::Record) -> Option<CellId> {
         .then_some(kind)
 }
 
-#[cfg(test)]
-fn node(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    ::grap::isa::record(kind, fields)
-}
-
-#[cfg(test)]
-fn axis(axis: CellId) -> Value {
-    node(vocabulary::kind::AXIS, [(vocabulary::AXIS, axis.into())])
-}
-
-#[cfg(test)]
-fn unary(kind: CellId, operand: Value) -> Value {
-    node(kind, [(vocabulary::OPERAND, operand)])
-}
-
-#[cfg(test)]
-fn binary(kind: CellId, left: Value, right: Value) -> Value {
-    node(kind, [(vocabulary::LEFT, left), (vocabulary::RIGHT, right)])
-}
-
 fn evaluated(
     context: &mut ::grap::Context,
     call: &Expression,
