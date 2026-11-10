@@ -108,15 +108,14 @@ impl ApplicationHandler<UserEvent> for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         for runner in &mut self.editors {
-            if let RenderState::Active { window, .. } = &runner.editor.state {
-                let window = window.clone();
-                if runner.editor.timers.fire_due(now) {
-                    if !runner.flush_pending_continuous() {
-                        runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
-                    }
-                    runner.sync_window(&window);
-                    window.request_redraw();
+            if let Some(window) = runner.editor.active_window()
+                && runner.editor.timers.fire_due(now)
+            {
+                if !runner.flush_pending_continuous() {
+                    runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
                 }
+                runner.sync_window(&window);
+                window.request_redraw();
             }
         }
         event_loop.set_control_flow(
@@ -132,7 +131,7 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         for runner in &mut self.editors {
             if runner.flush_pending_continuous()
-                && let RenderState::Active { window, .. } = &runner.editor.state
+                && let Some(window) = runner.editor.active_window()
             {
                 window.request_redraw();
             }
@@ -157,8 +156,7 @@ impl ApplicationHandler<UserEvent> for App {
             #[cfg(target_arch = "wasm32")]
             UserEvent::ProjectionsChanged(stack) => {
                 for runner in &mut self.editors {
-                    if let RenderState::Active { window, .. } = &runner.editor.state {
-                        let window = window.clone();
+                    if let Some(window) = runner.editor.active_window() {
                         runner.stack_changed(
                             stack.clone(),
                             runner.editor.scale(&window),
@@ -173,9 +171,8 @@ impl ApplicationHandler<UserEvent> for App {
             #[cfg(target_arch = "wasm32")]
             UserEvent::BrowserFocusChanged => {
                 if let Some(runner) = self.editors.first_mut()
-                    && let RenderState::Active { window, .. } = &runner.editor.state
+                    && let Some(window) = runner.editor.active_window()
                 {
-                    let window = window.clone();
                     if runner.focus_changed(
                         browser_editor_focused(&window),
                         runner.editor.scale(&window),
@@ -188,9 +185,8 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::ComputationFinished => {
                 for runner in &mut self.editors {
                     if runner.editor.computations.poll()
-                        && let RenderState::Active { window, .. } = &runner.editor.state
+                        && let Some(window) = runner.editor.active_window()
                     {
-                        let window = window.clone();
                         runner.refresh_window(&window);
                     }
                 }
@@ -263,8 +259,8 @@ impl ApplicationHandler<UserEvent> for App {
             {
                 runner.editor.paint_resources = Resources::default();
             }
-            if let RenderState::Active { window, .. } = &runner.editor.state {
-                runner.editor.state = RenderState::Suspended(Some(window.clone()));
+            if let Some(window) = runner.editor.active_window() {
+                runner.editor.state = RenderState::Suspended(Some(window));
             }
         }
     }
@@ -413,7 +409,7 @@ impl App {
             match self.focused_index() {
                 None => event_loop.exit(),
                 Some(index) if self.editors[index].editor.model.dirty() => {
-                    if let RenderState::Active { window, .. } = &self.editors[index].editor.state {
+                    if let Some(window) = self.editors[index].editor.active_window() {
                         window.focus_window();
                         self.quit = QuitState::Draining {
                             awaiting: Some(window.id()),
@@ -545,8 +541,7 @@ impl App {
         index: usize,
         event: WindowEvent,
     ) {
-        if let RenderState::Active { window, .. } = &self.editors[index].editor.state {
-            let window = window.clone();
+        if let Some(window) = self.editors[index].editor.active_window() {
             let runner = &mut self.editors[index];
             let scale = runner.editor.scale(&window);
             let viewport = viewport(&window);
@@ -672,14 +667,13 @@ impl App {
 /// repaints now, a suspended one when it resumes.
 #[cfg(any(target_os = "macos", target_arch = "wasm32"))]
 fn change_palette(runner: &mut EditorRunner, palette: crate::display::widget::style::Palette) {
-    match &runner.editor.state {
-        RenderState::Active { window, .. } => {
-            let window = window.clone();
+    match runner.editor.active_window() {
+        Some(window) => {
             if runner.palette_changed(palette, runner.editor.scale(&window), viewport(&window)) {
                 window.request_redraw();
             }
         }
-        RenderState::Suspended(_) => runner.editor.palette = palette,
+        None => runner.editor.palette = palette,
     }
 }
 
@@ -841,7 +835,7 @@ impl App {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn show_discard_sheet(&mut self, index: usize, then: AfterDiscard) {
         let editor = &mut self.editors[index].editor;
-        if let RenderState::Active { window, .. } = &editor.state {
+        if let Some(window) = editor.active_window() {
             let window_id = window.id();
             editor.pending_discard = Some(then);
             // rfd reports a custom button by its label; one spelling.

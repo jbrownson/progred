@@ -283,8 +283,7 @@ impl EditorRunner {
         *pending_gesture = None;
         *pending_pointer = None;
         editor.replace_document(doc, path, text_binders);
-        if let RenderState::Active { window, .. } = &editor.state {
-            let window = window.clone();
+        if let Some(window) = editor.active_window() {
             self.refresh_window(&window);
         }
     }
@@ -384,6 +383,14 @@ impl Editor {
         match &self.state {
             RenderState::Active { window, .. } => Some(window.clone()),
             RenderState::Suspended(window) => window.clone(),
+        }
+    }
+
+    /// The window while it can draw; a suspended editor has none to draw in.
+    pub(crate) fn active_window(&self) -> Option<Arc<Window>> {
+        match &self.state {
+            RenderState::Active { window, .. } => Some(window.clone()),
+            RenderState::Suspended(_) => None,
         }
     }
 
@@ -916,14 +923,14 @@ impl Editor {
         // An in-place save keeps its frame claim; only a new document
         // identity renames it.
         #[cfg(target_os = "macos")]
-        if let RenderState::Active { window, .. } = &self.state
+        if let Some(window) = self.active_window()
             && self.doc_path.as_deref() != Some(path.as_path())
         {
-            macos_window::rename_document_frame(window, &path);
+            macos_window::rename_document_frame(&window, &path);
         }
         self.doc_path = Some(path);
         self.refresh_title();
-        if let RenderState::Active { window, .. } = &self.state {
+        if let Some(window) = self.active_window() {
             window.request_redraw();
         }
     }
