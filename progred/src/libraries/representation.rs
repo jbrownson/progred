@@ -82,14 +82,18 @@ pub(crate) fn infix_display<W: Host>(
         crate::libraries::grap::expression_path(input, [Step::Key(FUNCTION)]),
         [LEFT, RIGHT],
         |field| {
-            (
-                crate::libraries::grap::expression_path(input, [Step::Key(field)]),
-                fields
-                    .field(field)
-                    .as_ref()
-                    .and_then(binds)
-                    .is_some_and(|operand| precedence.groups(operand, field == RIGHT)),
-            )
+            let grouped = fields
+                .field(field)
+                .as_ref()
+                .and_then(binds)
+                .is_some_and(|operand| precedence.groups(operand, field == RIGHT));
+            // An operand's parentheses are its own, not this call's.
+            let operand = if grouped {
+                crate::libraries::grap::grouped_expression_path(input, [Step::Key(field)])
+            } else {
+                crate::libraries::grap::expression_path(input, [Step::Key(field)])
+            };
+            (operand, false)
         },
     );
     Some(crate::display::structure::Fields::default().after(

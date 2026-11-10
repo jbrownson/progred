@@ -103,6 +103,27 @@ fn operators_typed_in_a_line_group_as_the_line_reads() {
 }
 
 #[test]
+fn a_parenthesis_selects_the_operand_it_groups() {
+    use crate::libraries::f32;
+    use crate::libraries::grap::numbers::f32::{MULTIPLY, SUM};
+    let n = f32::value;
+    let sum = ::grap::call(SUM.into(), [(LEFT, n(3.0)), (RIGHT, n(4.0))]);
+    let mut driver = Driver::of(::grap::call(
+        MULTIPLY.into(),
+        [(LEFT, n(2.0)), (RIGHT, sum)],
+    ));
+    let grouped = driver.rect(&[Step::Key(RIGHT)]);
+    let first = driver.rect(&[Step::Key(RIGHT), Step::Key(LEFT)]);
+    // The operand reaches out to its parentheses, past its first number.
+    assert!(grouped.x0 < first.x0);
+    driver.clicks_at(
+        kurbo::Point::new((grouped.x0 + first.x0) / 2.0, grouped.center().y),
+        1,
+    );
+    assert_eq!(driver.selection(), [Step::Key(RIGHT)]);
+}
+
+#[test]
 fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)

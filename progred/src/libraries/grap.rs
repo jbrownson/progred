@@ -366,6 +366,22 @@ pub(crate) fn expression_path<W: Host, V>(
     )
 }
 
+/// As [`expression_path`], in parentheses that are the expression's own, so
+/// pointing at one selects what it groups.
+pub(crate) fn grouped_expression_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    steps: impl AsRef<[Step]> + 'static,
+) -> Layout<W> {
+    let ungrouped = crate::display::first(input, crate::display::runtime_partial(expression));
+    descend(
+        steps,
+        Some(crate::display::runtime_partial(move |input| {
+            ungrouped(input).map(|layout| selectable_bracket(Delim::Paren, layout))
+        })),
+        None,
+    )
+}
+
 /// A record naming a Grap program: the program its `grap` field names is
 /// code, so an empty one offers Grap's suggestions. Its other fields, and
 /// code further in, keep their ordinary projections.

@@ -8,8 +8,15 @@ use crate::test_values::{binary_call, invalid_arguments, not};
 use ::grap::RuntimeValue;
 use gid::CellId;
 
+/// f64's infix notation, with operands that are calls of it drawn the same.
 fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
-    crate::libraries::representation::infix_display(&super::super::f64_parts().infix, input)
+    let infix = |input: &ProjectionInput<'_, RuntimeValue>| {
+        crate::libraries::representation::infix_display(&super::super::f64_parts().infix, input)
+    };
+    infix(&ProjectionInput {
+        default_projection: crate::display::runtime_partial(infix),
+        ..input.with_value(input.value)
+    })
 }
 
 /// Binary notation's one-line form; the other wraps after the left operand.
@@ -26,6 +33,26 @@ fn infix_children(layout: &Layout) -> Option<Vec<Recorded<crate::Editor, crate::
             .map(|child| unshared(child).clone())
             .collect(),
     )
+}
+
+/// Whether the operand `child` draws, which holds `operand`, is in
+/// parentheses of its own: its walk's projection draws them around it.
+fn grouped(child: &Recorded<crate::Editor, crate::frame::Hovered>, operand: &RuntimeValue) -> bool {
+    let ProjectionCall::Descend {
+        projection: Some(projection),
+        ..
+    } = inspect(&child)
+    else {
+        panic!("an operand is drawn by a walk to it");
+    };
+    projection(&projection_input(&NoEval, operand)).is_some_and(|layout| {
+        matches!(
+            layout.record().content(),
+            Recorded::Row { gap, children, .. }
+                if *gap == 0.0
+                    && matches!(children.as_slice(), [Recorded::Widget(_), _, Recorded::Widget(_)])
+        )
+    })
 }
 use crate::display::recording::{Recordable, Recorded};
 use ::grap::vocabulary::FUNCTION;
@@ -67,7 +94,10 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
             FUNCTION,
             Value::from(crate::libraries::grap::numbers::f64::MULTIPLY).into(),
         ),
-        (crate::libraries::grap::numbers::vocabulary::LEFT, sum),
+        (
+            crate::libraries::grap::numbers::vocabulary::LEFT,
+            sum.clone(),
+        ),
         (
             crate::libraries::grap::numbers::vocabulary::RIGHT,
             RuntimeValue::f64(3.0),
@@ -75,7 +105,7 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
     ]);
     let children =
         infix_children(&binary_display(&projection_input(&NoEval, &product)).unwrap()).unwrap();
-    crate::display::test_support::delimited(&children[0]);
+    assert!(grouped(&children[0], &sum));
 }
 
 #[test]
@@ -263,7 +293,13 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
     );
     let layout = binary_display(&projection_input(&NoEval, &(&product).into())).unwrap();
     let children = infix_children(&layout).unwrap();
-    crate::display::test_support::delimited(&children[0]);
+    let sum = binary_call(
+        crate::libraries::grap::numbers::f64::SUM,
+        value(1.0),
+        value(2.0),
+    );
+    assert!(grouped(&children[0], &(&sum).into()));
+    assert!(!grouped(&children[2], &(&value(3.0)).into()));
 }
 
 #[test]
@@ -411,10 +447,7 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
         ))
         .unwrap();
         let children = infix_children(&layout).unwrap();
-        assert_eq!(
-            matches!(children[index].content(), Recorded::Row { .. }),
-            grouped
-        );
+        assert_eq!(self::grouped(&children[index], &(&sum).into()), grouped);
     }
     let without = |value: &Value, key| Value::record(value.as_record().unwrap().with(key, None));
     assert!(
