@@ -15,14 +15,14 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
                 |context| {
                     view(
                         context,
-                        LineEdit {
+                        &Rc::new(LineEdit {
                             text: "read only".into(),
                             update: Rc::new(|_, _| panic!("read-only line cannot write")),
                             prefix: String::new(),
                             suffix: String::new(),
                             family: TextFamily::default(),
                             placeholder: None,
-                        },
+                        }),
                     )
                 },
             );

@@ -28,7 +28,10 @@ pub struct LineEdit {
 pub type LineUpdate = Rc<dyn Fn(&str, Option<&Value>) -> Option<Value>>;
 
 pub fn line_edit<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
-    Layout::widget(Rc::new(move |context| view(context, line.clone())))
+    // The description is shared with the handlers each frame builds, not
+    // copied for them.
+    let line = Rc::new(line);
+    Layout::widget(Rc::new(move |context| view(context, &line)))
 }
 
 /// The line `line` describes. Drawn where its value is missing, it's that
@@ -37,7 +40,7 @@ pub fn line_edit<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
 /// nothing. With nothing to show and no placeholder, it shows an empty frame.
 pub fn view<W: Host>(
     context: &mut Context<'_, '_, W, W::Hover>,
-    line: LineEdit,
+    line: &Rc<LineEdit>,
 ) -> Measured<HoverPass<W, W::Hover>> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
@@ -66,14 +69,14 @@ pub fn view<W: Host>(
                 LineEditDescription {
                     state,
                     focused: toolkit.focused(),
-                    presentation: context.toolkit.styles().line_presentation(&line),
+                    presentation: context.toolkit.styles().line_presentation(line),
                     style: &context.toolkit.styles().edit,
                 },
                 context.text,
             );
             let empty = state.text().is_empty() && state.preedit_parts().is_none();
             let site = site.clone();
-            let edit_line = line.clone();
+            let edit_line = Rc::clone(line);
             let edit = leaf(extent(widget.metrics()), move |output, placement| {
                 output.line_edit(widget, placement, move |world: &mut W, operation| {
                     site.open(&mut world.session())
@@ -83,13 +86,13 @@ pub fn view<W: Host>(
             match line.placeholder.as_deref().filter(|_| empty) {
                 Some(placeholder) => measured::row(
                     0.0,
-                    vec![edit, placeholder_text(context, &line, placeholder)],
+                    vec![edit, placeholder_text(context, line, placeholder)],
                 ),
                 None => edit,
             }
         }
         None => match line.placeholder.as_deref().filter(|_| line.text.is_empty()) {
-            Some(placeholder) => placeholder_text(context, &line, placeholder),
+            Some(placeholder) => placeholder_text(context, line, placeholder),
             None if line.prefix.is_empty() && line.text.is_empty() && line.suffix.is_empty() => {
                 crate::display::widget::empty(context.text, context.toolkit.styles())
             }
@@ -97,7 +100,7 @@ pub fn view<W: Host>(
                 let text = puri::text::text(
                     context.text,
                     &format!("{}{}{}", line.prefix, line.text, line.suffix),
-                    &context.toolkit.styles().line_style(&line),
+                    &context.toolkit.styles().line_style(line),
                 );
                 leaf(extent(text.metrics()), move |output, placement| {
                     output.render(move |canvas, _| text.place(canvas, placement));
@@ -110,7 +113,7 @@ pub fn view<W: Host>(
     let selected = toolkit.selected();
     if writable {
         let nav_site = site.clone();
-        let nav_line = line.clone();
+        let nav_line = Rc::clone(line);
         let navigation: Select<W> = Rc::new(move |world, direction| {
             let mut session = world.session();
             let mut edit = nav_site.open(&mut session);
@@ -130,6 +133,7 @@ pub fn view<W: Host>(
             true
         });
         let stop = path.clone();
+        let line = Rc::clone(line);
         let presentation = context.toolkit.styles().line_presentation(&line);
         let scale = context.toolkit.styles().scale as f32;
         let target = W::Hover::from(site.hover());
