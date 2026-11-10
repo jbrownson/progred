@@ -125,13 +125,10 @@ pub fn document(path: &[Step]) -> Option<gid::Path> {
 /// jump's location, along the data steps after it. None for a computed
 /// value.
 pub fn location(path: &[Step]) -> Option<Location<'static>> {
-    let marker = path
-        .iter()
-        .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed));
-    let (mut location, rest) = match marker.map(|index| (&path[index], index)) {
-        None => (Location::root(Vec::new()), path),
-        Some((Step::Jump(location), index)) => ((**location).clone(), &path[index + 1..]),
-        Some(_) => return None,
+    let (mut location, rest) = match split_at_marker(path) {
+        (None, rest) => (Location::root(Vec::new()), rest),
+        (Some(Step::Jump(location)), rest) => ((**location).clone(), rest),
+        (Some(_), _) => return None,
     };
     location
         .path
@@ -143,11 +140,8 @@ pub fn location(path: &[Step]) -> Option<Location<'static>> {
 /// The data steps to `path` from the computed value it lies in. None where
 /// it's stored, as [`location`] finds it.
 pub fn within_computed(path: &[Step]) -> Option<gid::Path> {
-    let marker = path
-        .iter()
-        .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed))?;
-    matches!(path[marker], Step::Computed)
-        .then(|| path[marker + 1..].iter().map(data_after_marker).collect())
+    let (marker, rest) = split_at_marker(path);
+    matches!(marker, Some(Step::Computed)).then(|| rest.iter().map(data_after_marker).collect())
 }
 
 /// The value at `path`, where it's stored.
@@ -165,15 +159,10 @@ pub fn writable(sources: &Sources, path: &[Step]) -> bool {
 /// else where its last jump's location is stored, else the root. None for a
 /// computed value, or where the route to that Follow no longer reaches a cell.
 pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
-    let marker = path
-        .iter()
-        .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed));
-    let (from, rest) = match marker {
-        None => (None, path),
-        Some(index) => match &path[index] {
-            Step::Jump(location) => (Some(&**location), &path[index + 1..]),
-            _ => return None,
-        },
+    let (from, rest) = match split_at_marker(path) {
+        (None, rest) => (None, rest),
+        (Some(Step::Jump(location)), rest) => (Some(&**location), rest),
+        (Some(_), _) => return None,
     };
     match rest.iter().rposition(|step| matches!(step, Step::Follow)) {
         Some(follow) => {
@@ -192,6 +181,18 @@ pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
             None => Some(Start::Root),
             Some(location) => location.stored(sources).map(|stored| stored.start),
         },
+    }
+}
+
+/// `path`'s last jump or computed step, if it has one, and the steps after
+/// it, which are data steps.
+fn split_at_marker(path: &[Step]) -> (Option<&Step>, &[Step]) {
+    match path
+        .iter()
+        .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed))
+    {
+        Some(index) => (Some(&path[index]), &path[index + 1..]),
+        None => (None, path),
     }
 }
 
