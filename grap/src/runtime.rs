@@ -169,33 +169,39 @@ impl RuntimeValue {
         Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::U64(number))))
     }
 
+    /// The native value this holds, when it holds one unboxed.
+    fn native(&self) -> Option<&Native> {
+        match &self.0 {
+            RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.native()),
+            _ => None,
+        }
+    }
+
+    /// The bytes under `tag`, where this is a record whose `tag` field is a
+    /// blob, as a privileged convention's record is: read without building
+    /// the record.
+    fn tagged(&self, tag: CellId) -> Option<&[u8]> {
+        match &self.0 {
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.original()?.get(&tag)?.as_blob(),
+            RuntimeValueKind::Data(value) => value.as_record()?.get(&tag)?.as_blob(),
+            RuntimeValueKind::Record(fields) => runtime_field(fields, tag)?.as_blob(),
+            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+        }
+    }
+
     /// The f32 this value holds under the f32 convention.
     pub fn as_f32(&self) -> Option<f32> {
-        match &self.0 {
-            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                Native::F32(number) => Some(*number),
-                _ => crate::f32::read_record(unboxed.original()?),
-            },
-            RuntimeValueKind::Data(value) => crate::f32::read(value),
-            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f32::F32)?
-                .as_blob()
-                .and_then(crate::f32::decode),
-            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+        match self.native() {
+            Some(Native::F32(number)) => Some(*number),
+            _ => self.tagged(crate::f32::F32).and_then(crate::f32::decode),
         }
     }
 
     /// The u64 this value holds under the u64 convention.
     pub fn as_u64(&self) -> Option<u64> {
-        match &self.0 {
-            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                Native::U64(number) => Some(*number),
-                _ => crate::u64::read_record(unboxed.original()?),
-            },
-            RuntimeValueKind::Data(value) => crate::u64::read(value),
-            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::u64::U64)?
-                .as_blob()
-                .and_then(crate::u64::decode),
-            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+        match self.native() {
+            Some(Native::U64(number)) => Some(*number),
+            _ => self.tagged(crate::u64::U64).and_then(crate::u64::decode),
         }
     }
 
@@ -230,33 +236,20 @@ impl RuntimeValue {
         }))
     }
 
+    /// The f64 this value holds under the f64 convention.
     pub fn as_f64(&self) -> Option<f64> {
-        match &self.0 {
-            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                Native::F64(number) => Some(*number),
-                _ => crate::f64::read_record(unboxed.original()?),
-            },
-            RuntimeValueKind::Data(value) => crate::f64::read(value),
-            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f64::F64)?
-                .as_blob()
-                .and_then(crate::f64::decode),
-            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+        match self.native() {
+            Some(Native::F64(number)) => Some(*number),
+            _ => self.tagged(crate::f64::F64).and_then(crate::f64::decode),
         }
     }
 
     /// The text this value holds under the text convention, borrowed
     /// without materializing it.
     pub fn as_text(&self) -> Option<&str> {
-        match &self.0 {
-            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                Native::Text(text) => Some(text.as_ref()),
-                _ => crate::text::read_record(unboxed.original()?),
-            },
-            RuntimeValueKind::Data(value) => crate::text::read(value),
-            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::text::UTF8)?
-                .as_blob()
-                .and_then(crate::text::decode),
-            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+        match self.native() {
+            Some(Native::Text(text)) => Some(text.as_ref()),
+            _ => self.tagged(crate::text::UTF8).and_then(crate::text::decode),
         }
     }
 
