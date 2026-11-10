@@ -69,10 +69,18 @@ pub(crate) struct FrameState {
 }
 
 impl FrameState {
-    fn hover_location(&self) -> Option<(Option<Area>, Hovered)> {
+    fn hover_location(&self) -> Option<(Option<&Area>, &Hovered)> {
         self.hover
-            .clone()
-            .map(|hover| (self.dispatch.pointer_area.clone(), hover))
+            .as_ref()
+            .map(|hover| (self.dispatch.pointer_area.as_ref(), hover))
+    }
+
+    /// Whether the pointer rests somewhere handlers haven't been told of.
+    fn hover_unnotified(&self) -> bool {
+        self.notified_hover
+            .as_ref()
+            .map(|(area, hover)| (area.as_ref(), hover))
+            != self.hover_location()
     }
 }
 
@@ -427,15 +435,13 @@ impl Editor {
         &mut self,
         scale: f64,
         viewport: Size,
-        previous: Option<(Option<Area>, Hovered)>,
+        previous: Option<(Option<&Area>, &Hovered)>,
     ) -> Frame {
         self.sync_views();
         self.computations.frame_time.set(web_time::Instant::now());
         let pointer = PointerInput {
             position: self.pointer,
-            previous: previous
-                .as_ref()
-                .map(|(root, hover)| (root.as_ref(), hover)),
+            previous,
             pressed: self.pressed,
             link_sources: self.command_modifier.pressed(&self.modifiers),
         };
@@ -540,10 +546,11 @@ impl EditorRunner {
     }
 
     pub(crate) fn dispatch_hover_changed(&mut self) -> bool {
-        if !self.frame.hover_awaits_paint
-            && self.frame.notified_hover != self.frame.hover_location()
-        {
-            self.frame.notified_hover = self.frame.hover_location();
+        if !self.frame.hover_awaits_paint && self.frame.hover_unnotified() {
+            self.frame.notified_hover = self
+                .frame
+                .hover_location()
+                .map(|(area, hover)| (area.cloned(), hover.clone()));
             let handled = self.frame.dispatch.send(
                 &mut self.editor,
                 self.frame.hover.as_ref(),
@@ -560,7 +567,7 @@ impl EditorRunner {
     /// successors may be replaced by input, just like other pending frames.
     pub(crate) fn frame_presented(&mut self) -> bool {
         self.frame.hover_awaits_paint = false;
-        self.frame.notified_hover != self.frame.hover_location()
+        self.frame.hover_unnotified()
     }
 
     fn install_frame(&mut self, frame: Frame, scale: f64, viewport: Size) -> PendingPaint {
