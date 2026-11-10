@@ -29,12 +29,17 @@ pub(crate) struct Snapshot {
 impl Model {
     pub fn new(doc: Document) -> Self {
         let doc = Rc::new(doc);
+        let workspace = workspace::Workspace::default();
         Self {
             saved: doc.clone(),
+            // An empty document opens ready to be typed into.
+            selection: doc
+                .root
+                .is_none()
+                .then(|| selection::pending_value(&workspace.document, Vec::new())),
             doc,
-            selection: None,
             history: history::History::default(),
-            workspace: workspace::Workspace::default(),
+            workspace,
         }
     }
 

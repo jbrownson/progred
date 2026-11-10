@@ -416,3 +416,14 @@ fn saving_and_folding_break_typing_runs() {
     assert!(!model.history.can_undo());
     assert!(model.dirty());
 }
+
+#[test]
+fn an_empty_document_opens_ready_to_be_typed_into() {
+    let empty = Model::new(Document::default());
+    let selection = empty.selection.as_ref().unwrap();
+    assert!(Rc::ptr_eq(selection.view(), &empty.workspace.document));
+    assert!(selection.path().is_empty());
+    assert_eq!(selection.explicit_stage(), selection::Stage::Pending);
+    // A document with a root opens with nothing selected.
+    assert!(model().selection.is_none());
+}
