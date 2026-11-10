@@ -139,6 +139,13 @@ pub fn owned(sources: &Sources, start: Start) -> bool {
     }
 }
 
+/// Where `location` is stored, when writes can land there.
+pub fn writable<'a>(sources: &Sources, location: &'a Location) -> Option<Location<'a>> {
+    location
+        .stored(sources)
+        .filter(|stored| owned(sources, stored.start))
+}
+
 /// Whether a value could be written at `location`, ignoring permissions: it
 /// holds one, or its container does, as for a deleted field or element,
 /// or it's a cell's definition, written or not.
@@ -162,22 +169,9 @@ pub fn set_value(
     location: &Location,
     value: Value,
 ) -> bool {
-    let write = {
-        let sources = Sources {
-            doc: &*doc,
-            libraries,
-        };
-        location
-            .stored(&sources)
-            .filter(|stored| owned(&sources, stored.start))
-            .and_then(|stored| {
-                spine::set(sources.read_from(stored.start, &[]), &stored.path, value)
-                    .map(|rebuilt| (stored.start, rebuilt))
-            })
-    };
-    write
-        .map(|(start, rebuilt)| store(doc, start, Some(rebuilt)))
-        .is_some()
+    rewrite(doc, libraries, location, |sources, stored| {
+        spine::set(sources.read_from(stored.start, &[]), &stored.path, value).map(Some)
+    })
 }
 
 /// Deletes the value at `location`, where it's stored. Within a value it
@@ -187,24 +181,35 @@ pub fn set_value(
 /// authoring a value into one. At the root's own start it empties the
 /// document; locations that no longer resolve decline.
 pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, location: &Location) -> bool {
-    let deletion = {
+    rewrite(doc, libraries, location, |sources, stored| {
+        let owner = sources.read_from(stored.start, &[])?;
+        if stored.path.is_empty() {
+            Some(None)
+        } else {
+            spine::without(owner, &stored.path).map(Some)
+        }
+    })
+}
+
+/// Stores what `replacement` makes of where `location` is stored, when
+/// writes can land there: the value its start then holds, or None to remove
+/// it. Whether it stored anything; a `replacement` that declines leaves the
+/// document alone.
+fn rewrite(
+    doc: &mut Rc<Document>,
+    libraries: &Libraries,
+    location: &Location,
+    replacement: impl FnOnce(&Sources, &Location) -> Option<Option<Value>>,
+) -> bool {
+    let write = {
         let sources = Sources {
             doc: &*doc,
             libraries,
         };
-        location
-            .stored(&sources)
-            .filter(|stored| owned(&sources, stored.start))
-            .and_then(|stored| {
-                let owner = sources.read_from(stored.start, &[])?;
-                if stored.path.is_empty() {
-                    Some((stored.start, None))
-                } else {
-                    spine::without(owner, &stored.path).map(|rebuilt| (stored.start, Some(rebuilt)))
-                }
-            })
+        writable(&sources, location)
+            .and_then(|stored| replacement(&sources, &stored).map(|value| (stored.start, value)))
     };
-    deletion
+    write
         .map(|(start, value)| store(doc, start, value))
         .is_some()
 }

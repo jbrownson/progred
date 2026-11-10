@@ -732,11 +732,10 @@ impl Workspace {
             area.view
                 .value(sources, &[])
                 .is_some_and(|value| move_part(value, area.path(), direction).is_some())
-                && area.view.place(&[]).is_some_and(|place| {
-                    place
-                        .stored(sources)
-                        .is_some_and(|stored| crate::location::owned(sources, stored.start))
-                })
+                && area
+                    .view
+                    .place(&[])
+                    .is_some_and(|place| crate::location::writable(sources, &place).is_some())
         }
     }
 
