@@ -499,22 +499,25 @@ fn child_origin(parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
 /// A field a construct's kind requires, while it's missing: found where the
 /// field would be, answering why it can't be used yet.
 pub(crate) fn missing_field(field: CellId, origin: Option<OriginId>) -> Expression {
-    let value = RuntimeValue::from(absent::missing_field(field));
+    ready(absent::missing_field(field).into(), origin, None)
+}
+
+fn runtime_expression(value: RuntimeValue) -> Expression {
+    ready(value, None, None)
+}
+
+/// Code that is already its value, `value`, written at `origin`, with its
+/// fields' code when it's a call.
+fn ready(
+    value: RuntimeValue,
+    origin: Option<OriginId>,
+    fields: Option<Vec<(CellId, Expression)>>,
+) -> Expression {
     Expression(Rc::new(Lowered {
         source: value.clone(),
         origin,
         form: Form::Ready(value),
-        fields: None,
-        elements: None,
-    }))
-}
-
-fn runtime_expression(value: RuntimeValue) -> Expression {
-    Expression(Rc::new(Lowered {
-        source: value.clone(),
-        origin: None,
-        form: Form::Ready(value),
-        fields: None,
+        fields,
         elements: None,
     }))
 }
@@ -539,12 +542,9 @@ pub(crate) fn runtime_call(
         .iter()
         .map(|(field, value)| (*field, runtime_expression(value.clone())))
         .collect();
-    let value = RuntimeValue::new(RuntimeValueKind::Record(fields));
-    Expression(Rc::new(Lowered {
-        source: value.clone(),
-        origin: None,
-        form: Form::Ready(value),
-        fields: Some(lowered),
-        elements: None,
-    }))
+    ready(
+        RuntimeValue::new(RuntimeValueKind::Record(fields)),
+        None,
+        Some(lowered),
+    )
 }
