@@ -27,9 +27,10 @@ pub struct TextCtx<'a> {
 /// unused; retention is mark-and-sweep by frame: [`TextCache::sweep`]
 /// at the top of each pass drops entries the previous pass never
 /// touched and resets the marks, so the steady state is exactly the
-/// text on screen, shaped once.
+/// text on screen, shaped once. The text is keyed under its style so
+/// that a hit looks it up by `&str`, allocating nothing.
 #[derive(Default)]
-pub struct TextCache(HashMap<TextKey, CacheEntry>);
+pub struct TextCache(HashMap<StyleKey, HashMap<String, CacheEntry>>);
 
 struct CacheEntry {
     layout: Rc<Layout<Brush>>,
@@ -38,14 +39,15 @@ struct CacheEntry {
 
 impl TextCache {
     pub fn sweep(&mut self) {
-        self.0
-            .retain(|_, entry| std::mem::replace(&mut entry.used, false));
+        self.0.retain(|_, lines| {
+            lines.retain(|_, entry| std::mem::replace(&mut entry.used, false));
+            !lines.is_empty()
+        });
     }
 }
 
 #[derive(PartialEq, Eq, Hash)]
-pub struct TextKey {
-    text: String,
+struct StyleKey {
     size: u32,
     weight: Option<u32>,
     family: GenericFamily,
@@ -54,10 +56,9 @@ pub struct TextKey {
 }
 
 /// Only solid brushes key — anything fancier shapes uncached.
-fn text_key(s: &str, style: &TextStyle, scale: f32) -> Option<TextKey> {
+fn style_key(style: &TextStyle, scale: f32) -> Option<StyleKey> {
     match &style.brush {
-        Brush::Solid(color) => Some(TextKey {
-            text: s.to_owned(),
+        Brush::Solid(color) => Some(StyleKey {
             size: style.size.to_bits(),
             weight: style.weight.map(f32::to_bits),
             family: style.family,
@@ -145,14 +146,23 @@ pub fn scripted_text(ctx: &mut TextCtx, s: &str, style: &TextStyle, script: Scri
 /// `s` shaped as one line, shared through the cache: the layout [`text`]
 /// measures and draws.
 pub fn line_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<Layout<Brush>> {
-    match text_key(s, style, ctx.scale) {
+    match style_key(style, ctx.scale) {
         Some(key) => {
-            let entry = ctx.cache.0.entry(key).or_insert_with(|| CacheEntry {
-                layout: shape(ctx.fonts, ctx.layouts, ctx.scale, s, style),
-                used: true,
-            });
-            entry.used = true;
-            Rc::clone(&entry.layout)
+            let lines = ctx.cache.0.entry(key).or_default();
+            if let Some(entry) = lines.get_mut(s) {
+                entry.used = true;
+                Rc::clone(&entry.layout)
+            } else {
+                let layout = shape(ctx.fonts, ctx.layouts, ctx.scale, s, style);
+                lines.insert(
+                    s.to_owned(),
+                    CacheEntry {
+                        layout: Rc::clone(&layout),
+                        used: true,
+                    },
+                );
+                layout
+            }
         }
         None => shape(ctx.fonts, ctx.layouts, ctx.scale, s, style),
     }
