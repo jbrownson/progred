@@ -89,6 +89,17 @@ pub(super) fn contribution<W: Host>() -> (
     Partial<W>,
 ) {
     let mut parts = [f64_parts(), f32_parts(), u64_parts()];
+    let kinds: Kinds = parts
+        .iter()
+        .flat_map(|parts| {
+            std::iter::once((parts.tag, parts.tag)).chain(
+                parts
+                    .names
+                    .iter()
+                    .map(|(operation, _)| (*operation, parts.tag)),
+            )
+        })
+        .collect();
     let names = [
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
@@ -109,9 +120,9 @@ pub(super) fn contribution<W: Host>() -> (
     );
     let [f64, f32, u64] = parts;
     let (provided, projections): (Vec<_>, Vec<_>) = [
-        f64.projection(f64_arithmetic()),
-        f32.projection(f32_arithmetic()),
-        u64.projection(u64_arithmetic()),
+        f64.projection(f64_arithmetic(), &kinds),
+        f32.projection(f32_arithmetic(), &kinds),
+        u64.projection(u64_arithmetic(), &kinds),
     ]
     .into_iter()
     .unzip();
@@ -121,6 +132,38 @@ pub(super) fn contribution<W: Host>() -> (
         provided.into_iter().flatten().collect(),
         crate::display::compose_partials(projections),
     )
+}
+
+/// Each representation's tag and operations, with the tag of the
+/// representation they're of.
+type Kinds = Rc<[(CellId, CellId)]>;
+
+/// Whether `offer` is of a number representation other than `tag`'s: a
+/// number of it, or one of its operations or a call of one.
+fn of_another(kinds: &Kinds, tag: CellId, offer: &crate::display::Completion) -> bool {
+    let kind = |cell: CellId| {
+        kinds
+            .iter()
+            .find(|(known, _)| *known == cell)
+            .map(|&(_, tag)| tag)
+    };
+    let of = match offer.preview.as_ref() {
+        Some(Value::Cell(operation)) => kind(*operation),
+        Some(Value::Record(fields))
+            if ::grap::isa::of(fields) == Some(::grap::vocabulary::kind::CALL) =>
+        {
+            fields
+                .get(&::grap::vocabulary::FUNCTION)
+                .and_then(Value::as_cell)
+                .and_then(kind)
+        }
+        Some(Value::Record(fields)) => kinds
+            .iter()
+            .find(|(known, tag)| known == tag && fields.get(known).is_some())
+            .map(|&(_, tag)| tag),
+        _ => None,
+    };
+    of.is_some_and(|of| of != tag)
 }
 
 /// An operation's name: its spelling, then its representation's `tag` as a
@@ -280,6 +323,8 @@ enum Operation<N> {
 /// One representation's operations: their names, functions, and infix
 /// forms.
 struct Parts {
+    /// The representation's tag, which its numbers are records of.
+    tag: CellId,
     names: Vec<(CellId, Value)>,
     functions: ForeignFunctions<'static>,
     /// The calls that read infix, and how tightly each binds.
@@ -294,12 +339,18 @@ impl Parts {
     fn projection<W: Host, N: Scrubbable + std::str::FromStr>(
         self,
         arithmetic: Arithmetic<N>,
+        kinds: &Kinds,
     ) -> (Vec<(CellId, Partial<W>)>, Partial<W>) {
         let infix: Rc<[(CellId, Precedence)]> = self.infix.into();
         let symbols: Rc<[(&'static str, CellId)]> = self.symbols.into();
+        // An operand is most likely a number of the operation's own kind.
+        let others: crate::libraries::grap::Last = {
+            let (kinds, tag) = (kinds.clone(), self.tag);
+            Rc::new(move |offer| of_another(&kinds, tag, offer))
+        };
         let operator = {
             let infix = infix.clone();
-            crate::display::runtime_partial(move |input| infix_display(&infix, input))
+            crate::display::runtime_partial(move |input| infix_display(&infix, &others, input))
         };
         (
             infix
@@ -327,6 +378,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
         let tag = self.representation.tag;
         operations.into_iter().fold(
             Parts {
+                tag,
                 names: vec![(self.not, text::value(format!("not {name}")))],
                 functions: ForeignFunctions::default(),
                 infix: Vec::new(),

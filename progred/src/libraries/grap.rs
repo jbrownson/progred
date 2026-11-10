@@ -366,6 +366,34 @@ pub(crate) fn expression_path<W: Host, V>(
     )
 }
 
+/// Which of a slot's offers go after the rest.
+pub(crate) type Last = std::rc::Rc<dyn Fn(&Completion) -> bool>;
+
+/// As [`expression_path`], for an operand whose empty slot lists the offers
+/// `last` picks after the others, each group in its usual order.
+pub(crate) fn operand_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    steps: impl AsRef<[Step]> + 'static,
+    last: Last,
+) -> Layout<W> {
+    let operand = crate::display::runtime_partial(move |input| match input.value {
+        Some(_) => reference(input),
+        None => (input.default_projection)(input).or_else(|| {
+            let last = last.clone();
+            Some(picker(Picker::new(
+                CompletionKind::Value,
+                ranked(std::rc::Rc::new(move |request| {
+                    suggestions::offers(request).map(|mut offers| {
+                        offers.sort_by_key(|offer| last(offer));
+                        offers
+                    })
+                })),
+            )))
+        }),
+    });
+    descend(steps, Some(crate::display::first(input, operand)), None)
+}
+
 /// As [`expression_path`], in parentheses that are the expression's own, so
 /// pointing at one selects what it groups.
 pub(crate) fn grouped_expression_path<W: Host, V>(

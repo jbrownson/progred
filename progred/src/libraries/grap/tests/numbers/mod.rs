@@ -123,6 +123,45 @@ fn an_operation_chosen_over_a_value_takes_it_as_its_left_operand() {
 }
 
 #[test]
+fn an_operand_typed_as_a_number_is_one_of_its_operations_kind() {
+    use crate::libraries::grap::numbers::{f64::SUM, u64};
+    use crate::libraries::{f32, u64 as unsigned};
+    // Typed after each kind of number, an operator's right operand is the
+    // first reading of what's typed, and of that kind.
+    for (left, right, operator) in [
+        (f64::value(1.0), f64::value(2.0), SUM),
+        (
+            f32::value(1.0),
+            f32::value(2.0),
+            crate::libraries::grap::numbers::f32::SUM,
+        ),
+        (unsigned::value(1), unsigned::value(2), u64::SUM),
+    ] {
+        let mut driver = Driver::of(left.clone());
+        driver.select::<Step>(&[]);
+        driver.type_text("+");
+        driver.type_text("2");
+        driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+        assert_eq!(
+            driver.value(&[]),
+            ::grap::call(
+                operator.into(),
+                [(LEFT, left.clone()), (RIGHT, right.clone())]
+            )
+        );
+        // A number typed over an operand that isn't one is of that kind too.
+        let mut driver = Driver::of(::grap::call(
+            operator.into(),
+            [(LEFT, left), (RIGHT, Value::from(new_cell_id()))],
+        ));
+        driver.select(&[Step::Key(RIGHT)]);
+        driver.type_text("2");
+        driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+        assert_eq!(driver.value(&[Step::Key(RIGHT)]), right);
+    }
+}
+
+#[test]
 fn a_parenthesis_selects_the_operand_it_groups() {
     use crate::libraries::f32;
     use crate::libraries::grap::numbers::f32::{MULTIPLY, SUM};
