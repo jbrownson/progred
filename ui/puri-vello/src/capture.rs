@@ -13,18 +13,37 @@ pub struct Gpu {
     pub queue: wgpu::Queue,
 }
 
+/// Why there's no GPU to capture with.
+#[derive(Debug)]
+pub enum Unavailable {
+    Adapter(wgpu::RequestAdapterError),
+    Device(wgpu::RequestDeviceError),
+}
+
+impl std::fmt::Display for Unavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Adapter(error) => error.fmt(f),
+            Self::Device(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for Unavailable {}
+
 impl Gpu {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, Unavailable> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
+        let adapter = pollster::block_on(instance.request_adapter(&Default::default()))
+            .map_err(Unavailable::Adapter)?;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             required_features: adapter.features()
                 & (wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE),
             required_limits: wgpu::Limits::default().or_worse_values_from(&adapter.limits()),
             ..Default::default()
         }))
-        .unwrap();
-        Self { device, queue }
+        .map_err(Unavailable::Device)?;
+        Ok(Self { device, queue })
     }
 
     fn borrowed(&self) -> compositor::Gpu<'_> {

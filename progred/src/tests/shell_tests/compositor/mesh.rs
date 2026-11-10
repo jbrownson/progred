@@ -9,7 +9,7 @@ fn cam_mesh_roundtrip_profile() {
         controls::vocabulary::STATE, fidget::vocabulary as f, toolpath::vocabulary as t,
     };
     use crate::test_examples::{cam_editor, cam_position, result_path};
-    let gpu = gpu::Gpu::new();
+    let gpu = gpu::Gpu::new().unwrap();
     let size = kurbo::Size::new(2400.0, 1800.0);
     let scale = 2.0;
     for progress in [0.02, 0.5] {

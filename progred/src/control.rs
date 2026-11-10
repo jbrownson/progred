@@ -184,7 +184,7 @@ struct Capture {
 
 impl Capture {
     fn new() -> Result<Self, String> {
-        let gpu = Gpu::new();
+        let gpu = Gpu::new().map_err(|error| error.to_string())?;
         let compositor =
             Compositor::new(&gpu.device, &gpu.queue).map_err(|error| error.to_string())?;
         let target = gpu.texture(WINDOW.width as u32, WINDOW.height as u32);

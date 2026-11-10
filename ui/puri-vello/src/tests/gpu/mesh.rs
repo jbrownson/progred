@@ -34,7 +34,7 @@ fn triangle(color: [f32; 3]) -> mesh::Scene {
 #[test]
 #[ignore = "headless GPU mesh ordering, clipping, and upload regression"]
 fn mesh_layers_match_roundtrip_with_clips_and_reused_target() {
-    let gpu = gpu::Gpu::new();
+    let gpu = gpu::Gpu::new().unwrap();
     let mut renderer = crate::mesh::Renderer::new(&gpu.device, &gpu.queue);
     let mut readback = Readback::default();
     let target = gpu.texture(180, 90);
@@ -108,7 +108,7 @@ fn mesh_layers_match_roundtrip_with_clips_and_reused_target() {
 #[test]
 #[ignore = "headless GPU depth upload identity and premultiplied-alpha contract"]
 fn depth_only_changes_refresh_the_surface_upload() {
-    let gpu = gpu::Gpu::new();
+    let gpu = gpu::Gpu::new().unwrap();
     let mut renderer = crate::mesh::Renderer::new(&gpu.device, &gpu.queue);
     let mut scene = triangle([1.0, 0.0, 0.0]);
     scene.surface = Some(mesh::Surface {

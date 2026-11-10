@@ -142,7 +142,7 @@ fn png(path: &Path, width: u32, height: u32, pixels: &[u8]) {
 #[test]
 #[ignore = "headless GPU experiment; requires explicit GPU access"]
 fn compositor_pixels() {
-    let gpu = Gpu::new();
+    let gpu = Gpu::new().unwrap();
     let reference = gpu.texture(256, 192);
     let actual = gpu.texture(256, 192);
     let mut renderer = Renderer::new(&gpu.device, RendererOptions::default()).unwrap();
@@ -283,7 +283,7 @@ fn preview(canvas: &mut dyn CanvasSink, image: &ImageData, width: u32, height: u
 #[test]
 #[ignore = "headless GPU experiment; requires explicit GPU access"]
 fn compositor_updates_and_timing() {
-    let gpu = Gpu::new();
+    let gpu = Gpu::new().unwrap();
     for width in [1200, 4000, 4200] {
         let height = if width == 1200 { 800 } else { 2800 };
         let reference = gpu.texture(width, height);
@@ -423,7 +423,7 @@ fn panes(canvas: &mut dyn CanvasSink, images: &[ImageData], width: u32, height: 
 #[test]
 #[ignore = "headless GPU measurement; requires explicit GPU access"]
 fn compositor_multiple_previews() {
-    let gpu = Gpu::new();
+    let gpu = Gpu::new().unwrap();
     let (width, height) = (2400, 1600);
     let reference = gpu.texture(width, height);
     let scratch = gpu.texture(width, height);
@@ -515,7 +515,7 @@ fn compositor_multiple_previews() {
 #[test]
 #[ignore = "headless GPU regression; requires explicit GPU access"]
 fn compositor_resource_lifetimes_and_formats() {
-    let gpu = Gpu::new();
+    let gpu = Gpu::new().unwrap();
     let mut compositor = Compositor::new(&gpu.device, &gpu.queue).unwrap();
     let mut resources = Resources::default();
     let mut other_window = Resources::default();
@@ -701,7 +701,7 @@ fn compositor_resource_lifetimes_and_formats() {
 #[test]
 #[ignore = "headless GPU regression; requires explicit GPU access"]
 fn scratch_textures_follow_the_output_size() {
-    let gpu = Gpu::new();
+    let gpu = Gpu::new().unwrap();
     let mut compositor = Compositor::new(&gpu.device, &gpu.queue).unwrap();
     let mut resources = Resources::default();
     // Nested round clips around images need a mask and a group per depth.

@@ -28,7 +28,7 @@ use puri_vello::capture as gpu;
 #[test]
 #[ignore = "headless CAM hover GPU regression"]
 fn cam_hover_compositor_pixels() {
-    let gpu = gpu::Gpu::new();
+    let gpu = gpu::Gpu::new().unwrap();
     // At this size, hundreds of pane-sized highlight clips left the controls'
     // vector pass unpainted. Small-window tests did not reproduce the failure.
     let size = kurbo::Size::new(3028.0, 1836.0);
@@ -219,7 +219,7 @@ fn cam_hover_compositor_pixels() {
 #[test]
 #[ignore = "headless full-editor GPU compositor comparison"]
 fn editor_compositor_profile() {
-    let gpu = gpu::Gpu::new();
+    let gpu = gpu::Gpu::new().unwrap();
     let size = kurbo::Size::new(2400.0, 1600.0);
     let base_color = crate::display::widget::style::Theme::Light.palette().paper;
     for example in [

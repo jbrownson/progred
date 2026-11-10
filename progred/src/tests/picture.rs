@@ -107,7 +107,7 @@ fn a_crop_keeps_the_regions_pixels_row_by_row() {
 #[test]
 #[ignore = "needs a GPU"]
 fn gpu_pictures_are_pngs_of_what_was_copied() {
-    let gpu = Gpu::new();
+    let gpu = Gpu::new().unwrap();
     let mut compositor = Compositor::new(&gpu.device, &gpu.queue).unwrap();
     for zoom in [1.0, 2.0] {
         let (mut driver, path) = selecting_a_list(zoom);
