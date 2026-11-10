@@ -1,4 +1,4 @@
-//! Platform conventions, resolved once into flags, so behavior
+//! Platform conventions, each resolved in one place, so behavior
 //! differences read as policy rather than scattered conditions.
 
 /// Closing the last window quits the process. The macOS convention
@@ -6,7 +6,9 @@
 /// open the next window.
 pub(crate) const QUITS_ON_LAST_CLOSE: bool = cfg!(not(target_os = "macos"));
 
-/// The in-window drawn menu system is on wherever there is no native
-/// application menu. `PROGRED_DRAWN_MENU=1` turns it on anywhere, for
-/// developing the drawn system on macOS.
-pub(crate) const DRAWN_MENU: bool = cfg!(not(target_os = "macos"));
+/// Whether windows draw the in-window menu system: wherever there is no
+/// native application menu. Setting `PROGRED_DRAWN_MENU` turns it on
+/// anywhere, for developing the drawn system on macOS.
+pub(crate) fn drawn_menu() -> bool {
+    cfg!(not(target_os = "macos")) || std::env::var_os("PROGRED_DRAWN_MENU").is_some()
+}

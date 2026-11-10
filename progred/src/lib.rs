@@ -173,12 +173,11 @@ pub fn run() {
         }),
         _ => (gid::Document::default(), gid_text::Binders::new()),
     };
-    let drawn_menu = platform::DRAWN_MENU || std::env::var_os("PROGRED_DRAWN_MENU").is_some();
     run_document(
         doc,
         binders,
         doc_path,
-        drawn_menu,
+        platform::drawn_menu(),
         stack::load(),
         modifiers::native(),
         display::widget::style::Theme::Light.palette(),
