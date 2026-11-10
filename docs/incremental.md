@@ -109,7 +109,7 @@ and catching them makes a parent non-reusable just as for synchronous reads.
 Consumers choose whether to show a previous value, a placeholder, or some other
 representation; the scheduler never silently presents a stale value as ready.
 
-`Tasks::memo_progressive` supplies the worker an additional `publish(T)` callback.
+`Tasks::memo_reporting_when_ready` supplies the worker a `publish(T)` callback.
 Each publication is a usable result for the **current** request, reported as
 `Refining`; returning the final result changes it to `Ready`. A new request
 retains the last published result as `Pending.previous`. Intermediate values use
@@ -122,20 +122,20 @@ the job. This adds no task, queue, or scheduling policy.
 `memo` is the same mechanism without intermediate publications. The worker, not
 the graph runtime, decides what refinement means and which quality levels to run.
 
-`memo_reporting` additionally supplies a thread-safe work-progress callback;
+It additionally supplies a thread-safe work-progress callback;
 `AsyncMemo::progress` observes its latest completed/total counts through the same
 graph revision and generation checks. Counts do not make a result ready or
 replace an intermediate value. They reset on a new request and disappear on
 completion. A worker may reset them for a new stage. These are work units, not
 an estimate of elapsed or remaining time; the producer owns reporting frequency.
 
-`memo_reporting_when_ready` accepts preparation returning `Option<I>`. `None`
+Its preparation returns `Option<I>`. `None`
 means a dependency is not ready: it cancels old work, clears any queued
 replacement and progress, and retains the last result as `Pending.previous`.
 It submits no waiting/no-op job. When preparation becomes `Some(input)`, the
 ordinary dependency graph starts the job. Waiting is not a failure or an absent;
-old completions remain subject to generation checks. The always-ready APIs wrap
-their prepared inputs in `Some`.
+old completions remain subject to generation checks. The always-ready APIs,
+`memo` and `memo_conflated`, wrap their prepared inputs in `Some`.
 
 `memo_reporting_with_start_condition` additionally accepts an optional boolean
 memo controlling submission. Unlike readiness, permission does not invalidate an

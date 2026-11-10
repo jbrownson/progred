@@ -407,12 +407,12 @@ fn work_progress_keeps_values_and_obeys_revision_and_generation_boundaries() {
     let input = runtime.input(1usize);
     let prepared = runtime.memo({
         let input = input.clone();
-        move |read| Ok(*input.read(read))
+        move |read| Ok(Some(*input.read(read)))
     });
     let (stage, staged) = mpsc::channel();
     let (resume, resumed) = mpsc::channel();
     let resumed = Mutex::new(resumed);
-    let node = tasks.memo_reporting(prepared, move |value, _, publish, progress| {
+    let node = tasks.memo_reporting_when_ready(prepared, move |value, _, publish, progress| {
         if value == 1 {
             progress(Progress {
                 completed: 2,
@@ -532,11 +532,11 @@ fn progressive_values_are_current_and_publish_only_between_revisions() {
     let runtime = Runtime::default();
     let queue = Queue::default();
     let tasks = Tasks::new(&runtime, queue.executor(), || {});
-    let prepared = runtime.memo(|_| Ok(10usize));
+    let prepared = runtime.memo(|_| Ok(Some(10usize)));
     let (stage, staged) = mpsc::channel();
     let (resume, resumed) = mpsc::channel();
     let resumed = Mutex::new(resumed);
-    let node = tasks.memo_progressive(prepared, move |value, _, publish| {
+    let node = tasks.memo_reporting_when_ready(prepared, move |value, _, publish, _| {
         for step in 0..2 {
             publish(value + step)?;
             stage.send(step).unwrap();
@@ -589,12 +589,12 @@ fn replacing_a_progressive_request_retains_its_preview_but_rejects_late_reports(
     let input = runtime.input(1usize);
     let prepared = runtime.memo({
         let input = input.clone();
-        move |read| Ok(*input.read(read))
+        move |read| Ok(Some(*input.read(read)))
     });
     let (stage, staged) = mpsc::channel();
     let (resume, resumed) = mpsc::channel();
     let resumed = Mutex::new(resumed);
-    let node = tasks.memo_progressive(prepared, move |value, _, publish| {
+    let node = tasks.memo_reporting_when_ready(prepared, move |value, _, publish, _| {
         publish(value * 10)?;
         if value == 1 {
             stage.send(()).unwrap();
@@ -633,12 +633,12 @@ fn unpublished_progress_is_discarded_if_inputs_changed_before_poll() {
     let input = runtime.input(1usize);
     let prepared = runtime.memo({
         let input = input.clone();
-        move |read| Ok(*input.read(read))
+        move |read| Ok(Some(*input.read(read)))
     });
     let (stage, staged) = mpsc::channel();
     let (resume, resumed) = mpsc::channel();
     let resumed = Mutex::new(resumed);
-    let node = tasks.memo_progressive(prepared, move |value, _, publish| {
+    let node = tasks.memo_reporting_when_ready(prepared, move |value, _, publish, _| {
         publish(value)?;
         stage.send(()).unwrap();
         resumed.lock().unwrap().recv().unwrap();
@@ -661,19 +661,21 @@ fn unpublished_progress_is_discarded_if_inputs_changed_before_poll() {
 fn inline_progress_finishes_immediately_and_does_not_swallow_a_final_failure() {
     let runtime = Runtime::default();
     let tasks = Tasks::new(&runtime, Executor::inline(), || {});
-    let node = tasks.memo_progressive(runtime.memo(|_| Ok(0usize)), |_, _, publish| {
-        publish(1)?;
-        publish(2)?;
-        Ok(3)
-    });
+    let node =
+        tasks.memo_reporting_when_ready(runtime.memo(|_| Ok(Some(0usize))), |_, _, publish, _| {
+            publish(1)?;
+            publish(2)?;
+            Ok(3)
+        });
     assert_eq!(
         *runtime.read(&observe(&runtime, node)).unwrap(),
         (false, Some(3))
     );
-    let node = tasks.memo_progressive(runtime.memo(|_| Ok(0usize)), |_, _, publish| {
-        publish(1)?;
-        Err(Error::Cancelled)
-    });
+    let node =
+        tasks.memo_reporting_when_ready(runtime.memo(|_| Ok(Some(0usize))), |_, _, publish, _| {
+            publish(1)?;
+            Err(Error::Cancelled)
+        });
     assert!(matches!(
         runtime.read(&observe(&runtime, node)),
         Err(Error::Cancelled)

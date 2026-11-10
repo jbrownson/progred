@@ -183,9 +183,10 @@ impl Tasks {
         prepare: Memo<I>,
         compute: impl Fn(I, &Cancellation) -> Result<T, Error> + Send + Sync + 'static,
     ) -> AsyncMemo<I, T> {
-        self.memo_progressive(prepare, move |input, cancel, _publish| {
-            compute(input, cancel)
-        })
+        self.memo_reporting_when_ready(
+            always_ready(&self.runtime, prepare),
+            move |input, cancel, _publish, _progress| compute(input, cancel),
+        )
     }
 
     /// Finish admitted work instead of cancelling it on each input change.
@@ -196,59 +197,18 @@ impl Tasks {
         prepare: Memo<I>,
         compute: impl Fn(I, &Cancellation) -> Result<T, Error> + Send + Sync + 'static,
     ) -> AsyncMemo<I, T> {
-        let prepare = self.runtime.memo_by(
-            move |read| Ok(Some((*prepare.read(read)?).clone())),
-            |_, _| false,
-        );
         self.memo_with_policy(
-            prepare,
+            always_ready(&self.runtime, prepare),
             None,
             Supersession::Finish,
             move |input, cancel, _, _| compute(input, cancel),
         )
     }
 
-    /// A worker may publish intermediate values before returning its final one.
-    /// Publication uses the same generation validation and revision boundary as completion.
-    pub fn memo_progressive<I: Clone + Send + 'static, T: Send + Sync + 'static>(
-        &self,
-        prepare: Memo<I>,
-        compute: impl Fn(
-            I,
-            &Cancellation,
-            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
-        ) -> Result<T, Error>
-        + Send
-        + Sync
-        + 'static,
-    ) -> AsyncMemo<I, T> {
-        self.memo_reporting(prepare, move |input, cancel, publish, _progress| {
-            compute(input, cancel, publish)
-        })
-    }
-
-    /// Work counts are independent of usable intermediate values. Both use the
-    /// job's generation and enter the graph only at the next poll boundary.
-    pub fn memo_reporting<I: Clone + Send + 'static, T: Send + Sync + 'static>(
-        &self,
-        prepare: Memo<I>,
-        compute: impl Fn(
-            I,
-            &Cancellation,
-            &mut (dyn FnMut(T) -> Result<(), Error> + Send),
-            &(dyn Fn(Progress) + Sync),
-        ) -> Result<T, Error>
-        + Send
-        + Sync
-        + 'static,
-    ) -> AsyncMemo<I, T> {
-        let prepare = self.runtime.memo_by(
-            move |read| Ok(Some((*prepare.read(read)?).clone())),
-            |_, _| false,
-        );
-        self.memo_reporting_when_ready(prepare, compute)
-    }
-
+    /// A worker may publish intermediate values before returning its final one,
+    /// and report work counts, which are independent of those values. Both use
+    /// the job's generation and enter the graph only at the next poll boundary.
+    ///
     /// `None` means preparation is waiting on a dependency: cancel obsolete
     /// work, retain the previous result as pending, and submit no replacement.
     /// A later `Some(input)` starts work through the usual dependency mechanism.
@@ -341,6 +301,15 @@ impl Tasks {
         nodes.push(Rc::downgrade(&source));
         AsyncMemo(node)
     }
+}
+
+/// Preparation that never waits. Each evaluation is a new request, even when
+/// it prepares an equal input.
+fn always_ready<I: Clone + 'static>(runtime: &Runtime, prepare: Memo<I>) -> Memo<Option<I>> {
+    runtime.memo_by(
+        move |read| Ok(Some((*prepare.read(read)?).clone())),
+        |_, _| false,
+    )
 }
 
 impl Drop for Tasks {
