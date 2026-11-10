@@ -28,7 +28,7 @@ pub enum Delim {
 /// modest: the surrounding text is a near-monoline UI face, and the
 /// mathy quality comes from the modulation being PRESENT, not from
 /// absolute weight — a display-grade 2.5x read heavy against it.
-pub const MAX_CONTRAST: f64 = 1.6;
+const MAX_CONTRAST: f64 = 1.6;
 
 /// How thin a curved stroke's ends are, as a fraction of its belly:
 /// Latin Modern's parens and brace hooks keep about this contrast at

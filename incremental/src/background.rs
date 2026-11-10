@@ -611,6 +611,13 @@ impl<I, T> BackgroundNode for AsyncNode<I, T> {
     fn close(&self) {
         let mut state = self.state.borrow_mut();
         state.closed = true;
+        self.abandon(&state);
+    }
+}
+
+impl<I, T> AsyncNode<I, T> {
+    /// Cancel the running job, and discard queued work and unread reports.
+    fn abandon(&self, state: &State<I, T>) {
         state.cancel.cancel();
         self.slot.clear();
         self.reports.close();
@@ -620,10 +627,7 @@ impl<I, T> BackgroundNode for AsyncNode<I, T> {
 
 impl<I, T> Drop for AsyncNode<I, T> {
     fn drop(&mut self) {
-        self.state.get_mut().cancel.cancel();
-        self.slot.clear();
-        self.reports.close();
-        while self.reports.pop().is_ok() {}
+        self.abandon(&self.state.borrow());
     }
 }
 
