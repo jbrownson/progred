@@ -26,6 +26,15 @@ dependencies, which halved its test binary and cut its incremental cache to a
 third; see the root `Cargo.toml` for stepping through a crate in a debugger. Nothing here needs a window; the owner does the visual
 testing.
 
+A full `make test` then runs the tests that aren't Cargo's, as `make
+test-scripts` does alone: the website's Python and JavaScript tests and the
+development loop's. They need `python3` and `node` and build nothing. One of
+progred's own tests runs `tools/control` too, with `--print`, and has a
+session answer what it writes, since that client spells its requests by hand.
+What no test runs, a person or an agent has to: the tools that drive a
+browser (`tools/web-control` and those built on it), and the tutorials taken
+as a reader takes them.
+
 ## Layers
 
 - **Pure logic.** GID, Grap, `incremental`, layout, and the libraries test their
