@@ -62,7 +62,11 @@ A document declares its own libraries under the root's `libraries` field, which
 the editor library names beside `row` and `column`, and the editor reads it
 only at the root. Each entry, or the cell it names, is a record of the `keys` the library
 owns and the `projection` that draws a record carrying any of them: a function
-of `value`, the same convention a pane's projection uses. One built-in library,
+of `value`, the same convention a pane's projection uses, or a template. A
+template is layout data, a stored node such as `{isa: col, …}` or a cell
+holding one: it is drawn for the record as it stands, selects the record
+where it's pointed at, and its `descend`s lead into the record, so it draws
+every record carrying a key and computes nothing. One built-in library,
 "document libraries", loaded after all the others, tries the declared libraries
 in order on records carrying their keys, so a document library can't take over
 another library's values, the root, or its own definition, and switching it off

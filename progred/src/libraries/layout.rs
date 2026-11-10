@@ -620,6 +620,16 @@ fn node<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option
     decode_with(input.value?, &Place::Root, &|| input.site())
 }
 
+/// The layout a stored node describes, drawn where the caller is drawing: a
+/// template, whose `descend`s lead into the value there. None for anything
+/// that isn't a node.
+pub(crate) fn template<W: Host>(
+    node: &::grap::RuntimeValue,
+    site: &impl Fn() -> crate::editing::Site,
+) -> Option<Layout<W>> {
+    decode_with(node, &Place::Root, site)
+}
+
 pub fn library<W: Host>() -> Library<W> {
     name::named_library(
         ID,

@@ -74,36 +74,60 @@ fn projection<W: Host>() -> Partial<W> {
             .filter(|library| library.keys.iter().any(|key| value.field(*key).is_some()))
             .find_map(|library| {
                 let projection = library.projection;
-                let (evaluation, layout) = layout::scope::run(
-                    || input.site(),
-                    |scope| {
-                        input.env.apply_runtime_scoped(
-                            &projection,
-                            &[(vocabulary::VALUE, value.clone())],
-                            scope,
-                        )
-                    },
-                );
-                match layout {
-                    // The view chose what to show; only a field being added
-                    // follows it.
-                    Some(layout) => Some(crate::display::structure::Fields::default().after(
-                        input,
-                        |_| true,
-                        layout,
-                    )),
-                    None => Some(evaluation.result)
-                        .filter(|result| result.absent_reason().is_none())
-                        .map(crate::libraries::presentation::result_layout),
-                }
-                .map(|layout| {
-                    let occurrence = occurrence.clone();
-                    let value = value.clone();
-                    Layout::new(move |builder| {
-                        let _drawing = Drawing::at(occurrence.clone(), value.clone());
-                        layout.run(builder)
+                // A view that is layout data is a template: drawn for the
+                // record as it stands, selecting the record where it's
+                // pointed at, its `descend`s leading into the record.
+                let stored = match projection.as_cell() {
+                    Some(cell) => input.env.resolve(cell).map(|found| found.value.into()),
+                    None => Some(projection.clone()),
+                };
+                let template = stored
+                    .and_then(|node| layout::template(&node, &|| input.site()))
+                    .map(|layout| crate::display::selectable(layout, &input.site()));
+                let drawn = match template {
+                    Some(layout) => Some(layout),
+                    None => {
+                        let (evaluation, layout) = layout::scope::run(
+                            || input.site(),
+                            |scope| {
+                                input.env.apply_runtime_scoped(
+                                    &projection,
+                                    &[(vocabulary::VALUE, value.clone())],
+                                    scope,
+                                )
+                            },
+                        );
+                        match layout {
+                            Some(layout) => Some(layout),
+                            None => {
+                                return Some(evaluation.result)
+                                    .filter(|result| result.absent_reason().is_none())
+                                    .map(crate::libraries::presentation::result_layout)
+                                    .map(|layout| nested(&occurrence, value, layout));
+                            }
+                        }
+                    }
+                };
+                // The view chose what to show; only a field being added
+                // follows it.
+                drawn
+                    .map(|layout| {
+                        crate::display::structure::Fields::default().after(input, |_| true, layout)
                     })
-                })
+                    .map(|layout| nested(&occurrence, value, layout))
             })
+    })
+}
+
+/// `layout`, drawn as a document library's drawing of `value` at `occurrence`.
+fn nested<W: Host>(
+    occurrence: &Option<crate::occurrence::Trail>,
+    value: &::grap::RuntimeValue,
+    layout: Layout<W>,
+) -> Layout<W> {
+    let (occurrence, value) = (occurrence.clone(), value.clone());
+    Layout::new(move |builder| {
+        let _drawing = Drawing::at(occurrence.clone(), value.clone());
+        layout.run(builder)
     })
 }

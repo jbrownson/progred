@@ -267,3 +267,46 @@ fn the_example_views_select_what_they_draw() {
     driver.click_at(Point::new(angle_rect.x1 - 4.0, angle_rect.center().y));
     assert_eq!(driver.selection(), angle, "the label selects its angle");
 }
+
+#[test]
+fn a_view_that_is_layout_data_is_a_template_for_its_records() {
+    use crate::libraries::layout::vocabulary::{self as l, kind};
+    let (mut world, names) = planets("value");
+    let [mars, planet, moons, view] =
+        ["mars", "planet", "moons", "planet_view"].map(|name| names[name]);
+    let node = ::grap::isa::record(
+        kind::ROW,
+        [
+            (l::GAP, crate::libraries::f64::value(4.0)),
+            (
+                l::CHILDREN,
+                Value::list([
+                    ::grap::isa::record(
+                        kind::TEXT,
+                        [
+                            (l::CONTENT, crate::libraries::text::value("planet with")),
+                            (l::PAINT, Value::from(l::INK_FACE)),
+                        ],
+                    ),
+                    ::grap::isa::record(
+                        kind::DESCEND,
+                        [(l::STEP, Value::record([(names["key"], Value::from(moons))]))],
+                    ),
+                ]),
+            ),
+        ],
+    );
+    std::rc::Rc::make_mut(&mut world.model.doc)
+        .cells
+        .set_value(view, node);
+    // Its `descend` leads into the record it draws, and nothing else of the
+    // record shows.
+    assert!(drawn(&mut world, &[Step::Key(mars), Step::Key(moons)]));
+    assert!(!drawn(&mut world, &[Step::Key(mars), Step::Key(planet)]));
+    // It has no way to decline, so it draws every record carrying the key,
+    // one without moons included.
+    assert!(!drawn(
+        &mut world,
+        &[Step::Key(names["note"]), Step::Key(planet)]
+    ));
+}
