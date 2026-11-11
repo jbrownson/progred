@@ -299,3 +299,26 @@ fn center_and_rule_decode_from_data_as_a_program_emits_them() {
     };
     assert_eq!(children.len(), 3);
 }
+
+#[test]
+fn a_drawing_with_no_width_goes_across_what_its_container_offers() {
+    // A rule is one of these: a rectangle from 0 to 1 across the width.
+    let bar = |fields: Vec<(CellId, Value)>| {
+        layout_node(
+            vocabulary::kind::DRAWING,
+            [(vocabulary::ASCENT, number(3.0))]
+                .into_iter()
+                .chain(fields),
+        )
+    };
+    let across = bar(vec![(
+        vocabulary::COMMANDS,
+        Value::list([fill(
+            rect(0.0, 1.0, 1.0, 1.0),
+            Value::Cell(vocabulary::INK_FACE),
+        )]),
+    )]);
+    assert!(matches!(decoded(&across), Some(Recorded::Widget(_))));
+    // With neither a width nor commands there's nothing to draw across it.
+    assert!(decoded(&bar(vec![])).is_none());
+}

@@ -794,34 +794,54 @@ pub fn arrow<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
 const RULE_SPACE: f64 = 3.0;
 const RULE_THICKNESS: f64 = 1.0;
 
-/// A line across the width its container offers it, with space above and
-/// below. Its baseline is its bottom, so a column aligned on it holds the
-/// line just above the surrounding text's baseline.
-pub fn rule<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
-    Layout::widget(Rc::new(|context| {
+/// A drawing across the width its container offers it: its x runs from 0 at
+/// the left of that width to 1 at the right, and its y in units, as any
+/// drawing's does. `drawing`'s own width isn't read.
+pub fn stretched<World: 'static, Hover: 'static>(
+    drawing: puri::draw::Drawing<Paint>,
+) -> Layout<World, Hover> {
+    Layout::widget(Rc::new(move |context| {
         let scale = context.toolkit.styles().scale;
-        let ink = context.toolkit.styles().ink.brush.clone();
-        measured::fill_width(widget::paint(
+        let drawing = drawing
+            .clone()
+            .map_paint(|paint| widget::style::brush(context.toolkit.styles(), paint));
+        measured::fill_width(widget::leaf(
             widget::Extent {
                 width: 0.0,
-                ascent: (2.0 * RULE_SPACE + RULE_THICKNESS) * scale,
-                descent: 0.0,
+                ascent: drawing.ascent * scale,
+                descent: drawing.descent * scale,
             },
-            move |canvas, placement| {
-                let top = placement.rect.y0 + RULE_SPACE * scale;
-                canvas.fill_shape(
-                    puri::draw::Shape::Rect(kurbo::Rect::new(
-                        placement.rect.x0,
-                        top,
-                        placement.rect.x1,
-                        top + RULE_THICKNESS * scale,
-                    )),
-                    ink,
-                    kurbo::Affine::IDENTITY,
-                );
+            move |output, placement| {
+                output.render(move |canvas, _| {
+                    let across = kurbo::Affine::translate((placement.rect.x0, placement.rect.y0))
+                        * kurbo::Affine::scale_non_uniform(placement.rect.width(), scale);
+                    puri::draw::draw(drawing, canvas, across);
+                })
             },
         ))
     }))
+}
+
+/// A line across the width its container offers it, with space above and
+/// below: a [`stretched`] drawing of one rectangle. Its baseline is its
+/// bottom, so a column aligned on it holds the line just above the
+/// surrounding text's baseline.
+pub fn rule<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
+    stretched(puri::draw::Drawing {
+        width: 0.0,
+        ascent: 2.0 * RULE_SPACE + RULE_THICKNESS,
+        descent: 0.0,
+        commands: vec![puri::draw::Command::Fill {
+            shape: puri::draw::Shape::Rect(kurbo::Rect::new(
+                0.0,
+                RULE_SPACE,
+                1.0,
+                RULE_SPACE + RULE_THICKNESS,
+            )),
+            paint: Paint::Face(Face::Ink),
+            transform: kurbo::Affine::IDENTITY,
+        }],
+    })
 }
 
 pub fn indent<World: 'static, Hover: 'static>(

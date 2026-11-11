@@ -1703,9 +1703,10 @@ What it shows, and what exists (on a blank document, in the native app):
 5. A field renamed to a phrase with spaces, every use following. Works, as
    renaming does anywhere.
 
-Still rough: a template's `rule` is a construct of its own, where it should be
-a drawing as wide as it's offered; the starter template's gap shows as a
-trailing `{gap: 6}`; a library is named after its first key; a template can't
+Still rough: a drawing as wide as it's offered, which `rule` now is one of,
+can be stored in a template but has no offers there, so anything but a rule
+is typed as raw records; the starter template's gap shows as a trailing
+`{gap: 6}`; a library is named after its first key; a template can't
 decline a record or compute, and for that the view is a function, which has
 none of this editing; and a document library still offers no completions, so
 a new fraction is typed as a record.

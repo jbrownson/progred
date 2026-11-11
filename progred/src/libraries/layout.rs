@@ -344,6 +344,23 @@ fn decode_with<W: Host>(
             }),
             script: puri::text::Script::Normal,
         })),
+        // With no width of its own, drawn commands go across the width the
+        // container offers, their x from 0 to 1 over it, as a rule's do.
+        kind::DRAWING if value.field(WIDTH).is_none() && value.field(PROGRAM).is_none() => {
+            Some(crate::display::stretched(Drawing {
+                width: 0.0,
+                ascent: nonnegative(ASCENT)?,
+                descent: match value.field(DESCENT) {
+                    Some(_) => nonnegative(DESCENT)?,
+                    None => 0.0,
+                },
+                commands: value
+                    .field(COMMANDS)?
+                    .list_values()?
+                    .map(|command| read_command(command.as_value()))
+                    .collect::<Option<Vec<_>>>()?,
+            }))
+        }
         kind::DRAWING => {
             let extent = crate::display::widget::Extent {
                 width: nonnegative(WIDTH)?,

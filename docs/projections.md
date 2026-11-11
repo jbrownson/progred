@@ -716,7 +716,10 @@ measurement in Grap. `descend` takes `step`; `descend path` takes
 All paths use the path convention, with no opaque editor or scope value in Grap.
 The Grap-facing jump provides the standard document-path interpretation.
 `drawing` accepts width/ascent/descent and a drawing-program value, as the
-stored drawing node does; it does not construct a list of draw commands. Its
+stored drawing node does; it does not construct a list of draw commands. A
+stored drawing node of commands with no width goes across the width its
+container offers, its x running from 0 to 1 over that width; `rule` is that
+drawing of one rectangle, not a construct of its own. Its
 optional fuel argument configures the later drawing evaluation, as the stored
 node's does; omitting it uses the evaluator's ordinary default, not the layout
 call's remainder. Every construct is in both forms under one name and the same
