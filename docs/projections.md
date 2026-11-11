@@ -694,13 +694,16 @@ borrowing a Rust layout output buffer; a record of the kind
 can carry the data its program descends into beside it. It adds no evaluator
 types or syntax.
 
-Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
+Within that scope, `row`, `col`, `flow`, `overlay`, and `alternatives` take a raw
 `children` expression. They evaluate it once into a fresh child buffer, then
 emit the corresponding native layout. `do`, ordinary function calls, and loops
 can produce that sequence; a list of expressions remains inert unless a control
 function evaluates it. A row aligns its children's baselines; given a
 `baseline`, it aligns their tops instead and keeps that child's baseline, as a
-column does. `pad`, `center`, `border`, `bracket`, and interaction wrappers
+column does. A flow puts its children side by side, `gap` apart, and
+takes another line `line gap` below where one is full, as a paragraph's words
+do: for many small things of a kind, which read across. A lambda's parameters
+are drawn so. `pad`, `center`, `border`, `bracket`, and interaction wrappers
 take a raw `child` expression that must emit exactly one child. `selectable` makes its
 child select the value being drawn: it claims the hover there, and a click selects
 that value; whatever the child descends into keeps its own target. No buffer borrow is held

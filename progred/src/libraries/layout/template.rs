@@ -20,7 +20,13 @@ use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
 /// The nodes that arrange a list of `children`.
-const CONTAINERS: [CellId; 4] = [kind::ROW, kind::COL, kind::OVERLAY, kind::ALTERNATIVES];
+const CONTAINERS: [CellId; 5] = [
+    kind::ROW,
+    kind::COL,
+    kind::FLOW,
+    kind::OVERLAY,
+    kind::ALTERNATIVES,
+];
 
 /// The nodes that hold one `child`.
 const WRAPPERS: [CellId; 6] = [

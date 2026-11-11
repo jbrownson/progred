@@ -322,3 +322,26 @@ fn a_drawing_with_no_width_goes_across_what_its_container_offers() {
     // With neither a width nor commands there's nothing to draw across it.
     assert!(decoded(&bar(vec![])).is_none());
 }
+
+#[test]
+fn a_flow_decodes_from_data_with_no_gaps_given() {
+    let value = layout_node(
+        vocabulary::kind::FLOW,
+        [(
+            vocabulary::CHILDREN,
+            Value::list([
+                text_leaf("a", vocabulary::NAME_FACE),
+                text_leaf("b", vocabulary::NAME_FACE),
+            ]),
+        )],
+    );
+    let Some(Recorded::Flow {
+        gap,
+        line_gap,
+        children,
+    }) = decoded(&value)
+    else {
+        panic!("a flow decodes");
+    };
+    assert_eq!((gap, line_gap, children.len()), (0.0, 0.0, 2));
+}

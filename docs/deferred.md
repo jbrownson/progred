@@ -587,7 +587,15 @@ everything went on one line, a small root document included.
 The ribbon is one number for every form. Each alternatives node holds its own,
 so a projection could state how wide its one-line form is willing to be, as
 rustfmt lets a call run longer on a line than a struct literal; none does
-yet. Other reasons something might stack even when it fits:
+yet.
+
+Between one line and one to a line there is a third form, a flow
+(`display::flow`, the `flow` node and layout function): children side by
+side, taking another line where one is full. It is a projection's to choose,
+not a list's default, since it suits many small things of a kind and reads
+badly for compound ones; a lambda's parameters use it
+(`structure::list_flowing`). A call's arguments and a list of numbers are
+candidates. Other reasons something might stack even when it fits:
 
 - Several things rather than parts of one: a document's top level, definitions,
   `do` steps, `match` cases and bindings read down; a call's arguments or a

@@ -10,6 +10,7 @@ use vocabulary::*;
 const FUNCTIONS: &[CellId] = &[
     ROW,
     COL,
+    FLOW,
     PAD,
     CENTER,
     BORDER,
@@ -244,6 +245,7 @@ fn operation<W: Host>(
     match function {
         ROW => row(context, call, environment, output),
         COL => col(context, call, environment, output),
+        FLOW => flow(context, call, environment, output),
         PAD => pad(context, call, environment, output),
         CENTER => single_child(context, call, environment, output).map(crate::display::center),
         BORDER => single_child(context, call, environment, output).map(crate::display::border),
@@ -303,6 +305,21 @@ fn col<W: Host>(
         baseline_index(baseline, children.len()).ok_or(BuildError::Invalid)?,
         gap,
         children,
+    ))
+}
+
+fn flow<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    output: &RefCell<Vec<Layout<W>>>,
+) -> Result<Layout<W>, BuildError> {
+    let gap = number_argument(context, call, environment, GAP, Some(0.0))?;
+    let line_gap = number_argument(context, call, environment, LINE_GAP, Some(0.0))?;
+    Ok(crate::display::flow(
+        gap,
+        line_gap,
+        children(context, call, environment, output)?,
     ))
 }
 

@@ -43,6 +43,7 @@ pub mod vocabulary {
     // Boxes and walk.
     pub const ROW: CellId = CellId::from_u128(0x1af52c96e380b7d40c9e1f6a2d5b83e7);
     pub const COL: CellId = CellId::from_u128(0x9d04b6e1783f2ca5f17d09c4e6a2358b);
+    pub const FLOW: CellId = CellId::from_u128(0x9448b92f850216a29bd7e54aefbf4f5b);
     pub const PAD: CellId = CellId::from_u128(0x4e8a17d0952cb6f3a30c5e92b7d1f648);
     /// A child in the middle of the width its container offers.
     pub const CENTER: CellId = CellId::from_u128(0x6837fa29d597fede353287ffd98394f5);
@@ -79,6 +80,7 @@ pub mod vocabulary {
     // Fields.
     pub const GAP: CellId = CellId::from_u128(0xa4917e2c60d3f8b5310b6d8f2c74ae95);
     pub const BASELINE: CellId = CellId::from_u128(0x6cd28a4f91e057b3c2941e6a07f5d3b8);
+    pub const LINE_GAP: CellId = CellId::from_u128(0xb3807b44d751a41536d62394891b61e0);
     pub const CHILDREN: CellId = CellId::from_u128(0xe10b73d5482f96ca7d3852c0f16b49ea);
     pub const CHILD: CellId = CellId::from_u128(0x59a6f0c2e8b1d4738f6e04a9d21c57b3);
     pub const LEFT: CellId = CellId::from_u128(0x0d34c8a1f7625e9ba81f37d2c50e964b);
@@ -146,6 +148,9 @@ pub mod vocabulary {
         pub const ROW: CellId = CellId::from_u128(0x4843d61b088a4e569fafe00f7a617c6a);
         /// Children one under another: `{isa: col, baseline, gap, children}`.
         pub const COL: CellId = CellId::from_u128(0x167741552b1a4d7cbffecb45d1326970);
+        /// Children side by side, taking another line where one is full:
+        /// `{isa: flow, gap, line gap, children}`.
+        pub const FLOW: CellId = CellId::from_u128(0x3ed2f2aff5f660a9e5fc4aa6fe5a9b4c);
         /// A child with room around it: `{isa: pad, left, top, right, bottom, child}`.
         pub const PAD: CellId = CellId::from_u128(0x426095b35fa14ed0a452d15a18d40f53);
         /// A child in the middle of the width its container offers: `{isa: center, child}`.
@@ -195,9 +200,10 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
 
 /// The kinds of the stored form's nodes, each drawn as [`decode_with`]
 /// reads it.
-const NODES: [CellId; 20] = [
+const NODES: [CellId; 21] = [
     vocabulary::kind::ROW,
     vocabulary::kind::COL,
+    vocabulary::kind::FLOW,
     vocabulary::kind::OVERLAY,
     vocabulary::kind::PAD,
     vocabulary::kind::CENTER,
@@ -293,6 +299,11 @@ fn decode_with<W: Host>(
                 children,
             ))
         }
+        kind::FLOW => Some(crate::display::flow(
+            number_or_zero(GAP)?,
+            number_or_zero(LINE_GAP)?,
+            children_field()?,
+        )),
         kind::OVERLAY => Some(layout_overlay(children_field()?)),
         kind::PAD => Some(crate::display::padding(
             (
@@ -675,6 +686,8 @@ pub fn library<W: Host>() -> Library<W> {
         [
             (vocabulary::ROW, "row"),
             (vocabulary::COL, "col"),
+            (vocabulary::FLOW, "flow"),
+            (vocabulary::LINE_GAP, "line gap"),
             (vocabulary::PAD, "pad"),
             (vocabulary::CENTER, "center"),
             (vocabulary::RULE, "rule"),
@@ -695,6 +708,7 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::kind::LAYOUT_PROGRAM, "layout program"),
             (vocabulary::kind::ROW, "row"),
             (vocabulary::kind::COL, "col"),
+            (vocabulary::kind::FLOW, "flow"),
             (vocabulary::kind::PAD, "pad"),
             (vocabulary::kind::CENTER, "center"),
             (vocabulary::kind::BORDER, "border"),
