@@ -1674,6 +1674,42 @@ but drawn text keeps only glyph IDs, so names and values would come from the
 projections that draw them. External control needs the same description of
 what's on screen, so the two can share it.
 
+### The demo: making a view
+
+From a November 2026 discussion of what Progred is for. Text as the encoding
+of programs puts a ceiling on what's cheap to build on them; what lies above
+it, projected notations or Inventing-on-Principle loops, is expensive for
+reasons that have nothing to do with the ideas. The claim to show is about
+cost, so the demo shows the making: something a programmer knows is costly on
+text, built in front of them in a few steps. CAM follows it, as the serious
+example, once the viewer knows what they're looking at.
+
+What it shows, and what exists (on a blank document, in the native app):
+
+1. Some plain data, a record or two. Works: `new record`, a label, a value,
+   each chosen by typing.
+2. A view of it, made on the spot. Works: with a record selected, Edit's New
+   Library from Selection declares a library for records like it under the
+   root's `libraries`, with a [template](projections.md#packages-and-libraries)
+   of the record's parts in a row. Changing the row to a `col`, adding a
+   `rule`, and centering a part are each a few keys there, and every such
+   record redraws as they're typed.
+3. The same value in two notations, both live. Works: open the record in a
+   pane and switch "document libraries" off there; an edit in either shows in
+   the other.
+4. A second view driven by a gesture, a pie to drag. Missing: a template has
+   no node that takes a drag and writes a part, and a drawing in one can't
+   read the record.
+5. A field renamed to a phrase with spaces, every use following. Works, as
+   renaming does anywhere.
+
+Still rough: a template's `rule` is a construct of its own, where it should be
+a drawing as wide as it's offered; the starter template's gap shows as a
+trailing `{gap: 6}`; a library is named after its first key; a template can't
+decline a record or compute, and for that the view is a function, which has
+none of this editing; and a document library still offers no completions, so
+a new fraction is typed as a record.
+
 ### Demo moments
 
 - Drag handles on the tool profile picture that update the numbers it was drawn
