@@ -99,6 +99,7 @@ fn all_enabled() -> crate::command::Availability {
         save: true,
         undo: true,
         redo: true,
+        declare_library: true,
         open_pane: true,
         close_pane: true,
         move_up: true,
@@ -116,7 +117,8 @@ fn arrows_walk_enabled_items_and_wrap() {
     let menus = definition([], []);
     let mut availability = all_enabled();
     availability.undo = false;
-    // Edit is [Undo, Redo]; with Undo disabled the cursor lands on
+    availability.declare_library = false;
+    // Edit is [Undo, Redo, a library to declare]; with only Redo enabled the cursor lands on
     // Redo from either direction and wraps in place.
     let mut state = State::default();
     let edit = menus
@@ -324,7 +326,7 @@ fn an_open_menu_captures_other_key_downs() {
 fn the_drawn_tree_lists_every_command_once() {
     let definition = definition([], []);
     let commands = commands(&definition).collect::<Vec<_>>();
-    assert_eq!(commands.len(), 23 + Example::ALL.len());
+    assert_eq!(commands.len(), 24 + Example::ALL.len());
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));
     }

@@ -140,6 +140,57 @@ fn declaration<W: Host>(
         .record(input)
 }
 
+/// A library for records like `fields`, to start from: it owns the first of
+/// their fields, as `name` orders them, and its view is a template with each
+/// field's part in a row, which draws such a record as its parts alone. None
+/// for a record with no fields of its own.
+pub(crate) fn starter(
+    fields: &gid::Record,
+    name: impl Fn(CellId) -> Option<String>,
+) -> Option<gid::Value> {
+    use crate::workspace::vocabulary::{KEYS, PROJECTION};
+    use gid::Value;
+    use layout::vocabulary::{CHILDREN, GAP, kind};
+    let mut parts: Vec<(Option<String>, CellId)> = fields
+        .keys()
+        .filter(|key| **key != ::grap::isa::ISA)
+        .map(|key| (name(*key), *key))
+        .collect();
+    // Named fields by name, then the rest, as a record lists them.
+    parts.sort_by_cached_key(|(name, key)| {
+        (
+            name.is_none(),
+            name.as_deref().map(str::to_lowercase),
+            name.clone(),
+            *key,
+        )
+    });
+    let (owner_name, owner) = parts.first()?.clone();
+    Some(Value::record(
+        owner_name
+            .map(|name| (name::vocabulary::NAME, crate::libraries::text::value(name)))
+            .into_iter()
+            .chain([
+                (KEYS, Value::list([owner.into()])),
+                (
+                    PROJECTION,
+                    ::grap::isa::record(
+                        kind::ROW,
+                        [
+                            (GAP, crate::libraries::f64::value(6.0)),
+                            (
+                                CHILDREN,
+                                Value::list(
+                                    parts.iter().map(|(_, part)| layout::template::part(*part)),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ]),
+    ))
+}
+
 /// `layout`, drawn as a document library's drawing of `value` at `occurrence`.
 fn nested<W: Host>(
     occurrence: &Option<crate::occurrence::Trail>,

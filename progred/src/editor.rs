@@ -501,6 +501,7 @@ impl Editor {
             save: self.model.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
+            declare_library: self.library_to_declare().is_some(),
             open_pane: self
                 .model
                 .selection
@@ -520,6 +521,74 @@ impl Editor {
             zoom_in: self.next_zoom(true).is_some(),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             zoom_out: self.next_zoom(false).is_some(),
+        }
+    }
+
+    /// The record a library can be declared for: the selected one, or the
+    /// one the selected cell holds, in a document whose root is a record,
+    /// where no library the document declares draws it yet.
+    fn library_to_declare(&self) -> Option<&gid::Record> {
+        let sources = self.sources();
+        let selection = self.model.selection.as_ref()?;
+        (!selection.path().is_empty()).then_some(())?;
+        sources.root()?.as_record()?;
+        let fields = match selection.value(&sources)? {
+            gid::Value::Cell(cell) => sources.value(*cell)?,
+            value => value,
+        }
+        .as_record()?;
+        let declared = workspace::libraries(&sources);
+        (fields.keys().any(|key| *key != ::grap::isa::ISA)
+            && !declared
+                .iter()
+                .any(|library| library.keys.iter().any(|key| fields.get(key).is_some())))
+        .then_some(fields)
+    }
+
+    /// Declares a library for records like the selected one, last among the
+    /// document's, and selects the template it starts with, there in the
+    /// root's `libraries` where the library now lives.
+    fn declare_library(&mut self) {
+        use workspace::vocabulary::{LIBRARIES, PROJECTION};
+        let sources = self.sources();
+        let Some(library) = self.library_to_declare().and_then(|fields| {
+            crate::libraries::declared::starter(fields, |cell| {
+                crate::libraries::name::of_cell(&|cell| sources.value(cell), cell)
+                    .map(|name| name.spelling().into_owned())
+            })
+        }) else {
+            return;
+        };
+        let declared = sources
+            .root()
+            .and_then(gid::Value::as_record)
+            .and_then(|root| root.get(&LIBRARIES))
+            .cloned()
+            .unwrap_or_else(|| gid::Value::list([]));
+        let Some(position) = declared
+            .as_list()
+            .and_then(|list| gid::position::between(list.keys().next_back(), None))
+        else {
+            return;
+        };
+        let declared = gid::Value::List(
+            declared
+                .as_list()
+                .expect("read as a list above")
+                .clone()
+                .with(position.clone(), library),
+        );
+        let field = crate::location::Location::root(vec![gid::Step::Key(LIBRARIES)]);
+        if crate::editing::write(&mut self.session(), &field, declared) {
+            self.model.selection = Some(selection::Selection::edge(
+                &self.model.workspace.document,
+                crate::occurrence::of(&[
+                    gid::Step::Key(LIBRARIES),
+                    gid::Step::Element(position),
+                    gid::Step::Key(PROJECTION),
+                ]),
+            ));
+            self.sync_views();
         }
     }
 
@@ -693,6 +762,7 @@ impl Editor {
             DocCommand::SaveAs => self.desktop_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
             DocCommand::Redo => self.step_history(false, geometry),
+            DocCommand::DeclareLibrary => self.declare_library(),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
             DocCommand::OpenLibrary(library) => {
