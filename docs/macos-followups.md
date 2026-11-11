@@ -37,6 +37,11 @@ tested on Linux only; its macOS code was checked with
   The owner found a native demo in early November slower than remembered. Run
   `make perf ARGS=--editor` at `dbec690c` and at the head and compare wall
   times; then orbit a CAM preview and drag the forest's slider by hand.
+- **Edit's New Library from Selection.** A new command in the native Edit
+  menu, enabled only while a record no declared library draws is selected;
+  checked with `--target aarch64-apple-darwin` but not run. Select a record,
+  choose it, and see the library appear under the root's `libraries` with its
+  template selected, then undo it.
 - **To write: don't sync the native menu on every redraw.** `App::sync_menus`
   (app.rs) calls `native_menu.sync` with the editor's availability and toggles
   from five places, one of them each redraw. Keep the last pair synced and
