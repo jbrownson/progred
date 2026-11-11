@@ -53,7 +53,10 @@ fn partial_consumption_round_trips_all_units() {
     for (delta, expected, remaining) in [
         (
             ScrollDelta::LineDelta(2.0, 4.0),
-            Vec2::new(80.0, 160.0),
+            Vec2::new(
+                2.0 * crate::display::widget::scroll::WHEEL_LINE,
+                4.0 * crate::display::widget::scroll::WHEEL_LINE,
+            ),
             ScrollDelta::LineDelta(2.0, 2.0),
         ),
         (
@@ -116,10 +119,14 @@ fn nested_handlers_receive_only_unused_scroll_and_respect_clipping() {
         ),
     );
     let handler = frame.handler.unwrap();
+    let line = crate::display::widget::scroll::WHEEL_LINE;
     for (x, expected) in [
-        (5.0, vec![Vec2::new(80.0, 160.0), Vec2::new(80.0, 80.0)]),
-        (15.0, vec![Vec2::new(80.0, 160.0)]),
-        (25.0, vec![Vec2::new(80.0, 160.0)]),
+        (
+            5.0,
+            vec![line * Vec2::new(2.0, 4.0), line * Vec2::new(2.0, 2.0)],
+        ),
+        (15.0, vec![line * Vec2::new(2.0, 4.0)]),
+        (25.0, vec![line * Vec2::new(2.0, 4.0)]),
     ] {
         let mut event = event(ScrollDelta::LineDelta(2.0, 4.0));
         event.state.position = (x, 5.0).into();

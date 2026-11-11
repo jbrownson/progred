@@ -92,13 +92,14 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
 }
 
 /// `event` with its pixels magnified by the editor's `zoom`, as the display
-/// is, so a swipe scrolls as much content at any zoom. Lines and pages are
-/// already in content units.
+/// is, so a swipe scrolls as much content at any zoom, and by what the
+/// platform's swipes are scaled by. Lines and pages are already in content
+/// units.
 fn zoomed(event: &PointerScrollEvent, zoom: f64) -> PointerScrollEvent {
     let mut event = event.clone();
     if let ScrollDelta::PixelDelta(delta) = &mut event.delta {
-        delta.x *= zoom;
-        delta.y *= zoom;
+        delta.x *= zoom * crate::display::widget::scroll::SWIPE_SCALE;
+        delta.y *= zoom * crate::display::widget::scroll::SWIPE_SCALE;
     }
     event
 }

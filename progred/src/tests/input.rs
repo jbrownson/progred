@@ -731,7 +731,10 @@ fn scrolling_delivers_one_batch_and_builds_one_successor() {
     }
     assert!(log.borrow().is_empty());
     assert!(runner.flush_pending_continuous());
-    assert_eq!(runner.editor.model.workspace.document_pane().scroll.y, 10.0);
+    assert_eq!(
+        runner.editor.model.workspace.document_pane().scroll.y,
+        10.0 * crate::display::widget::scroll::SWIPE_SCALE
+    );
     assert_eq!(
         log.take(),
         [("project", 0.0), ("hover", 0.0), ("bind", 0.0)]
@@ -1085,7 +1088,7 @@ fn a_swipe_scrolls_as_much_content_at_any_zoom() {
         driver.swipe_at(Point::new(100.0, 100.0), kurbo::Vec2::new(0.0, -40.0));
         let moved = before - driver.rect(&line).y0;
         assert!(
-            (moved - 40.0 * zoom).abs() < 1e-6,
+            (moved - 40.0 * zoom * crate::display::widget::scroll::SWIPE_SCALE).abs() < 1e-6,
             "at {zoom}x a 40 pixel swipe moves the content {moved} pixels"
         );
     }

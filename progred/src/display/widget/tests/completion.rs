@@ -325,7 +325,11 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     let scroll = PointerScrollEvent {
         pointer,
         state: pointer_state,
-        delta: ScrollDelta::LineDelta(0.0, -5.0),
+        // Enough lines to scroll 200 points, whatever a line is here.
+        delta: ScrollDelta::LineDelta(
+            0.0,
+            (-200.0 / crate::display::widget::scroll::WHEEL_LINE) as f32,
+        ),
     };
     let initial = frame(state, None);
     assert!(
@@ -348,10 +352,13 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .dispatch_scroll(&mut state, &scroll)
             .handled()
     );
-    assert_eq!(state, (200.0, 0));
+    assert!((state.0 - 200.0).abs() < 1e-3 && state.1 == 0, "{state:?}");
     let mut batched = (0.0, 0);
     let events = [scroll.clone(), scroll.clone()].map(|mut event| {
-        event.delta = ScrollDelta::LineDelta(0.0, -2.5);
+        event.delta = ScrollDelta::LineDelta(
+            0.0,
+            (-100.0 / crate::display::widget::scroll::WHEEL_LINE) as f32,
+        );
         event
     });
     assert!(
@@ -364,7 +371,10 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             )
             .handled()
     );
-    assert_eq!(batched, (200.0, 0));
+    assert!(
+        (batched.0 - 200.0).abs() < 1e-3 && batched.1 == 0,
+        "{batched:?}"
+    );
     assert!((4..160).any(|y| matches!(
         frame(state, Some(Point::new(10.0,y as f64))).claim.map(|(_, claim)| claim),
         Some(Claim::Direct(Hovered::Tree(Hover::Entry(index)))) if index > 0

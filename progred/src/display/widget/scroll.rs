@@ -69,10 +69,30 @@ pub fn offset(
     (next, outcome)
 }
 
+/// How far a swipe scrolls for the distance the platform reports. macOS
+/// reports the distance to scroll. Wayland reports the fingers' travel in
+/// surface units, which compositors turn down and toolkits turn back up,
+/// each by a factor of its own choosing; this is Zed's, from
+/// `crates/gpui_linux/src/linux/wayland/client.rs`.
+pub const SWIPE_SCALE: f64 = if cfg!(target_os = "linux") { 3.0 } else { 1.0 };
+
+/// How far one line of a wheel scrolls, in points of content. On Linux a
+/// notch is a line, and scrolls three lines of text, as Zed's does
+/// (`SCROLL_LINES`) and most toolkits' do; elsewhere the platform's own
+/// lines are finer.
+pub const WHEEL_LINE: f64 = if cfg!(target_os = "linux") {
+    3.0 * TEXT_LINE
+} else {
+    40.0
+};
+
+/// About the height of a line of the editor's text, in points.
+const TEXT_LINE: f64 = 21.0;
+
 pub fn units(scale: f64, viewport: Size) -> puri::scroll::Units {
     puri::scroll::Units {
         scale,
-        line: 40.0,
+        line: WHEEL_LINE,
         // A pane may briefly have no room during resize.
         page: Size::new(
             viewport.width.max(1.0) / scale,

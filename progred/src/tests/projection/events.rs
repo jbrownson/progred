@@ -56,6 +56,6 @@ fn native_annotation_handler_retains_the_projected_site() {
     assert!(outcome.remaining.is_none());
     assert_eq!(
         writes.model.workspace.document_pane().annotations.at(&path),
-        Some(&f64::value(40.0))
+        Some(&f64::value(crate::display::widget::scroll::WHEEL_LINE))
     );
 }
