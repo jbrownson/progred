@@ -58,13 +58,37 @@ fn node<W: Host>(
         });
     }
     let kind = value.kind()?;
-    let label = || {
+    let named = |input: &ProjectionInput<'_, W, RuntimeValue>, kind: CellId| {
         selectable(
             match input.env.name(kind) {
                 Some(name) => crate::display::named(&name, Face::Name),
                 None => crate::display::faced(crate::identity::short_id(kind), Face::Id),
             },
             &input.site(),
+        )
+    };
+    // A node with nothing in it is selected by its kind.
+    let label = || named(input, kind);
+    // One that holds others names its kind where the record does, so the
+    // kind can be changed to another of its `family` around what it holds.
+    let kind_among = |family: &'static [CellId]| {
+        descend(
+            [Step::Key(::grap::isa::ISA)],
+            Some(runtime_partial(move |input| match input.value {
+                Some(kind) => Some(named(input, kind.as_cell()?)),
+                None => Some(picker(Picker::new(
+                    CompletionKind::Value,
+                    ranked(Rc::new(move |_| {
+                        Some(
+                            family
+                                .iter()
+                                .map(|kind| select(*kind, Value::from(*kind)).with_detail("layout"))
+                                .collect(),
+                        )
+                    })),
+                ))),
+            })),
+            None,
         )
     };
     match kind {
@@ -82,7 +106,7 @@ fn node<W: Host>(
             Some(row(
                 4.0,
                 [
-                    label(),
+                    kind_among(&CONTAINERS),
                     descend([Step::Key(l::CHILDREN)], Some(first(input, children)), None),
                 ],
             ))
@@ -91,7 +115,7 @@ fn node<W: Host>(
             Some(row(
                 6.0,
                 [
-                    label(),
+                    kind_among(&WRAPPERS),
                     descend([Step::Key(l::CHILD)], Some(within()), None),
                 ],
             ))
@@ -118,20 +142,30 @@ pub(crate) fn part(part: CellId) -> Value {
 /// What an empty place in a template for records carrying `keys` offers.
 fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
     let node = |kind: CellId, fields: Vec<(CellId, Value)>| ::grap::isa::record(kind, fields);
-    let holding = |kind: CellId, fields: Vec<(CellId, Value)>| {
-        insert(
+    // A node that holds others, chosen where there's a node already, goes
+    // around it: `center` over a part centers the part.
+    let held = request.value();
+    let holding = |kind: CellId| match held {
+        Some(held) => select(kind, node(kind, vec![(l::CHILD, held.clone())])),
+        None => insert(
             kind,
-            node(kind, fields),
+            node(kind, vec![]),
             Some(pending_at(&[Step::Key(l::CHILD)])),
-        )
+        ),
     };
-    let arranging = |kind: CellId| {
-        let first = gid::position::between(None, None).expect("an empty list has room");
-        insert(
+    let arranging = |kind: CellId| match held {
+        Some(held) => select(
             kind,
-            node(kind, vec![(l::CHILDREN, Value::list([]))]),
-            Some(pending_at(&[Step::Key(l::CHILDREN), Step::Element(first)])),
-        )
+            node(kind, vec![(l::CHILDREN, Value::list([held.clone()]))]),
+        ),
+        None => {
+            let first = gid::position::between(None, None).expect("an empty list has room");
+            insert(
+                kind,
+                node(kind, vec![(l::CHILDREN, Value::list([]))]),
+                Some(pending_at(&[Step::Key(l::CHILDREN), Step::Element(first)])),
+            )
+        }
     };
     let typed = request.query.trim();
     parts(request, keys)
@@ -139,10 +173,10 @@ fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
         .map(|key| select(key, part(key)).with_detail("part"))
         .chain(CONTAINERS.map(arranging))
         .chain([
-            holding(kind::CENTER, vec![]),
-            holding(kind::PAD, vec![]),
-            holding(kind::BORDER, vec![]),
-            holding(kind::BRACKET, vec![(l::DELIM, Value::from(l::PAREN))]),
+            holding(kind::CENTER),
+            holding(kind::PAD),
+            holding(kind::BORDER),
+            holding(kind::BRACKET),
             select(kind::RULE, node(kind::RULE, vec![])),
             insert(
                 kind::TEXT,

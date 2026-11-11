@@ -306,7 +306,13 @@ fn decode_with<W: Host>(
         )),
         kind::CENTER => Some(crate::display::center(child()?)),
         kind::BORDER => Some(border(child()?)),
-        kind::BRACKET => Some(bracket(read_delim(&value.field(DELIM)?)?, child()?)),
+        kind::BRACKET => Some(bracket(
+            match value.field(DELIM) {
+                Some(delim) => read_delim(&delim)?,
+                None => Delim::Paren,
+            },
+            child()?,
+        )),
         kind::ALTERNATIVES => Some(alternatives(children_field()?)),
         kind::DESCEND => Some(descend(
             [path::read_step(value.field(STEP)?.as_value())?],

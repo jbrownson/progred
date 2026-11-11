@@ -352,4 +352,24 @@ fn a_template_is_edited_where_its_library_declares_it() {
         driver.value(&driver.element(&children, 3, &[Step::Key(l::CONTENT)])),
         crate::libraries::text::value("big")
     );
+    // A node that holds another, chosen over a node, goes around it.
+    let moons = crate::libraries::layout::template::part(names["moons"]);
+    driver.select(&part);
+    driver.type_text("cent");
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    assert_eq!(
+        driver.value(&part),
+        ::grap::isa::record(l::kind::CENTER, [(l::CHILD, moons)])
+    );
+    // A node's kind is changed where it's named, around what the node holds.
+    let template = &children[..children.len() - 1];
+    let held = driver.value(&children);
+    driver.select(&[template, &[Step::Key(::grap::isa::ISA)]].concat());
+    driver.type_text("col");
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    assert_eq!(
+        driver.value(&[template, &[Step::Key(::grap::isa::ISA)]].concat()),
+        Value::from(l::kind::COL)
+    );
+    assert_eq!(driver.value(&children), held);
 }
