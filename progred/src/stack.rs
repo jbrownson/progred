@@ -206,7 +206,6 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (fidget::ID, fidget::library),
     (toolpath::ID, toolpath::library),
     (grap_library::ID, grap_library::library),
-    // After Grap, which draws a number taking its operators as typing.
     (f32::ID, f32::library),
     (f64::ID, f64::library),
     (u64::ID, u64::library),

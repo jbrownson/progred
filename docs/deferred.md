@@ -1389,8 +1389,10 @@ This is the biggest weak spot.
 - Wrap insertions: besides completions at a placeholder, libraries offer ways to
   wrap the selection. With `42` selected, asking for a wrap lists each operator
   with the 42 on its left or its right, and typing an operator such as `-` picks
-  its left form. Typing an operator at the end of a number already does this
-  for that one case.
+  its left form. Typing an operator at the end of a number did this for that
+  one case until November 2026, when it was taken out: there is no one `+` to
+  type, but one for each kind of number, and the key had to guess which. It
+  can come back when a slot knows the type it holds.
 
 ### Languages as peers
 

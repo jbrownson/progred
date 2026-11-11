@@ -19,11 +19,6 @@ impl<'a> Edit<'a> {
 }
 
 impl Edit<'_> {
-    /// The value at `path`.
-    pub(crate) fn value(&self, path: &[Step]) -> Option<&Value> {
-        crate::occurrence::read(&self.session.sources(), path)
-    }
-
     pub(crate) fn selection(&self) -> Option<&selection::Selection> {
         self.session.model.selection.as_ref()
     }

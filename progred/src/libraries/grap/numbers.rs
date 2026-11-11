@@ -1,11 +1,11 @@
 //! Grap's arithmetic over the number representations: each one's operations
 //! as primitives Grap runs natively, named with their representation's tag
-//! as a subscript, read infix, and typed after a number; the argument labels
+//! as a subscript, and read infix; the argument labels
 //! of binary and unary operations, which list concatenation takes too; and
 //! conversions between them. The numbers themselves belong to f64, f32 and
 //! u64, which know nothing of Grap.
 
-use crate::display::host::{Host, Layout, Partial};
+use crate::display::host::{Host, Partial};
 use crate::libraries::number::{Representation, Scrubbable};
 use crate::libraries::representation::{Precedence, infix_display};
 use crate::libraries::u64 as u64_library;
@@ -15,7 +15,6 @@ use ::grap::arguments::Parse;
 use ::grap::primitive::{Binary, Number, Primitive, Unary};
 use ::grap::{Context, ForeignFunction, ForeignFunctions, RuntimeValue};
 use gid::{CellId, Value};
-use puri::handler::HasHandler;
 use std::rc::Rc;
 
 pub mod vocabulary {
@@ -80,13 +79,12 @@ pub mod u64 {
     pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
 }
 
-/// The numbers' names, their functions, the projections their operators
-/// provide for calls of them, and the numbers' own projection.
+/// The numbers' names, their functions, and the projections their operators
+/// provide for calls of them.
 pub(super) fn contribution<W: Host>() -> (
     Vec<(CellId, Value)>,
     ForeignFunctions<'static>,
     Vec<(CellId, Partial<W>)>,
-    Partial<W>,
 ) {
     let mut parts = [f64_parts(), f32_parts(), u64_parts()];
     let names = [
@@ -107,19 +105,10 @@ pub(super) fn contribution<W: Host>() -> (
             .iter_mut()
             .map(|parts| std::mem::take(&mut parts.functions)),
     );
-    let [f64, f32, u64] = parts;
-    let (provided, projections): (Vec<_>, Vec<_>) = [
-        f64.projection(f64_arithmetic()),
-        f32.projection(f32_arithmetic()),
-        u64.projection(u64_arithmetic()),
-    ]
-    .into_iter()
-    .unzip();
     (
         names,
         functions,
-        provided.into_iter().flatten().collect(),
-        crate::display::compose_partials(projections),
+        parts.into_iter().flat_map(Parts::projections).collect(),
     )
 }
 
@@ -284,37 +273,20 @@ struct Parts {
     functions: ForeignFunctions<'static>,
     /// The calls that read infix, and how tightly each binds.
     infix: Vec<(CellId, Precedence)>,
-    /// The infix operators by spelling, for typing after a number.
-    symbols: Vec<(&'static str, CellId)>,
 }
 
 impl Parts {
-    /// The infix operators' projection for calls of each, and a number
-    /// that takes its operators as typing.
-    fn projection<W: Host, N: Scrubbable + std::str::FromStr>(
-        self,
-        arithmetic: Arithmetic<N>,
-    ) -> (Vec<(CellId, Partial<W>)>, Partial<W>) {
+    /// The infix operators' projection, for calls of each.
+    fn projections<W: Host>(self) -> Vec<(CellId, Partial<W>)> {
         let infix: Rc<[(CellId, Precedence)]> = self.infix.into();
-        let symbols: Rc<[(&'static str, CellId)]> = self.symbols.into();
         let operator = {
             let infix = infix.clone();
             crate::display::runtime_partial(move |input| infix_display(&infix, input))
         };
-        (
-            infix
-                .iter()
-                .map(|(cell, _)| (*cell, operator.clone()))
-                .collect(),
-            crate::display::runtime_partial(move |input| {
-                let layout = arithmetic.representation.display(input)?;
-                Some(if input.writable && input.selection.is_some() {
-                    typed_operators::<_, N>(layout, symbols.clone(), infix.clone())
-                } else {
-                    layout
-                })
-            }),
-        )
+        infix
+            .iter()
+            .map(|(cell, _)| (*cell, operator.clone()))
+            .collect()
     }
 }
 
@@ -330,12 +302,10 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
                 names: vec![(self.not, text::value(format!("not {name}")))],
                 functions: ForeignFunctions::default(),
                 infix: Vec::new(),
-                symbols: Vec::new(),
             },
             |mut parts, (cell, spelling, operation)| {
                 if let Some(precedence) = precedence(spelling, &operation) {
                     parts.infix.push((cell, precedence));
-                    parts.symbols.push((spelling, cell));
                 }
                 parts.names.push((cell, operation_name(spelling, tag)));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
@@ -375,120 +345,6 @@ fn conversion<From: Parse + 'static, N: 'static>(
         runtime(convert(number))
     })
     .cacheable()
-}
-
-/// A selected number takes its type's single-character operators as typing:
-/// one typed at the end of a whole number makes what it ends the left operand,
-/// with the right operand's picker open. A sign or exponent that doesn't yet
-/// make a number still goes into its text.
-fn typed_operators<W: Host, N: std::str::FromStr + 'static>(
-    child: Layout<W>,
-    symbols: Rc<[(&'static str, CellId)]>,
-    infix: Rc<[(CellId, Precedence)]>,
-) -> Layout<W> {
-    crate::display::widget::after(
-        child,
-        Rc::new(move |context| {
-            let site = context.site();
-            let (symbols, infix) = (symbols.clone(), infix.clone());
-            Box::new(move |output, _| {
-                output.handler().on_key(move |world: &mut W, event| {
-                    wrap_typed::<N>(&mut world.session(), event, &site, &symbols, &infix)
-                });
-            })
-        }),
-    )
-}
-
-fn wrap_typed<N: std::str::FromStr>(
-    session: &mut crate::editing::Session<'_>,
-    event: &ui_events::keyboard::KeyboardEvent,
-    site: &crate::editing::Site,
-    symbols: &[(&'static str, CellId)],
-    infix: &[(CellId, Precedence)],
-) -> bool {
-    typed_operator(event, symbols).is_some_and(|operator| {
-        if !ends_a_number::<N>(site.open(session).selected()) {
-            return false;
-        }
-        let ended = left_operand(session, site.clone(), precedence_of(infix, operator), infix);
-        let mut edit = ended.open(session);
-        let wrapped = edit.value().cloned().is_some_and(|left| {
-            edit.replace(::grap::call(
-                Value::from(operator),
-                [(vocabulary::LEFT, left)],
-            ))
-        });
-        if wrapped {
-            edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
-        }
-        wrapped
-    })
-}
-
-/// What an operator binding as `typed` takes as its left operand when typed
-/// after the number at `site`: the number, or the infix call it ends that
-/// binds at least as tightly, as the same symbols written in a line would
-/// group. So `1 + 2` then `*` multiplies the 2, and `1 * 2` then `+` adds to
-/// the product.
-fn left_operand(
-    session: &mut crate::editing::Session<'_>,
-    site: crate::editing::Site,
-    typed: Option<Precedence>,
-    infix: &[(CellId, Precedence)],
-) -> crate::editing::Site {
-    let ends_tighter = site.parent().and_then(|(parent, step)| {
-        let binds = parent
-            .open(session)
-            .value()
-            .and_then(Value::as_record)
-            .filter(|fields| ::grap::isa::of(fields) == Some(::grap::vocabulary::kind::CALL))
-            .and_then(|fields| fields.get(&::grap::vocabulary::FUNCTION)?.as_cell())
-            .and_then(|function| precedence_of(infix, function));
-        (*step == crate::occurrence::Step::Key(vocabulary::RIGHT)
-            && binds.is_some()
-            && binds >= typed)
-            .then_some(parent)
-    });
-    match ends_tighter {
-        Some(parent) => left_operand(session, parent, typed, infix),
-        None => site,
-    }
-}
-
-fn precedence_of(infix: &[(CellId, Precedence)], operator: CellId) -> Option<Precedence> {
-    infix
-        .iter()
-        .find(|(cell, _)| *cell == operator)
-        .map(|&(_, precedence)| precedence)
-}
-
-/// The operator among `symbols` that an unmodified keypress types.
-fn typed_operator(
-    event: &ui_events::keyboard::KeyboardEvent,
-    symbols: &[(&'static str, CellId)],
-) -> Option<CellId> {
-    let plain = event.state.is_down() && crate::modifiers::at_most_shift(&event.modifiers);
-    match &event.key {
-        ui_events::keyboard::Key::Character(typed) if plain => symbols
-            .iter()
-            .find(|(spelling, _)| *spelling == typed.as_str())
-            .map(|&(_, operator)| operator),
-        _ => None,
-    }
-}
-
-/// Whether a typed operator follows the whole number: the number is
-/// selected, or its line is being typed with the caret after all of it.
-fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -> bool {
-    match selected {
-        crate::editing::Selected::Elsewhere => false,
-        crate::editing::Selected::Here => true,
-        crate::editing::Selected::Typing(line) => {
-            let (anchor, focus) = line.selection_offsets();
-            anchor == focus && focus == line.text().len() && line.text().trim().parse::<N>().is_ok()
-        }
-    }
 }
 
 #[cfg(test)]

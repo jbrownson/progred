@@ -6,7 +6,6 @@ use super::{Edit, Session};
 use crate::hover::Hover;
 use crate::occurrence::Trail;
 use gid::Value;
-use puri::edit::LineEditState;
 use std::rc::Rc;
 
 #[cfg(test)]
@@ -28,12 +27,6 @@ impl Site {
         Self {
             path: self.path.below(steps),
         }
-    }
-
-    /// The occurrence this one is drawn within and the step from it to here,
-    /// unless this is its view's root.
-    pub(crate) fn parent(&self) -> Option<(Self, &crate::occurrence::Step)> {
-        Some((Self::new(self.path.parent()?.clone()), self.path.last()?))
     }
 
     /// Whether `selection` is at this occurrence.
@@ -92,35 +85,7 @@ pub(crate) struct SiteEdit<'s> {
     edit: Edit<'s>,
 }
 
-/// Whether an occurrence is selected.
-pub(crate) enum Selected<'s> {
-    Elsewhere,
-    Here,
-    /// Selected, with its value's text being typed.
-    Typing(&'s LineEditState),
-}
-
 impl SiteEdit<'_> {
-    /// The value stored here.
-    pub(crate) fn value(&self) -> Option<&Value> {
-        self.edit.value(&self.site.path.to_vec())
-    }
-
-    /// Whether this occurrence is selected, and the line being typed in its
-    /// value if one is.
-    pub(crate) fn selected(&self) -> Selected<'_> {
-        match self
-            .edit
-            .selection()
-            .filter(|selection| self.site.holds(selection))
-        {
-            None => Selected::Elsewhere,
-            Some(selection) => selection
-                .value_edit()
-                .map_or(Selected::Here, Selected::Typing),
-        }
-    }
-
     /// Whether the selection is here or below, resting on a value rather
     /// than picking one or typing one.
     pub(crate) fn rests_within(&self) -> bool {

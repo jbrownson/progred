@@ -14,7 +14,7 @@ mod session;
 mod site;
 pub(crate) use edit::Edit;
 pub(crate) use session::{Session, TextTools};
-pub(crate) use site::{Selected, Site};
+pub(crate) use site::Site;
 
 /// Writes `value` at `location` as an undo step of its own; whether the
 /// document changed.

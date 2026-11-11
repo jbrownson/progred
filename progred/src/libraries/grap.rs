@@ -764,7 +764,7 @@ fn functions() -> ForeignFunctions<'static> {
 
 pub fn library<W: Host>() -> Library<W> {
     let (control_names, control_functions, control) = control::contribution();
-    let (number_names, number_functions, operators, numbers) = numbers::contribution();
+    let (number_names, number_functions, operators) = numbers::contribution();
     name::library_named(
         ID,
         "grap",
@@ -849,13 +849,7 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(control)
         .chain(operators),
     )
-    .with_projection(
-        // A number takes its operators as typing.
-        crate::display::compose_partials([
-            numbers,
-            crate::display::runtime_partial(program_display),
-        ]),
-    )
+    .with_projection(crate::display::runtime_partial(program_display))
     .with_completions(completions)
 }
 

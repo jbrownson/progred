@@ -84,9 +84,8 @@ There are also Linux and browser hosts. They do not yet have feature or performa
 - **A robust set of libraries.** The built-in libraries cover the examples and
   little else: there's no `and`, `or`, `not`, or `if`, comparisons stop at `<`
   and `==`, and text has no operations.
-- **Fluent input.** Code is mostly entered a piece at a time through pickers
-  rather than typed left to right; typing an operator after a number is the
-  first exception.
+- **Fluent input.** Code is entered a piece at a time through pickers, not
+  typed left to right.
 - **Complete libraries in documents.** A document can declare a library that
   draws its own records, but the library can't offer completions yet, and other
   documents can't load it.

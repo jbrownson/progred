@@ -7,99 +7,13 @@ mod u64_arithmetic;
 
 use crate::driver::Driver;
 use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
-use crate::libraries::{f64, text, u64};
+use crate::libraries::{f64, text};
 use crate::selection::Stage;
 use gid::{Cells, Document, Step, Value, new_cell_id};
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
 fn editor(root: Value) -> crate::Editor {
     crate::editor_of(root)
-}
-
-#[test]
-fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
-    let typed = |root: Value, typed: &str| {
-        let mut driver = Driver::of(root);
-        driver.select::<Step>(&[]);
-        driver.type_text(typed);
-        driver
-    };
-    for (number, operator, symbol) in [
-        (
-            f64::value(2.0),
-            crate::libraries::grap::numbers::f64::MULTIPLY,
-            "*",
-        ),
-        (
-            f64::value(2.0),
-            crate::libraries::grap::numbers::f64::SUBTRACT,
-            "-",
-        ),
-        (
-            u64::value(6),
-            crate::libraries::grap::numbers::u64::DIVIDE,
-            "/",
-        ),
-    ] {
-        let driver = typed(number.clone(), symbol);
-        assert_eq!(
-            driver.value(&[]),
-            ::grap::call(operator.into(), [(LEFT, number)])
-        );
-        assert_eq!(driver.selection(), [Step::Key(RIGHT)]);
-        assert_eq!(driver.stage(), Some(Stage::Pending));
-    }
-    // An exponent's sign belongs to the number it is still becoming.
-    let driver = typed(f64::value(2.0), "e-");
-    assert_eq!(driver.value(&[]), f64::value(2.0));
-    assert_eq!(driver.line(), Some("2e-"));
-}
-
-#[test]
-fn operators_typed_in_a_line_group_as_the_line_reads() {
-    use crate::libraries::f32;
-    use crate::libraries::grap::numbers::f32::{MULTIPLY, SUM as ADD};
-    let call = |operator: gid::CellId, left: Value, right: Value| {
-        ::grap::call(operator.into(), [(LEFT, left), (RIGHT, right)])
-    };
-    let n = f32::value;
-    let typed = |text: &str| {
-        let mut driver = Driver::of(n(1.0));
-        driver.select::<Step>(&[]);
-        for part in text.split(' ') {
-            driver.type_text(part);
-            if part.parse::<f64>().is_ok() {
-                driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
-            }
-        }
-        driver.value(&[])
-    };
-    // A product binds tighter than the sum it follows, and takes its operand.
-    assert_eq!(
-        typed("+ 2 * 3"),
-        call(ADD, n(1.0), call(MULTIPLY, n(2.0), n(3.0)))
-    );
-    // A sum after a product, or after another sum, takes all that came before.
-    assert_eq!(
-        typed("* 2 + 3"),
-        call(ADD, call(MULTIPLY, n(1.0), n(2.0)), n(3.0))
-    );
-    assert_eq!(
-        typed("+ 2 * 3 + 4"),
-        call(
-            ADD,
-            call(ADD, n(1.0), call(MULTIPLY, n(2.0), n(3.0))),
-            n(4.0)
-        )
-    );
-    // A left operand ends nothing: an operator after it takes it alone.
-    let mut driver = Driver::of(call(ADD, n(1.0), n(2.0)));
-    driver.select(&[Step::Key(LEFT)]);
-    driver.type_text("*");
-    assert_eq!(
-        driver.value(&[Step::Key(LEFT)]),
-        ::grap::call(MULTIPLY.into(), [(LEFT, n(1.0))])
-    );
 }
 
 #[test]
