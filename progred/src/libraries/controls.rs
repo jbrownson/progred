@@ -25,6 +25,9 @@ pub mod vocabulary {
     pub const VIEW: CellId = CellId::from_u128(0x047d43dfc6ba836cd75a7c840f4b9df7);
     pub const PARAMETERS: CellId = CellId::from_u128(0x6f0875ea2329b14673435cc13e2836d0);
     pub const SLIDER: CellId = CellId::from_u128(0xe3c52729da1f3b54e99ef208ad9d9201);
+    /// A number from 0 to 1 drawn as a slider that writes it where it's
+    /// dragged: the projection a template's part is drawn `with`.
+    pub const AS_SLIDER: CellId = CellId::from_u128(0x0fafd7fa2aa3cc2daa8147035eb4c538);
     pub const RADIO: CellId = CellId::from_u128(0xd3e46e8851004f6786bb6cf771ad1d87);
     pub const TREE_RANGE: CellId = CellId::from_u128(0xe6031ee7046216b43b9fa9c08bdcd656);
     pub const TREE_CURSOR: CellId = CellId::from_u128(0x21781a5dfb25048f053375147e251b80);
@@ -59,8 +62,10 @@ use presentation::vocabulary::VALUE;
 use vocabulary::*;
 
 type Widget<W> = widget::Widget<W, <W as Host>::Hover>;
-/// What a slider does with the value it's dragged to.
-type Change = Rc<dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Site, f64)>;
+/// What a slider does with each value one drag takes it to.
+type Dragged = Box<dyn FnMut(&mut crate::editing::Session<'_>, f64)>;
+/// A drag of the slider at a site, begun.
+type Change = Rc<dyn Fn(&crate::editing::Site) -> Dragged>;
 
 const PADDING_X: f64 = 10.0;
 const PADDING_Y: f64 = 4.0;
@@ -171,8 +176,7 @@ fn apply_change(
 }
 
 struct Drag {
-    site: crate::editing::Site,
-    change: Change,
+    change: Dragged,
     slider: Slider,
     rect: Rect,
     scale: f64,
@@ -181,11 +185,7 @@ struct Drag {
 impl widget::gesture::Gesture for Drag {
     fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         if let Some(point) = samples.last() {
-            (self.change)(
-                session,
-                &self.site,
-                self.slider.value_at(self.rect, self.scale, *point),
-            );
+            (self.change)(session, self.slider.value_at(self.rect, self.scale, *point));
         }
         false
     }
@@ -197,8 +197,11 @@ fn handler_slider<W: Host>(slider: Slider, width: f64, handler: ::grap::RuntimeV
         slider,
         width,
         Vec::new(),
-        Rc::new(move |session, site, value| {
-            apply_change(session, site, &handler, f64::value(value));
+        Rc::new(move |site| {
+            let (site, handler) = (site.clone(), handler.clone());
+            Box::new(move |session, value| {
+                apply_change(session, &site, &handler, f64::value(value));
+            })
         }),
     )
 }
@@ -211,11 +214,15 @@ fn keyed_slider<W: Host>(
     ticks: Vec<puri_widgets::slider::TickLevel>,
     value: impl Fn(f64) -> Value + 'static,
 ) -> Widget<W> {
+    let value = Rc::new(value);
     slider_control(
         slider,
         width,
         ticks,
-        Rc::new(move |session, site, position| store(session, site, key, value(position))),
+        Rc::new(move |site| {
+            let (site, value) = (site.clone(), value.clone());
+            Box::new(move |session, position| store(session, &site, key, value(position)))
+        }),
     )
 }
 
@@ -250,8 +257,7 @@ fn slider_control<W: Host>(
                         }
                         world.session().start_gesture(
                             Box::new(Drag {
-                                site: site.clone(),
-                                change: change.clone(),
+                                change: change(&site),
                                 slider,
                                 rect: placement.rect,
                                 scale,
@@ -264,6 +270,36 @@ fn slider_control<W: Host>(
         );
         measured::pad((PADDING_X * scale, PADDING_Y * scale).into(), rail)
     })
+}
+
+/// How wide a number drawn as a slider is.
+const NUMBER_SLIDER_WIDTH: f64 = 120.0;
+
+/// A number from 0 to 1 as a slider, which writes the number where it's
+/// dragged, one undo step to a drag, in the representation it has. A
+/// template draws a part so by naming [`AS_SLIDER`] as what it's drawn with.
+fn number_slider<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    let value = input.value?.as_value();
+    let (number, encode): (f64, fn(f64) -> Value) = match f64::read(value) {
+        Some(number) => (number, f64::value),
+        None => (super::f32::read(value)?.into(), |number| {
+            super::f32::value(number as f32)
+        }),
+    };
+    let slider = Slider::new(0.0, 1.0, number)?;
+    Some(Layout::widget(slider_control(
+        slider,
+        NUMBER_SLIDER_WIDTH,
+        Vec::new(),
+        Rc::new(move |site| {
+            let mut edit = site.edit_run();
+            Box::new(move |session, number| {
+                edit.write(session, encode(number));
+            })
+        }),
+    )))
 }
 
 #[derive(Clone)]
@@ -759,6 +795,7 @@ pub fn library<W: Host>() -> Library<W> {
             (VIEW, "view"),
             (PARAMETERS, "parameters"),
             (SLIDER, "slider"),
+            (AS_SLIDER, "slider"),
             (RADIO, "radio"),
             (TREE_RANGE, "tree range"),
             (TREE_CURSOR, "tree cursor"),
@@ -781,5 +818,8 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions,
     )
-    .with_projections_for([(kind::VIEW_WITH_CONTROLS, display::runtime_partial(display))])
+    .with_projections_for([
+        (kind::VIEW_WITH_CONTROLS, display::runtime_partial(display)),
+        (AS_SLIDER, display::runtime_partial(number_slider)),
+    ])
 }

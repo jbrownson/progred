@@ -73,7 +73,12 @@ draws it as its author edits it
 ([`template.rs`](../progred/src/libraries/layout/template.rs)): each node as
 its kind and what it holds, a `descend` as the name of the part it stands
 for, and an empty place offering the parts of the records the library draws,
-the kinds of node, and what's typed as the text it would draw. One built-in library,
+the kinds of node, and what's typed as the text it would draw. A stored
+`descend` can name, as `with`, a cell whose provided projection draws what it
+reaches in place of the usual one: the controls library provides `slider`,
+which draws a number from 0 to 1 as a slider and writes it where it's dragged,
+one undo step to a drag. So a template can show a part twice, as its number
+and as a slider, and either edits the other. One built-in library,
 "document libraries", loaded after all the others, tries the declared libraries
 in order on records carrying their keys, so a document library can't take over
 another library's values, the root, or its own definition, and switching it off

@@ -90,6 +90,8 @@ pub mod vocabulary {
     pub const DELIM: CellId = CellId::from_u128(0x71c35a9e04b8d2f6f9401c7b3e685da2);
     pub const PAINT: CellId = CellId::from_u128(0xcb04728f5e6a1d93a6790238b5f1ce4d);
     pub const STEP: CellId = CellId::from_u128(0x67a2d5e0b93c48f14e28b671d0a5c39f);
+    /// The cell whose provided projection draws what a `descend` reaches.
+    pub const WITH: CellId = CellId::from_u128(0x0cc37e582daea4a6b6a7d310ba37ad8c);
     pub const STEPS: CellId = CellId::from_u128(0x1298c6f4a7053edb09b64d2e8371fa5c);
     pub const VALUE: CellId = CellId::from_u128(0x85e3b0d729c4165ffa1e0c5d49b3872e);
     pub const FUEL: CellId = CellId::from_u128(0x4a0f68c1d3952b7ec5d7f2a1806e3b49);
@@ -327,7 +329,10 @@ fn decode_with<W: Host>(
         kind::ALTERNATIVES => Some(alternatives(children_field()?)),
         kind::DESCEND => Some(descend(
             [path::read_step(value.field(STEP)?.as_value())?],
-            None,
+            match value.field(WITH) {
+                Some(with) => Some(drawn_with(with.as_cell()?)),
+                None => None,
+            },
             None,
         )),
         kind::DESCEND_PATH => Some(descend(
@@ -669,6 +674,18 @@ fn node<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option
     decode_with(input.value?, &Place::Root, &|| input.site())
 }
 
+/// What a `descend` reaches drawn by the projection `with` provides, as a
+/// number is by a slider's, or as it otherwise would be where `with`
+/// provides none that draws it.
+pub(crate) fn drawn_with<W: Host>(with: CellId) -> crate::display::host::Partial<W> {
+    crate::display::runtime_partial(move |input| {
+        input
+            .projection_for(with)
+            .and_then(|projection| projection(input))
+            .or_else(|| (input.default_projection)(input))
+    })
+}
+
 /// The layout a stored node describes, drawn where the caller is drawing: a
 /// template, whose `descend`s lead into the value there. None for anything
 /// that isn't a node.
@@ -696,6 +713,7 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::BRACKET, "bracket"),
             (vocabulary::ALTERNATIVES, "alternatives"),
             (vocabulary::DESCEND, "descend"),
+            (vocabulary::WITH, "with"),
             (vocabulary::DESCEND_PATH, "descend path"),
             (vocabulary::JUMP, "jump"),
             (vocabulary::DOCUMENT_PATH, "document path"),

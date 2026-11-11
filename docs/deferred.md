@@ -1715,9 +1715,12 @@ What it shows, and what exists (on a blank document, in the native app):
 3. The same value in two notations, both live. Works: open the record in a
    pane and switch "document libraries" off there; an edit in either shows in
    the other.
-4. A second view driven by a gesture, a pie to drag. Missing: a template has
-   no node that takes a drag and writes a part, and a drawing in one can't
-   read the record.
+4. A second view driven by a gesture. Works for a number from 0 to 1: a
+   template's part can be drawn `with` a projection it names, and the controls
+   library's `slider` is one, so `‹level› with slider` beside `‹level›` shows
+   the number and a slider that writes it. Missing: any other range, a step
+   to round to, and a drawing in a template that reads the record, which a pie
+   would need and which is where a view becomes a function.
 5. A field renamed to a phrase with spaces, every use following. Works, as
    renaming does anywhere.
 

@@ -98,12 +98,23 @@ fn node<W: Host>(
         )
     };
     match kind {
-        kind::DESCEND => kind_form(input, kind, [l::STEP], |[step]| {
+        kind::DESCEND => kind_form(input, kind, [l::STEP, l::WITH], |[step, with]| {
             let Step::Key(part) = ::grap::path::read_step(step?.as_value())? else {
                 return None;
             };
+            let part = [dim("‹"), field_name(input.env, part), dim("›")];
+            // What the part is drawn with, where the template says.
+            let with = with.and_then(|with| with.as_cell()).map(|with| {
+                [
+                    dim(" with "),
+                    match input.env.name(with) {
+                        Some(name) => crate::display::named(&name, Face::Name),
+                        None => crate::display::faced(crate::identity::short_id(with), Face::Id),
+                    },
+                ]
+            });
             Some(selectable(
-                row(0.0, [dim("‹"), field_name(input.env, part), dim("›")]),
+                row(0.0, part.into_iter().chain(with.into_iter().flatten())),
                 &input.site(),
             ))
         }),
@@ -145,6 +156,17 @@ pub(crate) fn part(part: CellId) -> Value {
     )
 }
 
+/// The node standing for `part`, drawn by the projection `with` provides.
+pub(crate) fn part_with(part: CellId, with: CellId) -> Value {
+    ::grap::isa::record(
+        kind::DESCEND,
+        [
+            (l::STEP, ::grap::path::step_value(&Step::Key(part))),
+            (l::WITH, Value::from(with)),
+        ],
+    )
+}
+
 /// What an empty place in a template for records carrying `keys` offers.
 fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
     let node = |kind: CellId, fields: Vec<(CellId, Value)>| ::grap::isa::record(kind, fields);
@@ -174,9 +196,25 @@ fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
         }
     };
     let typed = request.query.trim();
-    parts(request, keys)
+    let parts = parts(request, keys);
+    // A part as a slider: a number from 0 to 1, dragged.
+    let sliders: Vec<_> = parts
+        .iter()
+        .map(|key| {
+            let name = (request.name)(*key)
+                .map(|name| name.spelling().into_owned())
+                .unwrap_or_else(|| crate::identity::short_id(*key));
+            select(
+                CompletionText::Literal(format!("{name} slider")),
+                part_with(*key, crate::libraries::controls::vocabulary::AS_SLIDER),
+            )
+            .with_detail("part")
+        })
+        .collect();
+    parts
         .into_iter()
         .map(|key| select(key, part(key)).with_detail("part"))
+        .chain(sliders)
         .chain(CONTAINERS.map(arranging))
         .chain([
             holding(kind::CENTER),

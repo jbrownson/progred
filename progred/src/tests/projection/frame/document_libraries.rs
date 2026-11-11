@@ -373,3 +373,42 @@ fn a_template_is_edited_where_its_library_declares_it() {
     );
     assert_eq!(driver.value(&children), held);
 }
+
+#[test]
+fn a_template_draws_a_part_with_a_projection_it_names() {
+    use crate::driver::Driver;
+    use crate::libraries::controls::vocabulary::AS_SLIDER;
+    use crate::libraries::layout::template::part_with;
+    use crate::workspace::vocabulary::{KEYS, LIBRARIES, PROJECTION};
+    let [level, tank] = std::array::from_fn(|_| gid::new_cell_id());
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(Value::record([
+                (
+                    tank,
+                    Value::record([(level, crate::libraries::f64::value(0.25))]),
+                ),
+                (
+                    LIBRARIES,
+                    Value::list([Value::record([
+                        (KEYS, Value::list([level.into()])),
+                        (PROJECTION, part_with(level, AS_SLIDER)),
+                    ])]),
+                ),
+            ])),
+            cells: gid::Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    // The level is a slider, a quarter of the way along; dragging it most of
+    // the way writes the number it's dragged to.
+    let part = [Step::Key(tank), Step::Key(level)];
+    let slider = driver.rect(&part);
+    let at = |along: f64| kurbo::Point::new(slider.x0 + along * slider.width(), slider.center().y);
+    driver.drag(at(0.25), &[at(0.5), at(0.8)]);
+    let dragged = crate::libraries::f64::read(&driver.value(&part)).unwrap();
+    assert!(dragged > 0.6 && dragged <= 1.0, "{dragged}");
+    // The whole drag is one step to undo.
+    assert!(driver.undo());
+    assert_eq!(driver.value(&part), crate::libraries::f64::value(0.25));
+}
