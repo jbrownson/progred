@@ -619,6 +619,13 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
             kurbo::Size::new(width, 600.0),
         );
         let document = driver.editor().model.doc.clone();
+        let last_list = crate::occurrence::below(
+            &sections[first_lists].1,
+            &[Step::Element(last_list_position.clone())],
+        );
+        // Whether the last list is drawn on one line, as it is where it's
+        // short enough to read as one, or one item to a line.
+        let on_one_line = driver.rect(&last_list).height() < 1.5 * driver.rect(&last_text).height();
         let mut walk = |start: &crate::occurrence::Path,
                         moves: &[(NamedKey, &crate::occurrence::Path)]| {
             driver.select(start);
@@ -638,21 +645,13 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
                 ],
             );
         }
-        let last_list = crate::occurrence::below(
-            &sections[first_lists].1,
-            &[Step::Element(last_list_position.clone())],
-        );
         walk(
             &last_text,
             &[
                 (NamedKey::ArrowDown, &sections[first_lists + 1].0),
                 (
                     NamedKey::ArrowUp,
-                    if width == 900.0 {
-                        &last_list
-                    } else {
-                        &last_text
-                    },
+                    if on_one_line { &last_list } else { &last_text },
                 ),
             ],
         );

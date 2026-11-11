@@ -142,7 +142,20 @@ fn cells() {
 #[test]
 fn names() {
     let mut names = page("names");
-    let base = names.drawn_under(&[names.key("third")]);
+    // What the base view draws and where, from its own top: a longer name
+    // above it can take more lines and move it down the page.
+    let base_view = |names: &Embed| {
+        let drawn = names.drawn_under(&[names.key("third")]);
+        let top = drawn
+            .iter()
+            .map(|(_, rect)| rect.y0)
+            .fold(f64::INFINITY, f64::min);
+        drawn
+            .into_iter()
+            .map(|(path, rect)| (path, rect - kurbo::Vec2::new(0.0, top)))
+            .collect::<Vec<_>>()
+    };
+    let base = base_view(&names);
     let calls = names.cell("calls");
 
     // In the recipe, click x and rename it.
@@ -157,7 +170,7 @@ fn names() {
     // Every call's label follows, because the calls point at x, not its name.
     assert_eq!(names.cell("calls"), calls);
     // The base view doesn't change at all.
-    assert_eq!(names.drawn_under(&[names.key("third")]), base);
+    assert_eq!(base_view(&names), base);
 }
 
 #[test]

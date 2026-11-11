@@ -786,7 +786,7 @@ fn prepare_project(
         }),
     };
     // An empty document is a selectable placeholder at the root path.
-    let mut build = ChoiceBuild::default();
+    let mut build = ChoiceBuild::with_ribbon(styles.ribbon());
     let ancestry = Ancestry {
         stored: crate::occurrence::stored_start(&sources, root_path),
         ..followed.map_or_else(Ancestry::default, |(cell, start)| Ancestry {

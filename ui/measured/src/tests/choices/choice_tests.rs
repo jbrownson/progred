@@ -232,7 +232,7 @@ fn select(layout: &ChoiceLayout<Output>, count: usize, available: f64) -> (f64, 
 
 #[test]
 fn preferred_form_wins_when_its_natural_width_fits() {
-    let layout = ChoiceLayout::alternatives(0, vec![fixed(100.0), fixed(70.0)]);
+    let layout = ChoiceLayout::alternatives(0, vec![fixed(100.0), fixed(70.0)], f64::INFINITY);
 
     let (width, choices) = select(&layout, 1, 100.0);
 
@@ -242,8 +242,8 @@ fn preferred_form_wins_when_its_natural_width_fits() {
 
 #[test]
 fn outer_accommodation_precedes_nested_accommodation() {
-    let nested = ChoiceLayout::alternatives(1, vec![fixed(100.0), fixed(60.0)]);
-    let layout = ChoiceLayout::alternatives(0, vec![nested, fixed(80.0)]);
+    let nested = ChoiceLayout::alternatives(1, vec![fixed(100.0), fixed(60.0)], f64::INFINITY);
+    let layout = ChoiceLayout::alternatives(0, vec![nested, fixed(80.0)], f64::INFINITY);
 
     let (width, choices) = select(&layout, 2, 80.0);
 
@@ -253,13 +253,13 @@ fn outer_accommodation_precedes_nested_accommodation() {
 
 #[test]
 fn accommodating_form_receives_the_real_allocation() {
-    let nested = ChoiceLayout::alternatives(1, vec![fixed(60.0), fixed(20.0)]);
+    let nested = ChoiceLayout::alternatives(1, vec![fixed(60.0), fixed(20.0)], f64::INFINITY);
     let accommodating = ChoiceLayout::aligned_row(
         crate::RowAlignment::Baseline,
         0.0,
         vec![nested, fixed(40.0)],
     );
-    let layout = ChoiceLayout::alternatives(0, vec![fixed(120.0), accommodating]);
+    let layout = ChoiceLayout::alternatives(0, vec![fixed(120.0), accommodating], f64::INFINITY);
 
     let (width, choices) = select(&layout, 2, 70.0);
 
@@ -269,7 +269,7 @@ fn accommodating_form_receives_the_real_allocation() {
 
 #[test]
 fn a_row_reserves_its_siblings_minimum_widths() {
-    let choice = ChoiceLayout::alternatives(0, vec![fixed(90.0), fixed(50.0)]);
+    let choice = ChoiceLayout::alternatives(0, vec![fixed(90.0), fixed(50.0)], f64::INFINITY);
     let layout = ChoiceLayout::aligned_row(
         crate::RowAlignment::Baseline,
         0.0,
@@ -284,7 +284,11 @@ fn a_row_reserves_its_siblings_minimum_widths() {
 
 #[test]
 fn a_wider_backup_does_not_hide_a_later_fit() {
-    let layout = ChoiceLayout::alternatives(0, vec![fixed(100.0), fixed(120.0), fixed(70.0)]);
+    let layout = ChoiceLayout::alternatives(
+        0,
+        vec![fixed(100.0), fixed(120.0), fixed(70.0)],
+        f64::INFINITY,
+    );
 
     let (width, choices) = select(&layout, 1, 80.0);
 
@@ -294,11 +298,27 @@ fn a_wider_backup_does_not_hide_a_later_fit() {
 
 #[test]
 fn one_overwide_column_does_not_expand_its_siblings_budget() {
-    let choice = ChoiceLayout::alternatives(0, vec![fixed(105.0), fixed(70.0)]);
+    let choice = ChoiceLayout::alternatives(0, vec![fixed(105.0), fixed(70.0)], f64::INFINITY);
     let layout = ChoiceLayout::col(0, 0.0, vec![fixed(110.0), choice]);
 
     let (width, choices) = select(&layout, 1, 100.0);
 
     assert_eq!(width, 110.0);
     assert_eq!(choices, vec![1]);
+}
+
+#[test]
+fn a_ribbon_limits_a_preferred_option_however_much_room_there_is() {
+    let choose = |ribbon: f64, available: f64| {
+        let mut build = ChoiceBuild::<Output>::with_ribbon(ribbon);
+        let layout = build.alternatives(vec![fixed(100.0), fixed(70.0)]);
+        resolve_choices(build.finish(layout), available)
+            .extent
+            .width
+    };
+    // With room for either, the first is taken while it's within the ribbon.
+    assert_eq!(choose(120.0, 500.0), 100.0);
+    assert_eq!(choose(80.0, 500.0), 70.0);
+    // Room is still a limit of its own.
+    assert_eq!(choose(120.0, 90.0), 70.0);
 }

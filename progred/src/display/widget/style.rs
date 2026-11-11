@@ -103,6 +103,11 @@ pub struct Styles {
     pub scale: f64,
 }
 
+/// How many of its text's ems a one-line form may be wide and still be
+/// preferred to a stacked one: about seventy characters, a line that reads
+/// comfortably.
+const RIBBON_EMS: f64 = 36.0;
+
 pub fn editor(palette: Palette, scale: f64) -> Styles {
     let style = |size: f32, color: Color, weight: Option<f32>| TextStyle {
         size,
@@ -136,6 +141,12 @@ pub fn editor(palette: Palette, scale: f64) -> Styles {
 }
 
 impl Styles {
+    /// The widest a one-line form may be and still be preferred, at this
+    /// scale.
+    pub fn ribbon(&self) -> f64 {
+        RIBBON_EMS * f64::from(self.name.size) * self.scale
+    }
+
     pub fn line_presentation(&self, line: &crate::display::LineEdit) -> LineEditPresentation {
         LineEditPresentation {
             family: line_family(line.family),

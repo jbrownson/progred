@@ -574,18 +574,28 @@ October 2026, to try iteratively:
 
 ## Line breaking
 
-Each container offers a one-line form and a stacked one, and the first whose
-natural width fits wins, so on a wide window nearly everything goes on one line,
-a small root document included. Raised in October 2026 and deferred until there
-are more examples. Reasons something might stack even when it fits:
+Each container offers a one-line form and a stacked one, and the first that
+fits wins. Since November 2026 fitting has two limits: the room left on the
+line, which keeps the page from scrolling sideways, and a ribbon, the form's
+own width from where it starts, of about seventy characters
+(`Styles::ribbon`, held by each alternatives node in
+[`choices.rs`](../ui/measured/src/choices.rs)). Indentation doesn't count
+against the ribbon, so something deeply nested is squeezed only by the edge of
+the window. Before, room was the only limit, and on a wide window nearly
+everything went on one line, a small root document included.
+
+The ribbon is one number for every form. Each alternatives node holds its own,
+so a projection could state how wide its one-line form is willing to be, as
+rustfmt lets a call run longer on a line than a struct literal; none does
+yet. Other reasons something might stack even when it fits:
 
 - Several things rather than parts of one: a document's top level, definitions,
   `do` steps, `match` cases and bindings read down; a call's arguments or a
   point's `x` and `y` read across.
 - More than one compound child, many labelled fields, or nearness to the root.
-- Reading measure: a one-line form should fit about 70–80 characters' worth, not
-  the window. Wadler and Leijen's pretty printers call this the ribbon.
-- Stability: rules from structure don't flip while typing; width rules do.
+- Stability: rules from structure don't flip while typing; width rules do,
+  the ribbon's included. Renaming a parameter in the names lesson now takes a
+  line over it and moves what's below down the page.
 - Manual control as an option, stored like folds. Making Enter imply stacking
   would stack everything built by hand, since Enter is the only key that adds
   fields; an explicit toggle is safer.

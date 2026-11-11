@@ -97,10 +97,16 @@ enum ChoiceKind<Out> {
     Alternatives {
         id: usize,
         options: Vec<ChoiceLayout<Out>>,
+        /// How wide an option but the last may be and still be chosen,
+        /// however much room there is: its own width, from where it starts,
+        /// so indentation doesn't count against it.
+        ribbon: f64,
     },
 }
 
 pub struct ChoiceBuild<Out> {
+    /// The ribbon of the alternatives built here.
+    ribbon: f64,
     pending: Vec<Option<ChoiceLayout<Out>>>,
     next_choice: usize,
     shared_ids: HashMap<usize, usize>,
@@ -110,10 +116,24 @@ pub struct ChoiceBuild<Out> {
 impl<Out> Default for ChoiceBuild<Out> {
     fn default() -> Self {
         Self {
+            ribbon: f64::INFINITY,
             pending: Vec::new(),
             next_choice: 0,
             shared_ids: HashMap::new(),
             shared: Vec::new(),
+        }
+    }
+}
+
+impl<Out> ChoiceBuild<Out> {
+    /// A build whose alternatives prefer an option only while it's no wider
+    /// than `ribbon`: text is read across its own width, not the window's,
+    /// so a line that fits the window can still be too long. With no ribbon,
+    /// the default, room is the only limit.
+    pub fn with_ribbon(ribbon: f64) -> Self {
+        Self {
+            ribbon,
+            ..Self::default()
         }
     }
 }
@@ -172,7 +192,7 @@ impl<Out: 'static> ChoiceBuild<Out> {
     pub fn alternatives(&mut self, options: Vec<ChoiceLayout<Out>>) -> ChoiceLayout<Out> {
         let id = self.next_choice;
         self.next_choice += 1;
-        ChoiceLayout::alternatives(id, options)
+        ChoiceLayout::alternatives(id, options, self.ribbon)
     }
 
     pub fn finish(self, root: ChoiceLayout<Out>) -> ChoiceGraph<Out> {
@@ -303,7 +323,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn alternatives(id: usize, options: Vec<Self>) -> Self {
+    fn alternatives(id: usize, options: Vec<Self>, ribbon: f64) -> Self {
         let widths = match options.first() {
             Some(first) => Widths {
                 preferred: first.widths.preferred,
@@ -316,7 +336,11 @@ impl<Out: 'static> ChoiceLayout<Out> {
         };
         Self {
             widths,
-            kind: ChoiceKind::Alternatives { id, options },
+            kind: ChoiceKind::Alternatives {
+                id,
+                options,
+                ribbon,
+            },
         }
     }
 
@@ -359,7 +383,11 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 let horizontal = insets.x0 + insets.x1;
                 child.select(choices, shared, (available - horizontal).max(0.0)) + horizontal
             }
-            ChoiceKind::Alternatives { id, options } => match options.split_last() {
+            ChoiceKind::Alternatives {
+                id,
+                options,
+                ribbon,
+            } => match options.split_last() {
                 None => 0.0,
                 Some((accommodating, preferred)) if available <= 0.0 => {
                     choices[*id] = preferred.len();
@@ -369,7 +397,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     match preferred
                         .iter()
                         .enumerate()
-                        .find(|(_, option)| option.widths.preferred <= available)
+                        .find(|(_, option)| option.widths.preferred <= available.min(*ribbon))
                     {
                         Some((index, option)) => {
                             choices[*id] = index;
@@ -429,7 +457,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 trigger.prefer(choices, shared);
                 content.prefer(choices, shared);
             }
-            ChoiceKind::Alternatives { id, options } => {
+            ChoiceKind::Alternatives { id, options, .. } => {
                 choices[*id] = 0;
                 if let Some(first) = options.first() {
                     first.prefer(choices, shared);
@@ -447,7 +475,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 .take()
                 .expect("a shared layout is consumed by only one selected form")
                 .settle(choices, shared),
-            ChoiceKind::Alternatives { id, options } => options
+            ChoiceKind::Alternatives { id, options, .. } => options
                 .into_iter()
                 .nth(choices[id])
                 .map(|option| option.settle(choices, shared))
