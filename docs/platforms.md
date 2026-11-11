@@ -38,6 +38,44 @@ Winit loads its windowing libraries at runtime; under X11 that includes
 `libxkbcommon-x11` (Debian's `libxkbcommon-x11-0`). Rendering needs a Vulkan or
 OpenGL driver; Mesa's software Vulkan driver, lavapipe, works without a GPU.
 
+### Scrolling
+
+How far a scroll moves on Linux is a convention, not something the platform
+says, and Progred follows Zed's (November 2026, measured on Hyprland with
+Wayland).
+
+Wayland reports a touchpad swipe as a distance in surface units, the units
+pointer motion uses, so read literally a swipe scrolls as far as the fingers
+moved. Nothing reads it literally. A wheel's notch arrives through the same
+event as a small number, 10 to 15 units, which no application could scroll as
+that many pixels, so each toolkit chose what a notch is worth and scales by
+it, and swipes inherited the scaling. Compositors in turn scale swipes down
+before applications see them (Hyprland's touchpad `scroll_factor`, 0.4 in
+Omarchy's configuration), which only suits applications that scale them back
+up. The two factors roughly cancel; an application with only one of them is
+slow. Progred scrolled swipes one for one and a notch 40 points, and so moved
+a third as far as Zed for the same swipe.
+
+macOS has none of this: the system applies acceleration and momentum and hands
+the application the distance to scroll. Windows gives a notch a fixed unit and
+a system setting for how many lines it is. Linux has no setting applications
+agree on.
+
+So on Linux a swipe's reported distance is multiplied by 3 and a notch scrolls
+three lines of text, in
+[`scroll.rs`](../progred/src/display/widget/scroll.rs) (`SWIPE_SCALE`,
+`WHEEL_LINE`). Both are Zed's numbers, from its Wayland client
+(`let modifier = 3.0` on continuous axis values, `SCROLL_LINES = 3.0` for a
+notch), which gives no reason for either. Winit reports a notch as a line and
+a swipe as pixels on Wayland; under X11 it reports both as lines, which the
+swipe factor doesn't reach, and that hasn't been tried.
+
+There is no momentum after the fingers lift. libinput leaves it to
+applications, which get a stop event to start it from, and GTK, Firefox and
+Chromium each implement their own; Zed and VS Code don't, and Progred
+doesn't. If the two numbers suit one setup and not another, the next step is
+a sensitivity setting, as both of those editors have, not a better constant.
+
 ## Browser
 
 The browser build is supported on macOS and Linux, in the same build sandboxes
