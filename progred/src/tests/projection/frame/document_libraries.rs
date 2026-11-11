@@ -268,37 +268,35 @@ fn the_example_views_select_what_they_draw() {
     assert_eq!(driver.selection(), angle, "the label selects its angle");
 }
 
-#[test]
-fn a_view_that_is_layout_data_is_a_template_for_its_records() {
+/// The planets document with its view a template: "planet with", then the
+/// moons.
+fn planets_template() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::layout::vocabulary::{self as l, kind};
     let (mut world, names) = planets("value");
-    let [mars, planet, moons, view] =
-        ["mars", "planet", "moons", "planet_view"].map(|name| names[name]);
+    // What a node leaves out, a row's gap or a text's paint, has a default.
     let node = ::grap::isa::record(
         kind::ROW,
-        [
-            (l::GAP, crate::libraries::f64::value(4.0)),
-            (
-                l::CHILDREN,
-                Value::list([
-                    ::grap::isa::record(
-                        kind::TEXT,
-                        [
-                            (l::CONTENT, crate::libraries::text::value("planet with")),
-                            (l::PAINT, Value::from(l::INK_FACE)),
-                        ],
-                    ),
-                    ::grap::isa::record(
-                        kind::DESCEND,
-                        [(l::STEP, Value::record([(names["key"], Value::from(moons))]))],
-                    ),
-                ]),
-            ),
-        ],
+        [(
+            l::CHILDREN,
+            Value::list([
+                ::grap::isa::record(
+                    kind::TEXT,
+                    [(l::CONTENT, crate::libraries::text::value("planet with"))],
+                ),
+                crate::libraries::layout::template::part(names["moons"]),
+            ]),
+        )],
     );
     std::rc::Rc::make_mut(&mut world.model.doc)
         .cells
-        .set_value(view, node);
+        .set_value(names["planet_view"], node);
+    (world, names)
+}
+
+#[test]
+fn a_view_that_is_layout_data_is_a_template_for_its_records() {
+    let (mut world, names) = planets_template();
+    let [mars, planet, moons] = ["mars", "planet", "moons"].map(|name| names[name]);
     // Its `descend` leads into the record it draws, and nothing else of the
     // record shows.
     assert!(drawn(&mut world, &[Step::Key(mars), Step::Key(moons)]));
@@ -309,4 +307,49 @@ fn a_view_that_is_layout_data_is_a_template_for_its_records() {
         &mut world,
         &[Step::Key(names["note"]), Step::Key(planet)]
     ));
+}
+
+#[test]
+fn a_template_is_edited_where_its_library_declares_it() {
+    use crate::driver::Driver;
+    use crate::libraries::layout::vocabulary as l;
+    use ui_events::keyboard::{Key, Modifiers, NamedKey};
+    let (world, names) = planets_template();
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    let library = driver.element(&[Step::Key(names["libraries"])], 0, &[Step::Follow]);
+    let children = [
+        library.as_slice(),
+        &[
+            Step::Key(names["projection"]),
+            Step::Follow,
+            Step::Key(l::CHILDREN),
+        ],
+    ]
+    .concat();
+    // Its nodes are drawn there as nodes to edit, not as the layout they
+    // describe: the part stands where the template has it, and nothing is
+    // drawn inside it for the template to descend into.
+    let part = driver.element(&children, 1, &[]);
+    assert!(driver.drawn(&part));
+    assert!(!driver.drawn(&[part.as_slice(), &[Step::Key(names["moons"])]].concat()));
+    // Enter after a node opens a place beside it, which offers the parts of
+    // the records the library draws by name.
+    driver.select(&part);
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    driver.type_text("plan");
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    assert_eq!(
+        driver.value(&driver.element(&children, 2, &[])),
+        crate::libraries::layout::template::part(names["planet"])
+    );
+    // The records follow at once: the planet's name is drawn in each now.
+    assert!(driver.drawn(&[Step::Key(names["mars"]), Step::Key(names["planet"])]));
+    // What's typed that names nothing is the text it would draw.
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    driver.type_text("big");
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    assert_eq!(
+        driver.value(&driver.element(&children, 3, &[Step::Key(l::CONTENT)])),
+        crate::libraries::text::value("big")
+    );
 }

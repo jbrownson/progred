@@ -57,6 +57,9 @@ impl Drop for Drawing {
 fn projection<W: Host>() -> Partial<W> {
     crate::display::runtime_partial(|input| {
         let value = input.value?;
+        if let Some(declaration) = declaration(input) {
+            return Some(declaration);
+        }
         let occurrence = input.env.occurrence().cloned();
         DRAWING
             .with(|drawing| {
@@ -117,6 +120,24 @@ fn projection<W: Host>() -> Partial<W> {
                     .map(|layout| nested(&occurrence, value, layout))
             })
     })
+}
+
+/// A library's own record, as [`crate::workspace::libraries`] reads one: its
+/// view, where that's a template, drawn as a template's author edits it.
+fn declaration<W: Host>(
+    input: &crate::display::host::ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    use crate::workspace::vocabulary::{KEYS, PROJECTION};
+    let fields = input.value?;
+    fields.field(PROJECTION)?;
+    let keys: std::rc::Rc<[CellId]> = fields
+        .field(KEYS)?
+        .list_values()?
+        .filter_map(|key| key.as_cell())
+        .collect();
+    crate::display::structure::Fields::default()
+        .child(move |key| (key == PROJECTION).then(|| layout::template::editor(keys.clone())))
+        .record(input)
 }
 
 /// `layout`, drawn as a document library's drawing of `value` at `occurrence`.

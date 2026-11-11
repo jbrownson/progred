@@ -66,7 +66,14 @@ of `value`, the same convention a pane's projection uses, or a template. A
 template is layout data, a stored node such as `{isa: col, …}` or a cell
 holding one: it is drawn for the record as it stands, selects the record
 where it's pointed at, and its `descend`s lead into the record, so it draws
-every record carrying a key and computes nothing. One built-in library,
+every record carrying a key and computes nothing. Where the library declares
+it, a template can't be drawn as the layout it describes, since its
+`descend`s would lead into the template itself, so the library's record
+draws it as its author edits it
+([`template.rs`](../progred/src/libraries/layout/template.rs)): each node as
+its kind and what it holds, a `descend` as the name of the part it stands
+for, and an empty place offering the parts of the records the library draws,
+the kinds of node, and what's typed as the text it would draw. One built-in library,
 "document libraries", loaded after all the others, tries the declared libraries
 in order on records carrying their keys, so a document library can't take over
 another library's values, the root, or its own definition, and switching it off
@@ -718,7 +725,7 @@ function of the same name in a layout program, and a wrapper's content is its
 `child` field in both. The node's kind and the function are separate cells
 sharing that name.
 Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
-and text paint to the ink face. Other required inputs are validated. Invalid
+and text paint to the ink face, in a stored node as in a call. Other required inputs are validated. Invalid
 builder calls return absents; containers propagate a failed child computation
 without emitting that container. A final absent, multiple root emissions, or
 evaluator halt discards all output. There is no sticky failure flag overriding

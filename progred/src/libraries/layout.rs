@@ -28,6 +28,7 @@ mod drawing;
 mod events;
 pub use events::on_event;
 pub mod scope;
+pub(crate) mod template;
 #[cfg(test)]
 #[path = "tests/layout/test_support.rs"]
 pub(crate) mod test_support;
@@ -254,6 +255,11 @@ fn decode_with<W: Host>(
     use crate::libraries::editor::path;
     use vocabulary::*;
     let number = |field| coordinate(value, field);
+    // What a node leaves out reads as nothing: no gap, no padding.
+    let number_or_zero = |field| match value.field(field) {
+        Some(_) => coordinate(value, field),
+        None => Some(0.0),
+    };
     let nonnegative = |field| number(field).filter(|number| *number >= 0.0);
     let child = || decode_with(&value.field(CHILD)?, &Place::Field(place, CHILD), site);
     let children_field = || {
@@ -265,7 +271,7 @@ fn decode_with<W: Host>(
     };
     match value.kind()? {
         kind::ROW => {
-            let gap = number(GAP)?;
+            let gap = number_or_zero(GAP)?;
             let children = children_field()?;
             Some(match value.field(BASELINE) {
                 None => crate::display::row(gap, children),
@@ -279,17 +285,23 @@ fn decode_with<W: Host>(
             })
         }
         kind::COL => {
-            let baseline = number(BASELINE)?;
+            let baseline = number_or_zero(BASELINE)?;
             let children = children_field()?;
             Some(crate::display::col(
                 baseline_index(baseline, children.len())?,
-                number(GAP)?,
+                number_or_zero(GAP)?,
                 children,
             ))
         }
         kind::OVERLAY => Some(layout_overlay(children_field()?)),
         kind::PAD => Some(crate::display::padding(
-            (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
+            (
+                number_or_zero(LEFT)?,
+                number_or_zero(TOP)?,
+                number_or_zero(RIGHT)?,
+                number_or_zero(BOTTOM)?,
+            )
+                .into(),
             child()?,
         )),
         kind::CENTER => Some(crate::display::center(child()?)),
@@ -320,7 +332,10 @@ fn decode_with<W: Host>(
         )),
         kind::TEXT => Some(leaf(Leaf::Text {
             text: value.field(CONTENT)?.as_text()?.to_string(),
-            paint: Paint::Face(read_face(value.field(PAINT)?.as_value())?),
+            paint: Paint::Face(match value.field(PAINT) {
+                Some(paint) => read_face(paint.as_value())?,
+                None => Face::Ink,
+            }),
             script: puri::text::Script::Normal,
         })),
         kind::DRAWING => {
