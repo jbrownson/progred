@@ -34,6 +34,12 @@ pub enum Recorded<World, Hover> {
         gap: f64,
         children: Vec<Recorded<World, Hover>>,
     },
+    /// Children side by side, taking another line where one is full.
+    Flow {
+        gap: f64,
+        line_gap: f64,
+        children: Vec<Recorded<World, Hover>>,
+    },
     /// Children share a left edge and baseline, in back-to-front
     /// order. Its extent is the component-wise maximum.
     Overlay {
@@ -104,6 +110,15 @@ impl<World, Hover> Clone for Recorded<World, Hover> {
             } => Self::Col {
                 baseline: *baseline,
                 gap: *gap,
+                children: children.clone(),
+            },
+            Self::Flow {
+                gap,
+                line_gap,
+                children,
+            } => Self::Flow {
+                gap: *gap,
+                line_gap: *line_gap,
                 children: children.clone(),
             },
             Self::Overlay { children } => Self::Overlay {
@@ -233,6 +248,14 @@ impl<W: 'static, H: 'static> Builder<W, H> for Recording<W, H> {
         self.push(Recorded::Col {
             baseline,
             gap,
+            children,
+        })
+    }
+    fn flow(&mut self, gap: f64, line_gap: f64, children: Vec<Node>) -> Node {
+        let children = self.children(children);
+        self.push(Recorded::Flow {
+            gap,
+            line_gap,
             children,
         })
     }

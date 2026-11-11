@@ -26,6 +26,14 @@ impl Widths {
     }
 }
 
+/// What settling decided: the option each alternatives node takes, by its
+/// id, and how many children each line of a flow holds, by its id. A flow
+/// with no lines recorded is on one.
+struct Chosen {
+    options: Vec<usize>,
+    lines: Vec<Vec<usize>>,
+}
+
 /// A measured layout whose responsive choices have not been settled.
 /// Fixed leaves already own their placement continuations; selecting
 /// forms therefore combines widths only and never remeasures text
@@ -94,6 +102,16 @@ enum ChoiceKind<Out> {
         insets: Insets,
         child: Box<ChoiceLayout<Out>>,
     },
+    /// Children side by side, taking another line where one is full, as
+    /// words do in a paragraph.
+    Flow {
+        id: usize,
+        gap: f64,
+        line_gap: f64,
+        children: Vec<ChoiceLayout<Out>>,
+        /// How wide a line may be however much room there is.
+        ribbon: f64,
+    },
     Alternatives {
         id: usize,
         options: Vec<ChoiceLayout<Out>>,
@@ -109,6 +127,7 @@ pub struct ChoiceBuild<Out> {
     ribbon: f64,
     pending: Vec<Option<ChoiceLayout<Out>>>,
     next_choice: usize,
+    next_flow: usize,
     shared_ids: HashMap<usize, usize>,
     shared: Vec<Option<ChoiceLayout<Out>>>,
 }
@@ -119,6 +138,7 @@ impl<Out> Default for ChoiceBuild<Out> {
             ribbon: f64::INFINITY,
             pending: Vec::new(),
             next_choice: 0,
+            next_flow: 0,
             shared_ids: HashMap::new(),
             shared: Vec::new(),
         }
@@ -142,6 +162,7 @@ pub struct ChoiceGraph<Out> {
     root: ChoiceLayout<Out>,
     shared: Vec<Option<ChoiceLayout<Out>>>,
     choice_count: usize,
+    flow_count: usize,
 }
 
 impl<Out: 'static> ChoiceBuild<Out> {
@@ -195,6 +216,41 @@ impl<Out: 'static> ChoiceBuild<Out> {
         ChoiceLayout::alternatives(id, options, self.ribbon)
     }
 
+    /// `children` side by side, `gap` apart, taking another line `line_gap`
+    /// below where one is full: as wide as the room it has, or its ribbon.
+    pub fn flow(
+        &mut self,
+        gap: f64,
+        line_gap: f64,
+        children: Vec<ChoiceLayout<Out>>,
+    ) -> ChoiceLayout<Out> {
+        let id = self.next_flow;
+        self.next_flow += 1;
+        let gaps = gap * children.len().saturating_sub(1) as f64;
+        ChoiceLayout {
+            // On one line where there's room; no narrower than its widest
+            // child alone.
+            widths: Widths {
+                preferred: children
+                    .iter()
+                    .map(|child| child.widths.preferred)
+                    .sum::<f64>()
+                    + gaps,
+                minimum: children
+                    .iter()
+                    .map(|child| child.widths.minimum)
+                    .fold(0.0_f64, f64::max),
+            },
+            kind: ChoiceKind::Flow {
+                id,
+                gap,
+                line_gap,
+                children,
+                ribbon: self.ribbon,
+            },
+        }
+    }
+
     pub fn finish(self, root: ChoiceLayout<Out>) -> ChoiceGraph<Out> {
         assert!(
             self.pending.is_empty(),
@@ -204,6 +260,7 @@ impl<Out: 'static> ChoiceBuild<Out> {
             root,
             shared: self.shared,
             choice_count: self.next_choice,
+            flow_count: self.next_flow,
         }
     }
 }
@@ -344,7 +401,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn select(&self, choices: &mut [usize], shared: &[Option<Self>], available: f64) -> f64 {
+    fn select(&self, choices: &mut Chosen, shared: &[Option<Self>], available: f64) -> f64 {
         match &self.kind {
             ChoiceKind::Fixed(measured) => measured.extent.width,
             ChoiceKind::Use(id) => shared[*id]
@@ -373,6 +430,31 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 .iter()
                 .map(|child| child.select(choices, shared, available))
                 .fold(0.0_f64, f64::max),
+            ChoiceKind::Flow {
+                id,
+                gap,
+                children,
+                ribbon,
+                ..
+            } => {
+                let across = available.min(*ribbon);
+                let mut lines = Vec::new();
+                let (mut widest, mut line, mut count) = (0.0_f64, 0.0_f64, 0);
+                for child in children {
+                    let width = child.select(choices, shared, available);
+                    if count > 0 && line + gap + width > across {
+                        lines.push(count);
+                        widest = widest.max(line);
+                        (line, count) = (width, 1);
+                    } else {
+                        line += if count > 0 { *gap } else { 0.0 } + width;
+                        count += 1;
+                    }
+                }
+                lines.push(count);
+                choices.lines[*id] = lines;
+                widest.max(line)
+            }
             ChoiceKind::Attached {
                 trigger, content, ..
             } => {
@@ -390,7 +472,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
             } => match options.split_last() {
                 None => 0.0,
                 Some((accommodating, preferred)) if available <= 0.0 => {
-                    choices[*id] = preferred.len();
+                    choices.options[*id] = preferred.len();
                     accommodating.select(choices, shared, available)
                 }
                 Some((accommodating, preferred)) => {
@@ -400,18 +482,18 @@ impl<Out: 'static> ChoiceLayout<Out> {
                         .find(|(_, option)| option.widths.preferred <= available.min(*ribbon))
                     {
                         Some((index, option)) => {
-                            choices[*id] = index;
+                            choices.options[*id] = index;
                             option.widths.preferred
                         }
                         None => {
-                            choices[*id] = preferred.len();
+                            choices.options[*id] = preferred.len();
                             let accommodating_width =
                                 accommodating.select(choices, shared, available);
                             let width = preferred.iter().enumerate().rev().fold(
                                 accommodating_width,
                                 |best_width, (index, option)| {
                                     if option.widths.preferred <= best_width {
-                                        choices[*id] = index;
+                                        choices.options[*id] = index;
                                         option.widths.preferred
                                     } else {
                                         best_width
@@ -420,7 +502,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                             );
                             // Exploring the accommodating form may have
                             // narrowed children it shares with the winner.
-                            if let Some(option) = preferred.get(choices[*id]) {
+                            if let Some(option) = preferred.get(choices.options[*id]) {
                                 option.prefer(choices, shared);
                             }
                             width
@@ -433,7 +515,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
 
     /// Settle this form at its preferred width: every nested alternative
     /// takes its first form.
-    fn prefer(&self, choices: &mut [usize], shared: &[Option<Self>]) {
+    fn prefer(&self, choices: &mut Chosen, shared: &[Option<Self>]) {
         match &self.kind {
             ChoiceKind::Fixed(_) => {}
             ChoiceKind::Use(id) => {
@@ -451,6 +533,12 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     child.prefer(choices, shared);
                 }
             }
+            ChoiceKind::Flow { id, children, .. } => {
+                choices.lines[*id].clear();
+                for child in children {
+                    child.prefer(choices, shared);
+                }
+            }
             ChoiceKind::Attached {
                 trigger, content, ..
             } => {
@@ -458,7 +546,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 content.prefer(choices, shared);
             }
             ChoiceKind::Alternatives { id, options, .. } => {
-                choices[*id] = 0;
+                choices.options[*id] = 0;
                 if let Some(first) = options.first() {
                     first.prefer(choices, shared);
                 }
@@ -466,7 +554,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Settled<Out>
+    fn settle(self, choices: &Chosen, shared: &mut [Option<Self>]) -> Settled<Out>
     where
         Out: crate::ObserveLayout,
     {
@@ -477,7 +565,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 .settle(choices, shared),
             ChoiceKind::Alternatives { id, options, .. } => options
                 .into_iter()
-                .nth(choices[id])
+                .nth(choices.options[id])
                 .map(|option| option.settle(choices, shared))
                 .unwrap_or_else(|| {
                     Settled::new(SettledKind::Fixed(crate::leaf_into(
@@ -517,6 +605,33 @@ impl<Out: 'static> ChoiceLayout<Out> {
             ChoiceKind::Layers { children } => Settled::new(SettledKind::Layers {
                 children: settle_all(children, choices, shared),
             }),
+            ChoiceKind::Flow {
+                id,
+                gap,
+                line_gap,
+                children,
+                ..
+            } => {
+                let mut children = settle_all(children, choices, shared).into_iter();
+                let line = |children: Vec<Settled<Out>>| {
+                    Settled::new(SettledKind::Row {
+                        alignment: crate::RowAlignment::Baseline,
+                        gap,
+                        children,
+                    })
+                };
+                match choices.lines[id].as_slice() {
+                    [] | [_] => line(children.collect()),
+                    lines => Settled::new(SettledKind::Col {
+                        baseline: 0,
+                        gap: line_gap,
+                        children: lines
+                            .iter()
+                            .map(|count| line(children.by_ref().take(*count).collect()))
+                            .collect(),
+                    }),
+                }
+            }
             ChoiceKind::Pad { insets, child } => Settled::new(SettledKind::Pad {
                 insets,
                 child: Box::new(child.settle(choices, shared)),
@@ -609,7 +724,7 @@ impl<Out: crate::ObserveLayout + 'static> Settled<Out> {
 
 fn settle_all<Out: crate::ObserveLayout + 'static>(
     children: Vec<ChoiceLayout<Out>>,
-    choices: &[usize],
+    choices: &Chosen,
     shared: &mut [Option<ChoiceLayout<Out>>],
 ) -> Vec<Settled<Out>> {
     children
@@ -626,8 +741,12 @@ pub fn resolve_choices<Out: crate::ObserveLayout + 'static>(
         root,
         mut shared,
         choice_count,
+        flow_count,
     } = graph;
-    let mut choices = vec![0; choice_count];
+    let mut choices = Chosen {
+        options: vec![0; choice_count],
+        lines: vec![Vec::new(); flow_count],
+    };
     root.select(&mut choices, &shared, available);
     root.settle(&choices, &mut shared).into_measured()
 }

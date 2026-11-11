@@ -1032,6 +1032,20 @@ fn computed<World: 'static, Hover: 'static>(
     }))
 }
 
+/// `children` side by side, `gap` apart, taking another line `line_gap`
+/// below where one is full, as words do in a paragraph: for many small
+/// things of a kind, which read across. Its lines are no wider than the room
+/// it has, or the ribbon.
+pub fn flow<World: 'static, Hover: 'static>(
+    gap: f64,
+    line_gap: f64,
+    children: impl IntoIterator<Item = Layout<World, Hover>>,
+) -> Layout<World, Hover> {
+    composite(children, move |builder, children| {
+        builder.flow(gap, line_gap, children)
+    })
+}
+
 pub fn alternatives<World: 'static, Hover: 'static>(
     options: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {

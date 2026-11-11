@@ -143,20 +143,7 @@ pub fn list_layout_at<W: Host>(
     child: Option<Partial<W>>,
 ) -> Layout<W> {
     let items = list_items_at(input, positions, child);
-    let horizontal = list_with(
-        input,
-        &items,
-        |_, item| item,
-        |before, after| {
-            (before.is_some() && after.is_some()).then_some(|hover| {
-                let comma = dim(", ");
-                match hover {
-                    Some(hover) => hover_highlight(comma, hover),
-                    None => comma,
-                }
-            })
-        },
-    );
+    let horizontal = comma_separated(input, &items);
     let vertical = list_with(
         input,
         &items,
@@ -167,6 +154,49 @@ pub fn list_layout_at<W: Host>(
         Delim::Bracket,
         alternatives([row(0.0, horizontal), col(1, 0.0, vertical)]),
     ))
+}
+
+/// `items` with a comma between each two, which a new item can be added at.
+fn comma_separated<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    items: &[(gid::Position, Layout<W>)],
+) -> Vec<Layout<W>> {
+    list_with(
+        input,
+        items,
+        |_, item| item,
+        |before, after| {
+            (before.is_some() && after.is_some()).then_some(|hover| {
+                let comma = dim(", ");
+                match hover {
+                    Some(hover) => hover_highlight(comma, hover),
+                    None => comma,
+                }
+            })
+        },
+    )
+}
+
+/// A list between brackets whose items flow: on one line where they fit,
+/// and taking further lines as a paragraph's words do where they don't, each
+/// item keeping its comma. For many small things of a kind, which read
+/// across, as a function's parameters do; [`list`] puts one to a line.
+pub fn list_flowing<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
+    runtime_partial(move |input| {
+        let items = list_items_at(input, input.value?.list_positions()?, child.clone());
+        let mut separated = comma_separated(input, &items).into_iter();
+        let items = std::iter::from_fn(|| {
+            let item = separated.next()?;
+            Some(match separated.next() {
+                Some(comma) => row(0.0, [item, comma]),
+                None => item,
+            })
+        });
+        Some(authoring(selectable_bracket(
+            Delim::Bracket,
+            flow(0.0, 2.0, items.collect::<Vec<_>>()),
+        )))
+    })
 }
 
 /// How a record's fields read, whether drawn as a whole record

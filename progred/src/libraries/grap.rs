@@ -585,9 +585,11 @@ fn parameters<W: Host>(
         [Step::Key(PARAMS)],
         Some(crate::display::first(
             input,
-            crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
-                parameter(input, &computed)
-            }))),
+            // Parameters are small and alike, so they read across, taking
+            // another line where one is full.
+            crate::display::structure::list_flowing(Some(crate::display::runtime_partial(
+                move |input| parameter(input, &computed),
+            ))),
         )),
         None,
     ))

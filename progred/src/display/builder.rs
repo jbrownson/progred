@@ -16,6 +16,7 @@ pub trait Builder<W, H> {
     fn around(&mut self, child: Node, wrap: widget::Around<W, H>) -> Node;
     fn row(&mut self, alignment: RowAlignment, gap: f64, children: Vec<Node>) -> Node;
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Node>) -> Node;
+    fn flow(&mut self, gap: f64, line_gap: f64, children: Vec<Node>) -> Node;
     fn overlay(&mut self, children: Vec<Node>) -> Node;
     fn pad(&mut self, insets: Insets, child: Node) -> Node;
     fn floating(&mut self, base: Node, content: Node, position: FloatingPosition) -> Node;

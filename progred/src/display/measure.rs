@@ -95,6 +95,12 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         );
         self.push(col)
     }
+    fn flow(&mut self, gap: f64, line_gap: f64, children: Vec<Node>) -> Node {
+        let children = self.children(children);
+        let scale = self.context.toolkit.styles().scale;
+        let flow = self.build.flow(gap * scale, line_gap * scale, children);
+        self.push(flow)
+    }
     fn overlay(&mut self, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Overlay);

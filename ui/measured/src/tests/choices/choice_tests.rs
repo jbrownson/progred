@@ -225,9 +225,12 @@ fn fixed(width: f64) -> ChoiceLayout<Output> {
 }
 
 fn select(layout: &ChoiceLayout<Output>, count: usize, available: f64) -> (f64, Vec<usize>) {
-    let mut choices = vec![0; count];
+    let mut choices = Chosen {
+        options: vec![0; count],
+        lines: Vec::new(),
+    };
     let width = layout.select(&mut choices, &[], available);
-    (width, choices)
+    (width, choices.options)
 }
 
 #[test]
@@ -321,4 +324,38 @@ fn a_ribbon_limits_a_preferred_option_however_much_room_there_is() {
     assert_eq!(choose(80.0, 500.0), 70.0);
     // Room is still a limit of its own.
     assert_eq!(choose(120.0, 90.0), 70.0);
+}
+
+#[test]
+fn a_flow_takes_another_line_where_one_is_full() {
+    // Four children 30 wide, 10 apart: 150 on one line.
+    let flowed = |ribbon: f64, available: f64| {
+        let mut build = ChoiceBuild::<Output>::with_ribbon(ribbon);
+        let layout = build.flow(10.0, 2.0, (0..4).map(|_| fixed(30.0)).collect());
+        resolve_choices(build.finish(layout), available).extent
+    };
+    let (line, lines) = (1.0, |count: f64| count + 2.0 * (count - 1.0));
+    // With room, one line.
+    let extent = flowed(f64::INFINITY, 200.0);
+    assert_eq!(
+        (extent.width, extent.ascent + extent.descent),
+        (150.0, line)
+    );
+    // With room for two to a line, two lines of two; for one, four lines.
+    let extent = flowed(f64::INFINITY, 80.0);
+    assert_eq!(
+        (extent.width, extent.ascent + extent.descent),
+        (70.0, lines(2.0))
+    );
+    let extent = flowed(f64::INFINITY, 10.0);
+    assert_eq!(
+        (extent.width, extent.ascent + extent.descent),
+        (30.0, lines(4.0))
+    );
+    // A ribbon fills a line however much room there is.
+    let extent = flowed(110.0, 500.0);
+    assert_eq!(
+        (extent.width, extent.ascent + extent.descent),
+        (110.0, lines(2.0))
+    );
 }

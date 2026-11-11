@@ -265,3 +265,45 @@ fn a_parameter_with_no_definition_is_a_hole_that_typing_a_name_defines() {
         Some(name::record("depth", []))
     );
 }
+
+#[test]
+fn many_parameters_flow_onto_further_lines() {
+    use ui_events::keyboard::NamedKey;
+    let parameters: Vec<CellId> = (0..24).map(|_| new_cell_id()).collect();
+    let mut cells = Cells::new();
+    for (index, parameter) in parameters.iter().enumerate() {
+        cells.set_value(*parameter, name::record(&format!("parameter {index}"), []));
+    }
+    let function = new_cell_id();
+    cells.set_value(
+        function,
+        ::grap::lambda(parameters.clone(), parameters[0].into()),
+    );
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    let list = in_lambda(&[Step::Key(PARAMS)]);
+    let parameter = |driver: &Driver, index| driver.element(&list, index, &[]);
+    let rect = |driver: &Driver, index| driver.rect(&parameter(driver, index));
+    // The first two share a line, and the last is on a later one: across,
+    // then down, not one to a line.
+    assert_eq!(rect(&driver, 0).y0, rect(&driver, 1).y0);
+    assert!(rect(&driver, 0).x1 < rect(&driver, 1).x0);
+    assert!(rect(&driver, 23).y0 > rect(&driver, 0).y1);
+    // No line runs past the ribbon.
+    let ribbon = crate::display::widget::style::editor(
+        crate::display::widget::style::Theme::Light.palette(),
+        1.0,
+    )
+    .ribbon();
+    assert!((0..24).all(|index| rect(&driver, index).x1 - rect(&driver, 0).x0 <= ribbon));
+    // Down from a parameter reaches one on the line below it.
+    driver.select(&parameter(&driver, 0));
+    driver.press(NamedKey::ArrowDown);
+    let below = driver.rect(&driver.selection());
+    assert!(below.y0 > rect(&driver, 0).y1 && below.y0 < rect(&driver, 23).y1 + 1.0);
+}
