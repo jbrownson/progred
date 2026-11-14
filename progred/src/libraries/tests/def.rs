@@ -60,6 +60,27 @@ fn a_record_is_drawn_by_its_kinds_def() {
     let (mut driver, [fraction_cell, over, under, half]) = fraction(None);
     // With no projection, the record is drawn as a record, its kind shown.
     assert!(driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
+    // A field the record lacks is a place to fill.
+    let mut doc = (*driver.editor().model.doc).clone();
+    let without = driver
+        .value(&[Step::Key(half)])
+        .as_record()
+        .unwrap()
+        .with(under, None);
+    doc.root = Some(Value::record([(half, Value::Record(without))]));
+    driver.runner.editor.model.doc = Rc::new(doc);
+    driver.present();
+    assert!(driver.drawn(&[Step::Key(half), Step::Key(under)]));
+    driver.select(&[Step::Key(half), Step::Key(under)]);
+    driver.type_text("\"two");
+    driver.keystroke(
+        ui_events::keyboard::Key::Named(ui_events::keyboard::NamedKey::Enter),
+        ui_events::keyboard::Modifiers::empty(),
+    );
+    assert_eq!(
+        driver.value(&[Step::Key(half), Step::Key(under)]),
+        crate::libraries::text::value("two")
+    );
     let mut doc = (*driver.editor().model.doc).clone();
     let mut def = doc
         .cells
@@ -75,6 +96,17 @@ fn a_record_is_drawn_by_its_kinds_def() {
     // The def's projection draws the parts it names, one above the other.
     let [top, bottom] = [over, under].map(|part| driver.rect(&[Step::Key(half), Step::Key(part)]));
     assert!(top.y1 <= bottom.y0, "the parts stack");
+    // A part the record lacks is drawn by the template as a place to fill.
+    let mut doc = (*driver.editor().model.doc).clone();
+    let without = driver
+        .value(&[Step::Key(half)])
+        .as_record()
+        .unwrap()
+        .with(under, None);
+    doc.root = Some(Value::record([(half, Value::Record(without.clone()))]));
+    driver.runner.editor.model.doc = Rc::new(doc);
+    driver.present();
+    assert!(driver.drawn(&[Step::Key(half), Step::Key(under)]));
     assert!(!driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
     // Switched off in a view, the def draws nothing and the record is a record.
     driver

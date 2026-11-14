@@ -4,6 +4,9 @@
 //! to the kind itself. A record is drawn by its kind's def's projection
 //! before anything else draws it; where that declines, it's passed on. One
 //! projection, since projections compose: several are one that tries each.
+//! A kind with no projection is drawn as a record of its fields, each shown
+//! where the record lacks it as a place to fill, so a new record of a kind
+//! needs only to say the kind.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::presentation::vocabulary::VALUE;
@@ -96,8 +99,17 @@ pub(crate) fn starter(fields: impl IntoIterator<Item = CellId>) -> Value {
 pub fn by_def<W: Host>() -> Partial<W> {
     crate::display::runtime_partial(|input| {
         let kind = input.value?.kind()?;
-        let def = Def::read(&input.env.resolve(kind)?.value.into())?;
-        drawn(input, &def.projection?)
+        let Def { fields, projection } = Def::read(&input.env.resolve(kind)?.value.into())?;
+        match projection {
+            Some(projection) => drawn(input, &projection),
+            // A kind with no projection of its own is a record of its
+            // fields, in order, each drawn even where the record lacks it,
+            // as a place to fill.
+            None => crate::display::structure::Fields::default()
+                .leading([::grap::isa::ISA].into_iter().chain(fields.iter().copied()))
+                .slots(fields)
+                .record(input),
+        }
     })
 }
 

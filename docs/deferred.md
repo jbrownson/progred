@@ -94,8 +94,10 @@ def's projection is tried before the projections libraries register in Rust
 under a kind, so a document can redraw a built-in kind; drawing by defs
 switches off with the `def` library. Still to do:
 
-- `fields` drawn as places to fill where a record lacks them, and making a
-  new record of a kind with its fields empty.
+- Offers of a kind where a place could hold one, which make `{isa: kind}`
+  and so show its fields to fill. A kind's fields already show where a
+  record lacks them: a kind with no projection draws as a record of its
+  fields, and a template's part draws as a place to fill.
 - Built-in kinds defined by defs as data, their Rust projections attached
   under the same cell, so a built-in kind can be read like a document's.
 - A document library's key matching replaced by defs: `examples/libraries.gid`
