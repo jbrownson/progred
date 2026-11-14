@@ -99,7 +99,7 @@ fn all_enabled() -> crate::command::Availability {
         save: true,
         undo: true,
         redo: true,
-        declare_library: true,
+        make_kind: true,
         open_pane: true,
         close_pane: true,
         move_up: true,
@@ -117,7 +117,7 @@ fn arrows_walk_enabled_items_and_wrap() {
     let menus = definition([], []);
     let mut availability = all_enabled();
     availability.undo = false;
-    availability.declare_library = false;
+    availability.make_kind = false;
     // Edit is [Undo, Redo, a library to declare]; with only Redo enabled the cursor lands on
     // Redo from either direction and wraps in place.
     let mut state = State::default();

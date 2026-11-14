@@ -698,22 +698,14 @@ fn an_empty_document_opens_a_library_and_stays_empty() {
 }
 
 #[test]
-fn a_library_is_declared_for_records_like_the_selected_one() {
-    use crate::libraries::layout::{template::part, vocabulary as l};
-    use crate::libraries::{f64, text};
-    use crate::workspace::vocabulary::{KEYS, LIBRARIES, PROJECTION};
+fn a_kind_is_made_of_the_selected_record() {
+    use crate::libraries::def::{Def, vocabulary::DEF};
+    use crate::libraries::{f64, name, text};
     let [over, under, half, other] = std::array::from_fn(|_| gid::new_cell_id());
     let fraction = |a, b| Value::record([(over, f64::value(a)), (under, f64::value(b))]);
-    let cells = [(over, "over"), (under, "under")].into_iter().fold(
-        Cells::new(),
-        |mut cells, (cell, name)| {
-            cells.set_value(
-                cell,
-                Value::record([(crate::libraries::name::vocabulary::NAME, text::value(name))]),
-            );
-            cells
-        },
-    );
+    let mut cells = Cells::new();
+    cells.set_value(over, name::record("over", []));
+    cells.set_value(under, name::record("under", []));
     let mut driver = driver_of(
         Some(Value::record([
             (half, fraction(1.0, 2.0)),
@@ -721,39 +713,41 @@ fn a_library_is_declared_for_records_like_the_selected_one() {
         ])),
         cells,
     );
-    // Nothing to declare one for until a record is selected.
-    assert!(!driver.editor().menu_availability().declare_library);
+    // Nothing to make a kind of until a record is selected.
+    assert!(!driver.editor().menu_availability().make_kind);
     driver.select(&[Step::Key(half)]);
-    assert!(driver.editor().menu_availability().declare_library);
-    run(&mut driver, DocCommand::DeclareLibrary);
-    // The document now declares a library, last in its root's list: it owns
-    // the record's first field by name, and its view is a template of the
-    // record's parts in a row.
-    let library = driver.element(&[Step::Key(LIBRARIES)], 0, &[]);
-    let field = |key| [library.as_slice(), &[Step::Key(key)]].concat();
-    assert_eq!(driver.value(&field(KEYS)), Value::list([over.into()]));
+    assert!(driver.editor().menu_availability().make_kind);
+    run(&mut driver, DocCommand::MakeKind);
+    // The record now says its kind, a new cell defined by a def of its
+    // fields, which draws it as its parts in a row.
+    let kind = driver.value(&[Step::Key(half), Step::Key(::grap::isa::ISA)]);
+    let kind = kind.as_cell().expect("the record names its kind");
+    let def = driver.editor().sources().value(kind).cloned().unwrap();
+    assert_eq!(::grap::isa::of(def.as_record().unwrap()), Some(DEF));
+    assert_eq!(Def::read(&(&def).into()).unwrap().fields, [over, under]);
+    assert!(!driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
+    assert!(driver.drawn(&[Step::Key(half), Step::Key(under)]));
+    // A record that doesn't say the kind is drawn as it was: nothing is
+    // guessed from its fields.
+    assert!(driver.drawn(&[Step::Key(other), Step::Key(over)]));
+    // The def is open beside the document, with its name to type.
+    driver.type_text("fraction");
     assert_eq!(
-        driver.value(&[field(PROJECTION).as_slice(), &[Step::Key(l::CHILDREN)]].concat()),
-        Value::list([part(over), part(under)])
-    );
-    // The template is selected, where the library lives.
-    assert_eq!(driver.selection(), field(PROJECTION));
-    // Every such record is drawn by it at once, and there's nothing left to
-    // declare a library for in either.
-    assert!(driver.drawn(&[Step::Key(other), Step::Key(under)]));
-    driver.select(&[Step::Key(other)]);
-    assert!(!driver.editor().menu_availability().declare_library);
-    // It is one step to undo.
-    driver.undo();
-    assert!(
         driver
             .editor()
             .sources()
-            .root()
+            .value(kind)
             .unwrap()
             .as_record()
             .unwrap()
-            .get(&LIBRARIES)
-            .is_none()
+            .get(&name::vocabulary::NAME),
+        Some(&text::value("fraction"))
     );
+    // A record that already says its kind has none to make.
+    driver.select(&[Step::Key(half)]);
+    assert!(!driver.editor().menu_availability().make_kind);
+    // It is one step to undo.
+    driver.undo();
+    driver.undo();
+    assert_eq!(driver.value(&[Step::Key(half)]), fraction(1.0, 2.0));
 }

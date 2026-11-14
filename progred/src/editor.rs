@@ -501,7 +501,7 @@ impl Editor {
             save: self.model.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
-            declare_library: self.library_to_declare().is_some(),
+            make_kind: self.kind_to_make().is_some(),
             open_pane: self
                 .model
                 .selection
@@ -524,70 +524,70 @@ impl Editor {
         }
     }
 
-    /// The record a library can be declared for: the selected one, or the
-    /// one the selected cell holds, in a document whose root is a record,
-    /// where no library the document declares draws it yet.
-    fn library_to_declare(&self) -> Option<&gid::Record> {
+    /// Where the record a kind can be made of is stored, and the record: the
+    /// one selected, or the one the selected cell holds, where it says no
+    /// kind yet and has fields of its own.
+    fn kind_to_make(&self) -> Option<(crate::location::Location<'static>, &gid::Record)> {
         let sources = self.sources();
         let selection = self.model.selection.as_ref()?;
-        (!selection.path().is_empty()).then_some(())?;
-        sources.root()?.as_record()?;
-        let fields = match selection.value(&sources)? {
-            gid::Value::Cell(cell) => sources.value(*cell)?,
-            value => value,
-        }
-        .as_record()?;
-        let declared = workspace::libraries(&sources);
-        (fields.keys().any(|key| *key != ::grap::isa::ISA)
-            && !declared
-                .iter()
-                .any(|library| library.keys.iter().any(|key| fields.get(key).is_some())))
-        .then_some(fields)
+        let (location, value) = match selection.value(&sources)? {
+            gid::Value::Cell(cell) => (
+                crate::location::Location::in_cell(*cell, Vec::new()),
+                sources.value(*cell)?,
+            ),
+            value => (selection.location()?, value),
+        };
+        let fields = value.as_record()?;
+        (::grap::isa::of(fields).is_none()
+            && fields.keys().next().is_some()
+            && selection.writable(&sources))
+        .then_some((location, fields))
     }
 
-    /// Declares a library for records like the selected one, last among the
-    /// document's, and selects the template it starts with, there in the
-    /// root's `libraries` where the library now lives.
-    fn declare_library(&mut self) {
-        use workspace::vocabulary::{LIBRARIES, PROJECTION};
+    /// Makes a kind of the selected record: a new cell defined by a def of
+    /// the record's fields, drawn as its parts in a row to start with, and the
+    /// record says it's of that kind. The def opens in a pane beside the
+    /// document with its name to type. One step to undo.
+    fn make_kind(&mut self) {
+        use crate::libraries::name::vocabulary::NAME;
         let sources = self.sources();
-        let Some(library) = self.library_to_declare().and_then(|fields| {
-            crate::libraries::declared::starter(fields, |cell| {
-                crate::libraries::name::of_cell(&|cell| sources.value(cell), cell)
-                    .map(|name| name.spelling().into_owned())
+        let Some((location, record)) = self.kind_to_make() else {
+            return;
+        };
+        let mut fields: Vec<(Option<String>, gid::CellId)> = record
+            .keys()
+            .map(|key| {
+                let name = crate::libraries::name::of_cell(&|cell| sources.value(cell), *key)
+                    .map(|name| name.spelling().into_owned());
+                (name, *key)
             })
-        }) else {
-            return;
-        };
-        let declared = sources
-            .root()
-            .and_then(gid::Value::as_record)
-            .and_then(|root| root.get(&LIBRARIES))
-            .cloned()
-            .unwrap_or_else(|| gid::Value::list([]));
-        let Some(position) = declared
-            .as_list()
-            .and_then(|list| gid::position::between(list.keys().next_back(), None))
-        else {
-            return;
-        };
-        let declared = gid::Value::List(
-            declared
-                .as_list()
-                .expect("read as a list above")
+            .collect();
+        // Named fields by name, then the rest, as a record lists them.
+        fields.sort_by_cached_key(|(name, key)| {
+            (
+                name.is_none(),
+                name.as_deref().map(str::to_lowercase),
+                name.clone(),
+                *key,
+            )
+        });
+        let kind = gid::new_cell_id();
+        let def = crate::libraries::def::starter(fields.into_iter().map(|(_, field)| field));
+        let record = gid::Value::Record(
+            record
                 .clone()
-                .with(position.clone(), library),
+                .with(::grap::isa::ISA, gid::Value::from(kind)),
         );
-        let field = crate::location::Location::root(vec![gid::Step::Key(LIBRARIES)]);
-        if crate::editing::write(&mut self.session(), &field, declared) {
-            self.model.selection = Some(selection::Selection::edge(
-                &self.model.workspace.document,
-                crate::occurrence::of(&[
-                    gid::Step::Key(LIBRARIES),
-                    gid::Step::Element(position),
-                    gid::Step::Key(PROJECTION),
-                ]),
-            ));
+        if crate::editing::write(&mut self.session(), &location, record) {
+            std::rc::Rc::make_mut(&mut self.model.doc)
+                .cells
+                .set_value(kind, def);
+            self.show_in_pane(crate::location::Location::in_cell(kind, Vec::new()));
+            if let Some(selection) = &mut self.model.selection {
+                let mut name = selection.path().to_vec();
+                name.push(crate::occurrence::Step::Key(NAME));
+                *selection = selection::Selection::edge(selection.view(), name);
+            }
             self.sync_views();
         }
     }
@@ -762,7 +762,7 @@ impl Editor {
             DocCommand::SaveAs => self.desktop_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
             DocCommand::Redo => self.step_history(false, geometry),
-            DocCommand::DeclareLibrary => self.declare_library(),
+            DocCommand::MakeKind => self.make_kind(),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
             DocCommand::OpenLibrary(library) => {

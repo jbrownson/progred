@@ -2,8 +2,8 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    absent, color, controls, declared, editor, f32, f64, fidget, grap as grap_library, isa, layout,
-    list, logic, name, png, presentation, random, sequence, text, toolpath, tree, u64,
+    absent, color, controls, declared, def, editor, f32, f64, fidget, grap as grap_library, isa,
+    layout, list, logic, name, png, presentation, random, sequence, text, toolpath, tree, u64,
 };
 use crate::library::{Libraries, Library};
 use crate::projection::Partial;
@@ -112,6 +112,7 @@ impl Stack {
     /// projections left off, a pane's presentation among them.
     pub fn without(&self, hidden: &[gid::CellId]) -> (Projection, Projection) {
         let document = projection(
+            !hidden.contains(&def::ID),
             self.partials
                 .iter()
                 .filter(|(id, _)| !hidden.contains(id))
@@ -160,6 +161,7 @@ fn compose(
     let partials: Rc<[_]> = partials.into();
     let provided: Rc<[_]> = provided.into();
     let projection = projection(
+        true,
         partials.iter().map(|(_, partial)| partial.clone()),
         provided
             .iter()
@@ -177,14 +179,21 @@ fn compose(
     }
 }
 
-/// The libraries' projections, a record that says what kind of thing it is
-/// first drawn as its kind provides, when its kind provides a projection.
+/// The libraries' projections. A record that says what kind of thing it is
+/// is drawn first by its kind's def, where `defs` are drawn and the def has a
+/// projection that draws it; then as a library provides for its kind.
 fn projection(
+    defs: bool,
     partials: impl IntoIterator<Item = Partial>,
     provided: impl IntoIterator<Item = (gid::CellId, Partial)>,
 ) -> Projection {
-    Projection::new(std::iter::once(crate::display::by_kind()).chain(partials))
-        .with_provided(crate::display::Provided::new(provided))
+    Projection::new(
+        defs.then(crate::libraries::def::by_def)
+            .into_iter()
+            .chain([crate::display::by_kind()])
+            .chain(partials),
+    )
+    .with_provided(crate::display::Provided::new(provided))
 }
 
 /// `projection` for a pane, whose entry may present its value instead.
@@ -197,6 +206,7 @@ type BuildLibrary = fn() -> Library<crate::Editor, Hovered>;
 const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (name::ID, name::library),
     (isa::ID, isa::library),
+    (def::ID, def::library),
     (text::ID, text::library),
     (png::ID, png::library),
     (absent::ID, absent::library),

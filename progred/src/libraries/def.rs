@@ -1,0 +1,214 @@
+//! Defs: what a kind is. A record says its kind with `isa`; the kind's cell is
+//! defined by a def, `{isa: def, name, fields, projection}`, which says what
+//! such a record has and how it's drawn, connecting what's known about a kind
+//! to the kind itself. A record is drawn by its kind's def's projection
+//! before anything else draws it; where that declines, it's passed on. One
+//! projection, since projections compose: several are one that tries each.
+
+use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use crate::libraries::presentation::vocabulary::VALUE;
+use crate::libraries::{Library, layout, name};
+use ::grap::RuntimeValue;
+use gid::{CellId, Value};
+use std::rc::Rc;
+
+pub const ID: CellId = CellId::from_u128(0x5a0fcad83599b7a4bd80398988ba22cb);
+
+pub mod vocabulary {
+    use gid::CellId;
+
+    /// A def's kind: `{isa: def, name, fields, projection}`.
+    pub const DEF: CellId = CellId::from_u128(0xa9a53af4187f4715f1eebdf58e0c65c0);
+    /// The fields a kind's records have, in the order they're read.
+    pub const FIELDS: CellId = CellId::from_u128(0x003bb68cfb673326a483cd31b03ba27f);
+    /// How a kind's records are drawn, as a pane's value is: a template, or
+    /// a function of `value`.
+    pub use crate::workspace::vocabulary::PROJECTION;
+}
+use vocabulary::*;
+
+pub fn library<W: Host>() -> Library<W> {
+    name::named_library(
+        ID,
+        "def",
+        [(DEF, "def"), (FIELDS, "fields")],
+        ::grap::ForeignFunctions::default(),
+    )
+    .with_projections_for([(DEF, crate::display::runtime_partial(def_display))])
+}
+
+/// What a def says about a kind.
+pub(crate) struct Def {
+    pub fields: Vec<CellId>,
+    pub projection: Option<RuntimeValue>,
+}
+
+impl Def {
+    pub fn read(value: &RuntimeValue) -> Option<Self> {
+        (value.kind()? == DEF).then_some(())?;
+        Some(Self {
+            fields: value
+                .field(FIELDS)
+                .and_then(|list| {
+                    Some(
+                        list.list_values()?
+                            .filter_map(|field| field.as_cell())
+                            .collect(),
+                    )
+                })
+                .unwrap_or_default(),
+            projection: value.field(PROJECTION),
+        })
+    }
+}
+
+/// A def for a kind of record with `fields`, drawn to start with as its
+/// parts in a row. It has no name yet.
+pub(crate) fn starter(fields: impl IntoIterator<Item = CellId>) -> Value {
+    use layout::vocabulary::{CHILDREN, GAP, kind};
+    let fields: Vec<CellId> = fields.into_iter().collect();
+    ::grap::isa::record(
+        DEF,
+        [
+            (name::vocabulary::NAME, crate::libraries::text::value("")),
+            (
+                FIELDS,
+                Value::list(fields.iter().map(|field| Value::from(*field))),
+            ),
+            (
+                PROJECTION,
+                ::grap::isa::record(
+                    kind::ROW,
+                    [
+                        (GAP, crate::libraries::f64::value(6.0)),
+                        (
+                            CHILDREN,
+                            Value::list(fields.iter().map(|field| layout::template::part(*field))),
+                        ),
+                    ],
+                ),
+            ),
+        ],
+    )
+}
+
+/// A record drawn by its kind's def, where its kind has one.
+pub fn by_def<W: Host>() -> Partial<W> {
+    crate::display::runtime_partial(|input| {
+        let kind = input.value?.kind()?;
+        let def = Def::read(&input.env.resolve(kind)?.value.into())?;
+        drawn(input, &def.projection?)
+    })
+}
+
+/// A def as its author edits it: a record whose projection, where it's a
+/// template, is edited as a template for the def's own fields.
+fn def_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+    let parts: Rc<[CellId]> = Def::read(input.value?)?.fields.into();
+    crate::display::structure::Fields::default()
+        .leading([::grap::isa::ISA, name::vocabulary::NAME, FIELDS, PROJECTION])
+        .child(move |key| {
+            let parts = parts.clone();
+            (key == PROJECTION).then(|| layout::template::editor(Rc::new(move |_| parts.to_vec())))
+        })
+        .record(input)
+}
+
+thread_local! {
+    /// Where views are drawing right now, and what. One steps aside where
+    /// it's already drawing, or for a value it's already drawing, so a view
+    /// can show the value's ordinary projection inside itself, in place or as
+    /// a result.
+    static DRAWING: std::cell::RefCell<Vec<(Option<crate::occurrence::Trail>, RuntimeValue)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// How deeply views may nest before the loaded libraries take over, so a
+/// view that keeps drawing itself still ends.
+const NESTING: usize = 64;
+
+struct Drawing;
+
+impl Drawing {
+    fn at(occurrence: Option<crate::occurrence::Trail>, value: RuntimeValue) -> Self {
+        DRAWING.with(|drawing| drawing.borrow_mut().push((occurrence, value)));
+        Self
+    }
+}
+
+impl Drop for Drawing {
+    fn drop(&mut self) {
+        DRAWING.with(|drawing| drawing.borrow_mut().pop());
+    }
+}
+
+/// The value `input` draws, drawn by `projection`: a template, layout data
+/// drawn for it as it stands and selecting it where it's pointed at; or a
+/// function of `value`, whose layout draws it in place and whose returned
+/// value is drawn with the area's projections. None where it declines, or
+/// where a view is already drawing this place or this value.
+pub(crate) fn drawn<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+    projection: &RuntimeValue,
+) -> Option<Layout<W>> {
+    let value = input.value?;
+    let occurrence = input.env.occurrence().cloned();
+    DRAWING
+        .with(|drawing| {
+            let drawing = drawing.borrow();
+            drawing.len() < NESTING
+                && !drawing
+                    .iter()
+                    .any(|(at, drawn)| *at == occurrence || drawn.as_value() == value.as_value())
+        })
+        .then_some(())?;
+    let stored = match projection.as_cell() {
+        Some(cell) => input.env.resolve(cell).map(|found| found.value.into()),
+        None => Some(projection.clone()),
+    };
+    let layout = match stored.and_then(|node| layout::template(&node, &|| input.site())) {
+        Some(template) => crate::display::selectable(template, &input.site()),
+        None => {
+            let (evaluation, layout) = layout::scope::run(
+                || input.site(),
+                |scope| {
+                    input
+                        .env
+                        .apply_runtime_scoped(projection, &[(VALUE, value.clone())], scope)
+                },
+            );
+            match layout {
+                Some(layout) => layout,
+                None => {
+                    return Some(evaluation.result)
+                        .filter(|result| result.absent_reason().is_none())
+                        .map(crate::libraries::presentation::result_layout)
+                        .map(|layout| nested(&occurrence, value, layout));
+                }
+            }
+        }
+    };
+    // The view chose what to show; only a field being added follows it.
+    Some(nested(
+        &occurrence,
+        value,
+        crate::display::structure::Fields::default().after(input, |_| true, layout),
+    ))
+}
+
+/// `layout`, drawn as a view's drawing of `value` at `occurrence`.
+fn nested<W: Host>(
+    occurrence: &Option<crate::occurrence::Trail>,
+    value: &RuntimeValue,
+    layout: Layout<W>,
+) -> Layout<W> {
+    let (occurrence, value) = (occurrence.clone(), value.clone());
+    Layout::new(move |builder| {
+        let _drawing = Drawing::at(occurrence.clone(), value.clone());
+        layout.run(builder)
+    })
+}
+
+#[cfg(test)]
+#[path = "tests/def.rs"]
+mod tests;

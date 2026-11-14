@@ -13,6 +13,7 @@ pub mod completion;
 mod conformance;
 pub mod controls;
 pub mod declared;
+pub mod def;
 pub mod editor;
 pub mod f32;
 pub mod f64;

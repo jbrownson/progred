@@ -130,9 +130,9 @@ pub enum DocCommand {
     SaveAs,
     Undo,
     Redo,
-    /// Declare a library in the document for records like the selected one,
-    /// with a template to start its view from.
-    DeclareLibrary,
+    /// Make a kind of the selected record: a def of its fields, which the
+    /// record then says it is.
+    MakeKind,
     /// Open the selected value in a pane at that end of the editor's row.
     OpenPane(Side),
     /// Close the selected pane, leaving what it showed in place.
@@ -319,7 +319,7 @@ pub fn spec(command: Command) -> Spec {
         }
         Command::Doc(DocCommand::Undo) => item("Undo", Some(Shortcut::plain(ShortcutKey::Z))),
         Command::Doc(DocCommand::Redo) => item("Redo", Some(Shortcut::shifted(ShortcutKey::Z))),
-        Command::Doc(DocCommand::DeclareLibrary) => item("New Library from Selection", None),
+        Command::Doc(DocCommand::MakeKind) => item("New Kind from Selection", None),
         Command::Doc(DocCommand::OpenPane(Side::Left)) => {
             item("Open Value on Left", Some(Shortcut::plain(ShortcutKey::P)))
         }
@@ -363,7 +363,7 @@ pub struct Availability {
     pub save: bool,
     pub undo: bool,
     pub redo: bool,
-    pub declare_library: bool,
+    pub make_kind: bool,
     pub open_pane: bool,
     pub close_pane: bool,
     pub move_up: bool,
@@ -387,7 +387,7 @@ impl Availability {
             DocCommand::SaveAs => true,
             DocCommand::Undo => self.undo,
             DocCommand::Redo => self.redo,
-            DocCommand::DeclareLibrary => self.declare_library,
+            DocCommand::MakeKind => self.make_kind,
             DocCommand::OpenPane(_) => self.open_pane,
             DocCommand::ClosePane => self.close_pane,
             DocCommand::MovePane(Move::Up) => self.move_up,

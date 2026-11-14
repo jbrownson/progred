@@ -38,23 +38,25 @@ const WRAPPERS: [CellId; 6] = [
     kind::HOVER_BLOCK,
 ];
 
-/// A template for records carrying `keys`, as its author reads and edits it.
-/// Anything that isn't one of a template's nodes is left to the projections
-/// around it, as a view that's a function is.
-pub(crate) fn editor<W: Host>(keys: Rc<[CellId]>) -> Partial<W> {
-    runtime_partial(move |input| node(input, &keys))
+/// The parts of the records a template draws, as a place in it is filled.
+pub(crate) type Parts = Rc<dyn Fn(&CompletionRequest<'_>) -> Vec<CellId>>;
+
+/// A template for records whose `parts` it can show, as its author reads and
+/// edits it. Anything that isn't one of a template's nodes is left to the
+/// projections around it, as a view that's a function is.
+pub(crate) fn editor<W: Host>(parts: Parts) -> Partial<W> {
+    runtime_partial(move |input| node(input, &parts))
 }
 
-fn node<W: Host>(
-    input: &ProjectionInput<'_, W, RuntimeValue>,
-    keys: &Rc<[CellId]>,
-) -> Option<Layout<W>> {
-    let within = || first(input, editor(keys.clone()));
+fn node<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>, parts: &Parts) -> Option<Layout<W>> {
+    let within = || first(input, editor(parts.clone()));
     let Some(value) = input.value else {
-        let keys = keys.clone();
+        let parts = parts.clone();
         return Some(picker(Picker::new(
             CompletionKind::Value,
-            ranked(Rc::new(move |request| Some(offers(request, &keys)))),
+            ranked(Rc::new(move |request| {
+                Some(offers(request, &parts(request)))
+            })),
         )));
     };
     // A template kept in a cell reads the same, in the cell's parentheses.
@@ -167,8 +169,8 @@ pub(crate) fn part_with(part: CellId, with: CellId) -> Value {
     )
 }
 
-/// What an empty place in a template for records carrying `keys` offers.
-fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
+/// What an empty place in a template showing `parts` offers.
+fn offers(request: &CompletionRequest<'_>, parts: &[CellId]) -> Vec<Completion> {
     let node = |kind: CellId, fields: Vec<(CellId, Value)>| ::grap::isa::record(kind, fields);
     // A node that holds others, chosen where there's a node already, goes
     // around it: `center` over a part centers the part.
@@ -196,7 +198,7 @@ fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
         }
     };
     let typed = request.query.trim();
-    let parts = parts(request, keys);
+    let parts = parts.to_vec();
     // A part as a slider: a number from 0 to 1, dragged.
     let sliders: Vec<_> = parts
         .iter()
@@ -251,7 +253,7 @@ fn offers(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<Completion> {
 /// The parts a template for records carrying `keys` can show: the keys
 /// themselves, then the other fields of the document's records that carry
 /// one, as far as this place can read the document.
-fn parts(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<CellId> {
+pub(crate) fn scanned_parts(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<CellId> {
     fn visit(value: &Value, keys: &[CellId], found: &mut Vec<CellId>) {
         match value {
             Value::Record(fields) => {

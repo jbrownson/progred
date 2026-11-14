@@ -82,6 +82,26 @@ different, as they should be. Not chosen: wrapping every document on load,
 which changes a user's file for opening it, and keeping the workspace beside
 the root in the document format, which mixes the editor's layer into GID's.
 
+### Defs
+
+Begun November 2026. A kind's cell is defined by a def, `{isa: def, name,
+fields, projection}`, and a record that says the kind is drawn by the def's
+projection before anything else (see [projections](projections.md)). It
+connects what's known about a kind to the kind itself, where a document
+library matched records by the keys they carried. Decided: one `projection`,
+the key a pane's projection uses, not a list, since projections compose; the
+def's projection is tried before the projections libraries register in Rust
+under a kind, so a document can redraw a built-in kind; drawing by defs
+switches off with the `def` library. Still to do:
+
+- `fields` drawn as places to fill where a record lacks them, and making a
+  new record of a kind with its fields empty.
+- Built-in kinds defined by defs as data, their Rust projections attached
+  under the same cell, so a built-in kind can be read like a document's.
+- A document library's key matching replaced by defs: `examples/libraries.gid`
+  and the tests that use it moved to kinds, and the `libraries` field, its
+  `keys` and the "document libraries" built-in removed.
+
 ### External libraries a document uses
 
 The workspace should eventually say which libraries from outside the document

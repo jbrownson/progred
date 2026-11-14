@@ -107,7 +107,7 @@ pub fn definition(
                 Entry::Command(C::Doc(D::Undo)),
                 Entry::Command(C::Doc(D::Redo)),
                 Entry::Separator,
-                Entry::Command(C::Doc(D::DeclareLibrary)),
+                Entry::Command(C::Doc(D::MakeKind)),
             ],
         },
         Menu {
