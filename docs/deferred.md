@@ -71,7 +71,16 @@ shows the record itself, and its parts may get UI of their own in separate
 panes. A document doesn't start with one; the first thing the editor needs to
 keep there wraps the root in it, and later ones add to it. It holds what
 belongs to this document only, such as its own views, not a package manager.
-Open: how paths into the content survive the wrapping without rewriting them.
+
+A path runs from the root of the view it's drawn in, not from the document's
+root. The document's view is rooted at its content: `value` where the root is a
+workspace, the root otherwise. So wrapping the root in a workspace, or taking
+the workspace away, moves no stored path: the selection, folds, panes and
+history are all relative to the content. A view that shows the workspace
+itself is a different view, rooted at the document's root, and its paths are
+different, as they should be. Not chosen: wrapping every document on load,
+which changes a user's file for opening it, and keeping the workspace beside
+the root in the document format, which mixes the editor's layer into GID's.
 
 ### External libraries a document uses
 
