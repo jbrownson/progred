@@ -23,6 +23,7 @@
     "cos": fc89c17ecb5147158f928fe4e89da1e3,
     "cube": 650c98379ab879a6b902b0bc94305103,
     "def": a9a53af4187f4715f1eebdf58e0c65c0,
+    "defs": 9c1a4dd291087eef39ac1d4020380ed0,
     "delta_x": 671936a24eb2d9d6e47ac5915a3e38c4,
     "descend": 35c7a8e2f10d49b6d2f8016c4b9ea375,
     "difference": 10f86aecbad3474fa912858a56ebdf94,
@@ -50,10 +51,10 @@
     "half_size": f6e416437259d6867c11eced7923bf1c,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "key": f12dea12c741fe36312750a264f3a235,
-    "kinds": a5553c5c950035850ba43e174263c5e1,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_2": 3cbf5357204947fdb4f26eadcbd777d6,
+    "library": 6a2a379c9d9553cedafcb3987e7891b7,
     "max_2": 968e2f1f111a4849a8449dbeddbe8412,
     "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
     "max_y": c9e7268eb34af7bea225df94841c1c27,
@@ -814,9 +815,6 @@
     half_size: {
       name: "half size",
     },
-    kinds: {
-      name: "kinds",
-    },
     mesh: {
       name: "mesh",
     },
@@ -1214,10 +1212,11 @@
         isa: mesh_figure,
       },
     ],
-    kinds: [
+    defs: [
       0x55: figure,
       0xaa: mesh_figure,
     ],
+    isa: library,
     functions: [
       0x40: figure_layout,
       0x80: rendered,

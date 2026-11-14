@@ -55,8 +55,9 @@ See [layout navigation](../docs/navigation.md) for the current contract.
 like `{isa: figure, model: torus}`, and defines the two kinds they say they are:
 `figure` previews with `preview 3d`, `mesh figure` with `preview mesh`. Each
 kind's def draws its figure's picture beside the shape's editable source, tops
-aligned. The document lists its kinds and the functions their views call, so
-their definitions are drawn with it. Every shape is a no-argument Grap
+aligned. The document's root is its library, listing the kinds under `defs`,
+and it lists the functions their views call, so their definitions are drawn
+with it. Every shape is a no-argument Grap
 function, since a kind's view receives the record as data and calls the
 function to get the shape. There is no separate pane or chooser; scroll to another
 shape, or fold its source using the ordinary editor controls. The full machining

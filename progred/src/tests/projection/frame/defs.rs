@@ -298,7 +298,7 @@ fn a_template_is_edited_where_its_kind_is_defined() {
     use ui_events::keyboard::{Key, Modifiers, NamedKey};
     let (world, names) = planets_template();
     let mut driver = Driver::new(world, Driver::VIEWPORT);
-    let kind = driver.element(&[Step::Key(names["kinds"])], 0, &[Step::Follow]);
+    let kind = driver.element(&[Step::Key(names["defs"])], 0, &[Step::Follow]);
     let children = [
         kind.as_slice(),
         &[
