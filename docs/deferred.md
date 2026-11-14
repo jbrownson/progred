@@ -62,6 +62,24 @@ their definitions; loading needs that descriptor and a source that can resolve
 the listed cells, which a document can provide without becoming part of the
 library's semantic type.
 
+## A workspace record
+
+In design (November 2026). The editor's own concerns for a document get one
+record at its root, `{isa: workspace, value: …}`, between the document's root
+and its content: the editor draws `value` as if it were the root, an option
+shows the record itself, and its parts may get UI of their own in separate
+panes. A document doesn't start with one; the first thing the editor needs to
+keep there wraps the root in it, and later ones add to it. It holds what
+belongs to this document only, such as its own views, not a package manager.
+Open: how paths into the content survive the wrapping without rewriting them.
+
+### External libraries a document uses
+
+The workspace should eventually say which libraries from outside the document
+it uses, the built-in ones included, so a document records what it needs to
+be read as its author read it. Deferred: for now every document sees every
+loaded library, and the workspace holds only the document's own.
+
 ## Libraries with native code
 
 A library that needs native code, like the fidget library around the Fidget
