@@ -106,8 +106,6 @@ pub fn definition(
             entries: vec![
                 Entry::Command(C::Doc(D::Undo)),
                 Entry::Command(C::Doc(D::Redo)),
-                Entry::Separator,
-                Entry::Command(C::Doc(D::MakeKind)),
             ],
         },
         Menu {

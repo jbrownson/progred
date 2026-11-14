@@ -1756,10 +1756,11 @@ What it shows, and what exists (on a blank document, in the native app):
 
 1. Some plain data, a record or two. Works: `new record`, a label, a value,
    each chosen by typing.
-2. A view of it, made on the spot. Works: with a record selected, Edit's New
-   Kind from Selection makes a kind of it, defined by a def whose
-   [template](projections.md#packages-and-libraries) shows the record's parts
-   in a row, opens the def in a pane, and the record says the kind. Changing the row to a `col`, adding a
+2. A view of it, made on the spot. Partly: a def's
+   [template](projections.md#packages-and-libraries) draws every record that
+   says the def's kind, and edits to it show at once, but a def is made and a
+   record given its kind by editing their records by hand. Offers of a kind
+   where a place can hold one, a def among them, would make both a choice. Changing the row to a `col`, adding a
    `rule`, and centering a part are each a few keys there, and every such
    record redraws as they're typed.
 3. The same value in two notations, both live. Works: open the record in a

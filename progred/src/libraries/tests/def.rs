@@ -1,7 +1,7 @@
 use super::*;
 use crate::driver::Driver;
 use crate::libraries::layout::vocabulary as l;
-use gid::{Cells, Document, Step};
+use gid::{Cells, Document, Step, Value};
 
 /// A document of a fraction, `{isa: fraction, over: 1, under: 2}`, whose
 /// kind's def draws it with `projection`, where it has one.

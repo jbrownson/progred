@@ -12,7 +12,7 @@ use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::presentation::vocabulary::VALUE;
 use crate::libraries::{Library, layout, name};
 use ::grap::RuntimeValue;
-use gid::{CellId, Value};
+use gid::CellId;
 use std::rc::Rc;
 
 pub const ID: CellId = CellId::from_u128(0x5a0fcad83599b7a4bd80398988ba22cb);
@@ -63,36 +63,6 @@ impl Def {
             projection: value.field(PROJECTION),
         })
     }
-}
-
-/// A def for a kind of record with `fields`, drawn to start with as its
-/// parts in a row. It has no name yet.
-pub(crate) fn starter(fields: impl IntoIterator<Item = CellId>) -> Value {
-    use layout::vocabulary::{CHILDREN, GAP, kind};
-    let fields: Vec<CellId> = fields.into_iter().collect();
-    ::grap::isa::record(
-        DEF,
-        [
-            (name::vocabulary::NAME, crate::libraries::text::value("")),
-            (
-                FIELDS,
-                Value::list(fields.iter().map(|field| Value::from(*field))),
-            ),
-            (
-                PROJECTION,
-                ::grap::isa::record(
-                    kind::ROW,
-                    [
-                        (GAP, crate::libraries::f64::value(6.0)),
-                        (
-                            CHILDREN,
-                            Value::list(fields.iter().map(|field| layout::template::part(*field))),
-                        ),
-                    ],
-                ),
-            ),
-        ],
-    )
 }
 
 /// A record drawn by its kind's def, where its kind has one.

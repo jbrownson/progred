@@ -501,7 +501,6 @@ impl Editor {
             save: self.model.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
-            make_kind: self.kind_to_make().is_some(),
             open_pane: self
                 .model
                 .selection
@@ -521,74 +520,6 @@ impl Editor {
             zoom_in: self.next_zoom(true).is_some(),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             zoom_out: self.next_zoom(false).is_some(),
-        }
-    }
-
-    /// Where the record a kind can be made of is stored, and the record: the
-    /// one selected, or the one the selected cell holds, where it says no
-    /// kind yet and has fields of its own.
-    fn kind_to_make(&self) -> Option<(crate::location::Location<'static>, &gid::Record)> {
-        let sources = self.sources();
-        let selection = self.model.selection.as_ref()?;
-        let (location, value) = match selection.value(&sources)? {
-            gid::Value::Cell(cell) => (
-                crate::location::Location::in_cell(*cell, Vec::new()),
-                sources.value(*cell)?,
-            ),
-            value => (selection.location()?, value),
-        };
-        let fields = value.as_record()?;
-        (::grap::isa::of(fields).is_none()
-            && fields.keys().next().is_some()
-            && selection.writable(&sources))
-        .then_some((location, fields))
-    }
-
-    /// Makes a kind of the selected record: a new cell defined by a def of
-    /// the record's fields, drawn as its parts in a row to start with, and the
-    /// record says it's of that kind. The def opens in a pane beside the
-    /// document with its name to type. One step to undo.
-    fn make_kind(&mut self) {
-        use crate::libraries::name::vocabulary::NAME;
-        let sources = self.sources();
-        let Some((location, record)) = self.kind_to_make() else {
-            return;
-        };
-        let mut fields: Vec<(Option<String>, gid::CellId)> = record
-            .keys()
-            .map(|key| {
-                let name = crate::libraries::name::of_cell(&|cell| sources.value(cell), *key)
-                    .map(|name| name.spelling().into_owned());
-                (name, *key)
-            })
-            .collect();
-        // Named fields by name, then the rest, as a record lists them.
-        fields.sort_by_cached_key(|(name, key)| {
-            (
-                name.is_none(),
-                name.as_deref().map(str::to_lowercase),
-                name.clone(),
-                *key,
-            )
-        });
-        let kind = gid::new_cell_id();
-        let def = crate::libraries::def::starter(fields.into_iter().map(|(_, field)| field));
-        let record = gid::Value::Record(
-            record
-                .clone()
-                .with(::grap::isa::ISA, gid::Value::from(kind)),
-        );
-        if crate::editing::write(&mut self.session(), &location, record) {
-            std::rc::Rc::make_mut(&mut self.model.doc)
-                .cells
-                .set_value(kind, def);
-            self.show_in_pane(crate::location::Location::in_cell(kind, Vec::new()));
-            if let Some(selection) = &mut self.model.selection {
-                let mut name = selection.path().to_vec();
-                name.push(crate::occurrence::Step::Key(NAME));
-                *selection = selection::Selection::edge(selection.view(), name);
-            }
-            self.sync_views();
         }
     }
 
@@ -762,7 +693,6 @@ impl Editor {
             DocCommand::SaveAs => self.desktop_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
             DocCommand::Redo => self.step_history(false, geometry),
-            DocCommand::MakeKind => self.make_kind(),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
             DocCommand::OpenLibrary(library) => {
