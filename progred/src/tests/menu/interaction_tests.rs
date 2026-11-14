@@ -314,16 +314,16 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
 }
 
 #[test]
-fn the_document_libraries_entry_switches_the_documents_own_projections() {
+fn the_def_entry_switches_the_documents_own_kinds() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../examples/libraries.gid")).unwrap();
     let mut driver = driver(doc);
-    let command = Command::Doc(DocCommand::Projection(crate::libraries::declared::ID));
+    let command = Command::Doc(DocCommand::Projection(crate::libraries::def::ID));
     let heading = menus(&driver)
         .iter()
         .position(|menu| menu.label == "Projections")
         .unwrap();
-    // The document's fraction library stacks a fraction's parts; the stored
+    // The document's fraction kind stacks a fraction's parts; the stored
     // record lists them on one line.
     let stacked = |driver: &Driver| {
         let part = |key: &str| {

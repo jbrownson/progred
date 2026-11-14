@@ -7,10 +7,10 @@ platforms. Examples are numbered consecutively in menu order.
 | Shortcut | Document | Purpose |
 | --- | --- | --- |
 | 1 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
-| 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube, drawn by figure libraries the document declares |
+| 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube, drawn by kinds the document defines |
 | 3 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
 | 4 | `grap-demo.gid` | Grap evaluation |
-| 5 | `libraries.gid` | Libraries the document defines: fractions and angles, each a key it owns, a view that draws it, and the functions that go with it |
+| 5 | `libraries.gid` | Kinds the document defines: fractions and angles, each with its fields, a view that draws it, and the functions that go with it |
 | | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
 
 The menu lists the examples meant for visitors. The navigation fixture isn't on
@@ -52,11 +52,12 @@ See [layout navigation](../docs/navigation.md) for the current contract.
 ## Fidget shapes
 
 **Examples → Implicit CAD Shapes** (Command+2 / Ctrl+2) lists five figures, records
-like `{figure: torus}`, and declares the two libraries that draw them: `figure`
-previews with `preview 3d`, `mesh figure` with `preview mesh`. Each draws its
-figure's picture beside the shape's editable source, tops aligned, and lists the
-functions its view calls, so their definitions are drawn with it. Every shape is a no-argument
-Grap function, since a library's view receives the record as data and calls the
+like `{isa: figure, model: torus}`, and defines the two kinds they say they are:
+`figure` previews with `preview 3d`, `mesh figure` with `preview mesh`. Each
+kind's def draws its figure's picture beside the shape's editable source, tops
+aligned. The document lists its kinds and the functions their views call, so
+their definitions are drawn with it. Every shape is a no-argument Grap
+function, since a kind's view receives the record as data and calls the
 function to get the shape. There is no separate pane or chooser; scroll to another
 shape, or fold its source using the ordinary editor controls. The full machining
 example remains separate at Command+3 / Ctrl+3.

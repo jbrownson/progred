@@ -62,7 +62,7 @@ fn a_view_that_draws_its_own_value_ends() {
 }
 
 #[test]
-fn the_example_libraries_draw_fractions_angles_and_their_functions() {
+fn the_example_kinds_draw_fractions_angles_and_their_functions() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
     let mut world = crate::test_editor(doc);
@@ -199,33 +199,15 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         assert_eq!(lines(angle, [0x99; 3]), [0.0], "{degrees}: the zero line");
         assert_eq!(lines(angle, [0x44; 3]), [degrees], "{degrees}: its line");
     }
-    // Functions only code calls are listed in their library, so they're drawn.
-    let libraries = world
-        .sources()
-        .resolve_path(&[key("libraries")])
-        .and_then(Value::as_list)
-        .unwrap()
-        .iter()
-        .map(|(position, library)| (position.clone(), library.clone()))
-        .collect::<Vec<_>>();
-    for (library, record) in libraries {
-        let functions = record
-            .as_record()
-            .and_then(|fields| fields.get(&names["functions"]))
-            .and_then(Value::as_list)
-            .unwrap();
-        assert!(!functions.is_empty());
-        for (function, _) in functions.iter() {
-            let body = [
-                key("libraries"),
-                Step::Element(library.clone()),
-                key("functions"),
-                Step::Element(function.clone()),
-                Step::Follow,
-                Step::Key(::grap::vocabulary::BODY),
-            ];
-            assert!(frame.landmarks.landmark(&body).is_some(), "{body:?}");
-        }
+    // Functions only code calls are listed in the document, so they're drawn.
+    for function in elements(&world, "functions") {
+        let body = [
+            key("functions"),
+            Step::Element(function),
+            Step::Follow,
+            Step::Key(::grap::vocabulary::BODY),
+        ];
+        assert!(frame.landmarks.landmark(&body).is_some(), "{body:?}");
     }
 }
 

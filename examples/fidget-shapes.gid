@@ -22,6 +22,7 @@
     "coordinate": 51c725afd7f69a39972f5e910066a235,
     "cos": fc89c17ecb5147158f928fe4e89da1e3,
     "cube": 650c98379ab879a6b902b0bc94305103,
+    "def": a9a53af4187f4715f1eebdf58e0c65c0,
     "delta_x": 671936a24eb2d9d6e47ac5915a3e38c4,
     "descend": 35c7a8e2f10d49b6d2f8016c4b9ea375,
     "difference": 10f86aecbad3474fa912858a56ebdf94,
@@ -36,7 +37,8 @@
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "face_pair": 111895a6b630ea7972df149951c62b9b,
     "field": 66bad5269b830181b840cf23a391b10e,
-    "figure": 0b28a8dd5ee8f60d7394fb7f9d411158,
+    "fields": 003bb68cfb673326a483cd31b03ba27f,
+    "figure": 6ae6d51c4a03c7c5ae57f1faf04502df,
     "figure_layout": 21cae7fb0597a5195d36c8a11f9bd24c,
     "figure_view": b99645084a80c86dbc18fbc2eadc8d1a,
     "figures": 20d01ef06b50dc37b0660d7237a6eb97,
@@ -48,22 +50,23 @@
     "half_size": f6e416437259d6867c11eced7923bf1c,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "key": f12dea12c741fe36312750a264f3a235,
-    "keys": bb30d215605f5599e31f6274641ca89f,
+    "kinds": a5553c5c950035850ba43e174263c5e1,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_2": 3cbf5357204947fdb4f26eadcbd777d6,
-    "libraries": bc197ad66fea59a9bd97c4191c7845b2,
     "max_2": 968e2f1f111a4849a8449dbeddbe8412,
     "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
     "max_y": c9e7268eb34af7bea225df94841c1c27,
     "max_z": da0ed6603210813bf52a20df7bf27c7d,
     "mesh": 307f51c54065c16ea881ec0b165389b5,
     "mesh_depth": 47114a01984bb53e1538906f13333f84,
+    "mesh_figure": d13aa95cb3e103260e2fcaf97670b81e,
     "mesh_view": 149f69e043d1ea5f15bf999006d86505,
     "meshed": 2194649f4eeaf42295677a87957e1eef,
     "min_x": f7906c57fc0b9f4b7013b19eef775c2d,
     "min_y": eabfd820f82b8e25c43cb6596cfcbd8f,
     "min_z": 392a615eb91c6d64df871ec95831f89a,
+    "model": 0b28a8dd5ee8f60d7394fb7f9d411158,
     "multiply_2": 2b80236eda7245d6a63b0da98da25850,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
@@ -540,7 +543,12 @@
       isa: lambda,
     },
     figure: {
+      fields: [
+        0x80: model,
+      ],
       name: "figure",
+      projection: figure_view,
+      isa: def,
     },
     figure_layout: {
       name: "figure layout",
@@ -602,7 +610,7 @@
         expression: {
           function: figure_layout,
           part: {
-            key: figure,
+            key: model,
           },
           picture: {
             function: rendered,
@@ -619,7 +627,7 @@
           0x80: {
             value: projection_value,
             pattern: {
-              figure: {
+              model: {
                 bind: shape,
                 isa: binder,
               },
@@ -806,8 +814,19 @@
     half_size: {
       name: "half size",
     },
+    kinds: {
+      name: "kinds",
+    },
     mesh: {
       name: "mesh",
+    },
+    mesh_figure: {
+      fields: [
+        0x80: mesh,
+      ],
+      name: "mesh figure",
+      projection: mesh_view,
+      isa: def,
     },
     mesh_view: {
       name: "mesh view",
@@ -896,6 +915,9 @@
         },
       },
       isa: lambda,
+    },
+    model: {
+      name: "model",
     },
     normal: {
       name: "normal",
@@ -1172,43 +1194,34 @@
   "root": {
     figures: [
       0x2a: {
-        figure: ring,
+        model: ring,
+        isa: figure,
       },
       0x55: {
-        figure: torus,
+        model: torus,
+        isa: figure,
       },
       0x80: {
-        figure: tanglecube,
+        model: tanglecube,
+        isa: figure,
       },
       0xaa: {
-        figure: gyroid,
+        model: gyroid,
+        isa: figure,
       },
       0xd5: {
         mesh: cube,
+        isa: mesh_figure,
       },
     ],
-    libraries: [
-      0x55: {
-        name: "figure",
-        projection: figure_view,
-        keys: [
-          0x80: figure,
-        ],
-        functions: [
-          0x55: figure_layout,
-          0xaa: rendered,
-        ],
-      },
-      0xaa: {
-        name: "mesh figure",
-        projection: mesh_view,
-        keys: [
-          0x80: mesh,
-        ],
-        functions: [
-          0x80: meshed,
-        ],
-      },
+    kinds: [
+      0x55: figure,
+      0xaa: mesh_figure,
+    ],
+    functions: [
+      0x40: figure_layout,
+      0x80: rendered,
+      0xc0: meshed,
     ],
   },
 }
