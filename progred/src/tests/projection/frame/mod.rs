@@ -114,7 +114,7 @@ fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
 
 mod conject;
 mod custom_navigation;
-mod document_libraries;
+mod defs;
 mod drawing;
 mod folds;
 mod iop_tree_native;

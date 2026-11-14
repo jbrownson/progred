@@ -343,10 +343,6 @@ impl crate::display::Env for Occurrence<'_> {
         self.cx.sources.resolve(cell)
     }
 
-    fn libraries(&self) -> Vec<crate::display::DocumentLibrary> {
-        crate::workspace::libraries(&self.cx.sources)
-    }
-
     fn occurrence(&self) -> Option<&Trail> {
         Some(self.path)
     }

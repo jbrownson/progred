@@ -51,10 +51,10 @@ other sources; no such UI is implemented now.
 
 ## Editor-authored libraries
 
-A document can declare libraries that draw its own records (the root's
-`libraries` field; see projections.md). What remains for a complete
-editor-authored library: completion offers, so a library can construct its
-values; library-scoped definitions and names, beyond ordinary document cells;
+A document can define kinds that draw its own records (see
+[defs](#defs)). What remains for a complete editor-authored library:
+completion offers, so a kind's records can be made from a place that holds
+one; library-scoped definitions and names, beyond ordinary document cells;
 and loading a library defined in one document into another, as an explicit
 editor operation with its configuration and definitions reachable from root.
 The proposed descriptor lists cell references, not a second record duplicating
@@ -100,9 +100,8 @@ switches off with the `def` library. Still to do:
   fields, and a template's part draws as a place to fill.
 - Built-in kinds defined by defs as data, their Rust projections attached
   under the same cell, so a built-in kind can be read like a document's.
-- A document library's key matching replaced by defs: `examples/libraries.gid`
-  and the tests that use it moved to kinds, and the `libraries` field, its
-  `keys` and the "document libraries" built-in removed.
+- Done: document libraries, which matched records by the keys they carried,
+  are gone; the examples' records say their kinds.
 
 ### External libraries a document uses
 
@@ -1758,13 +1757,13 @@ What it shows, and what exists (on a blank document, in the native app):
 1. Some plain data, a record or two. Works: `new record`, a label, a value,
    each chosen by typing.
 2. A view of it, made on the spot. Works: with a record selected, Edit's New
-   Library from Selection declares a library for records like it under the
-   root's `libraries`, with a [template](projections.md#packages-and-libraries)
-   of the record's parts in a row. Changing the row to a `col`, adding a
+   Kind from Selection makes a kind of it, defined by a def whose
+   [template](projections.md#packages-and-libraries) shows the record's parts
+   in a row, opens the def in a pane, and the record says the kind. Changing the row to a `col`, adding a
    `rule`, and centering a part are each a few keys there, and every such
    record redraws as they're typed.
 3. The same value in two notations, both live. Works: open the record in a
-   pane and switch "document libraries" off there; an edit in either shows in
+   pane and switch the `def` library off there; an edit in either shows in
    the other.
 4. A second view driven by a gesture. Works for a number from 0 to 1: a
    template's part can be drawn `with` a projection it names, and the controls
@@ -1778,10 +1777,10 @@ What it shows, and what exists (on a blank document, in the native app):
 Still rough: a drawing as wide as it's offered, which `rule` now is one of,
 can be stored in a template but has no offers there, so anything but a rule
 is typed as raw records; the starter template's gap shows as a trailing
-`{gap: 6}`; a library is named after its first key; a template can't
-decline a record or compute, and for that the view is a function, which has
-none of this editing; and a document library still offers no completions, so
-a new fraction is typed as a record.
+`{gap: 6}`; a template can't decline a record or compute, and for that the
+view is a function, which has none of this editing; and a kind isn't yet
+offered where a place could hold one, so a new fraction is typed as a record
+that then says its kind.
 
 ### Demo moments
 

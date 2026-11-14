@@ -38,25 +38,23 @@ const WRAPPERS: [CellId; 6] = [
     kind::HOVER_BLOCK,
 ];
 
-/// The parts of the records a template draws, as a place in it is filled.
-pub(crate) type Parts = Rc<dyn Fn(&CompletionRequest<'_>) -> Vec<CellId>>;
-
 /// A template for records whose `parts` it can show, as its author reads and
-/// edits it. Anything that isn't one of a template's nodes is left to the
+/// edits it: a kind's def offers its fields. Anything that isn't one of a template's nodes is left to the
 /// projections around it, as a view that's a function is.
-pub(crate) fn editor<W: Host>(parts: Parts) -> Partial<W> {
+pub(crate) fn editor<W: Host>(parts: Rc<[CellId]>) -> Partial<W> {
     runtime_partial(move |input| node(input, &parts))
 }
 
-fn node<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>, parts: &Parts) -> Option<Layout<W>> {
+fn node<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+    parts: &Rc<[CellId]>,
+) -> Option<Layout<W>> {
     let within = || first(input, editor(parts.clone()));
     let Some(value) = input.value else {
         let parts = parts.clone();
         return Some(picker(Picker::new(
             CompletionKind::Value,
-            ranked(Rc::new(move |request| {
-                Some(offers(request, &parts(request)))
-            })),
+            ranked(Rc::new(move |request| Some(offers(request, &parts)))),
         )));
     };
     // A template kept in a cell reads the same, in the cell's parentheses.
@@ -248,36 +246,4 @@ fn offers(request: &CompletionRequest<'_>, parts: &[CellId]) -> Vec<Completion> 
             )
         }))
         .collect()
-}
-
-/// The parts a template for records carrying `keys` can show: the keys
-/// themselves, then the other fields of the document's records that carry
-/// one, as far as this place can read the document.
-pub(crate) fn scanned_parts(request: &CompletionRequest<'_>, keys: &[CellId]) -> Vec<CellId> {
-    fn visit(value: &Value, keys: &[CellId], found: &mut Vec<CellId>) {
-        match value {
-            Value::Record(fields) => {
-                if keys.iter().any(|key| fields.get(key).is_some()) {
-                    for (field, _) in fields.iter() {
-                        if *field != ::grap::isa::ISA && !found.contains(field) {
-                            found.push(*field);
-                        }
-                    }
-                }
-                fields.values().for_each(|value| visit(value, keys, found));
-            }
-            Value::List(items) => items.values().for_each(|value| visit(value, keys, found)),
-            _ => {}
-        }
-    }
-    let mut found = keys.to_vec();
-    if let Some(start) = (request.value_at)(&[]) {
-        visit(start, keys, &mut found);
-    }
-    for cell in (request.cells)() {
-        if let Some(definition) = (request.resolve)(cell).filter(|cell| cell.library.is_none()) {
-            visit(definition.value, keys, &mut found);
-        }
-    }
-    found
 }

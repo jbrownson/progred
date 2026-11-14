@@ -29,14 +29,14 @@ fn explicit_order_and_empty_selection_are_preserved_and_unknown_ids_fail() {
 
 #[test]
 fn only_libraries_that_bring_a_projection_or_offers_can_be_switched_off() {
-    let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID, declared::ID]).unwrap();
+    let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID, def::ID]).unwrap();
     assert_eq!(
         stack.switchable().collect::<Vec<_>>(),
         [
             (name::ID, "name"),
             (text::ID, "text"),
             (color::ID, "color"),
-            (declared::ID, "document libraries")
+            (def::ID, "def")
         ]
     );
 }

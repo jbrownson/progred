@@ -3,7 +3,6 @@ use crate::command::DocCommand;
 use crate::display::widget::view::Area;
 use crate::driver::Driver;
 use crate::library::Libraries;
-use crate::sample::{PLANET_VIEW, planets};
 use crate::test_examples::part;
 use crate::test_support::src;
 use gid::Cells;
@@ -332,23 +331,6 @@ fn opened_panes_sit_beside_the_documents_split_part() {
     assert_eq!((beside.y0, beside.y1, beside.x1), (0.0, 600.0, 900.0));
     // A rule between the pane and the document, and one in each split.
     assert_eq!(geometry.dividers.len(), 3);
-}
-
-#[test]
-fn only_the_root_declares_libraries() {
-    let (world, names) = planets(PLANET_VIEW);
-    let sources = world.sources();
-    assert_eq!(crate::workspace::libraries(&sources).len(), 1);
-    let mut nested = (*world.model.doc).clone();
-    nested.root = Some(Value::record([(
-        names["mars"],
-        nested.root.clone().unwrap(),
-    )]));
-    let nested_sources = crate::sources::Sources {
-        doc: &nested,
-        libraries: &world.stack.libraries,
-    };
-    assert!(crate::workspace::libraries(&nested_sources).is_empty());
 }
 
 #[test]

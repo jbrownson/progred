@@ -34,11 +34,8 @@ pub mod vocabulary {
 
     /// A row's or column's parts, in order.
     pub const PARTS: CellId = CellId::from_u128(0x4abd6fa4c21d4ba19bfc7c2893b52d69);
-    pub const LIBRARIES: CellId = CellId::from_u128(0xbc197ad66fea59a9bd97c4191c7845b2);
-    /// The keys a document library owns: it draws records carrying them.
-    pub const KEYS: CellId = CellId::from_u128(0xbb30d215605f5599e31f6274641ca89f);
-    /// A projection function: the one a document library draws its records
-    /// with, and the one presentation and layout take.
+    /// How something is drawn: a pane's value, presented, or a kind's
+    /// records, by its def.
     pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
 }
 
@@ -992,38 +989,6 @@ pub enum Move {
     Down,
     Left,
     Right,
-}
-
-/// The libraries the document declares at its root, in order. Each entry, or
-/// the cell it names, is a record of the `keys` the library owns and the
-/// `projection` that draws a record carrying them, a function of `value`.
-pub(crate) fn libraries(
-    sources: &crate::sources::Sources<'_>,
-) -> Vec<crate::display::DocumentLibrary> {
-    sources
-        .root()
-        .and_then(Value::as_record)
-        .and_then(|fields| fields.get(&vocabulary::LIBRARIES))
-        .and_then(Value::as_list)
-        .into_iter()
-        .flat_map(|declared| declared.values())
-        .filter_map(|entry| {
-            let entry = match entry.as_cell() {
-                Some(cell) => sources.resolve(cell)?.value,
-                None => entry,
-            };
-            let fields = entry.as_record()?;
-            Some(crate::display::DocumentLibrary {
-                keys: fields
-                    .get(&vocabulary::KEYS)?
-                    .as_list()?
-                    .values()
-                    .filter_map(Value::as_cell)
-                    .collect(),
-                projection: fields.get(&vocabulary::PROJECTION)?.clone().into(),
-            })
-        })
-        .collect()
 }
 
 /// Allocate requested weights while temporarily enforcing a minimum.

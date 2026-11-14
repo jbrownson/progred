@@ -12,7 +12,6 @@ pub mod completion;
 #[path = "tests/libraries/conformance.rs"]
 mod conformance;
 pub mod controls;
-pub mod declared;
 pub mod def;
 pub mod editor;
 pub mod f32;

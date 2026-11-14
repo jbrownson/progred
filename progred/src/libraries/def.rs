@@ -121,7 +121,7 @@ fn def_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<
         .leading([::grap::isa::ISA, name::vocabulary::NAME, FIELDS, PROJECTION])
         .child(move |key| {
             let parts = parts.clone();
-            (key == PROJECTION).then(|| layout::template::editor(Rc::new(move |_| parts.to_vec())))
+            (key == PROJECTION).then(|| layout::template::editor(parts.clone()))
         })
         .record(input)
 }

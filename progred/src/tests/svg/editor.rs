@@ -4,7 +4,7 @@
 use super::*;
 use crate::display::widget::view::Area;
 use crate::test_examples::{cam_editor, cam_position, result_path};
-use gid::{CellId, Value};
+use gid::CellId;
 #[test]
 #[ignore = "writes full-editor captures, including Fidget rasterization"]
 fn editor_svg_captures() {
@@ -200,27 +200,15 @@ fn capture_cam_async(mode: CellId) {
 }
 
 /// The home page's picture of the libraries example: its fractions and dials,
-/// drawn by the projections the document declares, ahead of those
-/// declarations.
+/// drawn by the kinds the document defines.
 #[test]
 #[ignore = "regenerates the website's document-libraries image"]
 fn website_libraries_image() {
-    use crate::libraries::editor::workspace::vocabulary::LIBRARIES;
-    let (mut doc, _) = crate::gid_text::parse(include_str!(concat!(
+    let (doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../examples/libraries.gid"
     )))
     .unwrap();
-    let root = doc.root.take().unwrap();
-    let fields = root.as_record().unwrap();
-    let declarations = fields.get(&LIBRARIES).unwrap().clone();
-    doc.root = Some(Value::record(
-        fields
-            .iter()
-            .filter(|(key, _)| *key != LIBRARIES)
-            .map(|(key, value)| (*key, value.clone()))
-            .chain([(LIBRARIES, declarations)]),
-    ));
     let mut editor = crate::test_editor(doc);
     editor.palette = crate::display::widget::style::Theme::Light.palette();
     editor.drawn_menu = false;

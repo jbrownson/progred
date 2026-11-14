@@ -58,44 +58,36 @@ start as; an area leaves out the providers of libraries switched off there. A Gr
 ordinary reachable data; configuration is never discovered through a reserved
 cell address or other data outside ordinary root reachability.
 
-A document declares its own libraries under the root's `libraries` field, which
-the editor library names beside `row` and `column`, and the editor reads it
-only at the root. Each entry, or the cell it names, is a record of the `keys` the library
-owns and the `projection` that draws a record carrying any of them: a function
-of `value`, the same convention a pane's projection uses, or a template. A
-template is layout data, a stored node such as `{isa: col, …}` or a cell
-holding one: it is drawn for the record as it stands, selects the record
-where it's pointed at, and its `descend`s lead into the record, so it draws
-every record carrying a key and computes nothing. Where the library declares
-it, a template can't be drawn as the layout it describes, since its
-`descend`s would lead into the template itself, so the library's record
-draws it as its author edits it
-([`template.rs`](../progred/src/libraries/layout/template.rs)): each node as
-its kind and what it holds, a `descend` as the name of the part it stands
-for, and an empty place offering the parts of the records the library draws,
-the kinds of node, and what's typed as the text it would draw. A stored
-`descend` can name, as `with`, a cell whose provided projection draws what it
-reaches in place of the usual one: the controls library provides `slider`,
-which draws a number from 0 to 1 as a slider and writes it where it's dragged,
-one undo step to a drag. So a template can show a part twice, as its number
-and as a slider, and either edits the other. One built-in library,
-"document libraries", loaded after all the others, tries the declared libraries
-in order on records carrying their keys, so a document library can't take over
-another library's values, the root, or its own definition, and switching it off
-in an area switches them all off. Records in its own code that
-carry its keys, like the patterns its view destructures, are still offered to it.
-The projection runs with the layout functions available: a layout it emits draws
+A document gives its own records views through kinds: a record says its kind
+with `isa`, and the kind's cell is defined by a def whose `projection` draws
+it (see [projection composition](#projection-composition)). The projection is
+a function of `value`, the same convention a pane's projection uses, or a
+template. A template is layout data, a stored node such as `{isa: col, …}` or
+a cell holding one: it is drawn for the record as it stands, selects the
+record where it's pointed at, and its `descend`s lead into the record, so it
+draws every record of its kind and computes nothing. Where the def holds it, a
+template can't be drawn as the layout it describes, since its `descend`s
+would lead into the template itself, so the def draws it as its author edits
+it ([`template.rs`](../progred/src/libraries/layout/template.rs)): each node
+as its kind and what it holds, a `descend` as the name of the part it stands
+for, and an empty place offering the def's fields as parts, the kinds of
+node, and what's typed as the text it would draw. A stored `descend` can name,
+as `with`, a cell whose provided projection draws what it reaches in place of
+the usual one: the controls library provides `slider`, which draws a number
+from 0 to 1 as a slider and writes it where it's dragged, one undo step to a
+drag. So a template can show a part twice, as its number and as a slider, and
+either edits the other.
+A function runs with the layout functions available: a layout it emits draws
 the record in place, so whatever it descends into stays editable; a value it
 returns is drawn with the area's projections; an absent passes the record on, so a
 view that can't draw a value returns an absent before emitting anything (`do`
 stops at its first absent). Only a field being added follows
-an emitted layout, as a trailing record. A library steps aside where it is already
-drawing, or for a value it is already drawing, so a view can show its record's
+an emitted layout, as a trailing record. A view steps aside where it is already
+drawing, or for a value it is already drawing, so it can show its record's
 ordinary projection inside itself, in place or as its result, and nested
-document-library drawings stop at a fixed depth. Declarations are read
-while projecting, so editing a library's view redraws its records at once. Document
-libraries contribute no completions or foreign functions, and other documents
-can't load them.
+views stop at a fixed depth. Defs are read while projecting, so editing a
+kind's view redraws its records at once. A document's kinds contribute no
+completions or foreign functions, and other documents can't load them.
 
 Library labels are once-minted random `CellId`s. Their readable names are
 ordinary GID facts, not identifiers derived from names. Text is an open
@@ -137,8 +129,7 @@ domain projections precede general ones.
 A record that says what kind of thing it is draws first by its kind's def,
 where the kind's cell is defined by one: `{isa: def, name, fields,
 projection}` ([`def.rs`](../progred/src/libraries/def.rs)). The def's
-`projection` is a template or a function of `value`, as a document library's
-is; one projection, since projections compose. Where it declines, or the
+`projection` is a template or a function of `value`; one projection, since projections compose. Where it declines, or the
 kind has no def, or the `def` library is switched off in the area, the record
 goes on. A def is edited as a record whose projection, a template, offers the
 def's own fields as its parts. Edit's New Kind from Selection makes a kind of

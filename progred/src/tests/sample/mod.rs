@@ -178,8 +178,8 @@ pub fn sample_document() -> Document {
         .0
 }
 
-/// A document with a planet library: its view says "planet with" and descends
-/// into the moons, and declines anything without them.
+/// A document with a kind of celestial body: its view says "planet with" and
+/// descends into the moons, and declines a body without them.
 pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
     let source = format!(
         r#"{{
@@ -208,8 +208,10 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
             "key": f12dea12c741fe36312750a264f3a235,
             "value": 84d3ba81fd2a52ea37478f4a868106f4,
             "projection": 873503e2e37a1722a0dd21399be9ee7f,
-            "libraries": bc197ad66fea59a9bd97c4191c7845b2,
-            "keys": bb30d215605f5599e31f6274641ca89f,
+            "def": a9a53af4187f4715f1eebdf58e0c65c0,
+            "fields": 003bb68cfb673326a483cd31b03ba27f,
+            "kinds": a5553c5c950035850ba43e174263c5e1,
+            "celestial": a7217fe6a94b121020303fbc9186cd35,
             "planet": 6655e4ba9e8ae76706056e0b8edf94f0,
             "moons": 6122302fdbe3db3624731717321b94a1,
             "planet_view": 0b570cad527f02e4ed4b06110a62bf67,
@@ -224,12 +226,12 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
             moons: {{name: "moons"}},
             n: {{name: "n"}},
             planet_view: {{isa: lambda, name: "planet view", params: [value], body: {view_body}}},
-            planets: {{name: "planets", keys: [planet], projection: planet_view}},
+            celestial: {{isa: def, name: "celestial body", fields: [planet, moons], projection: planet_view}},
           }},
           "root": {{
-            libraries: [planets],
-            mars: {{planet: "Mars", moons: {{f64: 0x0000000000000040}}}},
-            note: {{planet: "Pluto"}},
+            kinds: [celestial],
+            mars: {{isa: celestial, planet: "Mars", moons: {{f64: 0x0000000000000040}}}},
+            note: {{isa: celestial, planet: "Pluto"}},
           }},
         }}"#
     );

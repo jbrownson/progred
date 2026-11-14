@@ -11,7 +11,7 @@ use gid::{CellId, Step};
 pub use crate::workspace::row;
 
 pub mod vocabulary {
-    pub use crate::workspace::vocabulary::{KEYS, LIBRARIES, PARTS, kind};
+    pub use crate::workspace::vocabulary::{PARTS, kind};
 }
 
 /// The room between the parts of a row or column drawn inside a value.

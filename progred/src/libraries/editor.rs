@@ -54,8 +54,6 @@ pub fn library<W: Host>() -> Library<W> {
             (workspace::vocabulary::kind::ROW, "row"),
             (workspace::vocabulary::kind::COLUMN, "column"),
             (workspace::vocabulary::PARTS, "parts"),
-            (workspace::vocabulary::LIBRARIES, "libraries"),
-            (workspace::vocabulary::KEYS, "keys"),
             (crate::library::vocabulary::kind::LIBRARY, "loaded library"),
             (crate::library::vocabulary::CELLS, "cells"),
         ],

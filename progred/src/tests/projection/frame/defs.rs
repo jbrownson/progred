@@ -10,7 +10,7 @@ where
 }
 
 #[test]
-fn a_declared_library_draws_its_values_and_descends_into_them() {
+fn a_kinds_view_draws_its_records_and_descends_into_them() {
     let (mut world, names) = planets(PLANET_VIEW);
     let [mars, note, planet, moons] = ["mars", "note", "planet", "moons"].map(|name| names[name]);
     assert!(
@@ -28,7 +28,7 @@ fn a_declared_library_draws_its_values_and_descends_into_them() {
 }
 
 #[test]
-fn the_library_follows_edits_to_its_own_view() {
+fn records_follow_edits_to_their_kinds_view() {
     let (mut world, names) = planets(PLANET_VIEW);
     let [mars, planet, moons, view] =
         ["mars", "planet", "moons", "planet_view"].map(|name| names[name]);
@@ -283,8 +283,8 @@ fn a_view_that_is_layout_data_is_a_template_for_its_records() {
     // record shows.
     assert!(drawn(&mut world, &[Step::Key(mars), Step::Key(moons)]));
     assert!(!drawn(&mut world, &[Step::Key(mars), Step::Key(planet)]));
-    // It has no way to decline, so it draws every record carrying the key,
-    // one without moons included.
+    // It has no way to decline, so it draws every record of its kind, one
+    // without moons included.
     assert!(!drawn(
         &mut world,
         &[Step::Key(names["note"]), Step::Key(planet)]
@@ -292,15 +292,15 @@ fn a_view_that_is_layout_data_is_a_template_for_its_records() {
 }
 
 #[test]
-fn a_template_is_edited_where_its_library_declares_it() {
+fn a_template_is_edited_where_its_kind_is_defined() {
     use crate::driver::Driver;
     use crate::libraries::layout::vocabulary as l;
     use ui_events::keyboard::{Key, Modifiers, NamedKey};
     let (world, names) = planets_template();
     let mut driver = Driver::new(world, Driver::VIEWPORT);
-    let library = driver.element(&[Step::Key(names["libraries"])], 0, &[Step::Follow]);
+    let kind = driver.element(&[Step::Key(names["kinds"])], 0, &[Step::Follow]);
     let children = [
-        library.as_slice(),
+        kind.as_slice(),
         &[
             Step::Key(names["projection"]),
             Step::Follow,
@@ -314,8 +314,8 @@ fn a_template_is_edited_where_its_library_declares_it() {
     let part = driver.element(&children, 1, &[]);
     assert!(driver.drawn(&part));
     assert!(!driver.drawn(&[part.as_slice(), &[Step::Key(names["moons"])]].concat()));
-    // Enter after a node opens a place beside it, which offers the parts of
-    // the records the library draws by name.
+    // Enter after a node opens a place beside it, which offers the kind's
+    // fields as parts, by name.
     driver.select(&part);
     driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
     driver.type_text("plan");
@@ -360,25 +360,27 @@ fn a_template_is_edited_where_its_library_declares_it() {
 fn a_template_draws_a_part_with_a_projection_it_names() {
     use crate::driver::Driver;
     use crate::libraries::controls::vocabulary::AS_SLIDER;
+    use crate::libraries::def::vocabulary::{DEF, FIELDS, PROJECTION};
     use crate::libraries::layout::template::part_with;
-    use crate::workspace::vocabulary::{KEYS, LIBRARIES, PROJECTION};
-    let [level, tank] = std::array::from_fn(|_| gid::new_cell_id());
+    let [level, tank, gauge] = std::array::from_fn(|_| gid::new_cell_id());
+    let mut cells = gid::Cells::new();
+    cells.set_value(
+        gauge,
+        ::grap::isa::record(
+            DEF,
+            [
+                (FIELDS, Value::list([level.into()])),
+                (PROJECTION, part_with(level, AS_SLIDER)),
+            ],
+        ),
+    );
     let mut driver = Driver::new(
         crate::test_editor(gid::Document {
-            root: Some(Value::record([
-                (
-                    tank,
-                    Value::record([(level, crate::libraries::f64::value(0.25))]),
-                ),
-                (
-                    LIBRARIES,
-                    Value::list([Value::record([
-                        (KEYS, Value::list([level.into()])),
-                        (PROJECTION, part_with(level, AS_SLIDER)),
-                    ])]),
-                ),
-            ])),
-            cells: gid::Cells::new(),
+            root: Some(Value::record([(
+                tank,
+                ::grap::isa::record(gauge, [(level, crate::libraries::f64::value(0.25))]),
+            )])),
+            cells,
         }),
         Driver::VIEWPORT,
     );
