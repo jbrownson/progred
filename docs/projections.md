@@ -132,7 +132,10 @@ projection}` ([`def.rs`](../progred/src/libraries/def.rs)). The def's
 `projection` is a template or a function of `value`; one projection, since projections compose. Where it declines, or the
 kind has no def, or the `def` library is switched off in the area, the record
 goes on. A def is edited as a record whose projection, a template, offers the
-def's own fields as its parts. Next, it draws as its kind provides,
+def's own fields as its parts. A document's own defs live in its library:
+its root, where the root says `isa: library`, lists them under `defs`, beside
+whatever else the document holds; nothing else in the document is searched
+for them. A record's empty `isa` offers those kinds. Next, it draws as its kind provides,
 ahead of every library's partial: the stack's next partial reads the record's
 `isa` and applies the projection its libraries registered under that kind's cell,
 composed in load order, or declines where the kind provides none or the record

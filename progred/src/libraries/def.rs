@@ -12,7 +12,7 @@ use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::presentation::vocabulary::VALUE;
 use crate::libraries::{Library, layout, name};
 use ::grap::RuntimeValue;
-use gid::CellId;
+use gid::{CellId, Value};
 use std::rc::Rc;
 
 pub const ID: CellId = CellId::from_u128(0x5a0fcad83599b7a4bd80398988ba22cb);
@@ -27,6 +27,11 @@ pub mod vocabulary {
     /// How a kind's records are drawn, as a pane's value is: a template, or
     /// a function of `value`.
     pub use crate::workspace::vocabulary::PROJECTION;
+    /// A library's kind: `{isa: library, defs, …}`, where a document's own
+    /// defs live.
+    pub const LIBRARY: CellId = CellId::from_u128(0x6a2a379c9d9553cedafcb3987e7891b7);
+    /// A library's defs, each a kind's cell.
+    pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
 }
 use vocabulary::*;
 
@@ -34,10 +39,37 @@ pub fn library<W: Host>() -> Library<W> {
     name::named_library(
         ID,
         "def",
-        [(DEF, "def"), (FIELDS, "fields")],
+        [
+            (DEF, "def"),
+            (FIELDS, "fields"),
+            (LIBRARY, "library"),
+            (DEFS, "defs"),
+        ],
         ::grap::ForeignFunctions::default(),
     )
-    .with_projections_for([(DEF, crate::display::runtime_partial(def_display))])
+    .with_projections_for([
+        (DEF, crate::display::runtime_partial(def_display)),
+        (LIBRARY, crate::display::runtime_partial(library_display)),
+    ])
+}
+
+/// The document's own defs: those of the library its root is, where its root
+/// is one. Nothing else in the document is searched.
+pub(crate) fn document_defs(root: Option<&Value>) -> Vec<CellId> {
+    root.and_then(Value::as_record)
+        .filter(|fields| ::grap::isa::of(fields) == Some(LIBRARY))
+        .and_then(|fields| fields.get(&DEFS)?.as_list())
+        .map(|defs| defs.values().filter_map(Value::as_cell).collect())
+        .unwrap_or_default()
+}
+
+/// A library as its author edits it: its defs first, then whatever else the
+/// document keeps beside them.
+fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+    (input.value?.kind()? == LIBRARY).then_some(())?;
+    crate::display::structure::Fields::default()
+        .leading([::grap::isa::ISA, name::vocabulary::NAME, DEFS])
+        .record(input)
 }
 
 /// What a def says about a kind.

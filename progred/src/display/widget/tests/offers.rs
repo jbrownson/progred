@@ -62,6 +62,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                 value_at: &|_| None,
                 resolve: &|cell| sources.resolve(cell),
                 cells: &|| sources.cells(),
+                root: sources.root(),
                 name: &|cell| crate::libraries::name::of(&sources, cell),
                 libraries: None,
             });

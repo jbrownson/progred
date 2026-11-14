@@ -91,9 +91,10 @@ of its kind, `{isa: library, defs: [...], …}`, edited where it is and drawn by
 a projection that keeps it organized. A record's `isa` reaches its def
 directly, so a library isn't a registry for drawing; it's where defs live,
 which keeps a def that no record uses yet, lists the kinds to edit, and is
-what's enumerated when something wants every def in reach, as offers of a
-kind will. Open: which libraries a document's places can reach, such as
-those reachable from its content, or those at a known place in it.
+what's enumerated when something wants every def in reach. The rule for
+finding it is fixed and simple, not a search of the document: the document's
+root, under any workspace, is its library where it says `isa: library`
+(`def::document_defs`). An empty `isa` offers that library's kinds.
 
 ### Defs
 

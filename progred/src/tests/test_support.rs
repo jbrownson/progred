@@ -198,6 +198,7 @@ pub(crate) fn bare_request(
         value_at: &|_| None,
         resolve: &|_| None,
         cells: &Vec::new,
+        root: None,
         name: &|_| None,
         libraries: None,
     }
@@ -221,6 +222,7 @@ pub(crate) fn ask_over<R>(
         value_at: &|path| sources.resolve_path(path),
         resolve: &|cell| sources.resolve(cell),
         cells: &|| sources.cells(),
+        root: sources.root(),
         name: &|cell| crate::libraries::name::of(sources, cell),
         libraries: None,
     })
@@ -271,6 +273,7 @@ pub(crate) fn completion_entries_with(
         value_at: &|path| sources.resolve_path(path),
         resolve: &|cell| sources.resolve(cell),
         cells: &|| sources.cells(),
+        root: sources.root(),
         name: &|cell| crate::libraries::name::of(sources, cell),
         libraries: providers,
     })

@@ -126,3 +126,28 @@ fn a_def_that_declines_passes_its_record_on() {
     let (driver, [_, _, _, half]) = fraction(Some(Value::list([])));
     assert!(driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
 }
+
+#[test]
+fn a_documents_defs_are_those_of_the_library_its_root_is() {
+    let [fraction, angle, data] = std::array::from_fn(|_| gid::new_cell_id());
+    let library = |defs: Vec<Value>| {
+        ::grap::isa::record(
+            LIBRARY,
+            [(DEFS, Value::list(defs)), (data, Value::list([]))],
+        )
+    };
+    assert_eq!(
+        document_defs(Some(&library(vec![fraction.into(), angle.into()]))),
+        [fraction, angle]
+    );
+    // A root that isn't a library has none, and a library further in isn't
+    // looked for.
+    assert!(document_defs(None).is_empty());
+    assert!(
+        document_defs(Some(&Value::record([(
+            data,
+            library(vec![fraction.into()])
+        )])))
+        .is_empty()
+    );
+}
