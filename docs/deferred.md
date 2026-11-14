@@ -82,6 +82,19 @@ different, as they should be. Not chosen: wrapping every document on load,
 which changes a user's file for opening it, and keeping the workspace beside
 the root in the document format, which mixes the editor's layer into GID's.
 
+### A document's library
+
+Decided November 2026: the workspace holds only how the document is looked
+at, panes and which views are on where, and is the record the editor peels
+off. What the document defines for itself is content: a library, a record
+of its kind, `{isa: library, defs: [...], …}`, edited where it is and drawn by
+a projection that keeps it organized. A record's `isa` reaches its def
+directly, so a library isn't a registry for drawing; it's where defs live,
+which keeps a def that no record uses yet, lists the kinds to edit, and is
+what's enumerated when something wants every def in reach, as offers of a
+kind will. Open: which libraries a document's places can reach, such as
+those reachable from its content, or those at a known place in it.
+
 ### Defs
 
 Begun November 2026. A kind's cell is defined by a def, `{isa: def, name,
