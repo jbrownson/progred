@@ -65,7 +65,16 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
         let site = input.site();
         let name = d::descend(
             [Step::Key(name::vocabulary::NAME)],
-            Some(d::first(input, name::slot())),
+            Some(d::first(
+                input,
+                name::projection(Some(crate::identity::name_or_short_id(
+                    input
+                        .env
+                        .name(name::vocabulary::NAME)
+                        .map(|name| name.spelling().into_owned()),
+                    name::vocabulary::NAME,
+                ))),
+            )),
             None,
         );
         let body = d::indent(18.0, d::descend([Step::Key(BODY)], None, None));

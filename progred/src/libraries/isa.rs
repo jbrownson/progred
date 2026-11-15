@@ -91,7 +91,16 @@ pub(crate) fn form<W: Host>(
     let name = (named || value.contains_field(name::vocabulary::NAME)).then(|| {
         descend(
             [Step::Key(name::vocabulary::NAME)],
-            Some(crate::display::first(input, name::slot())),
+            Some(crate::display::first(
+                input,
+                name::projection(Some(crate::identity::name_or_short_id(
+                    input
+                        .env
+                        .name(name::vocabulary::NAME)
+                        .map(|name| name.spelling().into_owned()),
+                    name::vocabulary::NAME,
+                ))),
+            )),
             None,
         )
     });

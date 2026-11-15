@@ -367,23 +367,6 @@ pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
     })
 }
 
-/// [`projection`] whose missing or empty name shows what the document calls
-/// a name, `name`, dim, a place to type one.
-pub(crate) fn slot<W: Host>() -> Partial<W> {
-    crate::display::partial(move |input| {
-        Some(crate::display::line_edit(crate::display::LineEdit {
-            placeholder: Some(
-                input
-                    .env
-                    .name(vocabulary::NAME)
-                    .map(|name| name.spelling().into_owned())
-                    .unwrap_or_else(|| crate::identity::short_id(vocabulary::NAME)),
-            ),
-            ..line(input.value)?
-        }))
-    })
-}
-
 /// The editor of the name `value`, or of a missing one, which its first
 /// keystroke writes.
 pub(crate) fn line(value: Option<&Value>) -> Option<crate::display::LineEdit> {
