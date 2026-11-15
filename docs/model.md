@@ -45,7 +45,9 @@ its identity, not in a separate metadata store: `{isa: loaded library, name,
 cells}`, the name it gives itself and the cells it defines, ordered by their
 names. Composing the loaded libraries writes it, so it lists what each library
 ends up defining; the editor library draws it as its name over a column of
-its cells, each by its name.
+its cells, each by its name. An empty document can start as the loaded
+libraries, a list of their cells, to look through; the Libraries menu opens
+one in a pane.
 Replacing a loaded library replaces all its contributions in place, including
 projections and completions, before those are composed.
 Paths, locations and evaluation all go through that lookup, so a path reaches

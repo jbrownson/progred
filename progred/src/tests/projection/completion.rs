@@ -487,6 +487,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
             "notebook",
             "fidget",
             "grap",
+            "loaded libraries",
             "new cell",
             "new list",
             "new record",
@@ -499,12 +500,12 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         &crate::selection::pending_with_query(&crate::test_document(), vec![], ""),
     )
     .into_iter()
-    .take(4)
+    .take(5)
     .map(|entry| entry.detail)
     .collect();
     assert_eq!(
         details,
-        ["def", "notebook", "fidget", "grap"].map(|library| Some(library.to_owned()))
+        ["def", "notebook", "fidget", "grap", "editor"].map(|library| Some(library.to_owned()))
     );
     let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);
@@ -665,4 +666,33 @@ fn missing_call_argument_slots_edit_real_fields_without_materializing_other_argu
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
     assert_eq!(document.root, Some(grap::call(function.into(), [])));
+}
+
+#[test]
+fn an_empty_document_can_start_as_the_loaded_libraries_each_by_its_name() {
+    let doc = Document::default();
+    let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "");
+    let entries = projected_completion_entries(&doc, &selection);
+    let offer = entries
+        .iter()
+        .find(|entry| entry.display == "loaded libraries")
+        .expect("offered");
+    let world = activate_projected(&doc, &selection, offer);
+    let sources = world.sources();
+    let names: Vec<_> = sources
+        .root()
+        .and_then(Value::as_list)
+        .expect("a list of the libraries")
+        .values()
+        .map(|library| {
+            crate::libraries::name::of(&sources, library.as_cell().unwrap())
+                .map(|name| name.spelling().into_owned())
+        })
+        .collect();
+    for library in ["name", "def", "grap", "fidget", "editor"] {
+        assert!(
+            names.contains(&Some(library.to_owned())),
+            "{library} in {names:?}"
+        );
+    }
 }

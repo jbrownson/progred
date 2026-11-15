@@ -1,6 +1,6 @@
 //! The editor's own vocabulary: its selection, each site's state and folds,
-//! paths as data, the rows and columns of parts, and the libraries a
-//! document declares at its root. The editor defines these cells beside the
+//! paths as data, the rows and columns of parts, and the loaded libraries,
+//! which an empty document can start as, to look through. The editor defines these cells beside the
 //! code that interprets them, and supplies their effects while dispatching;
 //! this library names them.
 
@@ -67,6 +67,32 @@ pub fn library<W: Host>() -> Library<W> {
         .into_iter()
         .chain(workspace::projections()),
     )
+    .with_completions(completions)
+}
+
+/// An empty document can start as the loaded libraries, each by its name,
+/// opening to what it defines, to look through.
+fn completions(
+    request: &crate::display::CompletionRequest<'_>,
+) -> Option<Vec<crate::display::Completion>> {
+    use crate::display::{CompletionKind, CompletionScope};
+    use crate::library::vocabulary::kind::LIBRARY;
+    (request.kind == CompletionKind::Value && request.scope == CompletionScope::Start)
+        .then_some(())?;
+    let libraries: Vec<gid::Value> = (request.loaded)()
+        .into_iter()
+        .filter(|cell| {
+            (request.resolve)(*cell)
+                .and_then(|definition| definition.value.as_record())
+                .and_then(::grap::isa::of)
+                == Some(LIBRARY)
+        })
+        .map(gid::Value::from)
+        .collect();
+    Some(vec![crate::libraries::completion::select(
+        "loaded libraries",
+        gid::Value::list(libraries),
+    )])
 }
 
 /// A loaded library: its name over its cells, each by its name, a reference
