@@ -170,11 +170,14 @@ pub fn library_named<W: Host>(
     Library::new(Definitions::from_parts(cells, functions))
 }
 
-/// `libraries` with each one's own cell holding the library as a value,
-/// `{isa: loaded library, name, cells}`: the name it gives itself and the
-/// cells it defines, in order of their names, those without one last.
-pub(crate) fn described(libraries: Libraries) -> Libraries {
-    use crate::library::vocabulary::{CELLS, kind::LIBRARY};
+/// `libraries` with each one's own cell holding the library as a library,
+/// as a document's is: `{isa: library, name, defs, functions, fields}`, the
+/// name it gives itself and the cells it defines, each where it belongs: the
+/// kinds it draws (`kinds`, which library draws which) among its defs, its
+/// foreign functions and lambdas among its functions, and the rest among its
+/// fields, each list ordered by name, those without one last.
+pub(crate) fn described(libraries: Libraries, kinds: &[(CellId, CellId)]) -> Libraries {
+    use crate::libraries::def::vocabulary::{DEFS, FIELDS, FUNCTIONS, LIBRARY};
     let mut described = libraries.clone();
     for (id, definitions) in libraries.iter() {
         let mut cells: Vec<_> = definitions
@@ -187,6 +190,21 @@ pub(crate) fn described(libraries: Libraries) -> Libraries {
             })
             .collect();
         cells.sort();
+        let (mut defs, mut functions, mut fields) = (Vec::new(), Vec::new(), Vec::new());
+        for (_, _, cell) in cells {
+            let lambda = definitions
+                .value(cell)
+                .and_then(Value::as_record)
+                .and_then(::grap::isa::of)
+                == Some(::grap::vocabulary::kind::LAMBDA);
+            if kinds.contains(&(id, cell)) {
+                defs.push(cell.into());
+            } else if definitions.implementation(cell).is_some() || lambda {
+                functions.push(cell.into());
+            } else {
+                fields.push(cell.into());
+            }
+        }
         let name = definitions
             .value(id)
             .and_then(Value::as_record)
@@ -194,10 +212,11 @@ pub(crate) fn described(libraries: Libraries) -> Libraries {
             .map(|name| (vocabulary::NAME, name.clone()));
         let value = ::grap::isa::record(
             LIBRARY,
-            name.into_iter().chain([(
-                CELLS,
-                Value::list(cells.into_iter().map(|(_, _, cell)| cell.into())),
-            )]),
+            name.into_iter().chain([
+                (DEFS, Value::list(defs)),
+                (FUNCTIONS, Value::list(functions)),
+                (FIELDS, Value::list(fields)),
+            ]),
         );
         let mut definitions = definitions.clone();
         definitions.insert(id, value);

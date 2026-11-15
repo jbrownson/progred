@@ -108,8 +108,7 @@ definition says what its places offer (`offers`, see
 [projections](projections.md)), a list or a Grap function of the record being
 filled. Still to do: a library of common ones, where those reading the
 document (its kinds, the functions in reach) need a foreign function given
-the document; a library listing `fields` for those shared or with no home,
-such as `name`, since fields mostly live in the defs that list them; and a
+the document; and a
 field's offers leading the place's list rather than following the editor's
 constructors, as Raw orders every reading today.
 
@@ -136,6 +135,20 @@ switches off with the `def` library. Still to do:
   under the same cell, so a built-in kind can be read like a document's.
 - Done: document libraries, which matched records by the keys they carried,
   are gone; the examples' records say their kinds.
+
+### A library, whoever wrote it
+
+Begun November 2026. A loaded library and a document's are the same record,
+`{isa: library, name, defs, functions, fields}`, drawn the same way; a loaded
+one's is written from what it contributes as it's composed. What a Rust
+library has beyond its cells, the projections it draws with, its fallback, its
+offers and starting points, its foreign functions, isn't data. A document's
+library has the data side of most of these: defs with projections, Grap
+functions, fields with offers. Still to do: built-in kinds as defs, so a
+loaded library's defs are defs and a kind it draws some other way isn't read
+as a field; and, once a document's library can be loaded into another
+document (below), its own starting points and offers, which mean nothing
+inside the document that defines them. Foreign functions stay Rust's.
 
 ### External libraries a document uses
 

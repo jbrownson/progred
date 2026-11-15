@@ -168,7 +168,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                         input.value?.field(wrapper)?;
                         Some(d::descend(
                             [Step::Key(wrapper)],
-                            Some(d::structure::list_column(8.0, None)),
+                            Some(d::test_support::list_column(8.0, None)),
                             None,
                         ))
                     }),
@@ -637,7 +637,7 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
         .collect();
     let mut world = crate::editor_of(root);
     world.stack.projection = Projection::new([
-        d::structure::list_column(8.0, None),
+        d::test_support::list_column(8.0, None),
         world.stack.projection.partial().clone(),
     ]);
     let document = world.model.doc.clone();

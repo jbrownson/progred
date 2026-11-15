@@ -153,34 +153,52 @@ fn a_call_draws_as_its_function_provides_else_as_a_call() {
 }
 
 #[test]
-fn each_library_s_own_cell_holds_the_library() {
-    use crate::library::vocabulary::{CELLS, kind::LIBRARY};
+fn each_library_s_own_cell_holds_the_library_as_a_library() {
+    use crate::libraries::def::{
+        self,
+        vocabulary::{DEFS, FIELDS, FUNCTIONS, LIBRARY},
+    };
     let stack = load();
-    let fields = crate::test_support::first_value(&stack.libraries, presentation::ID)
-        .and_then(gid::Value::as_record)
-        .unwrap();
-    assert_eq!(::grap::isa::of(fields), Some(LIBRARY));
+    // What a library lists under `list`, by name.
+    let listed = |library: gid::CellId, list: gid::CellId| -> Vec<String> {
+        let fields = crate::test_support::first_value(&stack.libraries, library)
+            .and_then(gid::Value::as_record)
+            .unwrap();
+        assert_eq!(::grap::isa::of(fields), Some(LIBRARY));
+        let (_, definitions) = stack
+            .libraries
+            .iter()
+            .find(|(id, _)| *id == library)
+            .unwrap();
+        fields
+            .get(&list)
+            .and_then(gid::Value::as_list)
+            .unwrap()
+            .values()
+            .map(|cell| {
+                name::read(definitions.value(cell.as_cell().unwrap()).unwrap())
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect()
+    };
     assert_eq!(
-        fields.get(&name::vocabulary::NAME).and_then(text::read),
-        Some("presentation")
+        crate::test_support::first_value(&stack.libraries, def::ID)
+            .and_then(gid::Value::as_record)
+            .and_then(|fields| fields.get(&name::vocabulary::NAME))
+            .and_then(text::read),
+        Some("def")
     );
-    let cells: Vec<_> = fields
-        .get(&CELLS)
-        .and_then(gid::Value::as_list)
-        .unwrap()
-        .values()
-        .map(|cell| cell.as_cell().unwrap())
-        .collect();
-    assert!(cells.contains(&presentation::vocabulary::kind::RENDER));
-    assert!(!cells.contains(&presentation::ID));
-    let (_, definitions) = stack
-        .libraries
-        .iter()
-        .find(|(id, _)| *id == presentation::ID)
-        .unwrap();
-    let names: Vec<_> = cells
-        .iter()
-        .map(|cell| name::read(definitions.value(*cell).unwrap()).unwrap())
-        .collect();
-    assert!(names.is_sorted(), "{names:?}");
+    // The kinds it draws are its defs, and the rest of its vocabulary its
+    // fields, each by name.
+    assert_eq!(listed(def::ID, DEFS), ["def", "library"]);
+    let fields = listed(def::ID, FIELDS);
+    assert!(fields.contains(&"offers".to_owned()), "{fields:?}");
+    assert!(fields.is_sorted(), "{fields:?}");
+    // Its foreign functions are its functions.
+    let functions = listed(crate::libraries::list::ID, FUNCTIONS);
+    assert!(
+        functions.contains(&"list length".to_owned()),
+        "{functions:?}"
+    );
 }

@@ -635,12 +635,14 @@ fn open_library_shows_a_loaded_library_read_only_once() {
     assert_eq!(driver.editor().model.doc.root.as_ref(), Some(&root));
     let opened = opened(&driver);
     assert_eq!(opened.entry, Entry::Place(place.clone()));
-    // The pane draws the library, its cells among it, and selects it.
+    // The pane draws the library, its fields among it, and selects it.
     let shown = opened_at(place);
     assert_eq!(driver.selection(), shown);
     let cells = [
         shown.clone(),
-        vec![occurrence::Step::Key(crate::library::vocabulary::CELLS)],
+        vec![occurrence::Step::Key(
+            crate::libraries::def::vocabulary::FIELDS,
+        )],
     ]
     .concat();
     assert!(driver.drawn(&cells));

@@ -154,7 +154,11 @@ fn compose(
     contributions: impl IntoIterator<Item = (gid::CellId, Library<crate::Editor, Hovered>)>,
 ) -> Stack {
     let (libraries, partials, provided, providers) = Libraries::from_contributions(contributions);
-    let libraries = crate::libraries::name::described(libraries);
+    let kinds: Vec<_> = provided
+        .iter()
+        .map(|(library, kind, _)| (*library, *kind))
+        .collect();
+    let libraries = crate::libraries::name::described(libraries, &kinds);
     let providers: Rc<[_]> = providers.into();
     let completions = crate::libraries::completion::combine(providers.iter().cloned());
     let partials: Rc<[_]> = partials.into();

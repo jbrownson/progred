@@ -628,3 +628,15 @@ pub fn primary_press(
         },
     }
 }
+
+/// An editable list without brackets or commas, one item under another;
+/// items keep the standard occurrence paths, child projections, and pending
+/// insertion behavior.
+pub(crate) fn list_column<W: crate::display::Host>(
+    gap: f64,
+    child: Option<crate::display::host::Partial<W>>,
+) -> crate::display::host::Partial<W> {
+    crate::display::runtime_partial(move |input| {
+        crate::display::structure::list_column_with(input, gap, child.clone(), |_, entry| entry)
+    })
+}

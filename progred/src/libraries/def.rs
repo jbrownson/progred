@@ -36,7 +36,9 @@ pub mod vocabulary {
     /// A library's kind: `{isa: library, defs, …}`, where a document's own
     /// defs live.
     pub const LIBRARY: CellId = CellId::from_u128(0x6a2a379c9d9553cedafcb3987e7891b7);
-    /// A library's defs, each a kind's cell.
+    /// A library's defs, each a kind's cell. A library lists its fields,
+    /// those shared or with no def of their own, under `fields`, as a def
+    /// lists its own.
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
     /// A library's functions, each a cell holding one.
     pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);
@@ -194,11 +196,11 @@ fn new_library() -> Completion {
         .with_aliases(["library"])
 }
 
-/// A library with no defs or functions yet.
+/// A library with no defs, functions or fields yet.
 fn empty_library() -> Value {
     ::grap::isa::record(
         LIBRARY,
-        [(DEFS, Value::list([])), (FUNCTIONS, Value::list([]))],
+        [DEFS, FUNCTIONS, FIELDS].map(|list| (list, Value::list([]))),
     )
 }
 
@@ -307,31 +309,42 @@ pub(crate) fn document_functions<'a>(
     listed(root, resolve, FUNCTIONS)
 }
 
-/// A library as its author edits it: its defs, then its functions, then
-/// whatever else it keeps. A place among its defs offers a new def, and one
-/// among its functions a new function, each named as typed.
+/// A library as it's read and edited, a loaded one as a document's: its
+/// defs, its functions and its fields, each a list. A cell
+/// another library defines reads by its name, opening to its definition; one
+/// the document defines reads in place, where it's edited. A place in a list
+/// offers a new def, function or field, named as typed.
 fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.kind()? == LIBRARY).then_some(())?;
-    // A list whose empty place offers what `new` makes of what's typed.
-    let growing = |new: fn(String) -> Completion| {
+    // A list whose entries read as above, and whose empty place offers what
+    // `new` makes of what's typed.
+    let listing = |new: fn(String) -> Completion| {
         crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
-            input.value.is_none().then(|| new_place(new))
+            match input.value {
+                None => Some(new_place(new)),
+                Some(entry) => {
+                    let cell = entry.as_cell()?;
+                    input.env.resolve(cell)?.library?;
+                    name::shallow_cell(input)
+                }
+            }
         })))
     };
+    let lists = [DEFS, FUNCTIONS, FIELDS];
     crate::libraries::isa::form(
         input,
         crate::display::structure::Fields::default()
-            .leading([DEFS, FUNCTIONS])
-            .slots([DEFS, FUNCTIONS])
+            .leading(lists)
+            .slots(lists)
             .child(move |key| match key {
-                DEFS => Some(growing(|typed| {
+                DEFS => Some(listing(|typed| {
                     name::new_cell(
                         typed,
                         "def",
                         vec![(::grap::isa::ISA, DEF.into()), (FIELDS, Value::list([]))],
                     )
                 })),
-                FUNCTIONS => Some(growing(|typed| {
+                FUNCTIONS => Some(listing(|typed| {
                     name::new_cell(
                         typed,
                         "function",
@@ -344,6 +357,7 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                         ],
                     )
                 })),
+                FIELDS => Some(listing(|typed| name::new_cell(typed, "field", vec![]))),
                 _ => None,
             }),
         false,

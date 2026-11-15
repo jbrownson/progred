@@ -16,12 +16,6 @@ pub fn list<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
     })
 }
 
-/// An editable list without brackets or commas; items retain the standard
-/// occurrence paths, child projections, and pending insertion behavior.
-pub fn list_column<W: Host>(gap: f64, child: Option<Partial<W>>) -> Partial<W> {
-    runtime_partial(move |input| list_column_with(input, gap, child.clone(), |_, entry| entry))
-}
-
 /// Compose content beside each projected item, outside that item's value
 /// boundary. The list still owns element paths and pending insertion slots.
 pub(crate) fn list_column_with<W: Host>(
