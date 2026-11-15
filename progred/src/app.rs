@@ -195,6 +195,11 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                 }
             }
+            #[cfg(target_os = "linux")]
+            UserEvent::SystemAppearance(system) => self.change_appearance(Appearance {
+                system,
+                ..self.appearance
+            }),
             #[cfg(target_os = "macos")]
             UserEvent::NativeMenu(event) => {
                 if let Some(command) = self.native_menu.command(&event) {

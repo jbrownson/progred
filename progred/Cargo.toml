@@ -66,6 +66,12 @@ clipboard-rs = "0.3.3"
 puri-vello = { path = "../ui/puri-vello", features = ["capture"] }
 rfd = "0.17"
 
+# The desktop's light or dark preference, read from the XDG desktop portal on
+# the session bus; see docs/platforms.md.
+[target.'cfg(target_os = "linux")'.dependencies]
+futures-core = "0.3"
+zbus = { version = "6.2", default-features = false, features = ["default-rt", "proxy"] }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
 getrandom = { workspace = true, features = ["wasm_js"] }

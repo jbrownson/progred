@@ -76,6 +76,21 @@ Chromium each implement their own; Zed and VS Code don't, and Progred
 doesn't. If the two numbers suit one setup and not another, the next step is
 a sensitivity setting, as both of those editors have, not a better constant.
 
+### Appearance
+
+View offers Light, Dark and Follow System Appearance, as on macOS. Winit can't
+see the desktop's preference on Linux, so the app reads it from the XDG desktop
+portal: on a thread of its own it reads `color-scheme` in the
+`org.freedesktop.appearance` namespace through
+`org.freedesktop.portal.Settings.ReadOne` on the session bus, then waits for
+`SettingChanged` signals, through zbus (`appearance.rs`). GNOME's and KDE's
+portals provide the setting, and on other compositors, such as Hyprland,
+`xdg-desktop-portal-gtk` does, from GNOME's `color-scheme` setting. Without a
+session bus or a portal that has the setting, or when it states no preference,
+following the system means light. The window is told the theme it draws in,
+which Wayland's drawn decorations follow and an X11 window manager may take as
+a hint.
+
 ## Browser
 
 The browser build is supported on macOS and Linux, in the same build sandboxes

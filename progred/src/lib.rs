@@ -132,6 +132,9 @@ pub(crate) enum UserEvent {
     /// The page's libraries, drawing only the projections it wants.
     #[cfg(target_arch = "wasm32")]
     ProjectionsChanged(stack::Stack),
+    /// The desktop's light or dark preference, now or `None`.
+    #[cfg(target_os = "linux")]
+    SystemAppearance(Option<winit::window::Theme>),
     #[cfg(target_os = "macos")]
     NativeMenu(native_menu::Event),
     /// A file the browser's Open picked, as its name and text.
@@ -206,6 +209,8 @@ fn run_document(
     let proxy = event_loop.create_proxy();
     #[cfg(target_arch = "wasm32")]
     WEB_PROXY.with(|slot| *slot.borrow_mut() = Some(proxy.clone()));
+    #[cfg(target_os = "linux")]
+    appearance::follow_system(proxy.clone());
     let fonts = font_context();
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App::new(
