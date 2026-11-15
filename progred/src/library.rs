@@ -120,6 +120,9 @@ pub fn foreign_record(
 pub struct Library<World, Hover> {
     pub definitions: Definitions,
     pub projection: Option<Partial<World, Hover>>,
+    /// How this library draws what no library's projection draws, tried
+    /// after all of them and before Raw.
+    pub fallback: Option<Partial<World, Hover>>,
     /// The projections this library's cells provide for the records they
     /// identify: a kind's for records of it, a function's for calls of it.
     pub provided: Vec<(gid::CellId, Partial<World, Hover>)>,
@@ -131,6 +134,7 @@ impl<World, Hover> Clone for Library<World, Hover> {
         Self {
             definitions: self.definitions.clone(),
             projection: self.projection.clone(),
+            fallback: self.fallback.clone(),
             provided: self.provided.clone(),
             completions: self.completions.clone(),
         }
@@ -148,6 +152,7 @@ impl<World, Hover> Library<World, Hover> {
         Self {
             definitions,
             projection: None,
+            fallback: None,
             provided: Vec::new(),
             completions: None,
         }
@@ -166,6 +171,12 @@ impl<World, Hover> Library<World, Hover> {
 
     pub fn with_projection(mut self, projection: Partial<World, Hover>) -> Self {
         self.projection = Some(projection);
+        self
+    }
+
+    /// Also draws what no library's projection draws with `fallback`.
+    pub fn with_fallback(mut self, fallback: Partial<World, Hover>) -> Self {
+        self.fallback = Some(fallback);
         self
     }
 
@@ -198,6 +209,10 @@ impl Libraries {
     pub(crate) fn same_storage(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.entries, &other.entries)
     }
+    /// The libraries `entries` contribute, a later one of the same identity
+    /// replacing an earlier, with their projections in load order and then
+    /// their fallbacks, the projections their cells provide, and their
+    /// completion providers.
     pub fn from_contributions<World, Hover>(
         entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
     ) -> (
@@ -214,11 +229,13 @@ impl Libraries {
                 unique.push((id, library));
             }
         }
-        unique.into_iter().fold(
+        let mut fallbacks = Vec::new();
+        let (libraries, mut projections, provided, completions) = unique.into_iter().fold(
             (Self::default(), Vec::new(), Vec::new(), Vec::new()),
             |(mut libraries, mut projections, mut provided, mut completions), (id, library)| {
                 libraries.insert(id, library.definitions);
                 projections.extend(library.projection.map(|projection| (id, projection)));
+                fallbacks.extend(library.fallback.map(|fallback| (id, fallback)));
                 provided.extend(
                     library
                         .provided
@@ -228,7 +245,10 @@ impl Libraries {
                 completions.extend(library.completions.map(|provider| (id, provider)));
                 (libraries, projections, provided, completions)
             },
-        )
+        );
+        // Fallbacks come after every library's own projection.
+        projections.extend(fallbacks);
+        (libraries, projections, provided, completions)
     }
 
     pub fn insert(&mut self, id: gid::CellId, definitions: Definitions) {

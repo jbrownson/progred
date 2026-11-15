@@ -4,11 +4,21 @@
 //! library's kinds can use it. An `isa` names a kind defined elsewhere, so
 //! it reads as the kind's name; one with nothing in it offers the kinds the
 //! document's library defines.
+//!
+//! A record no library draws otherwise reads by what it is and what it's
+//! called, `def "fraction" {…}`: its kind, its name, and then its other
+//! fields, those its kind's def lists first, in the def's order, each a place
+//! to fill where the record lacks it, then any others. A field being added
+//! offers the def's fields the record lacks.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{CompletionKind, Picker, picker, ranked};
-use crate::libraries::{Library, name};
-use gid::CellId;
+use crate::display::structure::Fields;
+use crate::display::{
+    Completion, CompletionKind, CompletionRequest, CompletionScope, Picker, descend, picker,
+    ranked, row, selectable,
+};
+use crate::libraries::{Library, def, name};
+use gid::{CellId, Step};
 use std::rc::Rc;
 
 pub const ID: CellId = CellId::from_u128(0x9f968bf188764d69af06cc2fd3c10909);
@@ -28,6 +38,82 @@ pub fn library<W: Host>() -> Library<W> {
         ::grap::ForeignFunctions::default(),
     )
     .with_projection(crate::display::runtime_partial(kind))
+    .with_fallback(crate::display::runtime_partial(|input| {
+        let defined = defined_fields(input.value?, &|cell| {
+            Some(input.env.resolve(cell)?.value.into())
+        });
+        form(
+            input,
+            Fields::default().leading(defined.clone()).slots(defined),
+        )
+    }))
+    .with_completions(completions)
+}
+
+/// The fields `record`'s kind's def lists, in order; none where its kind has
+/// no def.
+fn defined_fields(
+    record: &::grap::RuntimeValue,
+    resolve: &dyn Fn(CellId) -> Option<::grap::RuntimeValue>,
+) -> Vec<CellId> {
+    record
+        .kind()
+        .and_then(resolve)
+        .and_then(|kind| def::Def::read(&kind))
+        .map(|def| def.fields)
+        .unwrap_or_default()
+}
+
+/// A record by its kind and its name, either where it lacks the other, then
+/// its other fields as `fields` draws them, between braces, which show even
+/// where there are none, so a record that's only a name reads as a record,
+/// `"button" {}`, not as text. A record with neither declines. The kind and
+/// name are stops of their own, inside the record's.
+pub(crate) fn form<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    fields: Fields<W>,
+) -> Option<Layout<W>> {
+    let value = input.value?;
+    value.record_keys()?;
+    let heading: Vec<_> = [vocabulary::ISA, name::vocabulary::NAME]
+        .into_iter()
+        .filter(|key| value.contains_field(*key))
+        .map(|key| descend([Step::Key(key)], None, None))
+        .collect();
+    (!heading.is_empty()).then_some(())?;
+    let rest = fields.shown_empty().rest(input, |key| {
+        key == vocabulary::ISA || key == name::vocabulary::NAME
+    })?;
+    Some(crate::display::structure::authoring(selectable(
+        crate::display::hug(row(6.0, heading), rest, 6.0),
+        &input.site(),
+    )))
+}
+
+/// A field being added to a record of a kind offers the fields its def lists
+/// that the record lacks, in the def's order.
+fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
+    (request.kind == CompletionKind::Field && request.scope == CompletionScope::Literal)
+        .then_some(())?;
+    let record = request.value()?;
+    let fields = record.as_record()?;
+    let defined = defined_fields(&record.clone().into(), &|cell| {
+        Some((request.resolve)(cell)?.value.clone().into())
+    });
+    Some(
+        defined
+            .into_iter()
+            .filter(|field| fields.get(field).is_none())
+            .map(|field| {
+                Completion::new(field, move |session| {
+                    if let Some(picking) = session.pending() {
+                        picking.commit_label(field, None, Some(crate::selection::pending_at(&[])));
+                    }
+                })
+                .with_detail("field")
+            })
+            .collect(),
+    )
 }
 
 /// A record's `isa`: the kind's name, or where it's empty, a place for a

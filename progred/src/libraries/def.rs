@@ -4,10 +4,11 @@
 //! to the kind itself. A record is drawn by its kind's def's projection
 //! before anything else draws it; where that declines, it's passed on. One
 //! projection, since projections compose: several are one that tries each.
-//! A kind with no projection is drawn as a record of its fields, each shown
-//! where the record lacks it as a place to fill, so a new record of a kind
-//! needs only to say the kind: an empty place offers a new record of each
-//! kind the document's library defines.
+//! A kind with no projection is drawn as any record is, by its kind and name
+//! and then its fields in the def's order, each shown where the record lacks
+//! it as a place to fill (see [`crate::libraries::isa`]), so a new record of
+//! a kind needs only to say the kind: an empty place offers a new record of
+//! each kind the document's library defines.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::{
@@ -192,25 +193,32 @@ pub(crate) fn document_defs<'a>(
 /// document keeps beside them. A place among its defs offers a new one.
 fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.kind()? == LIBRARY).then_some(())?;
-    crate::display::structure::Fields::default()
-        .leading([::grap::isa::ISA, name::vocabulary::NAME, DEFS])
-        .slots([DEFS])
-        .child(|key| {
-            (key == DEFS).then(|| {
-                crate::display::structure::list(Some(crate::display::runtime_partial(|input| {
-                    input.value.is_none().then(|| {
-                        new_place(|typed| {
-                            name::new_cell(
-                                typed,
-                                "def",
-                                vec![(::grap::isa::ISA, DEF.into()), (FIELDS, Value::list([]))],
-                            )
-                        })
-                    })
-                })))
-            })
-        })
-        .record(input)
+    crate::libraries::isa::form(
+        input,
+        crate::display::structure::Fields::default()
+            .leading([DEFS])
+            .slots([DEFS])
+            .child(|key| {
+                (key == DEFS).then(|| {
+                    crate::display::structure::list(Some(crate::display::runtime_partial(
+                        |input| {
+                            input.value.is_none().then(|| {
+                                new_place(|typed| {
+                                    name::new_cell(
+                                        typed,
+                                        "def",
+                                        vec![
+                                            (::grap::isa::ISA, DEF.into()),
+                                            (FIELDS, Value::list([])),
+                                        ],
+                                    )
+                                })
+                            })
+                        },
+                    )))
+                })
+            }),
+    )
 }
 
 /// A def's field: a cell declared there, by its name. A place for one offers
@@ -257,41 +265,35 @@ impl Def {
     }
 }
 
-/// A record drawn by its kind's def, where its kind has one.
+/// A record drawn by its kind's def's projection, where its kind has one.
 pub fn by_def<W: Host>() -> Partial<W> {
     crate::display::runtime_partial(|input| {
         let kind = input.value?.kind()?;
-        let Def { fields, projection } = Def::read(&input.env.resolve(kind)?.value.into())?;
-        match projection {
-            Some(projection) => drawn(input, &projection),
-            // A kind with no projection of its own is a record of its
-            // fields, in order, each drawn even where the record lacks it,
-            // as a place to fill.
-            None => crate::display::structure::Fields::default()
-                .leading([::grap::isa::ISA].into_iter().chain(fields.iter().copied()))
-                .slots(fields)
-                .record(input),
-        }
+        let projection = Def::read(&input.env.resolve(kind)?.value.into())?.projection?;
+        drawn(input, &projection)
     })
 }
 
-/// A def as its author edits it: its name, its fields declared by name, and
-/// its projection, which where it's a template is edited as a template for
-/// the def's own fields. Each is a place to fill until it's there.
+/// A def as its author edits it, `def "fraction" {fields, projection}`: its
+/// fields declared by name, and its projection, which where it's a template
+/// is edited as a template for the def's own fields. Each is a place to fill
+/// until it's there.
 fn def_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let parts: Rc<[CellId]> = Def::read(input.value?)?.fields.into();
-    let fields = [name::vocabulary::NAME, FIELDS, PROJECTION];
-    crate::display::structure::Fields::default()
-        .leading([::grap::isa::ISA].into_iter().chain(fields))
-        .slots(fields)
-        .child(move |key| match key {
-            FIELDS => Some(crate::display::structure::list_flowing(Some(
-                crate::display::runtime_partial(field),
-            ))),
-            PROJECTION => Some(layout::template::editor(parts.clone())),
-            _ => None,
-        })
-        .record(input)
+    let fields = [FIELDS, PROJECTION];
+    crate::libraries::isa::form(
+        input,
+        crate::display::structure::Fields::default()
+            .leading(fields)
+            .slots(fields)
+            .child(move |key| match key {
+                FIELDS => Some(crate::display::structure::list_flowing(Some(
+                    crate::display::runtime_partial(field),
+                ))),
+                PROJECTION => Some(layout::template::editor(parts.clone())),
+                _ => None,
+            }),
+    )
 }
 
 thread_local! {

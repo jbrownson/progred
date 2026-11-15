@@ -117,7 +117,8 @@ declines only at a missing location, draws a cell as its definition between
 parentheses, and shows labels as short ids. Raw and Plain are sets of
 libraries an area shows, as any other set is: Raw shows none, and Plain shows
 the name, isa, text, absent and number libraries, so those read as
-themselves and the rest as Raw draws it. Arithmetic is Grap's, not the number
+themselves and the rest as Raw draws it, but for records that say what they
+are or what they're called. Arithmetic is Grap's, not the number
 libraries', so in Plain it stays the call records it is.
 One list in stack.rs defines Plain for the editor and the tutorial page alike.
 The Projections menu leads with All, Plain and Raw, then a checkbox for each
@@ -129,9 +130,9 @@ domain projections precede general ones.
 A record that says what kind of thing it is draws first by its kind's def,
 where the kind's cell is defined by one: `{isa: def, name, fields,
 projection}` ([`def.rs`](../progred/src/libraries/def.rs)). The def's
-`projection` is a template or a function of `value`; one projection, since projections compose. Where it declines, or the
-kind has no def, or the `def` library is switched off in the area, the record
-goes on. A def is edited as a record whose projection, a template, offers the
+`projection` is a template or a function of `value`; one projection, since
+projections compose. Where it declines, or the def has none, or the kind has
+no def, or the `def` library is switched off in the area, the record goes on. A def is edited as a record whose projection, a template, offers the
 def's own fields as its parts. A document's own defs live in a library,
 `{isa: library, defs}`: its root, where the root is one, or where the root is a
 notebook, any library among its entries, through the sections that name them
@@ -144,7 +145,19 @@ notebook whose first entry is a library, its first def made next. Next, it draws
 ahead of every library's partial: the stack's next partial reads the record's
 `isa` and applies the projection its libraries registered under that kind's cell,
 composed in load order, or declines where the kind provides none or the record
-says no kind, and the libraries' partials are tried in load order. Projection
+says no kind, and the libraries' partials are tried in load order, then their
+fallbacks, how a library draws what none of them draws, before Raw. The isa
+library's fallback draws a record with a kind or a name by them
+([`isa.rs`](../progred/src/libraries/isa.rs)): `def "fraction" {fields: …,
+projection: …}`, its kind, then its name, either alone where the record lacks
+the other, then its other fields between braces, which show even where there
+are none, so a record that's only a name, `"button" {}`, doesn't read as
+text. Its kind's def's fields come first, in the def's order, each a place to
+fill where the record lacks it, then any others, and a field being added
+offers the def's fields the record lacks. So a kind with a def but no
+projection reads this way, and in Plain every call reads as `call {function:
+…}` and every lambda as `lambda "name" {…}`. The def library's own records,
+defs and libraries, read the same way with their own fields' editors. Projection
 inputs carry the provided projections, so a projection can ask another cell for
 its own: Grap's call kind draws a call as its function provides, else as a
 call. Grap's calls, lambdas, closures and value wrappers provide theirs;
