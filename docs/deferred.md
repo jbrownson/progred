@@ -141,14 +141,18 @@ switches off with the `def` library. Still to do:
 Begun November 2026. A loaded library and a document's are the same record,
 `{isa: library, name, defs, functions, foreign functions, fields}`, drawn the
 same way; a loaded one's is written from what it contributes as it's
-composed. A foreign function is listed by its stub, the record a call names;
+composed. Decided: a built-in library is described from its Rust
+declaration, unparsed into GID, not read from a GID file it ships with, so
+each thing is declared once, beside the code that uses it, and its
+description can't disagree with that code. A foreign function is listed by its stub, the record a call names;
 its code is the host's, so a document's library lists the stubs of those it
 uses, a place for one offering the loaded libraries'. What a Rust library has
 beyond its cells, the projections it draws with, its fallback, its offers and
 starting points, isn't data. A document's library has the data side of most of
-these: defs with projections, Grap functions, fields with offers. Still to do: built-in kinds as defs, so a
-loaded library's defs are defs and a kind it draws some other way isn't read
-as a field; and, once a document's library can be loaded into another
+these: defs with projections, Grap functions, fields with offers. Still to do: built-in kinds as defs, written
+the same way from what Rust declares of each kind (its name and fields; how
+it's drawn stays Rust's), so a loaded library's defs are defs and a kind it
+draws some other way isn't read as a field; and, once a document's library can be loaded into another
 document (below), its own starting points and offers, which mean nothing
 inside the document that defines them. Foreign functions' code stays the
 host's.
