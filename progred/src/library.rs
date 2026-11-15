@@ -158,6 +158,32 @@ impl<World, Hover> Library<World, Hover> {
         self
     }
 
+    /// Also defines each of `kinds` as a kind, `{isa: def, name, fields}`:
+    /// its name as this library names it, and the fields every record of it
+    /// has, in order. How it's drawn stays this library's.
+    pub fn with_kinds(
+        mut self,
+        kinds: impl IntoIterator<Item = (gid::CellId, Vec<gid::CellId>)>,
+    ) -> Self {
+        use crate::libraries::def::vocabulary::{DEF, FIELDS};
+        for (kind, fields) in kinds {
+            let mut definition = self
+                .definitions
+                .value(kind)
+                .and_then(gid::Value::as_record)
+                .cloned()
+                .unwrap_or_default();
+            definition.set(::grap::isa::ISA, gid::Value::from(DEF));
+            definition.set(
+                FIELDS,
+                gid::Value::list(fields.into_iter().map(gid::Value::from)),
+            );
+            self.definitions
+                .insert(kind, gid::Value::Record(definition));
+        }
+        self
+    }
+
     /// Also draws what no library's projection draws with `fallback`.
     pub fn with_fallback(mut self, fallback: Partial<World, Hover>) -> Self {
         self.fallback = Some(fallback);

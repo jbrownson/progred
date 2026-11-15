@@ -801,6 +801,25 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(number_names),
         functions().merge(control_functions).merge(number_functions),
     )
+    // Grap's kinds, each with the fields every one of its records has.
+    .with_kinds(
+        [
+            (kind::CALL, vec![FUNCTION]),
+            (kind::LAMBDA, vec![PARAMS, ::grap::vocabulary::BODY]),
+            (
+                kind::CLOSURE,
+                vec![::grap::vocabulary::LAMBDA, ::grap::vocabulary::ENVIRONMENT],
+            ),
+            (kind::FOREIGN_FUNCTION, vec![IMPLEMENTATION]),
+            (kind::VALUE_WRAPPER, vec![::grap::vocabulary::VALUE]),
+            (
+                vocabulary::kind::EVALUATION,
+                vec![::grap::vocabulary::EXPRESSION],
+            ),
+        ]
+        .into_iter()
+        .chain(control::kinds()),
+    )
     // Grap's kinds draw as they provide, a call as its function does, else
     // as a call: control's forms and the operators provide theirs.
     .with_projections_for(

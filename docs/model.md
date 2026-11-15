@@ -43,15 +43,15 @@ first; one implemented nowhere isn't callable. An absent or non-callable result
 does not try another source. A library's own value lives in that same table under
 its identity, not in a separate metadata store: a library like a document's,
 `{isa: library, name, defs, functions, foreign functions, fields}`, the name it
-gives itself and the cells it defines, each list ordered by name: the kinds it
-draws (by kind) among its defs, its lambdas among its functions, the stubs of
+gives itself and the cells it defines, each list ordered by name: its kinds,
+each a def written from what it declares of it (`Library::with_kinds`: its
+name and the fields every record of it has; how it's drawn stays Rust's),
+among its defs, its lambdas among its functions, the stubs of
 the foreign functions it implements, `{isa: foreign function, name, params}`,
 the records a call names, among its foreign functions, and the rest of its
 vocabulary among its fields. Composing the loaded libraries writes
 it, so it lists what each library ends up defining, and it's drawn as a
-document's library is, a cell another library defines reading by its name. A
-kind a library draws some other way, as presentation's are drawn in a pane,
-reads among its fields until built-in kinds have defs of their own. An empty document can start as any loaded
+document's library is, a cell another library defines reading by its name. An empty document can start as any loaded
 library, offered by its name, to look through; the Libraries menu opens one
 in a pane.
 Replacing a loaded library replaces all its contributions in place, including

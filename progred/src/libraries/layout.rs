@@ -858,6 +858,38 @@ pub fn library<W: Host>() -> Library<W> {
                 .cacheable(),
         ),
     )
+    .with_kinds({
+        use vocabulary::{kind as k, *};
+        [k::ROW, k::COL, k::FLOW, k::OVERLAY, k::ALTERNATIVES]
+            .map(|kind| (kind, vec![CHILDREN]))
+            .into_iter()
+            .chain(
+                [
+                    k::PAD,
+                    k::CENTER,
+                    k::BORDER,
+                    k::BRACKET,
+                    k::SELECTABLE,
+                    k::HOVER_BLOCK,
+                ]
+                .map(|kind| (kind, vec![CHILD])),
+            )
+            .chain([
+                (k::PICKABLE, vec![CHILD, VALUE]),
+                (k::ON_EVENT, vec![CHILD, HANDLER]),
+                (k::DESCEND, vec![STEP]),
+                (k::DESCEND_PATH, vec![STEPS]),
+                (k::JUMP, vec![STEPS, DOCUMENT_PATH]),
+                (k::AT, vec![STEPS, VALUE]),
+                (k::TEXT, vec![CONTENT]),
+                // A drawing gives its commands or its program, and a width
+                // only where it isn't to stretch.
+                (k::DRAWING, vec![]),
+                (k::SLOT, vec![]),
+                (k::RULE, vec![]),
+                (k::LAYOUT_PROGRAM, vec![PROGRAM]),
+            ])
+    })
     .with_projections_for(
         NODES
             .into_iter()

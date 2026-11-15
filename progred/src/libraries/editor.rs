@@ -55,6 +55,20 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_kinds([
+        (
+            workspace::vocabulary::kind::ROW,
+            vec![workspace::vocabulary::PARTS],
+        ),
+        (
+            workspace::vocabulary::kind::COLUMN,
+            vec![workspace::vocabulary::PARTS],
+        ),
+        (
+            crate::location::vocabulary::kind::LOCATION,
+            vec![crate::location::vocabulary::STEPS],
+        ),
+    ])
     .with_projections_for(workspace::projections())
     .with_completions(completions)
 }

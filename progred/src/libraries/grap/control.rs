@@ -811,6 +811,21 @@ fn expression_list_display<W: Host>(
 
 /// Control's names, its functions, and the projections its functions
 /// provide for calls of them and its unquote kind for unquotes.
+/// Control's kinds, each with the fields every one of its records has: a
+/// binding binds by `bind` or by `pattern`, so only its value is always
+/// there.
+pub(super) fn kinds() -> [(CellId, Vec<CellId>); 4] {
+    [
+        (vocabulary::kind::UNQUOTE, vec![vocabulary::UNQUOTE]),
+        (
+            vocabulary::kind::CASE,
+            vec![vocabulary::PATTERN, ::grap::vocabulary::EXPRESSION],
+        ),
+        (vocabulary::kind::BINDING, vec![vocabulary::VALUE]),
+        (vocabulary::kind::BINDER, vec![vocabulary::BIND]),
+    ]
+}
+
 pub(super) fn contribution<W: Host>() -> (
     Vec<(CellId, &'static str)>,
     ForeignFunctions<'static>,

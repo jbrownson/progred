@@ -1081,6 +1081,25 @@ pub fn library<W: Host>() -> Library<W> {
         ),
         functions(),
     )
+    .with_kinds(
+        BINARY
+            .map(|(kind, _)| (kind, vec![vocabulary::LEFT, vocabulary::RIGHT]))
+            .into_iter()
+            .chain(UNARY.map(|(kind, _)| (kind, vec![vocabulary::OPERAND])))
+            .chain(
+                [
+                    vocabulary::kind::SLICE_PREVIEW,
+                    vocabulary::kind::VOLUME_PREVIEW,
+                    vocabulary::kind::MESH_PREVIEW,
+                ]
+                .map(|kind| (kind, vec![vocabulary::FIELD])),
+            )
+            .chain([
+                (vocabulary::kind::SCENE, vec![vocabulary::OBJECTS]),
+                (vocabulary::kind::AXIS, vec![]),
+                (vocabulary::kind::TRANSLATE, vec![vocabulary::OPERAND]),
+            ]),
+    )
     .with_values(
         [
             (vocabulary::X, "x"),

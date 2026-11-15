@@ -149,10 +149,9 @@ its code is the host's, so a document's library lists the stubs of those it
 uses, a place for one offering the loaded libraries'. What a Rust library has
 beyond its cells, the projections it draws with, its fallback, its offers and
 starting points, isn't data. A document's library has the data side of most of
-these: defs with projections, Grap functions, fields with offers. Still to do: built-in kinds as defs, written
-the same way from what Rust declares of each kind (its name and fields; how
-it's drawn stays Rust's), so a loaded library's defs are defs and a kind it
-draws some other way isn't read as a field; and, once a document's library can be loaded into another
+these: defs with projections, Grap functions, fields with offers. Built-in kinds are defs, written the same way
+from what Rust declares of each kind (its name and the fields every record of
+it has; how it's drawn stays Rust's). Still to do: once a document's library can be loaded into another
 document (below), its own starting points and offers, which mean nothing
 inside the document that defines them. Foreign functions' code stays the
 host's.

@@ -201,6 +201,20 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_kinds([
+        (
+            vocabulary::kind::RENDER,
+            vec![::grap::vocabulary::EXPRESSION],
+        ),
+        (
+            vocabulary::kind::PROJECTED,
+            vec![vocabulary::VALUE, vocabulary::PROJECTION],
+        ),
+        (
+            vocabulary::kind::SIZED,
+            vec![vocabulary::VALUE, vocabulary::VIEWPORT],
+        ),
+    ])
 }
 
 #[cfg(test)]

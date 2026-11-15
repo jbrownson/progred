@@ -29,6 +29,7 @@ pub fn library<W: Host>() -> Library<W> {
         [(SECTION, "section"), (BODY, "body")],
         ::grap::ForeignFunctions::default(),
     )
+    .with_kinds([(SECTION, vec![name::vocabulary::NAME, BODY])])
     .with_projections_for([(SECTION, d::runtime_partial(display))])
     .with_completions(completions)
 }

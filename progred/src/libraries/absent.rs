@@ -297,6 +297,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
+    .with_kinds([(vocabulary::kind::ABSENT, vec![vocabulary::REASON])])
     .with_projections_for([(
         vocabulary::kind::ABSENT,
         crate::display::compose_partials([

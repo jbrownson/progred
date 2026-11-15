@@ -142,7 +142,8 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
 }
 
 /// A record's `isa`: the kind's name, or where it's empty, a place for a
-/// kind, offering the kinds the document's library defines.
+/// kind, offering the kinds the document's libraries define, then those the
+/// loaded libraries do, each saying whose it is.
 fn kind<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     (input.env.occurrence()?.steps().next()? == &crate::occurrence::Step::Key(vocabulary::ISA))
         .then_some(())?;
@@ -152,15 +153,27 @@ fn kind<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option
     Some(picker(Picker::new(
         CompletionKind::Value,
         ranked(Rc::new(|request| {
+            let resolve = |cell| (request.resolve)(cell);
+            let own = def::document_defs(request.root, &|cell| Some(resolve(cell)?.value));
+            let loaded = (request.loaded)().into_iter().filter(|cell| {
+                !own.contains(cell)
+                    && resolve(*cell)
+                        .and_then(|definition| definition.value.as_record())
+                        .and_then(::grap::isa::of)
+                        == Some(def::vocabulary::DEF)
+            });
             Some(
-                crate::libraries::def::document_defs(request.root, &|cell| {
-                    Some((request.resolve)(cell)?.value)
-                })
-                .into_iter()
-                .map(|kind| {
-                    crate::libraries::completion::select(kind, kind.into()).with_detail("kind")
-                })
-                .collect(),
+                own.iter()
+                    .copied()
+                    .chain(loaded)
+                    .map(|kind| {
+                        let offer = crate::libraries::completion::select(kind, kind.into());
+                        match resolve(kind).and_then(|definition| definition.library) {
+                            Some(library) => offer.with_detail(library),
+                            None => offer.with_detail("kind"),
+                        }
+                    })
+                    .collect(),
             )
         })),
     )))

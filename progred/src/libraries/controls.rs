@@ -818,6 +818,10 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions,
     )
+    .with_kinds([(
+        kind::VIEW_WITH_CONTROLS,
+        vec![vocabulary::CONTROLS, vocabulary::VIEW],
+    )])
     .with_projections_for([
         (kind::VIEW_WITH_CONTROLS, display::runtime_partial(display)),
         (AS_SLIDER, display::runtime_partial(number_slider)),

@@ -43,6 +43,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_kinds([(vocabulary::kind::NOTEBOOK, vec![vocabulary::ENTRIES])])
     .with_projections_for([(
         vocabulary::kind::NOTEBOOK,
         crate::display::runtime_partial(display),

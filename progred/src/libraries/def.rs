@@ -68,6 +68,10 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_kinds([
+        (DEF, vec![name::vocabulary::NAME, FIELDS]),
+        (LIBRARY, vec![DEFS, FUNCTIONS, FOREIGN, FIELDS]),
+    ])
     .with_projections_for([
         (DEF, crate::display::runtime_partial(def_display)),
         (LIBRARY, crate::display::runtime_partial(library_display)),
@@ -426,7 +430,6 @@ fn new_place<W: Host>(offer: fn(String) -> Completion) -> Layout<W> {
 /// What a def says about a kind.
 pub(crate) struct Def {
     pub fields: Vec<CellId>,
-    pub projection: Option<RuntimeValue>,
 }
 
 impl Def {
@@ -443,7 +446,6 @@ impl Def {
                     )
                 })
                 .unwrap_or_default(),
-            projection: value.field(PROJECTION),
         })
     }
 }
@@ -451,9 +453,10 @@ impl Def {
 /// A record drawn by its kind's def's projection, where its kind has one.
 pub fn by_def<W: Host>() -> Partial<W> {
     crate::display::runtime_partial(|input| {
-        let kind = input.value?.kind()?;
-        let projection = Def::read(&input.env.resolve(kind)?.value.into())?.projection?;
-        drawn(input, &projection)
+        // Every record's kind is asked, so only the projection is read.
+        let kind = input.env.resolve(input.value?.kind()?)?.value.as_record()?;
+        (::grap::isa::of(kind)? == DEF).then_some(())?;
+        drawn(input, &kind.get(&PROJECTION)?.clone().into())
     })
 }
 

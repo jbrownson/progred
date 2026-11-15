@@ -563,6 +563,34 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(cutter::names()),
         cutter::functions(functions()),
     )
+    .with_kinds(
+        [
+            kind::PATHS_VOLUME_PREVIEW,
+            kind::PATHS_MESH_PREVIEW,
+            kind::PATHS_REFINED_PREVIEW,
+        ]
+        .map(|preview| {
+            (
+                preview,
+                vec![
+                    crate::libraries::presentation::vocabulary::VALUE,
+                    vocabulary::PROGRAM,
+                ],
+            )
+        })
+        .into_iter()
+        .chain([
+            (kind::PATHS_PREVIEW, vec![vocabulary::PROGRAM]),
+            (
+                kind::POINT,
+                vec![vocabulary::X, vocabulary::Y, vocabulary::Z],
+            ),
+            (
+                cutter::vocabulary::kind::TOOL,
+                vec![cutter::vocabulary::SECTIONS],
+            ),
+        ]),
+    )
     .with_projections_for([
         (
             kind::PATHS_PREVIEW,

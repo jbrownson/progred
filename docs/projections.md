@@ -142,7 +142,9 @@ notebook's entries, a section's body, a row's or column's parts; a new kind of
 container is a line added to that list. A record in reach that lists `defs` or
 `functions`, a library or another, gives the document those; nothing else in
 the document, a program's insides say, is entered. A kind in an `isa` reads as its name, and an empty one offers the
-library's kinds. They're made where they go: a place among the library's
+document's kinds, then the loaded libraries', each saying whose it is. A
+built-in kind is a def too, written from what its library declares, so a
+record of it reads its fields in the def's order, and Plain shows its places. They're made where they go: a place among the library's
 `defs` offers a new def named as typed, one among a def's `fields` a new field,
 and an empty value place a new record of each kind whose name is typed. A
 field's definition can say what a place for it offers, `offers`: a Grap

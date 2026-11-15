@@ -173,12 +173,12 @@ pub fn library_named<W: Host>(
 /// `libraries` with each one's own cell holding the library as a library,
 /// as a document's is: `{isa: library, name, defs, functions, foreign
 /// functions, fields}`, the name it gives itself and the cells it defines,
-/// each where it belongs: the kinds it draws (`kinds`, which library draws
-/// which) among its defs, its lambdas among its functions, the stubs of the
+/// each where it belongs: the kinds it defines, each a def, among its defs,
+/// its lambdas among its functions, the stubs of the
 /// foreign functions it implements among its foreign functions, and the rest
 /// among its fields, each list ordered by name, those without one last.
-pub(crate) fn described(libraries: Libraries, kinds: &[(CellId, CellId)]) -> Libraries {
-    use crate::libraries::def::vocabulary::{DEFS, FIELDS, FOREIGN, FUNCTIONS, LIBRARY};
+pub(crate) fn described(libraries: Libraries) -> Libraries {
+    use crate::libraries::def::vocabulary::{DEF, DEFS, FIELDS, FOREIGN, FUNCTIONS, LIBRARY};
     let mut described = libraries.clone();
     for (id, definitions) in libraries.iter() {
         let mut cells: Vec<_> = definitions
@@ -194,16 +194,15 @@ pub(crate) fn described(libraries: Libraries, kinds: &[(CellId, CellId)]) -> Lib
         let (mut defs, mut functions, mut foreign, mut fields) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (_, _, cell) in cells {
-            let lambda = definitions
+            let kind = definitions
                 .value(cell)
                 .and_then(Value::as_record)
-                .and_then(::grap::isa::of)
-                == Some(::grap::vocabulary::kind::LAMBDA);
-            if kinds.contains(&(id, cell)) {
+                .and_then(::grap::isa::of);
+            if kind == Some(DEF) {
                 defs.push(cell.into());
             } else if definitions.implementation(cell).is_some() {
                 foreign.push(cell.into());
-            } else if lambda {
+            } else if kind == Some(::grap::vocabulary::kind::LAMBDA) {
                 functions.push(cell.into());
             } else {
                 fields.push(cell.into());

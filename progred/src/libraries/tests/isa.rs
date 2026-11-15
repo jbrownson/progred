@@ -181,3 +181,34 @@ fn a_def_without_a_name_shows_a_place_for_one() {
     );
     assert!(driver.drawn(&[Step::Key(name::vocabulary::NAME)]));
 }
+
+#[test]
+fn an_empty_isa_offers_the_loaded_libraries_kinds_too() {
+    let half = gid::new_cell_id();
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([(half, Value::record([]))])),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let isa = [Step::Key(half), Step::Key(vocabulary::ISA)];
+    driver
+        .runner
+        .editor
+        .model
+        .selection
+        .replace(crate::selection::pending_value(
+            &driver.runner.editor.model.workspace.document,
+            crate::occurrence::of(&isa),
+        ));
+    driver.present();
+    driver.type_text("sectio");
+    // Each says whose it is.
+    assert_eq!(driver.picker_detail("section").as_deref(), Some("section"));
+    driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::empty());
+    assert_eq!(
+        driver.value(&isa),
+        Value::from(crate::libraries::section::vocabulary::SECTION)
+    );
+}
