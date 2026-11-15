@@ -1404,6 +1404,20 @@ selection and manipulation, and how existing source-to-output provenance maps
 onto three-dimensional geometry. None requires changing the GID or Grap model
 in advance.
 
+### Desktop color themes
+
+Progred draws in a light or a dark palette of its own; it follows the system's
+choice between them, not the system's colors. Some desktops give every
+application one palette: Omarchy (checked against its 4.0 alpha, November 2026)
+keeps a theme's colors in `~/.config/omarchy/current/theme/colors.toml`
+(`mode`, `accent`, `background`, `foreground`, `selection`, `muted` and named
+colors) and on a switch fills in each application's config from templates,
+its own and the user's in `~/.config/omarchy/themed/*.tpl`. Following that
+would mean a palette loaded from data and watched for changes, a decision about
+which of a theme's colors Progred's meaningful ones (names, literals, ids, dim
+text, selection) take, and then only a template on Omarchy's side. Deferred as
+more trouble than it's worth for now.
+
 ### The platform's drag threshold
 
 A press starts dragging once it moves 3 logical pixels
