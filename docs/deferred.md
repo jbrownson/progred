@@ -52,11 +52,11 @@ other sources; no such UI is implemented now.
 ## Editor-authored libraries
 
 A document can define kinds that draw its own records (see
-[defs](#defs)). What remains for a complete editor-authored library:
-completion offers, so a kind's records can be made from a place that holds
-one; library-scoped definitions and names, beyond ordinary document cells;
-and loading a library defined in one document into another, as an explicit
-editor operation with its configuration and definitions reachable from root.
+[defs](#defs)), and make its defs and their records by offers where they
+go. What remains for a complete editor-authored library: library-scoped
+definitions and names, beyond ordinary document cells; and loading a library
+defined in one document into another, as an explicit editor operation with its
+configuration and definitions reachable from root.
 The proposed descriptor lists cell references, not a second record duplicating
 their definitions; loading needs that descriptor and a source that can resolve
 the listed cells, which a document can provide without becoming part of the
@@ -108,10 +108,13 @@ def's projection is tried before the projections libraries register in Rust
 under a kind, so a document can redraw a built-in kind; drawing by defs
 switches off with the `def` library. Still to do:
 
-- Offers of a kind where a place could hold one, which make `{isa: kind}`
-  and so show its fields to fill. A kind's fields already show where a
-  record lacks them: a kind with no projection draws as a record of its
-  fields, and a template's part draws as a place to fill.
+- Done: made forward, by offers where things go. A place among a library's
+  `defs` offers a new def named as typed, `{isa: def, name, fields: []}`; a
+  place among a def's fields offers a new field cell named as typed, drawn by
+  its name as a lambda's parameters are; an empty value place offers a new
+  record of each of the library's kinds, `{isa: kind}`, by its name as typed
+  (every kind where a projection asks for all a library offers), which then
+  shows its fields to fill. A kind in an `isa` reads as its name.
 - Built-in kinds defined by defs as data, their Rust projections attached
   under the same cell, so a built-in kind can be read like a document's.
 - Done: document libraries, which matched records by the keys they carried,

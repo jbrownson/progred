@@ -6,9 +6,13 @@
 //! projection, since projections compose: several are one that tries each.
 //! A kind with no projection is drawn as a record of its fields, each shown
 //! where the record lacks it as a place to fill, so a new record of a kind
-//! needs only to say the kind.
+//! needs only to say the kind: an empty place offers a new record of each
+//! kind the document's library defines.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use crate::display::{
+    Completion, CompletionKind, CompletionRequest, CompletionScope, Picker, picker, ranked,
+};
 use crate::libraries::presentation::vocabulary::VALUE;
 use crate::libraries::{Library, layout, name};
 use ::grap::RuntimeValue;
@@ -51,6 +55,42 @@ pub fn library<W: Host>() -> Library<W> {
         (DEF, crate::display::runtime_partial(def_display)),
         (LIBRARY, crate::display::runtime_partial(library_display)),
     ])
+    .with_completions(completions)
+}
+
+/// A new record of each kind the document's library defines, for an empty
+/// place, selected as it's made: all of them where a projection asks for
+/// everything, and where what's typed is read, those whose name it begins.
+fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
+    (request.kind == CompletionKind::Value && request.value().is_none()).then_some(())?;
+    let typed = request.query.trim().to_lowercase();
+    let wanted = |name: &str| match request.scope {
+        CompletionScope::Everything => true,
+        CompletionScope::Literal => {
+            !typed.is_empty()
+                && [name.to_lowercase(), format!("new {}", name.to_lowercase())]
+                    .iter()
+                    .any(|spelling| spelling.starts_with(&typed))
+        }
+        CompletionScope::Start => false,
+    };
+    Some(
+        document_defs(request.root)
+            .into_iter()
+            .filter_map(|kind| {
+                let name = (request.name)(kind)
+                    .map(|name| name.spelling().into_owned())
+                    .unwrap_or_else(|| crate::identity::short_id(kind));
+                wanted(&name).then(|| {
+                    crate::libraries::completion::select(
+                        format!("new {name}"),
+                        ::grap::isa::record(kind, []),
+                    )
+                    .with_aliases([name])
+                })
+            })
+            .collect(),
+    )
 }
 
 /// The document's own defs: those of the library its root is, where its root
@@ -64,12 +104,47 @@ pub(crate) fn document_defs(root: Option<&Value>) -> Vec<CellId> {
 }
 
 /// A library as its author edits it: its defs first, then whatever else the
-/// document keeps beside them.
+/// document keeps beside them. A place among its defs offers a new one.
 fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.kind()? == LIBRARY).then_some(())?;
     crate::display::structure::Fields::default()
         .leading([::grap::isa::ISA, name::vocabulary::NAME, DEFS])
+        .slots([DEFS])
+        .child(|key| {
+            (key == DEFS).then(|| {
+                crate::display::structure::list(Some(crate::display::runtime_partial(|input| {
+                    input.value.is_none().then(|| {
+                        new_place(|typed| {
+                            name::new_cell(
+                                typed,
+                                "def",
+                                vec![(::grap::isa::ISA, DEF.into()), (FIELDS, Value::list([]))],
+                            )
+                        })
+                    })
+                })))
+            })
+        })
         .record(input)
+}
+
+/// A def's field: a cell declared there, by its name. A place for one offers
+/// a new one.
+fn field<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+    match input.value {
+        Some(_) => crate::libraries::grap::declaration_cell(input, None),
+        None => Some(new_place(|typed| name::new_cell(typed, "field", vec![]))),
+    }
+}
+
+/// An empty place offering what `offer` makes of what's typed.
+fn new_place<W: Host>(offer: fn(String) -> Completion) -> Layout<W> {
+    picker(Picker::new(
+        CompletionKind::Value,
+        ranked(Rc::new(move |request| {
+            Some(vec![offer(request.query.trim().to_owned())])
+        })),
+    ))
 }
 
 /// What a def says about a kind.
@@ -115,15 +190,21 @@ pub fn by_def<W: Host>() -> Partial<W> {
     })
 }
 
-/// A def as its author edits it: a record whose projection, where it's a
-/// template, is edited as a template for the def's own fields.
+/// A def as its author edits it: its name, its fields declared by name, and
+/// its projection, which where it's a template is edited as a template for
+/// the def's own fields. Each is a place to fill until it's there.
 fn def_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let parts: Rc<[CellId]> = Def::read(input.value?)?.fields.into();
+    let fields = [name::vocabulary::NAME, FIELDS, PROJECTION];
     crate::display::structure::Fields::default()
-        .leading([::grap::isa::ISA, name::vocabulary::NAME, FIELDS, PROJECTION])
-        .child(move |key| {
-            let parts = parts.clone();
-            (key == PROJECTION).then(|| layout::template::editor(parts.clone()))
+        .leading([::grap::isa::ISA].into_iter().chain(fields))
+        .slots(fields)
+        .child(move |key| match key {
+            FIELDS => Some(crate::display::structure::list_flowing(Some(
+                crate::display::runtime_partial(field),
+            ))),
+            PROJECTION => Some(layout::template::editor(parts.clone())),
+            _ => None,
         })
         .record(input)
 }

@@ -291,6 +291,39 @@ fn new_label(spelling: &str) -> Completion {
     }
 }
 
+/// A new cell of `fields`, named `spelling`, then selected; with nothing
+/// spelled, it has no name, and its name is picked next. `what` says what
+/// the cell is to whoever is choosing it.
+pub(crate) fn new_cell(spelling: String, what: &str, fields: Vec<(CellId, Value)>) -> Completion {
+    let named = !spelling.is_empty();
+    let then = if named {
+        crate::selection::at(&[], crate::selection::payload::edge())
+    } else {
+        crate::selection::pending_at(&[gid::Step::Follow, gid::Step::Key(vocabulary::NAME)])
+    };
+    let what = format!("new {what}");
+    let display = if named {
+        spelling.clone()
+    } else {
+        what.clone()
+    };
+    let offer = Completion::new(display, move |session| {
+        if let Some(picking) = session.pending() {
+            let definition = if named {
+                record(&spelling, fields.clone())
+            } else {
+                Value::record(fields.clone())
+            };
+            picking.commit_new_cell(definition, Some(then.clone()));
+        }
+    });
+    if named {
+        offer.with_detail(what)
+    } else {
+        offer
+    }
+}
+
 /// A named cell as its name, a reference to it, where a projection means the
 /// cell rather than what it holds, as Grap's references do. One without a
 /// name is left to show its definition.

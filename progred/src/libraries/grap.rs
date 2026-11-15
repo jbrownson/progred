@@ -195,40 +195,13 @@ fn parameter<W: Host>(
         None => Some(picker(Picker::new(
             CompletionKind::Value,
             ranked(std::rc::Rc::new(|request| {
-                Some(vec![new_parameter(request.query.trim().to_owned())])
+                Some(vec![name::new_cell(
+                    request.query.trim().to_owned(),
+                    "parameter",
+                    vec![],
+                )])
             })),
         ))),
-    }
-}
-
-/// A new parameter named `spelling`, then selected; with no spelling, it
-/// has no name, and its name is picked next.
-fn new_parameter(spelling: String) -> Completion {
-    let named = !spelling.is_empty();
-    let then = if named {
-        crate::selection::at(&[], crate::selection::payload::edge())
-    } else {
-        crate::selection::pending_at(&[Step::Follow, Step::Key(name::vocabulary::NAME)])
-    };
-    let display = if named {
-        spelling.clone()
-    } else {
-        "new parameter".to_owned()
-    };
-    let offer = Completion::new(display, move |session| {
-        if let Some(picking) = session.pending() {
-            let definition = if spelling.is_empty() {
-                Value::record([])
-            } else {
-                name::record(&spelling, [])
-            };
-            picking.commit_new_cell(definition, Some(then.clone()));
-        }
-    });
-    if named {
-        offer.with_detail("new parameter")
-    } else {
-        offer
     }
 }
 
