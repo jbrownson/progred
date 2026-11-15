@@ -1,8 +1,9 @@
 //! Kinds: a record's `isa` field names the kind of thing it is, so it stays
 //! that kind while it's unfinished. Grap's calls, lambdas and unquotes say
 //! theirs; a record that doesn't is data. Shared like a name, so any
-//! library's kinds can use it. An `isa` with nothing in it offers the kinds
-//! the document's library defines.
+//! library's kinds can use it. An `isa` names a kind defined elsewhere, so
+//! it reads as the kind's name; one with nothing in it offers the kinds the
+//! document's library defines.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{CompletionKind, Picker, picker, ranked};
@@ -26,15 +27,17 @@ pub fn library<W: Host>() -> Library<W> {
         [(vocabulary::ISA, "isa")],
         ::grap::ForeignFunctions::default(),
     )
-    .with_projection(crate::display::runtime_partial(kind_place))
+    .with_projection(crate::display::runtime_partial(kind))
 }
 
-/// A record's empty `isa`: a place for a kind, offering the kinds the
-/// document's library defines.
-fn kind_place<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    input.value.is_none().then_some(())?;
+/// A record's `isa`: the kind's name, or where it's empty, a place for a
+/// kind, offering the kinds the document's library defines.
+fn kind<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     (input.env.occurrence()?.steps().next()? == &crate::occurrence::Step::Key(vocabulary::ISA))
         .then_some(())?;
+    if input.value.is_some() {
+        return name::shallow_cell(input);
+    }
     Some(picker(Picker::new(
         CompletionKind::Value,
         ranked(Rc::new(|request| {
