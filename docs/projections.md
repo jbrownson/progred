@@ -515,6 +515,14 @@ calls, unrecorded effects, and evaluator halts prevent reuse. Expression and fue
 are explicit inputs. This memo retains only the computed Value, never widgets,
 handlers, or rendered output.
 
+A section, `{isa: section, name, body}` ([`section.rs`](../progred/src/libraries/section.rs)),
+is a name over a thing: its name, edited where it's drawn, beside a disclosure
+mark, and under them its body, indented and drawn as it would be anywhere. The
+mark folds the body, as an undoable fold at the body's occurrence that changes
+nothing in the document, and selects the section; a folded body opens around
+the selection. A section goes wherever a value does and only labels what it
+holds; other fields follow it as a form's do.
+
 The presentation library also offers an opt-in record outline:
 `{isa: outline, sections: [field-a, field-b], field-a: ..., field-b: ...}`,
 drawn as its kind provides. The list orders field references, not copies of

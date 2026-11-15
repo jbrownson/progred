@@ -28,6 +28,7 @@ pub mod png;
 pub mod presentation;
 pub mod random;
 pub mod representation;
+pub mod section;
 pub mod sequence;
 pub mod text;
 pub mod toolpath;
