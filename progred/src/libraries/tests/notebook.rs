@@ -191,6 +191,14 @@ fn an_empty_notebook_offers_its_first_entry() {
             "{offer} in {offers:?}"
         );
     }
+    // Each names the library it comes from.
+    for (offer, library) in [
+        ("new evaluation", "grap"),
+        ("new section", "section"),
+        ("new library", "def"),
+    ] {
+        assert_eq!(driver.picker_detail(offer).as_deref(), Some(library));
+    }
 }
 
 #[test]

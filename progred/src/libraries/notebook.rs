@@ -249,6 +249,7 @@ fn starter() -> Completion {
             Step::Element(first),
         ])),
     )
+    .with_detail(ID)
 }
 
 #[cfg(test)]

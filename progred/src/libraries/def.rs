@@ -106,6 +106,7 @@ fn new_records<'r>(
 fn new_library() -> Completion {
     crate::libraries::completion::insert("new library", empty_library(), Some(first_def()))
         .with_aliases(["library"])
+        .with_detail(ID)
 }
 
 /// A library with no defs yet.
@@ -142,6 +143,7 @@ fn starter() -> Completion {
             gid::Step::Element(first()),
         ])),
     )
+    .with_detail(ID)
 }
 
 /// The document's own defs: those of the library its root is, or where its

@@ -48,7 +48,8 @@ fn completions(request: &d::CompletionRequest<'_>) -> Option<Vec<d::Completion>>
                     crate::selection::payload::edge(),
                 )),
             )
-            .with_aliases(["section"]),
+            .with_aliases(["section"])
+            .with_detail(ID),
         ]
     })
 }

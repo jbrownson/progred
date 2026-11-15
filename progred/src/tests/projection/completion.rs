@@ -481,6 +481,19 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
             "\"\""
         ]
     );
+    // Each starting point names the library it comes from.
+    let details: Vec<_> = projected_completion_entries(
+        &doc,
+        &crate::selection::pending_with_query(&crate::test_document(), vec![], ""),
+    )
+    .into_iter()
+    .take(4)
+    .map(|entry| entry.detail)
+    .collect();
+    assert_eq!(
+        details,
+        ["def", "notebook", "fidget", "grap"].map(|library| Some(library.to_owned()))
+    );
     let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);
     assert_eq!(entries[0].display, "fidget");
