@@ -81,39 +81,52 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
 
 /// The entries as a list, one under another, so inserting between them, the
 /// hole a deleted one leaves, and the rest of a list's editing are a list's
-/// own. Each is numbered in the list's margin, the number selecting it.
-/// Enter on an entry starts another beside it; an empty notebook offers its
-/// first.
+/// own. Each is numbered in the list's margin, the number selecting it, and
+/// a place for one being made is numbered where it will be, the entries
+/// after it numbered as they will be. Enter on an entry starts another
+/// beside it; an empty notebook offers its first.
 fn entries<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let positions = input.value?.list_positions()?;
+    let stored = input.value?.list_positions()?;
     let list = input.site();
-    let digits = positions.len().to_string().len();
-    match positions.is_empty() && input.pending.is_none() {
-        true => Some(first_entry(list)),
-        false => crate::display::structure::list_column_with(
-            input,
-            12.0,
-            Some(crate::display::runtime_partial(entry)),
-            move |at, item| match positions.iter().position(|entry| *entry == at) {
+    if stored.is_empty() && input.pending.is_none() {
+        return Some(first_entry(list));
+    }
+    // What's numbered: the entries, and a place for one being made.
+    let mut numbered_at = stored.clone();
+    if let Some(crate::display::Pending::Child(Step::Element(pending))) = &input.pending
+        && !numbered_at.contains(pending)
+    {
+        numbered_at.push(pending.clone());
+        numbered_at.sort();
+    }
+    let digits = numbered_at.len().to_string().len();
+    crate::display::structure::list_column_with(
+        input,
+        12.0,
+        Some(crate::display::runtime_partial(entry)),
+        move |at, item| {
+            let Some(number) = numbered_at.iter().position(|entry| *entry == at) else {
+                return item;
+            };
+            let number = crate::display::dim(numbered(number + 1, digits));
+            match stored.iter().position(|entry| *entry == at) {
                 Some(index) => row(
                     8.0,
                     [
-                        selectable(
-                            crate::display::dim(numbered(index + 1, digits)),
-                            &list.below(&[Step::Element(at.clone())]),
-                        ),
+                        selectable(number, &list.below(&[Step::Element(at.clone())])),
                         new_entry_on_enter(
                             item,
-                            index.checked_sub(1).map(|before| positions[before].clone()),
+                            index.checked_sub(1).map(|before| stored[before].clone()),
                             at,
-                            positions.get(index + 1).cloned(),
+                            stored.get(index + 1).cloned(),
                         ),
                     ],
                 ),
-                None => item,
-            },
-        ),
-    }
+                // A place has nothing yet for its number to select.
+                None => row(8.0, [number, item]),
+            }
+        },
+    )
 }
 
 /// `number` as wide as `digits` digits, padded with figure spaces, so the

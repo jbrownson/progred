@@ -501,7 +501,9 @@ a list of entries, each drawn as it would be anywhere, a library as a library,
 a section as a section, an evaluation as its expression and its result. It says
 nothing about what they are. The record and its list are one thing, the
 notebook, marked by a bar down its side that selects it; its entries are stops
-inside, numbered in its margin, a number selecting its entry. The entries are
+inside, numbered in its margin, a number selecting its entry. A place for an
+entry being made is numbered where it will be, lined up with the entries, and
+those after it as they will be. The entries are
 drawn as a list, with a list's editing: clicking between two inserts a place
 for one there, deleting one leaves its place to fill, and Enter on an entry,
 once its own handlers decline it, opens a place after it, or with Shift before

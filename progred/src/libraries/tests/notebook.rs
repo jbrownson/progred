@@ -532,3 +532,25 @@ fn backspacing_a_call_s_function_leaves_the_call_and_then_steps_back() {
     assert_eq!(driver.value(&slot), ::grap::isa::record(CALL, []));
     assert_eq!(driver.selection(), occurrence::below(&[], &slot));
 }
+
+#[test]
+fn a_place_for_an_entry_is_numbered_and_lined_up_where_it_will_be() {
+    let mut driver = notebook(
+        &[Some(f64::value(1.0)), Some(f64::value(2.0))],
+        Cells::new(),
+    );
+    driver.select(&expression(&driver, 0));
+    driver.press(NamedKey::Enter);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    let place = driver.rect(&driver.selection());
+    let (first, second) = (
+        driver.rect(&entry(&driver, 0, &[])),
+        driver.rect(&entry(&driver, 1, &[])),
+    );
+    // Between the two entries, starting where they do, past the numbers.
+    assert!(first.y1 <= place.y0 && place.y1 <= second.y0);
+    assert!(
+        (place.x0 - first.x0).abs() < 0.5,
+        "{place:?} under {first:?}"
+    );
+}
