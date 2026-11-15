@@ -23,6 +23,7 @@ pub mod layout;
 pub mod list;
 pub mod logic;
 pub mod name;
+pub mod notebook;
 pub mod number;
 pub mod png;
 pub mod presentation;

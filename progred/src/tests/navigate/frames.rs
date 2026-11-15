@@ -445,9 +445,7 @@ fn navigation_example_cells() -> (World, Vec<crate::occurrence::Path>) {
     let body = crate::test_examples::section_body(&doc, &[], "Text and numbers", 0);
     let entries = [
         body,
-        vec![Step::Key(
-            crate::libraries::grap::notebook::vocabulary::ENTRIES,
-        )],
+        vec![Step::Key(crate::libraries::notebook::vocabulary::ENTRIES)],
     ]
     .concat();
     let cells = elements(&doc, &entries).into_iter().take(2).collect();
@@ -511,9 +509,7 @@ fn navigation_workshop_nested_sections_preserve_occurrences_and_shared_edits() {
 #[test]
 fn navigation_section_connects_heading_and_body_before_adjacent_sections() {
     let (doc, _) = navigation_example();
-    let entries = vec![Step::Key(
-        crate::libraries::grap::notebook::vocabulary::ENTRIES,
-    )];
+    let entries = vec![Step::Key(crate::libraries::notebook::vocabulary::ENTRIES)];
     // Where each section of the root is stored, and its body.
     let stored: Vec<_> = crate::test_examples::read(&doc, &entries)
         .as_list()

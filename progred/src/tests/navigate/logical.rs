@@ -100,7 +100,7 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
 #[test]
 fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
     let (mut world, binders) = example_section("Deep multiline containers");
-    let entries = crate::libraries::grap::notebook::vocabulary::ENTRIES;
+    let entries = crate::libraries::notebook::vocabulary::ENTRIES;
     let first = positions(
         world
             .model

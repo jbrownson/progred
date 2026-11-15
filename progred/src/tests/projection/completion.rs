@@ -472,9 +472,9 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         displays(""),
         [
             "library",
+            "notebook",
             "fidget",
             "grap",
-            "notebook",
             "new cell",
             "new list",
             "new record",

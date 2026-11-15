@@ -34,7 +34,7 @@ fn expression(driver: &Driver, index: usize) -> Vec<Step> {
 /// pick.
 fn evaluation(expression: Option<Value>) -> Value {
     ::grap::isa::record(
-        super::super::vocabulary::kind::EVALUATION,
+        crate::libraries::grap::vocabulary::kind::EVALUATION,
         expression.map(|expression| (EXPRESSION, expression)),
     )
 }
@@ -76,11 +76,27 @@ fn notebook(expressions: &[Option<Value>], cells: Cells) -> Driver {
     )
 }
 
+/// At the place for an entry, `=` makes an evaluation, its expression
+/// picked next.
+fn evaluate(driver: &mut Driver) {
+    driver.type_text("=");
+    assert_eq!(
+        driver
+            .picker_entries()
+            .and_then(|entries| entries.first().cloned()),
+        Some("new evaluation".into())
+    );
+    driver.press(NamedKey::Enter);
+}
+
 #[test]
 fn an_empty_document_starts_as_a_notebook_whose_entries_show_their_results() {
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.choose("notebook");
+    // The first entry's place is open; `=` makes it an evaluation.
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    evaluate(&mut driver);
     assert_eq!(
         driver.selection(),
         occurrence::below(&[], &expression(&driver, 0))
@@ -93,15 +109,16 @@ fn an_empty_document_starts_as_a_notebook_whose_entries_show_their_results() {
     let typed = driver.value(&expression(&driver, 0));
     assert_eq!(result(&mut driver, 0), Some(typed));
 
-    // Enter on an entry starts the next, its expression to pick.
+    // Enter on an entry opens a place for the next.
     driver.select(&expression(&driver, 0));
     driver.press(NamedKey::Enter);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    evaluate(&mut driver);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 2);
     assert_eq!(
         driver.selection(),
         occurrence::below(&[], &expression(&driver, 1))
     );
-    assert_eq!(driver.stage(), Some(Stage::Pending));
     let kept = driver.value(&entry(&driver, 1, &[Step::Key(EXPRESSION)]));
     assert_eq!(
         driver.value(&entry(&driver, 1, &[])),
@@ -119,6 +136,7 @@ fn shift_enter_starts_an_entry_before() {
     let mut driver = notebook(&[Some(first.into())], cells);
     driver.select(&expression(&driver, 0));
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::SHIFT));
+    evaluate(&mut driver);
     assert_eq!(
         driver.value(&entry(&driver, 1, &[])),
         evaluation(Some(first.into())),
@@ -163,12 +181,16 @@ fn an_empty_notebook_offers_its_first_entry() {
             occurrence::Trail::from([occurrence::Step::Key(ENTRIES)]),
         ))),
     );
-    assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 1);
-    assert_eq!(
-        driver.selection(),
-        occurrence::below(&[], &expression(&driver, 0))
-    );
+    // Its place offers what any empty place holds, the notebook adding
+    // nothing of its own.
     assert_eq!(driver.stage(), Some(Stage::Pending));
+    let offers = driver.picker_entries().unwrap();
+    for offer in ["new evaluation", "new section", "new library", "new list"] {
+        assert!(
+            offers.iter().any(|entry| entry == offer),
+            "{offer} in {offers:?}"
+        );
+    }
 }
 
 #[test]
@@ -320,13 +342,12 @@ fn a_deleted_entry_leaves_its_place_to_start_another() {
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 1);
     assert_eq!(driver.stage(), Some(Stage::Pending));
     assert!(driver.drawn(&driver.selection()), "the place is drawn");
-    assert_eq!(driver.picker_entries(), Some(vec!["new entry".into()]));
 
+    // What's typed there is the value typed: data, not an evaluation.
     driver.type_text("7");
     driver.press(NamedKey::Enter);
-    driver.press(NamedKey::Enter);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 2);
-    assert_eq!(driver.value(&expression(&driver, 0)), f32::value(7.0));
+    assert_eq!(driver.value(&entry(&driver, 0, &[])), f32::value(7.0));
     assert_eq!(
         driver.value(&entry(&driver, 1, &[])),
         evaluation(Some(second.into()))
@@ -341,10 +362,8 @@ fn a_click_between_entries_starts_one_there() {
     cells.set_value(second, f64::value(2.0));
     let mut driver = notebook(&[Some(first.into()), Some(second.into())], cells);
     driver.click_between(&[Step::Key(ENTRIES)], 0);
-    assert_eq!(driver.picker_entries(), Some(vec!["new entry".into()]));
-
+    evaluate(&mut driver);
     driver.type_text("7");
-    driver.press(NamedKey::Enter);
     driver.press(NamedKey::Enter);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 3);
     assert_eq!(

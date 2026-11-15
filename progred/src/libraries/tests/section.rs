@@ -105,3 +105,24 @@ fn a_section_goes_where_any_value_does() {
         .clone();
     assert!(driver.drawn(&[Step::Key(label), Step::Element(position), Step::Key(BODY)]));
 }
+
+#[test]
+fn an_empty_place_offers_a_new_section_its_name_typed_next() {
+    use crate::libraries::notebook::vocabulary::ENTRIES;
+    let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
+    driver.click::<Step>(&[]);
+    driver.choose("notebook");
+    driver.choose("new section");
+    driver.type_text("Notes");
+    let section = driver.element(&[Step::Key(ENTRIES)], 0, &[]);
+    assert_eq!(
+        driver.value(&section),
+        ::grap::isa::record(
+            SECTION,
+            [(
+                name::vocabulary::NAME,
+                crate::libraries::text::value("Notes")
+            )]
+        )
+    );
+}

@@ -129,7 +129,7 @@ fn a_def_that_declines_passes_its_record_on() {
 
 #[test]
 fn a_documents_defs_are_its_root_librarys_or_its_root_notebooks_librarys() {
-    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     let [fraction, angle, shared, data] = std::array::from_fn(|_| gid::new_cell_id());
     let library = |defs: Vec<Value>| ::grap::isa::record(LIBRARY, [(DEFS, Value::list(defs))]);
     let mut cells = Cells::new();
@@ -302,7 +302,7 @@ fn an_empty_place_offers_a_new_record_of_each_kind_the_library_defines() {
 
 #[test]
 fn an_empty_document_starts_as_a_notebook_of_a_library_its_first_def_made_next() {
-    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.choose("library");

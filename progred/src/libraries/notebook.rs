@@ -1,24 +1,28 @@
-//! A notebook: a list of entries, one under another, each drawn as it would
-//! be anywhere, a library as a library, a section as a section. A new entry
-//! is an evaluation, `{isa: evaluation, expression}`, which draws as its
-//! expression and its result; the expression is a new cell, picked next, so
-//! another entry refers to it the standard ways, and a change to it
-//! recomputes the entries that read it. They're drawn as a list, with a list's editing;
-//! Enter on an entry starts a new one after it, and an empty notebook offers
-//! its first.
+//! A notebook: a bunch of things, one under another, each drawn as it would
+//! be anywhere, a library as a library, a section as a section, a Grap
+//! evaluation as its expression and its result. It says nothing about what
+//! they are: the place for a new one is an ordinary empty place, offering
+//! what the libraries offer there. They're drawn as a list, with a list's
+//! editing; Enter on an entry opens a place for the next, and an empty
+//! notebook offers its first.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{Completion, row, selectable};
-use gid::{Position, Step, Value};
+use crate::display::{
+    Completion, CompletionKind, CompletionRequest, CompletionScope, Picker, picker, ranked, row,
+    selectable,
+};
+use crate::libraries::{Library, name};
+use gid::{CellId, Position, Step};
 use puri::handler::HasHandler;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
+pub const ID: CellId = CellId::from_u128(0x133388d1fe4f37b924e8b2ea9247cffe);
+
 pub mod vocabulary {
     use gid::CellId;
 
-    /// A notebook's entries: a list of cells, each evaluated where it's
-    /// drawn.
+    /// A notebook's entries, in order.
     pub const ENTRIES: CellId = CellId::from_u128(0x26b6e7f1fc0d482da89e2a4835d2f789);
 
     pub mod kind {
@@ -29,12 +33,33 @@ pub mod vocabulary {
     }
 }
 
+pub fn library<W: Host>() -> Library<W> {
+    name::named_library(
+        ID,
+        "notebook",
+        [
+            (vocabulary::kind::NOTEBOOK, "notebook"),
+            (vocabulary::ENTRIES, "entries"),
+        ],
+        ::grap::ForeignFunctions::default(),
+    )
+    .with_projections_for([(
+        vocabulary::kind::NOTEBOOK,
+        crate::display::runtime_partial(display),
+    )])
+    .with_completions(completions)
+}
+
+/// An empty document can start as a notebook, its first entry picked next.
+fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
+    (request.kind == CompletionKind::Value && request.scope == CompletionScope::Start)
+        .then(|| vec![starter()])
+}
+
 /// A notebook draws its entries, then its other fields, after a handle of
 /// its own. The record and its list of entries are one thing, the notebook;
 /// each entry is a stop inside.
-pub(super) fn display<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Layout<W>> {
+fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     crate::display::structure::kind_form(
         input,
         vocabulary::kind::NOTEBOOK,
@@ -98,7 +123,7 @@ fn numbered(number: usize, digits: usize) -> String {
     "\u{2007}".repeat(digits.saturating_sub(number.len())) + &number
 }
 
-/// A click on what an empty notebook draws starts its first entry.
+/// A click on what an empty notebook draws opens a place for its first entry.
 fn first_entry<W: Host>(list: crate::editing::Site) -> Layout<W> {
     let target = W::Hover::from(list.hover());
     let start: crate::display::Action =
@@ -114,51 +139,35 @@ fn first_entry<W: Host>(list: crate::editing::Site) -> Layout<W> {
 }
 
 /// An entry is drawn as it would be anywhere; the place for one the list
-/// leaves to fill offers a new one.
+/// leaves to fill offers what the libraries offer for an empty place, then
+/// the editor's constructors and what's typed, read as a value.
 fn entry<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    input.value.is_none().then(new_entry_hole)
+    input.value.is_none().then(|| {
+        picker(Picker::new(
+            CompletionKind::Value,
+            ranked(Rc::new(|request| {
+                let everything = CompletionRequest {
+                    scope: CompletionScope::Everything,
+                    ..*request
+                };
+                Some(
+                    request
+                        .libraries
+                        .and_then(|provider| provider(&everything))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .chain(crate::display::raw::constructors(request.kind))
+                        .chain(crate::display::raw::typed(request))
+                        .collect(),
+                )
+            })),
+        ))
+    })
 }
 
-/// A new entry: an evaluation of a new cell, whose expression is picked next.
-fn new_entry_value() -> Value {
-    ::grap::isa::record(
-        super::vocabulary::kind::EVALUATION,
-        [(::grap::vocabulary::EXPRESSION, gid::new_cell_id().into())],
-    )
-}
-
-/// Where a new entry's expression is picked, from the entry: its cell's
-/// definition.
-const EXPRESSION: [Step; 2] = [Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
-
-/// A place for an entry, as between two or where one was deleted: its one
-/// offer starts an entry there, its expression starting from what was
-/// typed.
-fn new_entry_hole<W: Host>() -> Layout<W> {
-    crate::display::picker(crate::display::Picker::new(
-        crate::display::CompletionKind::Value,
-        Rc::new(|request| {
-            let typed = request.query.to_owned();
-            vec![crate::display::widget::offers::entry(
-                request,
-                Completion::new("new entry", move |session| {
-                    if let Some(picking) = session.pending() {
-                        picking.commit(
-                            new_entry_value(),
-                            Some(crate::selection::at(
-                                &EXPRESSION,
-                                crate::selection::payload::pending(&typed),
-                            )),
-                        );
-                    }
-                }),
-            )]
-        }),
-    ))
-}
-
-/// Enter on the entry at `at`, after its own handlers decline it, starts a
-/// new entry after it, or with Shift before it, between its neighbours.
+/// Enter on the entry at `at`, after its own handlers decline it, opens a
+/// place for a new entry after it, or with Shift before it, between its
+/// neighbours.
 fn new_entry_on_enter<W: Host>(
     entry: Layout<W>,
     before: Option<Position>,
@@ -212,7 +221,7 @@ fn new_entry(
     }
 }
 
-/// Starts an entry between `low` and `high`, its expression picked next.
+/// Opens a place for an entry between `low` and `high`.
 fn start_entry(
     session: &mut crate::editing::Session<'_>,
     list: &crate::editing::Site,
@@ -222,40 +231,24 @@ fn start_entry(
     let Some(fresh) = gid::position::between(low, high) else {
         return false;
     };
-    let entry = list.below(&[Step::Element(fresh)]);
-    let mut edit = entry.open(session);
-    edit.replace(new_entry_value()) && {
-        edit.pend(&EXPRESSION);
-        true
-    }
+    list.open(session).pend(&[Step::Element(fresh)]);
+    true
 }
 
-/// Starts an empty document as a notebook of one entry, whose expression is
-/// picked next.
-pub(super) fn starter() -> Completion {
+/// Starts an empty document as a notebook, its first entry picked next.
+fn starter() -> Completion {
     let first = gid::position::between(None, None).expect("an empty list has room");
-    crate::libraries::completion::generated(
+    crate::libraries::completion::insert(
         vocabulary::kind::NOTEBOOK,
-        {
-            let first = first.clone();
-            move || {
-                ::grap::isa::record(
-                    vocabulary::kind::NOTEBOOK,
-                    [(
-                        vocabulary::ENTRIES,
-                        Value::List([(first.clone(), new_entry_value())].into_iter().collect()),
-                    )],
-                )
-            }
-        },
-        Some(crate::selection::pending_at(
-            &[Step::Key(vocabulary::ENTRIES), Step::Element(first)]
-                .into_iter()
-                .chain(EXPRESSION)
-                .collect::<Vec<_>>(),
-        )),
+        ::grap::isa::record(
+            vocabulary::kind::NOTEBOOK,
+            [(vocabulary::ENTRIES, gid::Value::list([]))],
+        ),
+        Some(crate::selection::pending_at(&[
+            Step::Key(vocabulary::ENTRIES),
+            Step::Element(first),
+        ])),
     )
-    .with_detail(super::ID)
 }
 
 #[cfg(test)]

@@ -105,11 +105,6 @@ impl SiteEdit<'_> {
             .annotate(self.site.path.view(), &self.site.path.to_vec(), state)
     }
 
-    /// Writes `value` where this occurrence is stored.
-    pub(crate) fn replace(&mut self, value: Value) -> bool {
-        self.edit.replace(&self.site.path.to_vec(), value)
-    }
-
     pub(crate) fn select(&mut self) {
         self.edit
             .select(self.site.path.view(), &self.site.path.to_vec());

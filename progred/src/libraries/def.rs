@@ -58,48 +58,73 @@ pub fn library<W: Host>() -> Library<W> {
     .with_completions(completions)
 }
 
-/// A new record of each kind the document's library defines, for an empty
-/// place, selected as it's made: all of them where a projection asks for
-/// everything, and where what's typed is read, those whose name it begins.
-/// An empty document can start as a library.
+/// For an empty place: a new library, and a new record of each kind the
+/// document's libraries define, selected as it's made; where what's typed is
+/// read, those kinds whose name it begins. An empty document can start as a
+/// notebook of a library.
 fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     (request.kind == CompletionKind::Value && request.value().is_none()).then_some(())?;
-    // What's typed, where it's read: a kind's name, or `new` and its name.
-    let typed = match request.scope {
-        CompletionScope::Start => return Some(vec![starter()]),
-        CompletionScope::Everything => None,
-        CompletionScope::Literal => Some(request.query.trim().to_lowercase()),
-    };
-    let wanted = |name: &str| {
-        typed.as_ref().is_none_or(|typed| {
-            let name = name.to_lowercase();
-            !typed.is_empty()
-                && (name.starts_with(typed) || format!("new {name}").starts_with(typed))
-        })
-    };
-    Some(
-        document_defs(request.root, |cell| Some((request.resolve)(cell)?.value))
-            .into_iter()
-            .filter_map(|kind| {
-                let name = (request.name)(kind)
-                    .map(|name| name.spelling().into_owned())
-                    .unwrap_or_else(|| crate::identity::short_id(kind));
-                wanted(&name).then(|| {
-                    crate::libraries::completion::select(
-                        format!("new {name}"),
-                        ::grap::isa::record(kind, []),
-                    )
-                    .with_aliases([name])
-                })
-            })
+    Some(match request.scope {
+        CompletionScope::Start => vec![starter()],
+        CompletionScope::Everything => std::iter::once(new_library())
+            .chain(new_records(request, |_| true))
             .collect(),
-    )
+        CompletionScope::Literal => {
+            let typed = request.query.trim().to_lowercase();
+            new_records(request, |name| {
+                let name = name.to_lowercase();
+                !typed.is_empty()
+                    && (name.starts_with(&typed) || format!("new {name}").starts_with(&typed))
+            })
+            .collect()
+        }
+    })
+}
+
+/// A new record of each of the document's kinds whose name is `wanted`.
+fn new_records<'r>(
+    request: &'r CompletionRequest<'_>,
+    wanted: impl Fn(&str) -> bool + 'r,
+) -> impl Iterator<Item = Completion> + 'r {
+    document_defs(request.root, |cell| Some((request.resolve)(cell)?.value))
+        .into_iter()
+        .filter_map(move |kind| {
+            let name = (request.name)(kind)
+                .map(|name| name.spelling().into_owned())
+                .unwrap_or_else(|| crate::identity::short_id(kind));
+            wanted(&name).then(|| {
+                crate::libraries::completion::select(
+                    format!("new {name}"),
+                    ::grap::isa::record(kind, []),
+                )
+                .with_aliases([name])
+            })
+        })
+}
+
+/// A new library, its first def made next.
+fn new_library() -> Completion {
+    crate::libraries::completion::insert("new library", empty_library(), Some(first_def()))
+        .with_aliases(["library"])
+}
+
+/// A library with no defs yet.
+fn empty_library() -> Value {
+    ::grap::isa::record(LIBRARY, [(DEFS, Value::list([]))])
+}
+
+/// Where a new library's first def is made, from the library.
+fn first_def() -> crate::site::Continuation {
+    crate::selection::pending_at(&[
+        gid::Step::Key(DEFS),
+        gid::Step::Element(gid::position::between(None, None).expect("an empty list has room")),
+    ])
 }
 
 /// Starts an empty document as a notebook whose first entry is a library,
 /// its first def made next.
 fn starter() -> Completion {
-    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     let first = || gid::position::between(None, None).expect("an empty list has room");
     crate::libraries::completion::insert(
         LIBRARY,
@@ -107,14 +132,7 @@ fn starter() -> Completion {
             NOTEBOOK,
             [(
                 ENTRIES,
-                Value::List(
-                    [(
-                        first(),
-                        ::grap::isa::record(LIBRARY, [(DEFS, Value::list([]))]),
-                    )]
-                    .into_iter()
-                    .collect(),
-                ),
+                Value::List([(first(), empty_library())].into_iter().collect()),
             )],
         ),
         Some(crate::selection::pending_at(&[
@@ -134,7 +152,7 @@ pub(crate) fn document_defs<'a>(
     root: Option<&'a Value>,
     resolve: impl Fn(CellId) -> Option<&'a Value>,
 ) -> Vec<CellId> {
-    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     use crate::libraries::section::vocabulary::{BODY, SECTION};
     let read = |value: &'a Value| match value.as_cell() {
         Some(cell) => resolve(cell),

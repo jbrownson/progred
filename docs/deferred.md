@@ -549,7 +549,7 @@ Directions this surfaced:
 Where offers come from, as of 20 October 2026, with the owner's view of each:
 
 - **Starting points** (`CompletionScope::Start`): what a document starts as,
-  a library, Grap's new program and notebook and Fidget's new scene, for an empty root's
+  a library, a notebook, Grap's new program and Fidget's new scene, for an empty root's
   hole. These
   stay a category of their own: they are how a document gets into a custom
   projection, whose holes then offer its own. They may not need to be
@@ -586,8 +586,8 @@ offers. There should be one for every direction a person might want to go, each
 landing on something that works. Of today's three, Grap's new program and
 Fidget's new scene each lead somewhere awkward; Grap's opens with a missing-cell
 error in its pane until the program is written (that error's hole does take the
-program now). Grap's notebook opens on its first entry's expression, with
-nothing in error; see [Notebook and REPL](#notebook-and-repl) for what it
+program now). A notebook opens on the place for its first entry, with nothing
+in error; see [Notebook and REPL](#notebook-and-repl) for what it
 lacks.
 
 ## Rows and columns
@@ -1703,10 +1703,10 @@ From the same month's discussion, none of it started:
 
 A Grap notebook in the style of Jupyter, but reactive like Pluto, marimo and
 Observable: changing a cell recomputes the cells that use it, so there is no
-hidden state from running cells out of order. A first one is Grap's notebook
-starting point ([projections](projections.md)): a list of entries, each drawn
-as it would be anywhere, a new one on Enter an evaluation of a new cell, drawn
-as its expression and its result.
+hidden state from running cells out of order. A first one is a notebook
+([projections](projections.md)) of Grap evaluations: a list of entries, each
+drawn as it would be anywhere, an evaluation of a new cell, typed `=` at the
+place Enter opens, drawn as its expression and its result.
 Results project through the normal projections (pictures, tool previews, 3D
 views), and observed evaluation tracks the cell definitions an evaluation reads.
 Still to come:

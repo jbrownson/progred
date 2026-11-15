@@ -139,8 +139,8 @@ notebook, any library among its entries, through the sections that name them
 library's kinds. They're made where they go: a place among the library's
 `defs` offers a new def named as typed, one among a def's `fields` a new field,
 and an empty value place a new record of each kind whose name is typed. An
-empty document can start as a notebook whose first entry is a library, its
-first def made next. Next, it draws as its kind provides,
+empty place offers a new library, and an empty document can start as a
+notebook whose first entry is a library, its first def made next. Next, it draws as its kind provides,
 ahead of every library's partial: the stack's next partial reads the record's
 `isa` and applies the projection its libraries registered under that kind's cell,
 composed in load order, or declines where the kind provides none or the record
@@ -478,21 +478,27 @@ and draws the program `grap` names as an expression slot: the cell keeps its
 parentheses, and an empty program offers Grap's suggestions rather than the
 whole vocabulary.
 
-Grap's other root template is a notebook, `{isa: notebook, entries}`: a list
-of entries, each drawn as it would be anywhere, a library as a library, a
-section as a section. The record and its list are one thing, the notebook,
-marked by a bar down its side that selects it; its entries are stops inside,
-numbered in its margin, a number selecting its entry. A new entry is an
-evaluation of a new cell, `{isa: evaluation, expression: (…)}`, whose
-definition is picked next; it reads as the cell, in its parentheses, an arrow,
-and what it evaluates to. The cell is what another entry refers to, the
-standard ways: Cmd-clicking, copying, or naming. The entries are drawn as a
-list, with a list's editing: clicking between two inserts a place for one
-there, and deleting one leaves its place to fill. Such a place offers "new
-entry", whose expression starts from what was typed. Enter on an entry, once
-its own handlers decline it, starts a new entry after it, or with Shift before
-it, going straight to its expression. An empty notebook draws a "new entry"
-that starts its first.
+A notebook, `{isa: notebook, entries}`
+([`notebook.rs`](../progred/src/libraries/notebook.rs)), is a bunch of things:
+a list of entries, each drawn as it would be anywhere, a library as a library,
+a section as a section, an evaluation as its expression and its result. It says
+nothing about what they are. The record and its list are one thing, the
+notebook, marked by a bar down its side that selects it; its entries are stops
+inside, numbered in its margin, a number selecting its entry. The entries are
+drawn as a list, with a list's editing: clicking between two inserts a place
+for one there, deleting one leaves its place to fill, and Enter on an entry,
+once its own handlers decline it, opens a place after it, or with Shift before
+it. An empty notebook draws a "new entry" that opens a place for its first, and
+an empty document can start as one. A place for an entry is an ordinary empty
+place: it offers what the libraries offer for one (Grap a new evaluation,
+typed `=` as a spreadsheet's formula is, the section library a new section,
+the def library a new library and a record of each of the document's kinds),
+then the editor's constructors and what's typed, read as a value, so typing
+`2` there makes the number 2. A new evaluation is of a new cell, `{isa:
+evaluation, expression: (…)}`, whose definition is picked next; it reads as the
+cell, in its parentheses, an arrow, and what it evaluates to, and the cell is
+what another entry refers to, the standard ways: Cmd-clicking, copying, or
+naming.
 
 The presentation library offers an opt-in interpreter for a projected value,
 `{isa: projected value, value: source, projection: function}`. Pane views try it

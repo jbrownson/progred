@@ -24,7 +24,6 @@ use ::grap::{Context, Early, Environment, Expression, ForeignFunction, ForeignFu
 use puri::text::Script;
 
 pub mod control;
-pub mod notebook;
 pub mod numbers;
 mod suggestions;
 #[cfg(test)]
@@ -779,8 +778,6 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::source::vocabulary::CELL, "source cell"),
             (::grap::source::vocabulary::PATH, "source path"),
             (vocabulary::GRAP, "grap"),
-            (notebook::vocabulary::kind::NOTEBOOK, "notebook"),
-            (notebook::vocabulary::ENTRIES, "entries"),
             (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
             (::grap::absent::DEPTH_EXHAUSTED, "nesting too deep"),
             (memo::CYCLE, "computation cycle"),
@@ -829,10 +826,6 @@ pub fn library<W: Host>() -> Library<W> {
                 vocabulary::kind::EVALUATION,
                 crate::display::runtime_partial(evaluation_display),
             ),
-            (
-                notebook::vocabulary::kind::NOTEBOOK,
-                crate::display::runtime_partial(notebook::display),
-            ),
         ]
         .into_iter()
         .chain(control)
@@ -842,12 +835,38 @@ pub fn library<W: Host>() -> Library<W> {
     .with_completions(completions)
 }
 
-/// An empty document can start as a program in a pane, or as a notebook.
-/// Grap's other offers are its slots' own.
+/// An empty document can start as a program in a pane, and an empty place
+/// can hold an evaluation. Grap's other offers are its slots' own.
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
-    (request.kind == CompletionKind::Value
-        && request.scope == crate::display::CompletionScope::Start)
-        .then(|| vec![new_program(), notebook::starter()])
+    use crate::display::CompletionScope;
+    (request.kind == CompletionKind::Value).then_some(())?;
+    match request.scope {
+        CompletionScope::Start => Some(vec![new_program()]),
+        CompletionScope::Everything => request.value().is_none().then(|| vec![new_evaluation()]),
+        CompletionScope::Literal => None,
+    }
+}
+
+/// An evaluation of a new cell, whose expression is picked next: an
+/// expression shown with its result, which another refers to by its cell.
+/// `=` makes one, as it starts a formula in a spreadsheet.
+fn new_evaluation() -> Completion {
+    use ::grap::vocabulary::EXPRESSION;
+    crate::libraries::completion::generated(
+        "new evaluation",
+        || {
+            ::grap::isa::record(
+                vocabulary::kind::EVALUATION,
+                [(EXPRESSION, gid::new_cell_id().into())],
+            )
+        },
+        Some(crate::selection::pending_at(&[
+            Step::Key(EXPRESSION),
+            Step::Follow,
+        ])),
+    )
+    .with_aliases(["=", "evaluation"])
+    .with_detail(ID)
 }
 
 /// What Grap builds in a slot that names no function: a lambda, its first

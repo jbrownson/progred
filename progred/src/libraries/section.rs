@@ -30,6 +30,27 @@ pub fn library<W: Host>() -> Library<W> {
         ::grap::ForeignFunctions::default(),
     )
     .with_projections_for([(SECTION, d::runtime_partial(display))])
+    .with_completions(completions)
+}
+
+/// A new section, for an empty place, its name typed next.
+fn completions(request: &d::CompletionRequest<'_>) -> Option<Vec<d::Completion>> {
+    (request.kind == d::CompletionKind::Value
+        && request.scope == d::CompletionScope::Everything
+        && request.value().is_none())
+    .then(|| {
+        vec![
+            crate::libraries::completion::insert(
+                "new section",
+                ::grap::isa::record(SECTION, []),
+                Some(crate::selection::at(
+                    &[Step::Key(name::vocabulary::NAME)],
+                    crate::selection::payload::edge(),
+                )),
+            )
+            .with_aliases(["section"]),
+        ]
+    })
 }
 
 /// Whether a section starts closed.

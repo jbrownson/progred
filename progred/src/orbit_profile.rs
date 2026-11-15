@@ -86,7 +86,7 @@ impl OrbitProfile {
         if collapsed {
             // Every section of the notebook beside the preview, folded.
             use libraries::editor::workspace::vocabulary::PARTS;
-            use libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+            use libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
             let root = editor.model.doc.root.as_ref().unwrap().as_record().unwrap();
             let parts = root.get(&PARTS).and_then(Value::as_list).unwrap();
             let (part, notebook) = parts
