@@ -243,8 +243,11 @@ fn completion_interpretation_order_is_independent_of_the_value_type() {
         .collect::<Vec<_>>()
     };
     let with_text = crate::libraries::completion::combine([
-        provider.clone(),
-        text::library::<crate::Editor>().completions.unwrap(),
+        (gid::new_cell_id(), provider.clone()),
+        (
+            text::ID,
+            text::library::<crate::Editor>().completions.unwrap(),
+        ),
     ]);
     assert_eq!(
         values(&with_text),

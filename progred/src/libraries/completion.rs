@@ -79,14 +79,28 @@ fn insertion(
     }
 }
 
-/// Combine applicable providers in order. An explicit empty vocabulary stays
-/// specified; only an entirely unspecified composition returns None.
-pub fn combine(providers: impl IntoIterator<Item = CompletionProvider>) -> CompletionProvider {
+/// Combine applicable providers, each a library's, in order. An offer that
+/// doesn't say what it is says which library it's from. An explicit empty
+/// vocabulary stays specified; only an entirely unspecified composition
+/// returns None.
+pub fn combine(
+    providers: impl IntoIterator<Item = (CellId, CompletionProvider)>,
+) -> CompletionProvider {
     let providers: Vec<_> = providers.into_iter().collect();
     Rc::new(move |request| {
         providers
             .iter()
-            .filter_map(|provider| provider(request))
+            .filter_map(|(library, provider)| {
+                Some(
+                    provider(request)?
+                        .into_iter()
+                        .map(|offer| match offer.detail {
+                            Some(_) => offer,
+                            None => offer.with_detail(*library),
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
             .reduce(|mut offers, next| {
                 offers.extend(next);
                 offers

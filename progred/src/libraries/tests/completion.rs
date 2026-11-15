@@ -16,11 +16,18 @@ fn combined_providers_preserve_order_and_explicit_empty_vocabularies() {
     let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
     let first = gid::new_cell_id();
     let second = gid::new_cell_id();
+    let library = gid::new_cell_id();
     let combined = combine([
-        unspecified.clone(),
-        Rc::new(move |_| Some(vec![select(first, first.into())])),
-        empty.clone(),
-        Rc::new(move |_| Some(vec![select(second, second.into())])),
+        (library, unspecified.clone()),
+        (
+            library,
+            Rc::new(move |_| Some(vec![select(first, first.into())])),
+        ),
+        (library, empty.clone()),
+        (
+            library,
+            Rc::new(move |_| Some(vec![select(second, second.into())])),
+        ),
     ]);
     assert_eq!(calls.get(), 0);
     let offers = combined(&request).unwrap();
@@ -33,8 +40,12 @@ fn combined_providers_preserve_order_and_explicit_empty_vocabularies() {
         [first.into(), second.into()]
     );
     assert!(combine([])(&request).is_none());
-    assert!(combine([unspecified.clone()])(&request).is_none());
-    assert!(combine([unspecified, empty])(&request).unwrap().is_empty());
+    assert!(combine([(library, unspecified.clone())])(&request).is_none());
+    assert!(
+        combine([(library, unspecified), (library, empty)])(&request)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Fidget's offers: an empty document can start as a scene.
 
-use super::{ID, vocabulary};
+use super::vocabulary;
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 use crate::libraries::presentation;
 
@@ -14,5 +14,4 @@ fn root_completion() -> Completion {
         presentation::sized(cell.into(), vocabulary::PREVIEW_3D.into())
     })
     .with_aliases(["sdf"])
-    .with_detail(ID)
 }

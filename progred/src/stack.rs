@@ -105,7 +105,7 @@ impl Stack {
             self.providers
                 .iter()
                 .filter(|(id, _)| !hidden.contains(id))
-                .map(|(_, provider)| provider.clone()),
+                .cloned(),
         )
     }
 
@@ -156,9 +156,7 @@ fn compose(
     let (libraries, partials, provided, providers) = Libraries::from_contributions(contributions);
     let libraries = crate::libraries::name::described(libraries);
     let providers: Rc<[_]> = providers.into();
-    let completions = crate::libraries::completion::combine(
-        providers.iter().map(|(_, provider)| provider.clone()),
-    );
+    let completions = crate::libraries::completion::combine(providers.iter().cloned());
     let partials: Rc<[_]> = partials.into();
     let provided: Rc<[_]> = provided.into();
     let projection = projection(

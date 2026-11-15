@@ -196,6 +196,8 @@ fn an_empty_notebook_offers_its_first_entry() {
         ("new evaluation", "grap"),
         ("new section", "section"),
         ("new library", "def"),
+        // Said by the libraries' combined offers, not each offer.
+        ("new color", "color"),
     ] {
         assert_eq!(driver.picker_detail(offer).as_deref(), Some(library));
     }

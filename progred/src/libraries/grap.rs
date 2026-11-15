@@ -866,7 +866,6 @@ fn new_evaluation() -> Completion {
         ])),
     )
     .with_aliases(["=", "evaluation"])
-    .with_detail(ID)
 }
 
 /// What Grap builds in a slot that names no function: a lambda, its first
@@ -897,7 +896,6 @@ fn new_program() -> Completion {
     crate::libraries::completion::starter(vocabulary::GRAP, |cell| {
         crate::libraries::presentation::render(cell.into())
     })
-    .with_detail(ID)
 }
 
 /// What an offer is, `call` or `function`, and where its function comes
