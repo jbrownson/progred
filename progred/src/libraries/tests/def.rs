@@ -284,3 +284,17 @@ fn an_empty_place_offers_a_new_record_of_each_kind_the_library_defines() {
         ::grap::isa::record(fraction, [])
     );
 }
+
+#[test]
+fn an_empty_document_starts_as_a_library_its_first_def_made_next() {
+    let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
+    driver.click::<Step>(&[]);
+    driver.choose("library");
+    driver.type_text("shape");
+    driver.press(ui_events::keyboard::NamedKey::Enter);
+    let root = driver.value(&[]);
+    assert_eq!(::grap::isa::of(root.as_record().unwrap()), Some(LIBRARY));
+    let (shape, definition) = first_cell(&driver, &[Step::Key(DEFS)]);
+    assert_eq!(document_defs(Some(&root)), [shape]);
+    assert_eq!(name::read(&definition), Some("shape"));
+}

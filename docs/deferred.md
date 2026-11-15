@@ -544,7 +544,7 @@ Directions this surfaced:
 Where offers come from, as of 20 October 2026, with the owner's view of each:
 
 - **Starting points** (`CompletionScope::Start`): what a document starts as,
-  Grap's new program and notebook and Fidget's new scene, for an empty root's
+  a library, Grap's new program and notebook and Fidget's new scene, for an empty root's
   hole. These
   stay a category of their own: they are how a document gets into a custom
   projection, whose holes then offer its own. They may not need to be

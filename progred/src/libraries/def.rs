@@ -61,18 +61,21 @@ pub fn library<W: Host>() -> Library<W> {
 /// A new record of each kind the document's library defines, for an empty
 /// place, selected as it's made: all of them where a projection asks for
 /// everything, and where what's typed is read, those whose name it begins.
+/// An empty document can start as a library.
 fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     (request.kind == CompletionKind::Value && request.value().is_none()).then_some(())?;
-    let typed = request.query.trim().to_lowercase();
-    let wanted = |name: &str| match request.scope {
-        CompletionScope::Everything => true,
-        CompletionScope::Literal => {
+    // What's typed, where it's read: a kind's name, or `new` and its name.
+    let typed = match request.scope {
+        CompletionScope::Start => return Some(vec![starter()]),
+        CompletionScope::Everything => None,
+        CompletionScope::Literal => Some(request.query.trim().to_lowercase()),
+    };
+    let wanted = |name: &str| {
+        typed.as_ref().is_none_or(|typed| {
+            let name = name.to_lowercase();
             !typed.is_empty()
-                && [name.to_lowercase(), format!("new {}", name.to_lowercase())]
-                    .iter()
-                    .any(|spelling| spelling.starts_with(&typed))
-        }
-        CompletionScope::Start => false,
+                && (name.starts_with(typed) || format!("new {name}").starts_with(typed))
+        })
     };
     Some(
         document_defs(request.root)
@@ -90,6 +93,19 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
                 })
             })
             .collect(),
+    )
+}
+
+/// Starts an empty document as a library, its first def made next.
+fn starter() -> Completion {
+    let first = gid::position::between(None, None).expect("an empty list has room");
+    crate::libraries::completion::insert(
+        LIBRARY,
+        ::grap::isa::record(LIBRARY, [(DEFS, Value::list([]))]),
+        Some(crate::selection::pending_at(&[
+            gid::Step::Key(DEFS),
+            gid::Step::Element(first),
+        ])),
     )
 }
 

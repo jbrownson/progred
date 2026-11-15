@@ -471,6 +471,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     assert_eq!(
         displays(""),
         [
+            "library",
             "fidget",
             "grap",
             "notebook",
