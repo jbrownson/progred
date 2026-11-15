@@ -915,12 +915,12 @@ fn a_value_a_grap_function_draws_is_an_arrow_stop() {
     // An angle draws as a dial, its degrees and a word, all from a Grap
     // function that declares nothing for navigation: the degrees are a stop
     // of their own, and the angle is one before them.
-    let (doc, _) =
+    let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../examples/libraries.gid")).unwrap();
+    let angles = crate::test_examples::section_body(&doc, &[], "Angles", 0);
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
-    let angles = Step::Key(gid::CellId::from_u128(0x1658642f21a8218fbfec1e4825521991));
-    let degrees = Step::Key(gid::CellId::from_u128(0xca9a2253bfe9bb037b1daf8416c70a8c));
-    let angle = driver.element(&[angles], 0, &[]);
+    let degrees = Step::Key(names["degrees"]);
+    let angle = driver.element(&angles, 0, &[]);
     let number = [&angle[..], &[degrees]].concat();
     driver.select(&number);
     // The degrees' caret moves first, as far as its spelling goes.

@@ -78,7 +78,7 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
         })
     };
     Some(
-        document_defs(request.root)
+        document_defs(request.root, |cell| Some((request.resolve)(cell)?.value))
             .into_iter()
             .filter_map(|kind| {
                 let name = (request.name)(kind)
@@ -96,27 +96,76 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     )
 }
 
-/// Starts an empty document as a library, its first def made next.
+/// Starts an empty document as a notebook whose first entry is a library,
+/// its first def made next.
 fn starter() -> Completion {
-    let first = gid::position::between(None, None).expect("an empty list has room");
+    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    let first = || gid::position::between(None, None).expect("an empty list has room");
     crate::libraries::completion::insert(
         LIBRARY,
-        ::grap::isa::record(LIBRARY, [(DEFS, Value::list([]))]),
+        ::grap::isa::record(
+            NOTEBOOK,
+            [(
+                ENTRIES,
+                Value::List(
+                    [(
+                        first(),
+                        ::grap::isa::record(LIBRARY, [(DEFS, Value::list([]))]),
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+            )],
+        ),
         Some(crate::selection::pending_at(&[
+            gid::Step::Key(ENTRIES),
+            gid::Step::Element(first()),
             gid::Step::Key(DEFS),
-            gid::Step::Element(first),
+            gid::Step::Element(first()),
         ])),
     )
 }
 
-/// The document's own defs: those of the library its root is, where its root
-/// is one. Nothing else in the document is searched.
-pub(crate) fn document_defs(root: Option<&Value>) -> Vec<CellId> {
-    root.and_then(Value::as_record)
-        .filter(|fields| ::grap::isa::of(fields) == Some(LIBRARY))
-        .and_then(|fields| fields.get(&DEFS)?.as_list())
-        .map(|defs| defs.values().filter_map(Value::as_cell).collect())
-        .unwrap_or_default()
+/// The document's own defs: those of the library its root is, or where its
+/// root is a notebook, of the libraries among its entries, through the
+/// sections that name them. `resolve` reads a cell, as an entry may be one.
+/// Nothing else in the document is searched.
+pub(crate) fn document_defs<'a>(
+    root: Option<&'a Value>,
+    resolve: impl Fn(CellId) -> Option<&'a Value>,
+) -> Vec<CellId> {
+    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    use crate::libraries::section::vocabulary::{BODY, SECTION};
+    let read = |value: &'a Value| match value.as_cell() {
+        Some(cell) => resolve(cell),
+        None => Some(value),
+    };
+    let kind = |value: &Value| value.as_record().and_then(::grap::isa::of);
+    // What an entry holds, under the sections that name it.
+    let held = |entry: &'a Value| {
+        std::iter::successors(read(entry), |value| match kind(value) {
+            Some(SECTION) => read(value.as_record()?.get(&BODY)?),
+            _ => None,
+        })
+        .last()
+    };
+    let libraries: Vec<&Value> = match root.and_then(kind) {
+        Some(LIBRARY) => root.into_iter().collect(),
+        Some(NOTEBOOK) => root
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&ENTRIES)?.as_list())
+            .into_iter()
+            .flat_map(|entries| entries.values())
+            .filter_map(held)
+            .filter(|value| kind(value) == Some(LIBRARY))
+            .collect(),
+        _ => Vec::new(),
+    };
+    libraries
+        .into_iter()
+        .filter_map(|library| library.as_record()?.get(&DEFS)?.as_list())
+        .flat_map(|defs| defs.values().filter_map(Value::as_cell))
+        .collect()
 }
 
 /// A library as its author edits it: its defs first, then whatever else the

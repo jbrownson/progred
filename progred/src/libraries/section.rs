@@ -85,4 +85,4 @@ fn open(viewing: &dyn d::Viewing) -> bool {
 
 #[cfg(test)]
 #[path = "tests/section.rs"]
-mod tests;
+pub(crate) mod tests;

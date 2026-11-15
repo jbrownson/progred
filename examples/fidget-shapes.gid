@@ -30,6 +30,7 @@
     "divide_2": 9f458eda134e4adc98661b07b5169223,
     "do": b1fc4cb45c58b1a662c431feef5bd140,
     "edge_limit": 0e67cc8b215da18b59b64177a5f4d911,
+    "entries": 26b6e7f1fc0d482da89e2a4835d2f789,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
@@ -42,9 +43,7 @@
     "figure": 6ae6d51c4a03c7c5ae57f1faf04502df,
     "figure_layout": 21cae7fb0597a5195d36c8a11f9bd24c,
     "figure_view": b99645084a80c86dbc18fbc2eadc8d1a,
-    "figures": 20d01ef06b50dc37b0660d7237a6eb97,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
-    "functions": e180cc460ec3879c7b331c8e734be0af,
     "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
     "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
@@ -71,6 +70,7 @@
     "multiply_2": 2b80236eda7245d6a63b0da98da25850,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
+    "notebook": 9111dde9a00f4106a817720187b45645,
     "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
     "operand_2": b66457fa59524110bb363bc28754cea0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
@@ -91,6 +91,8 @@
     "ring": ec804b721f63fb7b8fea58b401ae4eed,
     "row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "scene": 9b819b6ad5c547e8952d8759531b9cd3,
+    "section": 9d30242da6ce9d5736c24e2adbd820ff,
+    "section_body": ac7cc432940c7cc64b315a5581108930,
     "selectable": 40b93f6e17d5a28c6a2df1905e83b7c4,
     "shape": ebeb131d69636b697e95536fd45fc70e,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
@@ -639,12 +641,6 @@
       },
       isa: lambda,
     },
-    figures: {
-      name: "figures",
-    },
-    functions: {
-      name: "functions",
-    },
     gyroid: {
       name: "gyroid sphere",
       params: [],
@@ -1190,37 +1186,54 @@
     },
   },
   "root": {
-    figures: [
-      0x2a: {
-        model: ring,
-        isa: figure,
-      },
-      0x55: {
-        model: torus,
-        isa: figure,
+    entries: [
+      0x40: {
+        name: "Kinds",
+        section_body: {
+          defs: [
+            0x55: figure,
+            0xaa: mesh_figure,
+          ],
+          isa: library,
+        },
+        isa: section,
       },
       0x80: {
-        model: tanglecube,
-        isa: figure,
+        name: "Functions",
+        section_body: [
+          0x40: figure_layout,
+          0x80: rendered,
+          0xc0: meshed,
+        ],
+        isa: section,
       },
-      0xaa: {
-        model: gyroid,
-        isa: figure,
-      },
-      0xd5: {
-        mesh: cube,
-        isa: mesh_figure,
+      0xc0: {
+        name: "Figures",
+        section_body: [
+          0x2a: {
+            model: ring,
+            isa: figure,
+          },
+          0x55: {
+            model: torus,
+            isa: figure,
+          },
+          0x80: {
+            model: tanglecube,
+            isa: figure,
+          },
+          0xaa: {
+            model: gyroid,
+            isa: figure,
+          },
+          0xd5: {
+            mesh: cube,
+            isa: mesh_figure,
+          },
+        ],
+        isa: section,
       },
     ],
-    defs: [
-      0x55: figure,
-      0xaa: mesh_figure,
-    ],
-    isa: library,
-    functions: [
-      0x40: figure_layout,
-      0x80: rendered,
-      0xc0: meshed,
-    ],
+    isa: notebook,
   },
 }

@@ -128,28 +128,42 @@ fn a_def_that_declines_passes_its_record_on() {
 }
 
 #[test]
-fn a_documents_defs_are_those_of_the_library_its_root_is() {
-    let [fraction, angle, data] = std::array::from_fn(|_| gid::new_cell_id());
-    let library = |defs: Vec<Value>| {
-        ::grap::isa::record(
-            LIBRARY,
-            [(DEFS, Value::list(defs)), (data, Value::list([]))],
-        )
-    };
+fn a_documents_defs_are_its_root_librarys_or_its_root_notebooks_librarys() {
+    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    let [fraction, angle, shared, data] = std::array::from_fn(|_| gid::new_cell_id());
+    let library = |defs: Vec<Value>| ::grap::isa::record(LIBRARY, [(DEFS, Value::list(defs))]);
+    let mut cells = Cells::new();
+    fn none<'a>(_: CellId) -> Option<&'a Value> {
+        None
+    }
+    let root = library(vec![fraction.into(), angle.into()]);
+    assert_eq!(document_defs(Some(&root), none), [fraction, angle]);
+    // A notebook's libraries are among its entries, named by sections or
+    // kept in cells.
+    cells.set_value(
+        shared,
+        crate::libraries::section::tests::record("Kinds", library(vec![angle.into()])),
+    );
+    let notebook =
+        |entries: Vec<Value>| ::grap::isa::record(NOTEBOOK, [(ENTRIES, Value::list(entries))]);
+    let root = notebook(vec![
+        library(vec![fraction.into()]),
+        Value::list([]),
+        shared.into(),
+    ]);
     assert_eq!(
-        document_defs(Some(&library(vec![fraction.into(), angle.into()]))),
+        document_defs(Some(&root), |cell| cells.value(cell)),
         [fraction, angle]
     );
-    // A root that isn't a library has none, and a library further in isn't
-    // looked for.
-    assert!(document_defs(None).is_empty());
-    assert!(
-        document_defs(Some(&Value::record([(
-            data,
-            library(vec![fraction.into()])
-        )])))
-        .is_empty()
-    );
+    // A root that's neither has none, and a library further in isn't looked
+    // for.
+    assert!(document_defs(None, none).is_empty());
+    for root in [
+        Value::record([(data, library(vec![fraction.into()]))]),
+        notebook(vec![notebook(vec![library(vec![fraction.into()])])]),
+    ] {
+        assert!(document_defs(Some(&root), none).is_empty());
+    }
 }
 
 /// A document whose root is a library defining `defs`, with `items`, an
@@ -221,8 +235,9 @@ fn a_new_def_and_its_fields_are_made_where_they_go() {
     driver.press(NamedKey::Enter);
     let (radius, definition) = first_cell(&driver, &fields);
     assert_eq!(definition, name::record("radius", []));
+    let doc = &driver.editor().model.doc;
     assert_eq!(
-        document_defs(driver.editor().model.doc.root.as_ref()),
+        document_defs(doc.root.as_ref(), |cell| doc.cells.value(cell)),
         [shape]
     );
     assert_eq!(
@@ -286,15 +301,28 @@ fn an_empty_place_offers_a_new_record_of_each_kind_the_library_defines() {
 }
 
 #[test]
-fn an_empty_document_starts_as_a_library_its_first_def_made_next() {
+fn an_empty_document_starts_as_a_notebook_of_a_library_its_first_def_made_next() {
+    use crate::libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.choose("library");
     driver.type_text("shape");
     driver.press(ui_events::keyboard::NamedKey::Enter);
     let root = driver.value(&[]);
-    assert_eq!(::grap::isa::of(root.as_record().unwrap()), Some(LIBRARY));
-    let (shape, definition) = first_cell(&driver, &[Step::Key(DEFS)]);
-    assert_eq!(document_defs(Some(&root)), [shape]);
+    assert_eq!(::grap::isa::of(root.as_record().unwrap()), Some(NOTEBOOK));
+    let library = [
+        Step::Key(ENTRIES),
+        Step::Element(first_position(&driver, &[Step::Key(ENTRIES)])),
+    ];
+    assert_eq!(
+        ::grap::isa::of(driver.value(&library).as_record().unwrap()),
+        Some(LIBRARY)
+    );
+    let (shape, definition) = first_cell(&driver, &[&library[..], &[Step::Key(DEFS)]].concat());
+    let doc = &driver.editor().model.doc;
+    assert_eq!(
+        document_defs(Some(&root), |cell| doc.cells.value(cell)),
+        [shape]
+    );
     assert_eq!(name::read(&definition), Some("shape"));
 }

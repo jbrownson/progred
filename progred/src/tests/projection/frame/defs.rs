@@ -65,26 +65,29 @@ fn a_view_that_draws_its_own_value_ends() {
 fn the_example_kinds_draw_fractions_angles_and_their_functions() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
+    // Where each of the example's sections keeps what it holds.
+    let section = |name: &str| crate::test_examples::section_body(&doc, &[], name, 0);
+    let [fractions, angles, functions, sum] =
+        ["Fractions", "Angles", "Functions", "Sum"].map(section);
     let mut world = crate::test_editor(doc);
     let key = |name: &str| Step::Key(names[name]);
-    let elements = |world: &crate::Editor, list: &str| {
+    let elements = |world: &crate::Editor, list: &[Step]| {
         world
             .sources()
-            .resolve_path(&[key(list)])
+            .resolve_path(list)
             .and_then(Value::as_list)
             .unwrap()
             .keys()
             .cloned()
             .collect::<Vec<_>>()
     };
-    for position in elements(&world, "fractions") {
+    for position in elements(&world, &fractions) {
         for part in ["over", "under"] {
             let at = [
-                key("fractions"),
-                Step::Element(position.clone()),
-                Step::Follow,
-                key(part),
-            ];
+                &fractions[..],
+                &[Step::Element(position.clone()), Step::Follow, key(part)],
+            ]
+            .concat();
             assert!(drawn(&mut world, &at), "{part} of a fraction");
         }
     }
@@ -110,14 +113,13 @@ fn the_example_kinds_draw_fractions_angles_and_their_functions() {
             _ => None,
         })
         .collect::<Vec<_>>();
-    for position in elements(&world, "fractions") {
+    for position in elements(&world, &fractions) {
         let part = |name: &str| {
             let path = [
-                key("fractions"),
-                Step::Element(position.clone()),
-                Step::Follow,
-                key(name),
-            ];
+                &fractions[..],
+                &[Step::Element(position.clone()), Step::Follow, key(name)],
+            ]
+            .concat();
             frame.landmarks.landmark(&path).unwrap().rect
         };
         let (over, under) = (part("over"), part("under"));
@@ -135,11 +137,7 @@ fn the_example_kinds_draw_fractions_angles_and_their_functions() {
             "a rule between {over:?} and {under:?}: {rules:?}"
         );
     }
-    let total = world
-        .sources()
-        .resolve_path(&[key("fraction_sum")])
-        .cloned()
-        .unwrap();
+    let total = world.sources().resolve_path(&sum).cloned().unwrap();
     let sum = ::grap::Evaluator::new(&world.sources(), crate::sources::DEFAULT_FUEL)
         .evaluate(
             total
@@ -161,10 +159,10 @@ fn the_example_kinds_draw_fractions_angles_and_their_functions() {
         }),
         [Some(6.0), Some(8.0)]
     );
-    for position in elements(&world, "angles") {
+    for position in elements(&world, &angles) {
         assert!(drawn(
             &mut world,
-            &[key("angles"), Step::Element(position), key("degrees")]
+            &[&angles[..], &[Step::Element(position), key("degrees")]].concat()
         ));
     }
     // Each dial: a gray zero line, and a dark line turned by its angle.
@@ -189,24 +187,29 @@ fn the_example_kinds_draw_fractions_angles_and_their_functions() {
             })
             .collect::<Vec<_>>()
     };
-    for (position, degrees) in elements(&world, "angles").into_iter().zip([45.0, 120.0]) {
+    for (position, degrees) in elements(&world, &angles).into_iter().zip([45.0, 120.0]) {
         let angle = frame
             .landmarks
             .iter()
-            .find(|landmark| landmark.path == [key("angles"), Step::Element(position.clone())][..])
+            .find(|landmark| {
+                landmark.path == [&angles[..], &[Step::Element(position.clone())]].concat()[..]
+            })
             .unwrap()
             .rect;
         assert_eq!(lines(angle, [0x99; 3]), [0.0], "{degrees}: the zero line");
         assert_eq!(lines(angle, [0x44; 3]), [degrees], "{degrees}: its line");
     }
     // Functions only code calls are listed in the document, so they're drawn.
-    for function in elements(&world, "functions") {
+    for function in elements(&world, &functions) {
         let body = [
-            key("functions"),
-            Step::Element(function),
-            Step::Follow,
-            Step::Key(::grap::vocabulary::BODY),
-        ];
+            &functions[..],
+            &[
+                Step::Element(function),
+                Step::Follow,
+                Step::Key(::grap::vocabulary::BODY),
+            ],
+        ]
+        .concat();
         assert!(frame.landmarks.landmark(&body).is_some(), "{body:?}");
     }
 }
@@ -215,20 +218,16 @@ fn the_example_kinds_draw_fractions_angles_and_their_functions() {
 fn the_example_views_select_what_they_draw() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
+    let section = |name: &str| crate::test_examples::section_body(&doc, &[], name, 0);
+    let [fractions, angles] = ["Fractions", "Angles"].map(section);
+    // Tall enough that the data, after the library and functions, is in view.
     let mut driver =
-        crate::driver::Driver::new(crate::test_editor(doc), crate::driver::Driver::VIEWPORT);
+        crate::driver::Driver::new(crate::test_editor(doc), kurbo::Size::new(800.0, 2400.0));
     let key = |name: &str| Step::Key(names[name]);
-    let fraction = vec![
-        key("fractions"),
-        Step::Element(driver.positions(&[key("fractions")])[0].clone()),
-        Step::Follow,
-    ];
+    let fraction = driver.element(&fractions, 0, &[Step::Follow]);
     let over = [fraction.clone(), vec![key("over")]].concat();
     let under = [fraction.clone(), vec![key("under")]].concat();
-    let angle = vec![
-        key("angles"),
-        Step::Element(driver.positions(&[key("angles")])[0].clone()),
-    ];
+    let angle = driver.element(&angles, 0, &[]);
     let (over_rect, under_rect, angle_rect) =
         (driver.rect(&over), driver.rect(&under), driver.rect(&angle));
 

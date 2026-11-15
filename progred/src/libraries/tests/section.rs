@@ -5,7 +5,7 @@ use gid::{Document, Value};
 use kurbo::Point;
 
 /// A section of `body` named `spelling`.
-pub fn record(spelling: &str, body: gid::Value) -> gid::Value {
+pub(crate) fn record(spelling: &str, body: gid::Value) -> gid::Value {
     ::grap::isa::record(
         SECTION,
         [

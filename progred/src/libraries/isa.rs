@@ -42,12 +42,14 @@ fn kind<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option
         CompletionKind::Value,
         ranked(Rc::new(|request| {
             Some(
-                crate::libraries::def::document_defs(request.root)
-                    .into_iter()
-                    .map(|kind| {
-                        crate::libraries::completion::select(kind, kind.into()).with_detail("kind")
-                    })
-                    .collect(),
+                crate::libraries::def::document_defs(request.root, |cell| {
+                    Some((request.resolve)(cell)?.value)
+                })
+                .into_iter()
+                .map(|kind| {
+                    crate::libraries::completion::select(kind, kind.into()).with_detail("kind")
+                })
+                .collect(),
             )
         })),
     )))

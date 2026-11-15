@@ -87,14 +87,19 @@ the root in the document format, which mixes the editor's layer into GID's.
 Decided November 2026: the workspace holds only how the document is looked
 at, panes and which views are on where, and is the record the editor peels
 off. What the document defines for itself is content: a library, a record
-of its kind, `{isa: library, defs: [...], …}`, edited where it is and drawn by
+of its kind, `{isa: library, defs: [...]}`, edited where it is and drawn by
 a projection that keeps it organized. A record's `isa` reaches its def
 directly, so a library isn't a registry for drawing; it's where defs live,
 which keeps a def that no record uses yet, lists the kinds to edit, and is
 what's enumerated when something wants every def in reach. The rule for
 finding it is fixed and simple, not a search of the document: the document's
-root, under any workspace, is its library where it says `isa: library`
-(`def::document_defs`). An empty `isa` offers that library's kinds.
+root, under any workspace, is its library where it says `isa: library`, or
+where the root is a notebook, its libraries are among its entries, through the
+sections that name them (`def::document_defs`). A library holds only defs; a
+document that defines kinds and holds other things is a notebook of them, the
+library one entry. Which kind of document it is is chosen when it's started,
+as a Grap program or a Fidget scene is, so no document is wrapped to make room
+for a library. An empty `isa` offers the libraries' kinds.
 
 ### Defs
 

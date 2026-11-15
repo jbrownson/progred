@@ -13,12 +13,17 @@ fn example() -> (Document, Binders) {
     crate::gid_text::parse(crate::command::Example::Fidget.source()).unwrap()
 }
 
+/// Where the example's figures are: the body of its section of them.
+fn gallery(doc: &Document) -> Vec<Step> {
+    crate::test_examples::section_body(doc, &[], "Figures", 0)
+}
+
 /// The example's figures in order, each with the field holding its code and
 /// the example's function that previews that code.
 fn figures(doc: &Document, names: &Binders) -> Vec<(Position, Record, &'static str, &'static str)> {
     let libraries = core_libraries();
     src(doc, &libraries)
-        .resolve_path(&[Step::Key(names["figures"])])
+        .resolve_path(&gallery(doc))
         .and_then(Value::as_list)
         .unwrap()
         .iter()
@@ -90,13 +95,14 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     // The previews are the figures' own, not panes.
     assert!(crate::workspace::panes(doc.root.as_ref()).is_empty());
     let figures = figures(&doc, &names);
+    let gallery = gallery(&doc);
     let mut world = crate::test_editor(doc);
     let frame = settle(editing_frame(&mut world), &world.sources());
     let landmark = |path: &[crate::occurrence::Step]| {
         frame.landmarks.landmark(path).map(|landmark| landmark.rect)
     };
     let figure =
-        |position: &Position| vec![Step::Key(names["figures"]), Step::Element(position.clone())];
+        |position: &Position| [gallery.clone(), vec![Step::Element(position.clone())]].concat();
     let picture = |position: &Position| crate::test_examples::result_path(&figure(position));
     for (index, (position, _, part, _)) in figures.iter().enumerate() {
         let mut code = figure(position);
@@ -141,7 +147,8 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     );
     // Between a picture and its code, a click selects the figure.
     let (first, ..) = &figures[0];
-    let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
+    // Tall enough that the gallery, after the example's functions, is in view.
+    let mut driver = crate::driver::Driver::new(world, kurbo::Size::new(800.0, 4000.0));
     let picture = driver.rect(&picture(first));
     driver.click_at(Point::new(picture.x1 + 8.0, picture.y0 + 8.0));
     assert_eq!(driver.selection(), figure(first));

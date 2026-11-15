@@ -343,6 +343,7 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
 fn the_def_entry_switches_the_documents_own_kinds() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../examples/libraries.gid")).unwrap();
+    let fractions = crate::test_examples::section_body(&doc, &[], "Fractions", 0);
     let mut driver = driver(doc);
     let command = Command::Doc(DocCommand::Projection(crate::libraries::def::ID));
     let heading = menus(&driver)
@@ -362,7 +363,7 @@ fn the_def_entry_switches_the_documents_own_kinds() {
                 .find(|landmark| {
                     landmark
                         .path
-                        .starts_with(&[crate::occurrence::Step::Key(names["fractions"])])
+                        .starts_with(&crate::occurrence::of(&fractions))
                         && landmark.path.last() == Some(&crate::occurrence::Step::Key(names[key]))
                 })
                 .unwrap()
