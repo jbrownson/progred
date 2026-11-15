@@ -133,10 +133,15 @@ projection}` ([`def.rs`](../progred/src/libraries/def.rs)). The def's
 `projection` is a template or a function of `value`; one projection, since
 projections compose. Where it declines, or the def has none, or the kind has
 no def, or the `def` library is switched off in the area, the record goes on. A def is edited as a record whose projection, a template, offers the
-def's own fields as its parts. A document's own defs live in a library,
-`{isa: library, defs}`: its root, where the root is one, or where the root is a
-notebook, any library among its entries, through the sections that name them
-(`def::document_defs`); nothing else in the document is searched for them. A kind in an `isa` reads as its name, and an empty one offers the
+def's own fields as its parts. A document's own defs and functions live in a
+library, `{isa: library, defs, functions}`, two lists, each holding only its
+kind of thing. Where things are looked for is fixed, not a search of the
+document (`def::in_reach`): the root, and what's held by every field reached
+from it whose definition says it holds what its record collects
+(`members: true`), a notebook's entries, a section's body, a row's or
+column's parts, through cells. A record in reach that lists `defs` or
+`functions`, a library or another, gives the document those; nothing else in
+the document, a program's insides say, is entered. A kind in an `isa` reads as its name, and an empty one offers the
 library's kinds. They're made where they go: a place among the library's
 `defs` offers a new def named as typed, one among a def's `fields` a new field,
 and an empty value place a new record of each kind whose name is typed. An
@@ -323,7 +328,8 @@ so it can carry subscripts, and an offer shows one as it's drawn
 
 The expression-use partial also handles missing values with a focused completion
 provider. It lists statically visible bindings, Grap's new lambda and new call,
-the functions in reach as calls, the other libraries' `Everything` offers, Raw's
+the functions in reach as calls (those listed in reach and those the loaded
+libraries define), the other libraries' `Everything` offers, Raw's
 constructors, quote, and what's typed read as a value.
 Only explicit expression children use this provider, not quoted data, parameter
 declarations, or ordinary structural containers. Provider composition is lazy:

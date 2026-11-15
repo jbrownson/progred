@@ -1,5 +1,6 @@
 {
   "binders": {
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
@@ -52,6 +53,7 @@
     calls: {isa: call, function: all, expressions: [{isa: call, function: recipe, x_param: {f64: 0x0000000000004440}, height_param: {isa: call, function: multiply, left: {f64: 0x0000000000004e40}, right: growth}}, {isa: call, function: recipe, x_param: {f64: 0x0000000000006040}, height_param: {isa: call, function: multiply, left: {f64: 0x0000000000805640}, right: growth}}, {isa: call, function: recipe, x_param: {f64: 0x0000000000006b40}, height_param: {isa: call, function: multiply, left: {f64: 0x0000000000005240}, right: growth}}]},
   },
   "root": {
+    functions: [recipe],
     first: recipe,
     second: calls,
     third: {isa: drawing, width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000006440}, fuel: {f64: 0x0000000000408f40}, program: calls},

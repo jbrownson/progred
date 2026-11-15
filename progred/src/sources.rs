@@ -158,17 +158,9 @@ impl<'a> Sources<'a> {
         }
     }
 
-    pub fn cells(&self) -> Vec<CellId> {
-        let mut cells: Vec<_> = self
-            .doc
-            .cells
-            .cells()
-            .copied()
-            .chain(self.libraries.cell_ids())
-            .collect();
-        cells.sort_unstable();
-        cells.dedup();
-        cells
+    /// The cells the loaded libraries define.
+    pub fn loaded(&self) -> Vec<CellId> {
+        self.libraries.cell_ids().collect()
     }
 
     /// The library is authoritative only when it supplies the value

@@ -127,42 +127,54 @@ fn a_def_that_declines_passes_its_record_on() {
     assert!(driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
 }
 
+/// The defs of a document of `root` and `cells`, read as the editor reads
+/// them, the loaded libraries' kinds among what it resolves.
+fn defs_of(root: Value, cells: Cells) -> Vec<CellId> {
+    let editor = crate::test_editor(Document {
+        root: Some(root),
+        cells,
+    });
+    let sources = editor.sources();
+    document_defs(sources.root(), &|cell| Some(sources.resolve(cell)?.value))
+}
+
 #[test]
-fn a_documents_defs_are_its_root_librarys_or_its_root_notebooks_librarys() {
+fn a_documents_defs_are_its_libraries_wherever_its_collections_hold_them() {
     use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     let [fraction, angle, shared, data] = std::array::from_fn(|_| gid::new_cell_id());
     let library = |defs: Vec<Value>| ::grap::isa::record(LIBRARY, [(DEFS, Value::list(defs))]);
+    let notebook =
+        |entries: Vec<Value>| ::grap::isa::record(NOTEBOOK, [(ENTRIES, Value::list(entries))]);
+    assert_eq!(
+        defs_of(library(vec![fraction.into(), angle.into()]), Cells::new()),
+        [fraction, angle]
+    );
+    // A notebook's entries, a section's body and the cells they hold are
+    // looked through, in the document's order, notebooks within notebooks
+    // too.
     let mut cells = Cells::new();
-    fn none<'a>(_: CellId) -> Option<&'a Value> {
-        None
-    }
-    let root = library(vec![fraction.into(), angle.into()]);
-    assert_eq!(document_defs(Some(&root), none), [fraction, angle]);
-    // A notebook's libraries are among its entries, named by sections or
-    // kept in cells.
     cells.set_value(
         shared,
         crate::libraries::section::tests::record("Kinds", library(vec![angle.into()])),
     );
-    let notebook =
-        |entries: Vec<Value>| ::grap::isa::record(NOTEBOOK, [(ENTRIES, Value::list(entries))]);
     let root = notebook(vec![
         library(vec![fraction.into()]),
         Value::list([]),
-        shared.into(),
+        notebook(vec![shared.into()]),
     ]);
-    assert_eq!(
-        document_defs(Some(&root), |cell| cells.value(cell)),
-        [fraction, angle]
-    );
-    // A root that's neither has none, and a library further in isn't looked
-    // for.
-    assert!(document_defs(None, none).is_empty());
+    assert_eq!(defs_of(root, cells), [fraction, angle]);
+    // So is a row's parts, as a document beside a preview is.
+    let row = crate::libraries::editor::workspace::row([
+        Value::record([]),
+        notebook(vec![library(vec![fraction.into()])]),
+    ]);
+    assert_eq!(defs_of(row, Cells::new()), [fraction]);
+    // Nothing else is: not a record's fields, nor a list's elements.
     for root in [
         Value::record([(data, library(vec![fraction.into()]))]),
-        notebook(vec![notebook(vec![library(vec![fraction.into()])])]),
+        notebook(vec![Value::list([library(vec![fraction.into()])])]),
     ] {
-        assert!(document_defs(Some(&root), none).is_empty());
+        assert!(defs_of(root, Cells::new()).is_empty());
     }
 }
 
@@ -237,7 +249,7 @@ fn a_new_def_and_its_fields_are_made_where_they_go() {
     assert_eq!(definition, name::record("radius", []));
     let doc = &driver.editor().model.doc;
     assert_eq!(
-        document_defs(doc.root.as_ref(), |cell| doc.cells.value(cell)),
+        defs_of(doc.root.clone().unwrap(), doc.cells.clone()),
         [shape]
     );
     assert_eq!(
@@ -320,9 +332,6 @@ fn an_empty_document_starts_as_a_notebook_of_a_library_its_first_def_made_next()
     );
     let (shape, definition) = first_cell(&driver, &[&library[..], &[Step::Key(DEFS)]].concat());
     let doc = &driver.editor().model.doc;
-    assert_eq!(
-        document_defs(Some(&root), |cell| doc.cells.value(cell)),
-        [shape]
-    );
+    assert_eq!(defs_of(root.clone(), doc.cells.clone()), [shape]);
     assert_eq!(name::read(&definition), Some("shape"));
 }

@@ -1,5 +1,6 @@
 {
   "binders": {
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf,
     "abs": 119eddd0f1404b34a6e8653279b69feb,
     "absent": 6509cd9921ab4cf28657ac75a9976d71,
     "across": ebc8f65bb8b576e8a7ccca2ecbc4512d,
@@ -1606,6 +1607,7 @@
     },
   },
   "root": {
+    functions: [sample],
     first: sample,
     second: {isa: render, expression: {isa: call, function: sample, width: {f64: 0x0000000000408540}, height: {f64: 0x0000000000407a40}}},
   },

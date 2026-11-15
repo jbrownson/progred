@@ -227,7 +227,9 @@ pub struct CompletionRequest<'a> {
     pub path: &'a [Step],
     pub value_at: &'a dyn Fn(&[Step]) -> Option<&'a Value>,
     pub resolve: &'a dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
-    pub cells: &'a dyn Fn() -> Vec<CellId>,
+    /// The cells the loaded libraries define, which they offer where they
+    /// fit; the document's own are found through its structure.
+    pub loaded: &'a dyn Fn() -> Vec<CellId>,
     /// The document's root, where its own library is looked for.
     pub root: Option<&'a Value>,
     /// A cell's name as the document names it, for offers named by their

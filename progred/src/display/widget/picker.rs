@@ -193,7 +193,7 @@ fn located_query<W: Host>(
         path: &location.path,
         value_at: &value_at,
         resolve: &resolve,
-        cells: &|| sources.cells(),
+        loaded: &|| sources.loaded(),
         root: sources.root(),
         name: &|cell| toolkit.name(cell),
         libraries: toolkit.completions(),

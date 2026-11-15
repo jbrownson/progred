@@ -929,20 +929,27 @@ fn function_offers(
         Some(Step::Key(field)) => *field == FUNCTION,
         _ => false,
     };
-    let mut offers: Vec<_> = (request.cells)()
+    // The document's functions are those its libraries list; the loaded
+    // libraries' are those of the cells they define that are functions.
+    let resolve = |cell| (request.resolve)(cell).map(|definition| definition.value);
+    let listed = crate::libraries::def::document_functions(request.root, &resolve);
+    let loaded: Vec<_> = (request.loaded)()
         .into_iter()
+        .filter(|cell| {
+            !listed.contains(cell)
+                && ((request.resolve)(*cell).is_some_and(|definition| is_foreign(definition.value))
+                    || function_parameters(&Value::from(*cell).into(), request.resolve).is_some())
+        })
+        .collect();
+    let mut offers: Vec<_> = listed
+        .into_iter()
+        .chain(loaded)
         .filter(|&cell| cell != control::vocabulary::QUOTE && !bound(cell))
         .filter_map(|cell| {
             let definition = (request.resolve)(cell)?;
-            let name = name::of_cell(
-                &|cell| (request.resolve)(cell).map(|definition| definition.value),
-                cell,
-            )?
-            .spelling();
-            (is_foreign(definition.value)
-                || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
-            .then(|| {
-                let offer = if as_function {
+            let name = name::of_cell(&resolve, cell)?.spelling();
+            let offer =
+                if as_function {
                     function_completion(cell, request.resolve).with_detail(function_detail(
                         request,
                         "function",
@@ -952,8 +959,7 @@ fn function_offers(
                     call_completion(cell.into(), cell, request.resolve)
                         .with_detail(function_detail(request, "call", definition.library))
                 };
-                (definition.library.is_some(), name, offer)
-            })
+            Some((definition.library.is_some(), name, offer))
         })
         .collect();
     offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), name.clone()));

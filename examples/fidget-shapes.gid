@@ -44,6 +44,7 @@
     "figure_layout": 21cae7fb0597a5195d36c8a11f9bd24c,
     "figure_view": b99645084a80c86dbc18fbc2eadc8d1a,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf,
     "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
     "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
@@ -1188,23 +1189,19 @@
   "root": {
     entries: [
       0x40: {
-        name: "Kinds",
+        name: "Library",
         section_body: {
+          functions: [
+            0x40: figure_layout,
+            0x80: rendered,
+            0xc0: meshed,
+          ],
           defs: [
             0x55: figure,
             0xaa: mesh_figure,
           ],
           isa: library,
         },
-        isa: section,
-      },
-      0x80: {
-        name: "Functions",
-        section_body: [
-          0x40: figure_layout,
-          0x80: rendered,
-          0xc0: meshed,
-        ],
         isa: section,
       },
       0xc0: {

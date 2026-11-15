@@ -59,6 +59,17 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    // A row's or column's parts are what it collects.
+    .with_values([(
+        workspace::vocabulary::PARTS,
+        name::record(
+            "parts",
+            [(
+                crate::libraries::def::vocabulary::MEMBERS,
+                ::grap::logic::value(true),
+            )],
+        ),
+    )])
     .with_projections_for(
         [(
             crate::library::vocabulary::kind::LIBRARY,

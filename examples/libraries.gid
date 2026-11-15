@@ -32,7 +32,8 @@
     "notebook": 9111dde9a00f4106a817720187b45645, "entries": 26b6e7f1fc0d482da89e2a4835d2f789,
     "section": 9d30242da6ce9d5736c24e2adbd820ff, "section_body": ac7cc432940c7cc64b315a5581108930,
     "def": a9a53af4187f4715f1eebdf58e0c65c0, "fields": 003bb68cfb673326a483cd31b03ba27f,
-    "library": 6a2a379c9d9553cedafcb3987e7891b7, "defs": 9c1a4dd291087eef39ac1d4020380ed0, "fraction": b84b3fd33a0047dec70e52f73e92d7ec,
+    "library": 6a2a379c9d9553cedafcb3987e7891b7, "defs": 9c1a4dd291087eef39ac1d4020380ed0,
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf, "fraction": b84b3fd33a0047dec70e52f73e92d7ec,
     "angle": b5c5e40a6471334c439a91e0b70ccf82,
     "projection": 873503e2e37a1722a0dd21399be9ee7f,
     "over": 5217a5a2b20b9aa61ae7cc5f02d83822, "under": d5f908921d5ad4d2aec6856d1cf34eb6,
@@ -119,8 +120,11 @@
   "root": {
     isa: notebook,
     entries: [
-      {isa: section, name: "Kinds", section_body: {isa: library, defs: [fraction, angle]}},
-      {isa: section, name: "Functions", section_body: [add_fractions, dial]},
+      {
+        isa: section,
+        name: "Library",
+        section_body: {isa: library, defs: [fraction, angle], functions: [add_fractions, dial]},
+      },
       {isa: section, name: "Fractions", section_body: [half, quarter]},
       {isa: section, name: "Sum", section_body: {isa: evaluation, expression: {isa: call, function: add_fractions, p: half, q: quarter}}},
       {isa: section, name: "Angles", section_body: [{isa: angle, degrees: {f64: 0x0000000000804640}}, {isa: angle, degrees: {f64: 0x0000000000005e40}}]},

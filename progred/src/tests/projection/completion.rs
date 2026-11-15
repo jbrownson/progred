@@ -152,9 +152,16 @@ fn expression_list_insertion(callable: CellId) {
         ),
     );
     let document = Document {
+        // The document lists its functions where they're looked for.
         root: Some(grap::call(
             callable.into(),
-            [(control::vocabulary::EXPRESSIONS, Value::list([]))],
+            [
+                (control::vocabulary::EXPRESSIONS, Value::list([])),
+                (
+                    crate::libraries::def::vocabulary::FUNCTIONS,
+                    Value::list([function.into()]),
+                ),
+            ],
         )),
         cells,
     };
@@ -251,6 +258,11 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
                 gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (grap::vocabulary::PARAMS, Value::list([parameter.into()])),
+            // The document lists its functions where they're looked for.
+            (
+                crate::libraries::def::vocabulary::FUNCTIONS,
+                Value::list([callable.into()]),
+            ),
         ])),
         cells,
     };

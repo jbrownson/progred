@@ -85,10 +85,32 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
                     value: &definitions[index].1,
                 })
         };
-        let enumerate = || order.clone();
+        // The document's functions are listed by its library; the loaded
+        // libraries' are the cells they define.
+        let listed: Vec<_> = order
+            .iter()
+            .copied()
+            .filter(|cell| resolve(*cell).is_some_and(|found| found.library.is_none()))
+            .map(Value::from)
+            .collect();
+        let root = ::grap::isa::record(
+            crate::libraries::def::vocabulary::LIBRARY,
+            [(
+                crate::libraries::def::vocabulary::FUNCTIONS,
+                Value::list(listed),
+            )],
+        );
+        let loaded = || {
+            order
+                .iter()
+                .copied()
+                .filter(|cell| resolve(*cell).is_some_and(|found| found.library.is_some()))
+                .collect()
+        };
         let request = CompletionRequest {
             resolve: &resolve,
-            cells: &enumerate,
+            loaded: &loaded,
+            root: Some(&root),
             ..crate::test_support::bare_request(
                 CompletionKind::Value,
                 CompletionScope::Everything,
@@ -1472,4 +1494,68 @@ fn a_form_draws_a_field_being_added_among_its_others() {
     let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
     assert!(driver.drawn(&[Step::Key(note)]));
     assert!(driver.picker_entries().is_some(), "its slot is open");
+}
+
+#[test]
+fn a_slot_offers_the_functions_libraries_in_reach_list_and_no_others() {
+    use crate::libraries::def::vocabulary::{FUNCTIONS, LIBRARY};
+    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    let [listed, stray] = std::array::from_fn(|_| new_cell_id());
+    let lambda = |spelling: &str| {
+        name::record(
+            spelling,
+            [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
+                ),
+                (PARAMS, Value::list([])),
+                (BODY, Value::record([])),
+            ],
+        )
+    };
+    let mut cells = Cells::new();
+    cells.set_value(listed, lambda("listed function"));
+    cells.set_value(stray, lambda("stray function"));
+    // A notebook of a section over a library, and the stray function loose
+    // in an entry.
+    let library = ::grap::isa::record(LIBRARY, [(FUNCTIONS, Value::list([listed.into()]))]);
+    let document = Document {
+        root: Some(::grap::isa::record(
+            NOTEBOOK,
+            [(
+                ENTRIES,
+                Value::list([
+                    crate::libraries::section::tests::record("Library", library),
+                    stray.into(),
+                ]),
+            )],
+        )),
+        cells,
+    };
+    let libraries = core_libraries();
+    let sources = src(&document, &libraries);
+    let everything = crate::libraries::grap::test_support::slot_offers();
+    let offered = |query: &str| {
+        completion_entries_with(
+            &sources,
+            &CompletionKind::Value,
+            query,
+            None,
+            Some(&everything),
+        )
+        .into_iter()
+        .map(|entry| entry.display)
+        .collect::<Vec<_>>()
+    };
+    assert!(
+        offered("listed")
+            .iter()
+            .any(|entry| entry == "listed function")
+    );
+    assert!(
+        !offered("stray")
+            .iter()
+            .any(|entry| entry == "stray function")
+    );
 }

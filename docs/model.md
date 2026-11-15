@@ -391,8 +391,10 @@ function as a lambda. Filtering names and excluding existing record labels
 remain picker responsibilities.
 
 Grap's expression slots offer calls to named stored lambdas, closures, and
-foreign functions, found through the defined cells; the Grap library itself
-answers only what a document can start as. These are
+foreign functions: those the document lists in reach (see
+[projections](projections.md#projection-composition)) and those the loaded
+libraries define, never a search of the document's cells; the Grap library
+itself answers only what a document can start as. These are
 ordinary `call_completion` offers, distinguished by a `call` detail, which also
 names a library function's library; choosing one
 inserts `{isa: call, function: cell}` and opens its first declared argument when known.

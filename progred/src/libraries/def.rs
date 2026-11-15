@@ -37,6 +37,12 @@ pub mod vocabulary {
     pub const LIBRARY: CellId = CellId::from_u128(0x6a2a379c9d9553cedafcb3987e7891b7);
     /// A library's defs, each a kind's cell.
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
+    /// A library's functions, each a cell holding one.
+    pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);
+    /// Said `true` by a field's definition where the field holds what its
+    /// record collects, a notebook's entries, a section's body: where
+    /// things are looked for.
+    pub const MEMBERS: CellId = CellId::from_u128(0x13813c801ba66797399e7b340c3a723a);
 }
 use vocabulary::*;
 
@@ -49,6 +55,8 @@ pub fn library<W: Host>() -> Library<W> {
             (FIELDS, "fields"),
             (LIBRARY, "library"),
             (DEFS, "defs"),
+            (FUNCTIONS, "functions"),
+            (MEMBERS, "members"),
         ],
         ::grap::ForeignFunctions::default(),
     )
@@ -87,7 +95,7 @@ fn new_records<'r>(
     request: &'r CompletionRequest<'_>,
     wanted: impl Fn(&str) -> bool + 'r,
 ) -> impl Iterator<Item = Completion> + 'r {
-    document_defs(request.root, |cell| Some((request.resolve)(cell)?.value))
+    document_defs(request.root, &|cell| Some((request.resolve)(cell)?.value))
         .into_iter()
         .filter_map(move |kind| {
             let name = (request.name)(kind)
@@ -109,9 +117,12 @@ fn new_library() -> Completion {
         .with_aliases(["library"])
 }
 
-/// A library with no defs yet.
+/// A library with no defs or functions yet.
 fn empty_library() -> Value {
-    ::grap::isa::record(LIBRARY, [(DEFS, Value::list([]))])
+    ::grap::isa::record(
+        LIBRARY,
+        [(DEFS, Value::list([])), (FUNCTIONS, Value::list([]))],
+    )
 }
 
 /// Where a new library's first def is made, from the library.
@@ -145,76 +156,120 @@ fn starter() -> Completion {
     )
 }
 
-/// The document's own defs: those of the library its root is, or where its
-/// root is a notebook, of the libraries among its entries, through the
-/// sections that name them. `resolve` reads a cell, as an entry may be one.
-/// Nothing else in the document is searched.
-pub(crate) fn document_defs<'a>(
+/// What a document holds where things are looked for: its root, and what's
+/// held by every field reached from it whose definition says it holds
+/// members (`members: true`), a notebook's entries, a section's body, a
+/// row's parts, through cells, in the document's order. Nothing else in the
+/// document is entered: a program's insides, say, aren't. `resolve` reads a
+/// cell, the libraries' included, which define their fields.
+pub(crate) fn in_reach<'a>(
     root: Option<&'a Value>,
-    resolve: impl Fn(CellId) -> Option<&'a Value>,
-) -> Vec<CellId> {
-    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
-    use crate::libraries::section::vocabulary::{BODY, SECTION};
-    let read = |value: &'a Value| match value.as_cell() {
-        Some(cell) => resolve(cell),
-        None => Some(value),
-    };
-    let kind = |value: &Value| value.as_record().and_then(::grap::isa::of);
-    // What an entry holds, under the sections that name it.
-    let held = |entry: &'a Value| {
-        std::iter::successors(read(entry), |value| match kind(value) {
-            Some(SECTION) => read(value.as_record()?.get(&BODY)?),
-            _ => None,
-        })
-        .last()
-    };
-    let libraries: Vec<&Value> = match root.and_then(kind) {
-        Some(LIBRARY) => root.into_iter().collect(),
-        Some(NOTEBOOK) => root
+    resolve: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> Vec<&'a Value> {
+    let holds_members = |field: CellId| {
+        resolve(field)
             .and_then(Value::as_record)
-            .and_then(|fields| fields.get(&ENTRIES)?.as_list())
-            .into_iter()
-            .flat_map(|entries| entries.values())
-            .filter_map(held)
-            .filter(|value| kind(value) == Some(LIBRARY))
-            .collect(),
-        _ => Vec::new(),
+            .and_then(|definition| definition.get(&MEMBERS))
+            .is_some_and(|members| *members == ::grap::logic::value(true))
     };
-    libraries
+    let mut reached = Vec::new();
+    let mut followed = std::collections::HashSet::new();
+    let mut pending: Vec<&Value> = root.into_iter().collect();
+    while let Some(value) = pending.pop() {
+        let value = match value.as_cell() {
+            Some(cell) if followed.insert(cell) => match resolve(cell) {
+                Some(definition) => definition,
+                None => continue,
+            },
+            Some(_) => continue,
+            None => value,
+        };
+        reached.push(value);
+        let Some(fields) = value.as_record() else {
+            continue;
+        };
+        for (_, members) in fields
+            .iter()
+            .rev()
+            .filter(|(field, _)| holds_members(*field))
+        {
+            match members {
+                Value::List(members) => pending.extend(members.values().rev()),
+                member => pending.push(member),
+            }
+        }
+    }
+    reached
+}
+
+/// The cells listed under `list` by what the document holds in reach
+/// ([`in_reach`]): a library, say, or anything else that lists them there.
+fn listed<'a>(
+    root: Option<&'a Value>,
+    resolve: &dyn Fn(CellId) -> Option<&'a Value>,
+    list: CellId,
+) -> Vec<CellId> {
+    in_reach(root, resolve)
         .into_iter()
-        .filter_map(|library| library.as_record()?.get(&DEFS)?.as_list())
-        .flat_map(|defs| defs.values().filter_map(Value::as_cell))
+        .filter_map(|value| value.as_record()?.get(&list)?.as_list())
+        .flat_map(|cells| cells.values().filter_map(Value::as_cell))
         .collect()
 }
 
-/// A library as its author edits it: its defs first, then whatever else the
-/// document keeps beside them. A place among its defs offers a new one.
+/// The document's own kinds: the defs listed in reach.
+pub(crate) fn document_defs<'a>(
+    root: Option<&'a Value>,
+    resolve: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> Vec<CellId> {
+    listed(root, resolve, DEFS)
+}
+
+/// The document's own functions: those listed in reach.
+pub(crate) fn document_functions<'a>(
+    root: Option<&'a Value>,
+    resolve: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> Vec<CellId> {
+    listed(root, resolve, FUNCTIONS)
+}
+
+/// A library as its author edits it: its defs, then its functions, then
+/// whatever else it keeps. A place among its defs offers a new def, and one
+/// among its functions a new function, each named as typed.
 fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.kind()? == LIBRARY).then_some(())?;
+    // A list whose empty place offers what `new` makes of what's typed.
+    let growing = |new: fn(String) -> Completion| {
+        crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
+            input.value.is_none().then(|| new_place(new))
+        })))
+    };
     crate::libraries::isa::form(
         input,
         crate::display::structure::Fields::default()
-            .leading([DEFS])
-            .slots([DEFS])
-            .child(|key| {
-                (key == DEFS).then(|| {
-                    crate::display::structure::list(Some(crate::display::runtime_partial(
-                        |input| {
-                            input.value.is_none().then(|| {
-                                new_place(|typed| {
-                                    name::new_cell(
-                                        typed,
-                                        "def",
-                                        vec![
-                                            (::grap::isa::ISA, DEF.into()),
-                                            (FIELDS, Value::list([])),
-                                        ],
-                                    )
-                                })
-                            })
-                        },
-                    )))
-                })
+            .leading([DEFS, FUNCTIONS])
+            .slots([DEFS, FUNCTIONS])
+            .child(move |key| match key {
+                DEFS => Some(growing(|typed| {
+                    name::new_cell(
+                        typed,
+                        "def",
+                        vec![(::grap::isa::ISA, DEF.into()), (FIELDS, Value::list([]))],
+                    )
+                })),
+                FUNCTIONS => Some(growing(|typed| {
+                    name::new_cell(
+                        typed,
+                        "function",
+                        vec![
+                            (
+                                ::grap::isa::ISA,
+                                Value::from(::grap::vocabulary::kind::LAMBDA),
+                            ),
+                            (::grap::vocabulary::PARAMS, Value::list([])),
+                        ],
+                    )
+                })),
+                _ => None,
             }),
         false,
     )

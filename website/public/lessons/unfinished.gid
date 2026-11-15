@@ -1,5 +1,6 @@
 {
   "binders": {
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
@@ -29,6 +30,7 @@
     scale: {isa: lambda, name: "scale", params: [x], body: {isa: call, function: multiply, left: x, right: {f64: 0x0000000000000040}}},
   },
   "root": {
+    functions: [scale],
     first: scale,
     second: {isa: evaluation, expression: {isa: call, function: scale, x: {f64: 0x0000000000000840}}},
     third: {isa: evaluation, expression: {isa: call, function: scale}},
