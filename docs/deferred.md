@@ -94,9 +94,11 @@ not a third list. A record's `isa` reaches its def directly, so a library isn't
 a registry for drawing; it's where defs and functions live, which keeps one
 that nothing uses yet, lists what there is to edit, and is what's enumerated
 when something wants every def or function in reach. Where to look is fixed,
-not a search of the document (`def::in_reach`): the root, and what's held by
-the fields reached from it whose definitions say they hold members (a
-notebook's entries, a section's body, a row's parts), through cells. What a
+not a search of the document (`def::in_reach`): the root, and what the
+containers reached from it hold (a notebook's entries, a section's body, a
+row's parts, named in that one place), through cells. Not chosen: a flag on a
+field's definition saying it holds members, which read as ill-defined and was
+easy to leave off. What a
 record there lists under `defs` or `functions` is the document's; Grap's
 function slots offer those and the loaded libraries', where they used to
 search every cell. Which kind of document it is is chosen when it's started,

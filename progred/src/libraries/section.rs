@@ -29,17 +29,6 @@ pub fn library<W: Host>() -> Library<W> {
         [(SECTION, "section"), (BODY, "body")],
         ::grap::ForeignFunctions::default(),
     )
-    // What a section is over is what it collects.
-    .with_values([(
-        BODY,
-        name::record(
-            "body",
-            [(
-                crate::libraries::def::vocabulary::MEMBERS,
-                ::grap::logic::value(true),
-            )],
-        ),
-    )])
     .with_projections_for([(SECTION, d::runtime_partial(display))])
     .with_completions(completions)
 }

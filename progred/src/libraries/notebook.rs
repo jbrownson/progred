@@ -43,17 +43,6 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
-    // A notebook's entries are what it collects.
-    .with_values([(
-        vocabulary::ENTRIES,
-        name::record(
-            "entries",
-            [(
-                crate::libraries::def::vocabulary::MEMBERS,
-                ::grap::logic::value(true),
-            )],
-        ),
-    )])
     .with_projections_for([(
         vocabulary::kind::NOTEBOOK,
         crate::display::runtime_partial(display),

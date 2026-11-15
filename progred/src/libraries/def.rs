@@ -39,10 +39,6 @@ pub mod vocabulary {
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
     /// A library's functions, each a cell holding one.
     pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);
-    /// Said `true` by a field's definition where the field holds what its
-    /// record collects, a notebook's entries, a section's body: where
-    /// things are looked for.
-    pub const MEMBERS: CellId = CellId::from_u128(0x13813c801ba66797399e7b340c3a723a);
 }
 use vocabulary::*;
 
@@ -56,7 +52,6 @@ pub fn library<W: Host>() -> Library<W> {
             (LIBRARY, "library"),
             (DEFS, "defs"),
             (FUNCTIONS, "functions"),
-            (MEMBERS, "members"),
         ],
         ::grap::ForeignFunctions::default(),
     )
@@ -156,21 +151,24 @@ fn starter() -> Completion {
     )
 }
 
-/// What a document holds where things are looked for: its root, and what's
-/// held by every field reached from it whose definition says it holds
-/// members (`members: true`), a notebook's entries, a section's body, a
-/// row's parts, through cells, in the document's order. Nothing else in the
-/// document is entered: a program's insides, say, aren't. `resolve` reads a
-/// cell, the libraries' included, which define their fields.
+/// What a document holds where things are looked for: its root, and what
+/// the containers reached from it hold, through cells, in the document's
+/// order. The containers are named here, each with the field holding what's
+/// in it: a notebook's entries, a section's body, a row's or column's parts.
+/// Nothing else in the document is entered: a program's insides, say,
+/// aren't. `resolve` reads a cell.
 pub(crate) fn in_reach<'a>(
     root: Option<&'a Value>,
     resolve: &dyn Fn(CellId) -> Option<&'a Value>,
 ) -> Vec<&'a Value> {
-    let holds_members = |field: CellId| {
-        resolve(field)
-            .and_then(Value::as_record)
-            .and_then(|definition| definition.get(&MEMBERS))
-            .is_some_and(|members| *members == ::grap::logic::value(true))
+    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+    use crate::libraries::section::vocabulary::{BODY, SECTION};
+    use crate::workspace::vocabulary::{PARTS, kind::COLUMN, kind::ROW};
+    let held = |kind: CellId| match kind {
+        NOTEBOOK => Some(ENTRIES),
+        SECTION => Some(BODY),
+        ROW | COLUMN => Some(PARTS),
+        _ => None,
     };
     let mut reached = Vec::new();
     let mut followed = std::collections::HashSet::new();
@@ -185,18 +183,13 @@ pub(crate) fn in_reach<'a>(
             None => value,
         };
         reached.push(value);
-        let Some(fields) = value.as_record() else {
-            continue;
-        };
-        for (_, members) in fields
-            .iter()
-            .rev()
-            .filter(|(field, _)| holds_members(*field))
-        {
-            match members {
-                Value::List(members) => pending.extend(members.values().rev()),
-                member => pending.push(member),
-            }
+        let inside = value
+            .as_record()
+            .and_then(|fields| fields.get(&held(::grap::isa::of(fields)?)?));
+        match inside {
+            Some(Value::List(inside)) => pending.extend(inside.values().rev()),
+            Some(inside) => pending.push(inside),
+            None => {}
         }
     }
     reached

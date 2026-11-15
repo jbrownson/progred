@@ -136,10 +136,10 @@ no def, or the `def` library is switched off in the area, the record goes on. A 
 def's own fields as its parts. A document's own defs and functions live in a
 library, `{isa: library, defs, functions}`, two lists, each holding only its
 kind of thing. Where things are looked for is fixed, not a search of the
-document (`def::in_reach`): the root, and what's held by every field reached
-from it whose definition says it holds what its record collects
-(`members: true`), a notebook's entries, a section's body, a row's or
-column's parts, through cells. A record in reach that lists `defs` or
+document (`def::in_reach`): the root, and what the containers reached from it
+hold, through cells. The containers are named there, each with its field: a
+notebook's entries, a section's body, a row's or column's parts; a new kind of
+container is a line added to that list. A record in reach that lists `defs` or
 `functions`, a library or another, gives the document those; nothing else in
 the document, a program's insides say, is entered. A kind in an `isa` reads as its name, and an empty one offers the
 library's kinds. They're made where they go: a place among the library's
