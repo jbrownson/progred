@@ -42,10 +42,12 @@ cell otherwise overrides the code too, since the call reads the definition
 first; one implemented nowhere isn't callable. An absent or non-callable result
 does not try another source. A library's own value lives in that same table under
 its identity, not in a separate metadata store: a library like a document's,
-`{isa: library, name, defs, functions, fields}`, the name it gives itself and
-the cells it defines, each list ordered by name: the kinds it draws (by kind)
-among its defs, its foreign functions and lambdas among its functions, and the
-rest of its vocabulary among its fields. Composing the loaded libraries writes
+`{isa: library, name, defs, functions, foreign functions, fields}`, the name it
+gives itself and the cells it defines, each list ordered by name: the kinds it
+draws (by kind) among its defs, its lambdas among its functions, the stubs of
+the foreign functions it implements, `{isa: foreign function, name, params}`,
+the records a call names, among its foreign functions, and the rest of its
+vocabulary among its fields. Composing the loaded libraries writes
 it, so it lists what each library ends up defining, and it's drawn as a
 document's library is, a cell another library defines reading by its name. A
 kind a library draws some other way, as presentation's are drawn in a pane,

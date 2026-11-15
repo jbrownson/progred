@@ -42,6 +42,10 @@ pub mod vocabulary {
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
     /// A library's functions, each a cell holding one.
     pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);
+    /// A library's foreign functions: each a cell holding the stub a call
+    /// names, `{isa: foreign function, name, params}`, whose code the host
+    /// provides under that cell.
+    pub const FOREIGN: CellId = CellId::from_u128(0x2ece5420c51790c43b6dc0b24eefee40);
     /// What a place for a field offers, on the field's definition: a Grap
     /// expression evaluating to a list of the values that fit, or to a
     /// function of the record being filled (`value`) that returns one.
@@ -59,6 +63,7 @@ pub fn library<W: Host>() -> Library<W> {
             (LIBRARY, "library"),
             (DEFS, "defs"),
             (FUNCTIONS, "functions"),
+            (FOREIGN, "foreign functions"),
             (OFFERS, "offers"),
         ],
         ::grap::ForeignFunctions::default(),
@@ -196,11 +201,11 @@ fn new_library() -> Completion {
         .with_aliases(["library"])
 }
 
-/// A library with no defs, functions or fields yet.
+/// A library with nothing in it yet.
 fn empty_library() -> Value {
     ::grap::isa::record(
         LIBRARY,
-        [DEFS, FUNCTIONS, FIELDS].map(|list| (list, Value::list([]))),
+        [DEFS, FUNCTIONS, FOREIGN, FIELDS].map(|list| (list, Value::list([]))),
     )
 }
 
@@ -301,16 +306,19 @@ pub(crate) fn document_defs<'a>(
     listed(root, resolve, DEFS)
 }
 
-/// The document's own functions: those listed in reach.
+/// The document's own functions: those listed in reach, Grap's and
+/// foreign.
 pub(crate) fn document_functions<'a>(
     root: Option<&'a Value>,
     resolve: &dyn Fn(CellId) -> Option<&'a Value>,
 ) -> Vec<CellId> {
-    listed(root, resolve, FUNCTIONS)
+    let mut functions = listed(root, resolve, FUNCTIONS);
+    functions.extend(listed(root, resolve, FOREIGN));
+    functions
 }
 
 /// A library as it's read and edited, a loaded one as a document's: its
-/// defs, its functions and its fields, each a list. A cell
+/// defs, its functions, its foreign functions and its fields, each a list. A cell
 /// another library defines reads by its name, opening to its definition; one
 /// the document defines reads in place, where it's edited. A place in a list
 /// offers a new def, function or field, named as typed.
@@ -330,7 +338,7 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
             }
         })))
     };
-    let lists = [DEFS, FUNCTIONS, FIELDS];
+    let lists = [DEFS, FUNCTIONS, FOREIGN, FIELDS];
     crate::libraries::isa::form(
         input,
         crate::display::structure::Fields::default()
@@ -357,11 +365,43 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                         ],
                     )
                 })),
+                FOREIGN => Some(crate::display::structure::list(Some(
+                    crate::display::runtime_partial(foreign_function),
+                ))),
                 FIELDS => Some(listing(|typed| name::new_cell(typed, "field", vec![]))),
                 _ => None,
             }),
         false,
     )
+}
+
+/// A library's foreign function: its stub, by its name. A place for one
+/// offers the loaded libraries' stubs, as a document says which foreign
+/// functions it uses; the code behind a stub is the host's.
+fn foreign_function<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+    match input.value {
+        Some(_) => name::shallow_cell(input),
+        None => Some(picker(Picker::new(
+            CompletionKind::Value,
+            ranked(Rc::new(|request| {
+                Some(
+                    (request.loaded)()
+                        .into_iter()
+                        .filter(|cell| {
+                            (request.resolve)(*cell)
+                                .and_then(|definition| definition.value.as_record())
+                                .and_then(::grap::isa::of)
+                                == Some(::grap::vocabulary::kind::FOREIGN_FUNCTION)
+                        })
+                        .map(|stub| {
+                            crate::libraries::completion::select(stub, stub.into())
+                                .with_detail("foreign function")
+                        })
+                        .collect(),
+                )
+            })),
+        ))),
+    }
 }
 
 /// A def's field: a cell declared there, by its name. A place for one offers

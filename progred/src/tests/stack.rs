@@ -156,7 +156,7 @@ fn a_call_draws_as_its_function_provides_else_as_a_call() {
 fn each_library_s_own_cell_holds_the_library_as_a_library() {
     use crate::libraries::def::{
         self,
-        vocabulary::{DEFS, FIELDS, FUNCTIONS, LIBRARY},
+        vocabulary::{DEFS, FIELDS, FOREIGN, LIBRARY},
     };
     let stack = load();
     // What a library lists under `list`, by name.
@@ -195,10 +195,7 @@ fn each_library_s_own_cell_holds_the_library_as_a_library() {
     let fields = listed(def::ID, FIELDS);
     assert!(fields.contains(&"offers".to_owned()), "{fields:?}");
     assert!(fields.is_sorted(), "{fields:?}");
-    // Its foreign functions are its functions.
-    let functions = listed(crate::libraries::list::ID, FUNCTIONS);
-    assert!(
-        functions.contains(&"list length".to_owned()),
-        "{functions:?}"
-    );
+    // Its foreign functions are listed by their stubs.
+    let foreign = listed(crate::libraries::list::ID, FOREIGN);
+    assert!(foreign.contains(&"list length".to_owned()), "{foreign:?}");
 }

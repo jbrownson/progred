@@ -415,3 +415,38 @@ fn a_fields_offers_can_be_a_function_of_the_record_being_filled() {
     let entries = driver.picker_entries().expect("the place's picker");
     assert!(entries.iter().any(|entry| entry == "box"), "{entries:?}");
 }
+
+#[test]
+fn a_librarys_foreign_functions_are_the_loaded_stubs_it_lists() {
+    use ui_events::keyboard::{Key, NamedKey};
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(::grap::isa::record(LIBRARY, [(FOREIGN, Value::list([]))])),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let foreign = [Step::Key(FOREIGN)];
+    driver.select(&foreign);
+    assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
+    driver.type_text("list len");
+    assert_eq!(
+        driver.picker_detail("list length").as_deref(),
+        Some("foreign function")
+    );
+    driver.choose("list length");
+    let (stub, definition) = first_cell(&driver, &foreign);
+    assert_eq!(
+        definition.as_record().and_then(::grap::isa::of),
+        Some(::grap::vocabulary::kind::FOREIGN_FUNCTION)
+    );
+    let doc = &driver.editor().model.doc;
+    let sources = crate::sources::Sources {
+        doc,
+        libraries: &driver.editor().stack.libraries,
+    };
+    assert_eq!(
+        document_functions(sources.root(), &|cell| Some(sources.resolve(cell)?.value)),
+        [stub]
+    );
+}
