@@ -84,33 +84,37 @@ impl OrbitProfile {
         editor.sync_views();
         let document = editor.model.workspace.document.clone();
         if collapsed {
-            let outline = libraries::presentation::vocabulary::SECTIONS;
-            let sections: Vec<_> = editor
-                .model
-                .doc
-                .root
-                .as_ref()
-                .unwrap()
-                .as_record()
-                .unwrap()
-                .get(&outline)
-                .unwrap()
-                .as_list()
-                .unwrap()
+            // Every section of the notebook beside the preview, folded.
+            use libraries::editor::workspace::vocabulary::PARTS;
+            use libraries::grap::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+            let root = editor.model.doc.root.as_ref().unwrap().as_record().unwrap();
+            let parts = root.get(&PARTS).and_then(Value::as_list).unwrap();
+            let (part, notebook) = parts
                 .iter()
-                .map(|(position, value)| (position.clone(), value.as_cell().unwrap()))
+                .find(|(_, part)| {
+                    part.as_record()
+                        .is_some_and(|fields| ::grap::isa::of(fields) == Some(NOTEBOOK))
+                })
+                .unwrap();
+            let sections: Vec<_> = notebook
+                .as_record()
+                .and_then(|fields| fields.get(&ENTRIES)?.as_list())
+                .unwrap()
+                .keys()
+                .map(|position| {
+                    crate::occurrence::of(&[
+                        Step::Key(PARTS),
+                        Step::Element(part.clone()),
+                        Step::Key(ENTRIES),
+                        Step::Element(position.clone()),
+                        Step::Key(libraries::section::vocabulary::BODY),
+                    ])
+                })
                 .collect();
-            for (position, key) in sections {
-                editor.session().set_folded(
-                    &document,
-                    &crate::occurrence::of(&[
-                        Step::Key(outline),
-                        Step::Element(position),
-                        Step::Key(key),
-                    ]),
-                    false,
-                    Some(true),
-                );
+            for section in sections {
+                editor
+                    .session()
+                    .set_folded(&document, &section, false, Some(true));
             }
         }
         editor

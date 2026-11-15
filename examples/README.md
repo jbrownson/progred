@@ -11,7 +11,7 @@ platforms. Examples are numbered consecutively in menu order.
 | 3 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
 | 4 | `grap-demo.gid` | Grap evaluation |
 | 5 | `libraries.gid` | Kinds the document defines: fractions and angles, each with its fields, a view that draws it, and the functions that go with it |
-| | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
+| | `navigation.gid` | Keyboard navigation: nested notebooks and sections, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
 
 The menu lists the examples meant for visitors. The navigation fixture isn't on
 it; open the file directly.

@@ -4,6 +4,20 @@ use crate::libraries::f64;
 use gid::{Document, Value};
 use kurbo::Point;
 
+/// A section of `body` named `spelling`.
+pub fn record(spelling: &str, body: gid::Value) -> gid::Value {
+    ::grap::isa::record(
+        SECTION,
+        [
+            (
+                name::vocabulary::NAME,
+                crate::libraries::text::value(spelling),
+            ),
+            (BODY, body),
+        ],
+    )
+}
+
 /// A document that is a section named "Numbers" over a list of two.
 fn numbers() -> Driver {
     Driver::new(
@@ -39,6 +53,11 @@ fn a_sections_mark_folds_its_body_and_selects_it() {
         Rc::ptr_eq(&before, &driver.editor().model.doc),
         "folding changes how it's seen, not the document"
     );
+    // Folding is undone and redone as any change to how it's seen is.
+    assert!(driver.undo());
+    assert!(driver.drawn(&body));
+    assert!(driver.redo());
+    assert!(!driver.drawn(&body));
     click_mark(&mut driver);
     assert!(driver.drawn(&body));
 }

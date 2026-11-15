@@ -18,25 +18,23 @@ fn step(world: &mut World, direction: NavigationDirection) -> bool {
 }
 
 /// Exercise the actual document-authored layouts, not Rust substitutes for them.
-fn example_section(section: &str) -> (World, crate::gid_text::Binders) {
+/// The navigation example with the body of its section named `name` as its
+/// root.
+fn example_section(name: &str) -> (World, crate::gid_text::Binders) {
     let (mut doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    doc.root = Some(
-        doc.root
-            .as_ref()
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&binders[section])
-            .unwrap()
-            .clone(),
-    );
+    let body = crate::test_examples::read(
+        &doc,
+        &crate::test_examples::section_body(&doc, &[], name, 0),
+    )
+    .clone();
+    doc.root = Some(body);
     let world = crate::test_editor(doc);
     (world, binders)
 }
 
 #[test]
 fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
-    let (mut world, binders) = example_section("side_by_side");
+    let (mut world, binders) = example_section("Side-by-side columns");
     let field = |name: &str| vec![Step::Key(binders[name])];
     let frame = editing_frame(&mut world);
     for name in ["a", "b", "c", "d", "e"] {
@@ -67,7 +65,7 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
 
 #[test]
 fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
-    let (mut world, binders) = example_section("baseline_case");
+    let (mut world, binders) = example_section("Offset baselines");
     let field = |name: &str| vec![Step::Key(binders[name])];
     let frame = editing_frame(&mut world);
     let rect = |name: &str| frame.landmarks.landmark(&field(name)).unwrap().rect;
@@ -101,8 +99,8 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
 
 #[test]
 fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
-    let (mut world, binders) = example_section("deep");
-    let outline = crate::libraries::presentation::vocabulary::SECTIONS;
+    let (mut world, binders) = example_section("Deep multiline containers");
+    let entries = crate::libraries::grap::notebook::vocabulary::ENTRIES;
     let first = positions(
         world
             .model
@@ -112,12 +110,16 @@ fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
             .unwrap()
             .as_record()
             .unwrap()
-            .get(&outline)
+            .get(&entries)
             .unwrap(),
     )[0]
     .clone();
     let content: Path = std::iter::repeat_n(Step::Follow, 3)
-        .chain([Step::Key(outline), Step::Element(first)])
+        .chain([
+            Step::Key(entries),
+            Step::Element(first),
+            Step::Key(name::vocabulary::NAME),
+        ])
         .collect();
     let mut path = vec![];
     world.model.selection = Some(make_selection(path.clone()));
@@ -288,41 +290,6 @@ fn logical_reading_order_visits_container_stops_and_wraps_between_lines() {
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
     assert!(!step(&mut world, NavigationDirection::Left));
-}
-
-#[test]
-fn logical_navigation_retains_jump_editing_targets() {
-    use crate::libraries::presentation::vocabulary::{SECTIONS, kind};
-    let field = gid::new_cell_id();
-    let root = Value::record([
-        (::grap::isa::ISA, kind::OUTLINE.into()),
-        (SECTIONS, Value::list([field.into(), field.into()])),
-        (field, text::value("edit me")),
-    ]);
-    let entries = positions(root.as_record().unwrap().get(&SECTIONS).unwrap());
-    let mut cells = Cells::new();
-    cells.set_value(field, name::record("Section", []));
-    let mut world = crate::test_editor(Document {
-        root: Some(root),
-        cells,
-    });
-    let heading = vec![Step::Key(SECTIONS), Step::Element(entries[0].clone())];
-    // The body is drawn below its heading, jumped to the field it shows.
-    let body = crate::occurrence::of(&heading)
-        .into_iter()
-        .chain([
-            crate::occurrence::Step::Key(field),
-            crate::occurrence::Step::jump(Location::root(vec![Step::Key(field)])),
-        ])
-        .collect::<crate::occurrence::Path>();
-    world.model.selection = Some(make_selection(heading));
-    assert!(step(&mut world, NavigationDirection::Down));
-    let selection = world.model.selection.as_ref().unwrap();
-    assert_eq!(selection.path(), body);
-    assert_eq!(
-        selection.location(),
-        Some(Location::root(vec![Step::Key(field)]))
-    );
 }
 
 #[test]

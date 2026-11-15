@@ -526,46 +526,6 @@ nothing in the document, and selects the section; a folded body opens around
 the selection. A section goes wherever a value does and only labels what it
 holds; other fields follow it as a form's do.
 
-The presentation library also offers an opt-in record outline:
-`{isa: outline, sections: [field-a, field-b], field-a: ..., field-b: ...}`,
-drawn as its kind provides. The list orders field references, not copies of
-their contents. The ordinary `sections:` field label selects the list and reads
-its displayed name from the current definition.
-The list sits below the label without another indent, giving record and list
-selections distinct bounds even without extra fields. Select-all still reaches
-the root; deleting the `isa` field leaves the remaining record in its ordinary
-presentation. The list uses a vertical, unbracketed presentation with a local
-element partial for the field's name and
-disclosure heading. An item-composition callback adds the indented body outside
-the heading's cell boundary, so reference selection and library tint cover only
-the heading, not the separately projected source field. The same list-entry combinator
-supplies stable element paths and pending insertion for both ordinary bracketed
-lists and these columns. Column gaps, including half-gaps at either end, offer
-an insertion line on hover; clicking selects an ordinary missing element.
-Gaps beside an existing pending and all read-only gaps stay inactive. Empty
-columns retain an ordinary empty-list handle.
-
-A heading selects the real list element, so navigation, insertion, deletion,
-and picking remain list operations. Removing an entry removes only the reference,
-not the source field. The body jumps at `sections / element / field` to where the
-source record's field is stored, whatever jumps led to the outline. Repeated entries
-therefore share document edits but have independent selection and fold state.
-Section lists use the same unbracketed column with spacing between items.
-A computed outline is stored nowhere, so its bodies are drawn with `at`
-instead: copy and folding remain available without inventing a document
-source.
-
-Visibility uses the existing undoable fold annotation at each body occurrence,
-without document edits or a separate state store. Clicking a heading folds its
-body and selects the heading, keeping selection out of hidden content. The
-outline has no outer braces. Only unlisted fields, other than `isa`, appear in
-an ordinary record footer, omitted when there are no extras or pending field insertion. Its braces
-select the whole record; it has no separate fold state or control. A missing
-referenced source field gets its ordinary empty picker. A malformed outline
-declines to the normal projection.
-This is a library presentation available at any record, not a special root or
-workspace model. Raw still projects the underlying record normally.
-
 Assigned-size panes instead use a sized value, `{isa: sized value, value:
 source, viewport: function}`. The editor recognizes this kind at pane entry and passes the settled logical `width`
 and `height` along with the unevaluated `value` as data. An optional `prepare`

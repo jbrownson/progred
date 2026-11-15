@@ -171,7 +171,7 @@ fn each_library_s_own_cell_holds_the_library() {
         .values()
         .map(|cell| cell.as_cell().unwrap())
         .collect();
-    assert!(cells.contains(&presentation::vocabulary::kind::OUTLINE));
+    assert!(cells.contains(&presentation::vocabulary::kind::RENDER));
     assert!(!cells.contains(&presentation::ID));
     let (_, definitions) = stack
         .libraries

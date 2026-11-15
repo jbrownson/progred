@@ -14,6 +14,51 @@ pub const CUBE: &str = include_str!("../../../examples/fidget-cube.gid");
 /// Examples menu.
 pub const NAVIGATION: &str = include_str!("../../../examples/navigation.gid");
 
+/// The value stored at `path` from the root of `doc`, following cells.
+pub fn read<'a>(doc: &'a gid::Document, path: &[Step]) -> &'a Value {
+    path.iter()
+        .try_fold(
+            doc.root.as_ref().expect("a root"),
+            |value, step| match step {
+                Step::Key(key) => value.as_record()?.get(key),
+                Step::Element(position) => value.as_list()?.get(position),
+                Step::Follow => doc.cells.value(value.as_cell()?),
+            },
+        )
+        .unwrap_or_else(|| panic!("nothing at {path:?}"))
+}
+
+/// Where the `nth` section named `name` is stored among the entries of the
+/// notebook at `notebook`, from the root of `doc`: its entry, followed where
+/// it's a shared section's cell.
+pub fn section(doc: &gid::Document, notebook: &[Step], name: &str, nth: usize) -> Vec<Step> {
+    use crate::libraries::grap::notebook::vocabulary::ENTRIES;
+    let entries = [notebook, &[Step::Key(ENTRIES)]].concat();
+    read(doc, &entries)
+        .as_list()
+        .expect("a notebook's entries")
+        .iter()
+        .filter_map(|(position, entry)| {
+            let at = [entries.clone(), vec![Step::Element(position.clone())]].concat();
+            let at = match entry.as_cell() {
+                Some(_) => [at, vec![Step::Follow]].concat(),
+                None => at,
+            };
+            (crate::libraries::name::read(read(doc, &at)) == Some(name)).then_some(at)
+        })
+        .nth(nth)
+        .unwrap_or_else(|| panic!("no section {name:?} ({nth})"))
+}
+
+/// Where the body of the section [`section`] finds is stored.
+pub fn section_body(doc: &gid::Document, notebook: &[Step], name: &str, nth: usize) -> Vec<Step> {
+    [
+        section(doc, notebook, name, nth),
+        vec![Step::Key(crate::libraries::section::vocabulary::BODY)],
+    ]
+    .concat()
+}
+
 pub const FIDGET: [(&str, &str); 5] = [
     ("spheres", SPHERES),
     ("torus", TORUS),

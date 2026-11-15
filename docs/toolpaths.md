@@ -124,13 +124,11 @@ immediately.
 
 ## First example
 
-The example's root is a row of its preview and its main record, which uses the
-presentation library's `outline` to organize its ordinary fields: Cutting
-parameters, Geometry, Tools, Operations, Strategies, and Path combinators. The
-editable outline list sits at the top; clicking one of its field references
-toggles that section using ordinary view history. Several sections can be
-visible together. Unlisted fields follow in an ordinary record. Nothing is moved
-into a hidden workspace configuration or a separate CAM document model.
+The example's root is a row of its preview and a notebook of sections: Cutting
+parameters, Geometry, Tools, Operations, Strategies, and Path combinators, each
+a name over a list of the example's definitions that folds away under it.
+Several sections can be open together. Nothing is moved into a hidden workspace
+configuration or a separate CAM document model.
 
 The example's Grap `diagonal passes` and `sample pass` functions follow
 `ToolPathHelpers.DiagonalUVs` in

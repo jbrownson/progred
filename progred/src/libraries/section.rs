@@ -32,20 +32,6 @@ pub fn library<W: Host>() -> Library<W> {
     .with_projections_for([(SECTION, d::runtime_partial(display))])
 }
 
-/// A section of `body` named `spelling`.
-pub fn record(spelling: &str, body: gid::Value) -> gid::Value {
-    ::grap::isa::record(
-        SECTION,
-        [
-            (
-                name::vocabulary::NAME,
-                crate::libraries::text::value(spelling),
-            ),
-            (BODY, body),
-        ],
-    )
-}
-
 /// Whether a section starts closed.
 const CLOSED: bool = false;
 

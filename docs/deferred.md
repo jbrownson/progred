@@ -289,7 +289,7 @@ what the kind required when it was written. Open beside it:
   provides first (see [projections](projections.md#projection-composition)),
   and evaluation dispatches on Grap's kinds. Fidget's previews and scenes,
   toolpath's previews, tools and points, layout's stored nodes and programs,
-  presentation's outlines, renders and the projected and sized values a pane
+  presentation's renders and the projected and sized values a pane
   presents, locations, and the views `with controls` returns say theirs too. Still told by their fields, each a question for the owner:
   - `{grap: cell}` and `{fidget: [...]}`, which mark what a workspace's main
     value holds so an empty one gets that library's offers; `{grap: cell}`
@@ -783,8 +783,7 @@ first:
    computations, and the state and selection below it), keeps memoized work
    for its `Site`, and names a `Face` rather than reading the theme; and the
    toolkit reads through `Toolkit`, so nothing below the runtime names its
-   per-view bag. The outline's sections jump to a site rather than a
-   `Location`. Also done: the picker note's first four (the card, its
+   per-view bag. Also done: the picker note's first four (the card, its
    placement and the selection ring moved to display, then Raw's offers and
    the ranking of a projection's, then the picker itself as a toolkit widget,
    then `Picking`, the open picker the session lends, which offers commit into

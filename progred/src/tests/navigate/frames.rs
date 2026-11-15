@@ -425,121 +425,55 @@ fn navigation_example_projects_and_navigates_without_an_app_window() {
 
 /// Where an outline draws the body of its section `key`, below the section's
 /// `heading`: jumped to the field `key` of the outline stored at `outline`.
-fn section_body(
-    heading: &[crate::occurrence::Step],
-    outline: &[Step],
-    key: gid::CellId,
-) -> crate::occurrence::Path {
-    heading
-        .iter()
-        .cloned()
-        .chain([
-            crate::occurrence::Step::Key(key),
-            crate::occurrence::Step::jump(Location::root(
-                outline
-                    .iter()
-                    .cloned()
-                    .chain([Step::Key(key)])
-                    .collect::<Path>(),
-            )),
-        ])
+/// The navigation example's document and its binders.
+fn navigation_example() -> (gid::Document, crate::gid_text::Binders) {
+    crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap()
+}
+
+/// The occurrences of the elements of the list stored at `list`.
+fn elements(doc: &gid::Document, list: &[Step]) -> Vec<crate::occurrence::Path> {
+    crate::test_examples::read(doc, list)
+        .as_list()
+        .unwrap()
+        .keys()
+        .map(|position| crate::occurrence::of(&[list, &[Step::Element(position.clone())]].concat()))
         .collect()
 }
 
 fn navigation_example_cells() -> (World, Vec<crate::occurrence::Path>) {
-    use crate::libraries::presentation::vocabulary::SECTIONS;
-    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let fields = doc.root.as_ref().unwrap().as_record().unwrap();
-    let (section_position, section) = fields
-        .get(&SECTIONS)
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .iter()
-        .find(|(_, value)| value.as_cell() == Some(binders["parameters"]))
-        .unwrap();
-    let section = section.as_cell().unwrap();
-    let prefix = section_body(
-        &crate::occurrence::of(&[Step::Key(SECTIONS), Step::Element(section_position.clone())]),
-        &[],
-        section,
-    );
-    let cells = fields
-        .get(&section)
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .keys()
-        .take(2)
-        .map(|position| crate::occurrence::below(&prefix, &[Step::Element(position.clone())]))
-        .collect();
+    let (doc, _) = navigation_example();
+    let body = crate::test_examples::section_body(&doc, &[], "Text and numbers", 0);
+    let entries = [
+        body,
+        vec![Step::Key(
+            crate::libraries::grap::notebook::vocabulary::ENTRIES,
+        )],
+    ]
+    .concat();
+    let cells = elements(&doc, &entries).into_iter().take(2).collect();
     (crate::test_editor(doc), cells)
 }
 
 #[test]
-fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
-    use crate::libraries::presentation::vocabulary::SECTIONS;
-    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let root = doc.root.as_ref().unwrap();
-    let field = |value: &Value, key| value.as_record().unwrap().get(&key).unwrap().clone();
-    // The heading of the `occurrence`th section `key` of the outline `value`
-    // drawn at `parent`.
-    let section_heading = |parent: &[crate::occurrence::Step], value: &Value, key, occurrence| {
-        let outline = field(value, SECTIONS);
-        let (position, _) = outline
-            .as_list()
-            .unwrap()
-            .iter()
-            .filter(|(_, value)| value.as_cell() == Some(key))
-            .nth(occurrence)
-            .unwrap();
-        crate::occurrence::below(
-            parent,
-            &[Step::Key(SECTIONS), Step::Element(position.clone())],
-        )
-    };
-    let workshop = field(root, binders["workshop"]);
-    let inspection = field(&workshop, binders["inspection"]);
-    let checks = field(&inspection, binders["checks"]);
-    let check_positions = positions(&checks);
-    let prefix = section_body(
-        &section_heading(
-            &section_body(
-                &section_heading(&[], root, binders["workshop"], 0),
-                &[],
-                binders["workshop"],
-            ),
-            &workshop,
-            binders["inspection"],
-            0,
-        ),
-        &[Step::Key(binders["workshop"])],
-        binders["inspection"],
-    );
+fn navigation_workshop_nested_sections_preserve_occurrences_and_shared_edits() {
+    let (doc, binders) = navigation_example();
+    let workshop = crate::test_examples::section_body(&doc, &[], "Workshop plan", 0);
+    let inspection = crate::test_examples::section_body(&doc, &workshop, "Inspection", 0);
     let document = doc.clone();
-    // The same checks are projected twice, inside two nested outline jumps.
+    // The same checks are a cell the inspection lists twice.
     for occurrence in 0..2 {
-        let heading = section_heading(&prefix, &inspection, binders["checks"], occurrence);
-        let body = section_body(
-            &heading,
-            &[
-                Step::Key(binders["workshop"]),
-                Step::Key(binders["inspection"]),
-            ],
-            binders["checks"],
-        );
-        let first = crate::occurrence::below(&body, &[Step::Element(check_positions[0].clone())]);
-        let cell = crate::occurrence::below(&body, &[Step::Element(check_positions[1].clone())]);
+        let checks = crate::test_examples::section_body(&doc, &inspection, "Checks", occurrence);
+        let body = crate::occurrence::of(&checks);
+        let [first, cell, ..]: [_; 3] = elements(&doc, &checks).try_into().unwrap();
         let name =
             crate::occurrence::below(&cell, &[Step::Follow, Step::Key(name::vocabulary::NAME)]);
         let mut world = crate::test_editor(document.clone());
         let before = world.model.doc.clone();
         world.model.selection = Some(crate::selection::Selection::edge(
             &crate::test_document(),
-            heading,
+            body.clone(),
         ));
         for (direction, path) in [
-            (NavigationDirection::Down, &body),
             (NavigationDirection::Down, &first),
             (NavigationDirection::Down, &cell),
             (NavigationDirection::Right, &name),
@@ -548,61 +482,79 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
             assert!(frame.navigate(&mut world, direction));
             assert_eq!(world.model.selection.as_ref().unwrap().path(), *path);
         }
-        let source = vec![
-            Step::Key(binders["workshop"]),
-            Step::Key(binders["inspection"]),
-            Step::Key(binders["checks"]),
-            Step::Element(check_positions[1].clone()),
-            Step::Follow,
-            Step::Key(name::vocabulary::NAME),
-        ];
-        // The cell's definition stores what's selected, however the outline
-        // jumps reached it.
+        // The cell's definition stores what's selected, whichever
+        // occurrence reached it.
         let sources = world.sources();
         let selected = world.model.selection.as_ref().unwrap().location().unwrap();
         let stored = selected.stored(&sources);
-        assert_eq!(stored, Location::root(source.as_slice()).stored(&sources));
         assert!(matches!(
             stored.map(|location| location.start),
-            Some(Start::Cell(_))
+            Some(Start::Cell(cell)) if cell == binders["width"]
         ));
         assert!(Rc::ptr_eq(&world.model.doc, &before));
         let mut driver = Driver::new(world, Driver::VIEWPORT);
         driver.type_text("X");
         let doc = &driver.editor().model.doc;
         assert_eq!(
-            field(
-                doc.cells.value(binders["width"]).unwrap(),
-                name::vocabulary::NAME
-            ),
-            text::value("Xwidth")
+            doc.cells
+                .value(binders["width"])
+                .unwrap()
+                .as_record()
+                .unwrap()
+                .get(&name::vocabulary::NAME),
+            Some(&text::value("Xwidth"))
         );
         assert_eq!(doc.root, document.root);
     }
 }
 
 #[test]
-fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
-    use crate::libraries::presentation::vocabulary::SECTIONS;
-    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let fields = doc.root.as_ref().unwrap().as_record().unwrap();
-    let outline = fields.get(&SECTIONS).unwrap().as_list().unwrap();
-    let sections: Vec<_> = outline
+fn navigation_section_connects_heading_and_body_before_adjacent_sections() {
+    let (doc, _) = navigation_example();
+    let entries = vec![Step::Key(
+        crate::libraries::grap::notebook::vocabulary::ENTRIES,
+    )];
+    // Where each section of the root is stored, and its body.
+    let stored: Vec<_> = crate::test_examples::read(&doc, &entries)
+        .as_list()
+        .unwrap()
         .iter()
-        .map(|(position, value)| {
-            let heading =
-                crate::occurrence::of(&[Step::Key(SECTIONS), Step::Element(position.clone())]);
-            let body = section_body(&heading, &[], value.as_cell().unwrap());
-            (heading, body)
+        .map(|(position, entry)| {
+            let at = [entries.clone(), vec![Step::Element(position.clone())]].concat();
+            let section = match entry.as_cell() {
+                Some(_) => [at, vec![Step::Follow]].concat(),
+                None => at,
+            };
+            let body = [
+                section.clone(),
+                vec![Step::Key(crate::libraries::section::vocabulary::BODY)],
+            ]
+            .concat();
+            (section, body)
         })
         .collect();
-    let lists = fields.get(&binders["lists"]).unwrap().as_list().unwrap();
-    let list_sections: Vec<_> = outline
-        .values()
+    // A section's heading is its name; arrows reach it first.
+    let sections: Vec<_> = stored
+        .iter()
+        .map(|(section, body)| {
+            (
+                crate::occurrence::of(
+                    &[section.clone(), vec![Step::Key(name::vocabulary::NAME)]].concat(),
+                ),
+                crate::occurrence::of(body),
+            )
+        })
+        .collect();
+    let lists_body = crate::test_examples::section_body(&doc, &[], "Nested lists", 0);
+    let list_sections: Vec<_> = stored
+        .iter()
         .enumerate()
-        .filter(|(_, value)| value.as_cell() == Some(binders["lists"]))
+        .filter(|(_, (_, body))| *body == lists_body)
         .map(|(index, _)| index)
         .collect();
+    let lists = crate::test_examples::read(&doc, &lists_body)
+        .as_list()
+        .unwrap();
     let first_lists = list_sections[0];
     let (last_list_position, last_list) = lists.iter().next_back().unwrap();
     let last_item_position = last_list.as_list().unwrap().keys().next_back().unwrap();
@@ -613,6 +565,7 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
             Step::Element(last_item_position.clone()),
         ],
     );
+    let next_entry = crate::occurrence::of(&stored[first_lists + 1].0);
     for width in [900.0, 240.0] {
         let mut driver = Driver::new(
             crate::test_editor(doc.clone()),
@@ -648,7 +601,8 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
         walk(
             &last_text,
             &[
-                (NamedKey::ArrowDown, &sections[first_lists + 1].0),
+                // Down from the end of a section reaches the next entry.
+                (NamedKey::ArrowDown, &next_entry),
                 (
                     NamedKey::ArrowUp,
                     if on_one_line { &last_list } else { &last_text },
@@ -803,46 +757,23 @@ fn a_leaf_s_own_stop_is_its_occurrence_s_only_stop() {
 
 #[test]
 fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
-    use crate::libraries::presentation::vocabulary::SECTIONS;
-    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let section = binders["lists"];
-    let fields = doc.root.as_ref().unwrap().as_record().unwrap();
-    let (section_position, _) = fields
-        .get(&SECTIONS)
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .iter()
-        .find(|(_, value)| value.as_cell() == Some(section))
-        .unwrap();
-    let prefix = section_body(
-        &crate::occurrence::of(&[Step::Key(SECTIONS), Step::Element(section_position.clone())]),
-        &[],
-        section,
-    );
-    let lists: Vec<_> = fields
-        .get(&section)
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .keys()
-        .map(|position| crate::occurrence::below(&prefix, &[Step::Element(position.clone())]))
-        .collect();
-    let first_item = fields
-        .get(&section)
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .values()
-        .next()
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .keys()
-        .next()
-        .unwrap()
-        .clone();
-    let first_text = crate::occurrence::below(&lists[0], &[Step::Element(first_item)]);
+    let (doc, _) = navigation_example();
+    let body = crate::test_examples::section_body(&doc, &[], "Nested lists", 0);
+    let lists = elements(&doc, &body);
+    let first_list = [
+        body.clone(),
+        vec![Step::Element(
+            crate::test_examples::read(&doc, &body)
+                .as_list()
+                .unwrap()
+                .keys()
+                .next()
+                .unwrap()
+                .clone(),
+        )],
+    ]
+    .concat();
+    let first_text = elements(&doc, &first_list).remove(0);
     for width in [900.0, 240.0] {
         let mut driver = Driver::new(
             crate::test_editor(doc.clone()),
@@ -929,39 +860,14 @@ fn navigation_empty_list_stops_once_in_either_direction() {
 
 #[test]
 fn content_after_a_multiline_block_stays_on_its_content_line() {
-    use crate::libraries::presentation::vocabulary::SECTIONS;
-    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let fields = doc.root.as_ref().unwrap().as_record().unwrap();
-    let section = |name: &str| {
-        let (position, _) = fields
-            .get(&SECTIONS)
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .iter()
-            .find(|(_, value)| value.as_cell() == Some(binders[name]))
-            .unwrap();
-        section_body(
-            &crate::occurrence::of(&[Step::Key(SECTIONS), Step::Element(position.clone())]),
-            &[],
-            binders[name],
-        )
-    };
+    let (doc, binders) = navigation_example();
+    let section = |name: &str| crate::test_examples::section_body(&doc, &[], name, 0);
     let child = crate::occurrence::below;
     let items = |case: &str| -> Vec<crate::occurrence::Path> {
-        let block = child(&section(case), &[Step::Key(binders["block"])]);
-        fields
-            .get(&binders[case])
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&binders["block"])
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .keys()
-            .map(|position| child(&block, &[Step::Element(position.clone())]))
-            .collect()
+        elements(
+            &doc,
+            &[section(case), vec![Step::Key(binders["block"])]].concat(),
+        )
     };
     let mut driver = Driver::new(
         crate::test_editor(doc.clone()),
@@ -974,36 +880,29 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
             assert_eq!(driver.selection(), *to, "{key:?} from {from:?}");
         };
 
-    let body = section("after_label");
+    let body = crate::occurrence::of(&section("Label after a block"));
     let list = child(&body, &[Step::Key(binders["block"])]);
     let beside = child(&body, &[Step::Key(binders["beside"])]);
-    let [first, second, _] = items("after_label").try_into().unwrap();
+    let [first, second, _] = items("Label after a block").try_into().unwrap();
     check(&list, NamedKey::ArrowRight, &first);
     check(&list, NamedKey::ArrowDown, &first);
     check(&first, NamedKey::ArrowRight, &beside);
     check(&beside, NamedKey::ArrowRight, &second);
     check(&beside, NamedKey::ArrowDown, &second);
 
-    let body = section("after_value");
+    let body = crate::occurrence::of(&section("Single-line value after a block"));
     let list = child(&body, &[Step::Key(binders["block"])]);
     let beside = child(&body, &[Step::Key(binders["beside"])]);
-    let beside_item = {
-        let value = fields
-            .get(&binders["after_value"])
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&binders["beside"])
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .keys()
-            .next()
-            .unwrap()
-            .clone();
-        child(&beside, &[Step::Element(value)])
-    };
-    let [first, second, _] = items("after_value").try_into().unwrap();
+    let beside_item = elements(
+        &doc,
+        &[
+            section("Single-line value after a block"),
+            vec![Step::Key(binders["beside"])],
+        ]
+        .concat(),
+    )
+    .remove(0);
+    let [first, second, _] = items("Single-line value after a block").try_into().unwrap();
     check(&list, NamedKey::ArrowRight, &first);
     check(&first, NamedKey::ArrowRight, &beside);
     check(&beside, NamedKey::ArrowRight, &beside_item);

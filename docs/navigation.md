@@ -51,7 +51,7 @@ drawn, as a number's does after its name, and the landmark adds no second one;
 a landmark nested directly in another at the same occurrence, as a picker's is,
 shares its stop. So cells, lists, records, custom forms, and values drawn by a
 Grap projection function all stop the same way. What a projection draws as part
-of its own occurrence, such as a call's argument record or an outline's extra
+of its own occurrence, such as a call's argument record or a form's extra
 fields, adds no stop, and punctuation, padding, and other inert decoration add
 no stops or lines. Empty lists stop once; empty cells offer both the reference
 and the missing contents.
@@ -158,13 +158,13 @@ Revealing a destination follows [selection and reveal](puri.md#selection-and-rev
 
 Ordinary lists prefer an inline row and accommodate with a column. Choosing the
 inline alternative uses its children's preferred forms, which can themselves be
-multiline (an outline, for example). There is no general single-line-content
+multiline (a notebook, for example). There is no general single-line-content
 constraint.
 
 ## Examples and tests
 
 [examples/navigation.gid](../examples/navigation.gid) includes nested cells around a
-multiline outline, document-authored side-by-side and offset-baseline columns,
+multiline notebook, document-authored side-by-side and offset-baseline columns,
 and content after a block; [examples/README.md](../examples/README.md) says what
 to try. Collector tests in `navigation/tests/logical.rs` drive the collector
 through shapes mirroring the layout traversal; frame tests exercise the same
