@@ -1,6 +1,6 @@
 //! The editor's own vocabulary: its selection, each site's state and folds,
 //! paths as data, the rows and columns of parts, and the loaded libraries,
-//! which an empty document can start as, to look through. The editor defines these cells beside the
+//! any of which an empty document can start as, to look through. The editor defines these cells beside the
 //! code that interprets them, and supplies their effects while dispatching;
 //! this library names them.
 
@@ -70,8 +70,8 @@ pub fn library<W: Host>() -> Library<W> {
     .with_completions(completions)
 }
 
-/// An empty document can start as the loaded libraries, each by its name,
-/// opening to what it defines, to look through.
+/// An empty document can start as any loaded library, by its name, to look
+/// through what it defines.
 fn completions(
     request: &crate::display::CompletionRequest<'_>,
 ) -> Option<Vec<crate::display::Completion>> {
@@ -79,20 +79,21 @@ fn completions(
     use crate::library::vocabulary::kind::LIBRARY;
     (request.kind == CompletionKind::Value && request.scope == CompletionScope::Start)
         .then_some(())?;
-    let libraries: Vec<gid::Value> = (request.loaded)()
-        .into_iter()
-        .filter(|cell| {
-            (request.resolve)(*cell)
-                .and_then(|definition| definition.value.as_record())
-                .and_then(::grap::isa::of)
-                == Some(LIBRARY)
-        })
-        .map(gid::Value::from)
-        .collect();
-    Some(vec![crate::libraries::completion::select(
-        "loaded libraries",
-        gid::Value::list(libraries),
-    )])
+    Some(
+        (request.loaded)()
+            .into_iter()
+            .filter(|cell| {
+                (request.resolve)(*cell)
+                    .and_then(|definition| definition.value.as_record())
+                    .and_then(::grap::isa::of)
+                    == Some(LIBRARY)
+            })
+            .map(|library| {
+                crate::libraries::completion::select(library, library.into())
+                    .with_detail("loaded library")
+            })
+            .collect(),
+    )
 }
 
 /// A loaded library: its name over its cells, each by its name, a reference
