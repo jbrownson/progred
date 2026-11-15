@@ -33,7 +33,8 @@
     "section": 9d30242da6ce9d5736c24e2adbd820ff, "section_body": ac7cc432940c7cc64b315a5581108930,
     "def": a9a53af4187f4715f1eebdf58e0c65c0, "fields": 003bb68cfb673326a483cd31b03ba27f,
     "library": 6a2a379c9d9553cedafcb3987e7891b7, "defs": 9c1a4dd291087eef39ac1d4020380ed0,
-    "functions": 6a6a803312ecf3a652470a7cd2a9abcf, "fraction": b84b3fd33a0047dec70e52f73e92d7ec,
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf,
+    "offers": 6b258b5bc6d970abc5fb8b6ada32a4b9, "fraction": b84b3fd33a0047dec70e52f73e92d7ec,
     "angle": b5c5e40a6471334c439a91e0b70ccf82,
     "projection": 873503e2e37a1722a0dd21399be9ee7f,
     "over": 5217a5a2b20b9aa61ae7cc5f02d83822, "under": d5f908921d5ad4d2aec6856d1cf34eb6,
@@ -56,7 +57,8 @@
     "evaluation": 549dd85073474d6296d773c8df9c0526,
   },
   "cells": {
-    over: {name: "over"}, under: {name: "under"}, degrees: {name: "degrees"},
+    over: {name: "over"}, under: {name: "under"},
+    degrees: {name: "degrees", offers: [{f64: 0x0000000000000000}, {f64: 0x0000000000804640}, {f64: 0x0000000000805640}, {f64: 0x0000000000806640}]},
 
     fraction: {isa: def, name: "fraction", fields: [over, under], projection: fraction_view},
     angle: {isa: def, name: "angle", fields: [degrees], projection: angle_view},

@@ -65,6 +65,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                 root: sources.root(),
                 name: &|cell| crate::libraries::name::of(&sources, cell),
                 libraries: None,
+                env: Some(&sources),
             });
             if query.is_empty() || query == display {
                 let [entry] = entries.as_slice() else {

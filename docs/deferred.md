@@ -103,11 +103,15 @@ record there lists under `defs` or `functions` is the document's; Grap's
 function slots offer those and the loaded libraries', where they used to
 search every cell. Which kind of document it is is chosen when it's started,
 as a Grap program or a Fidget scene is, so no document is wrapped to make room
-for a library. An empty `isa` offers the libraries' kinds. Next: a field's
-definition could say what its places offer, a Grap function of the record
-being filled, with a library of common ones (one of a set, a kind, a function
-in reach); fields mostly live in the defs that list them, and a library could
-list `fields` for those shared or with no home, such as `name`.
+for a library. An empty `isa` offers the libraries' kinds. Begun: a field's
+definition says what its places offer (`offers`, see
+[projections](projections.md)), a list or a Grap function of the record being
+filled. Still to do: a library of common ones, where those reading the
+document (its kinds, the functions in reach) need a foreign function given
+the document; a library listing `fields` for those shared or with no home,
+such as `name`, since fields mostly live in the defs that list them; and a
+field's offers leading the place's list rather than following the editor's
+constructors, as Raw orders every reading today.
 
 ### Defs
 

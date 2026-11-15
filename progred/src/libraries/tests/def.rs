@@ -335,3 +335,83 @@ fn an_empty_document_starts_as_a_notebook_of_a_library_its_first_def_made_next()
     assert_eq!(defs_of(root.clone(), doc.cells.clone()), [shape]);
     assert_eq!(name::read(&definition), Some("shape"));
 }
+
+/// A record of a kind whose one field, `size`, offers what `offers` says.
+fn sized(offers: Value) -> (Driver, CellId, CellId) {
+    let [kind, size] = std::array::from_fn(|_| gid::new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(size, name::record("size", [(OFFERS, offers)]));
+    cells.set_value(
+        kind,
+        ::grap::isa::record(
+            DEF,
+            [
+                (name::vocabulary::NAME, crate::libraries::text::value("box")),
+                (FIELDS, Value::list([size.into()])),
+            ],
+        ),
+    );
+    let driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(::grap::isa::record(kind, [])),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    (driver, kind, size)
+}
+
+#[test]
+fn a_fields_place_offers_the_values_its_definition_lists() {
+    let (mut driver, _, size) = sized(Value::list([
+        crate::libraries::f64::value(1.0),
+        crate::libraries::f64::value(2.0),
+    ]));
+    let place = [Step::Key(size)];
+    // Selected, the place opens its picker.
+    driver.select(&place);
+    let entries = driver.picker_entries().expect("the place's picker");
+    assert!(entries.iter().any(|entry| entry == "1"), "{entries:?}");
+    assert_eq!(driver.picker_detail("2").as_deref(), Some("size"));
+    // What's typed narrows them.
+    driver.type_text("2");
+    assert!(
+        !driver
+            .picker_entries()
+            .unwrap()
+            .iter()
+            .any(|entry| entry == "1")
+    );
+    driver.choose("2");
+    assert_eq!(driver.value(&place), crate::libraries::f64::value(2.0));
+}
+
+#[test]
+fn a_fields_offers_can_be_a_function_of_the_record_being_filled() {
+    use crate::libraries::grap::control::vocabulary as control;
+    // Offers the record itself, read as its kind.
+    let value = crate::libraries::presentation::vocabulary::VALUE;
+    let (mut driver, _, size) = sized(::grap::isa::record(
+        ::grap::vocabulary::kind::LAMBDA,
+        [
+            (::grap::vocabulary::PARAMS, Value::list([value.into()])),
+            (
+                ::grap::vocabulary::BODY,
+                // `[value]`, quoted, its one element computed.
+                ::grap::call(
+                    control::QUOTE.into(),
+                    [(
+                        ::grap::vocabulary::EXPRESSION,
+                        Value::list([::grap::isa::record(
+                            control::kind::UNQUOTE,
+                            [(control::UNQUOTE, value.into())],
+                        )]),
+                    )],
+                ),
+            ),
+        ],
+    ));
+    driver.select(&[Step::Key(size)]);
+    let entries = driver.picker_entries().expect("the place's picker");
+    assert!(entries.iter().any(|entry| entry == "box"), "{entries:?}");
+}

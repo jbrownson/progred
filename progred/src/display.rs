@@ -238,6 +238,9 @@ pub struct CompletionRequest<'a> {
     /// The loaded libraries' offers, for holes that list some of them, as
     /// Raw's list their readings of what's typed.
     pub libraries: Option<&'a CompletionProvider>,
+    /// Where the request can evaluate, the sources it reads, for offers
+    /// that are computed, as a field's are.
+    pub env: Option<&'a dyn Env>,
 }
 
 impl CompletionRequest<'_> {

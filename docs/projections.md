@@ -144,7 +144,15 @@ container is a line added to that list. A record in reach that lists `defs` or
 the document, a program's insides say, is entered. A kind in an `isa` reads as its name, and an empty one offers the
 library's kinds. They're made where they go: a place among the library's
 `defs` offers a new def named as typed, one among a def's `fields` a new field,
-and an empty value place a new record of each kind whose name is typed. An
+and an empty value place a new record of each kind whose name is typed. A
+field's definition can say what a place for it offers, `offers`: a Grap
+expression evaluating to a list of the values that fit, or to a function of
+the record being filled, given as `value`, that returns one; an angle's
+`degrees: {name: "degrees", offers: [0, 45, 90, 180]}`. The place lists them,
+each read as it's drawn and saying which field offers it, and what's typed
+narrows them. A list whose values are computed is quoted, its elements
+unquoted, as Grap builds any data. Completion requests carry the sources they
+read as an `Env`, so a computed offer can be evaluated. An
 empty place offers a new library, and an empty document can start as a
 notebook whose first entry is a library, its first def made next. Next, it draws as its kind provides,
 ahead of every library's partial: the stack's next partial reads the record's

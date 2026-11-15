@@ -73,6 +73,7 @@
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
     "notebook": 9111dde9a00f4106a817720187b45645,
     "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
+    "offers": 6b258b5bc6d970abc5fb8b6ada32a4b9,
     "operand_2": b66457fa59524110bb363bc28754cea0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "part": 7b36d5ef72f4bb686adc57fd311182cd,
@@ -913,6 +914,12 @@
     },
     model: {
       name: "model",
+      offers: [
+        0x33: ring,
+        0x66: torus,
+        0x99: tanglecube,
+        0xcc: gyroid,
+      ],
     },
     normal: {
       name: "normal",

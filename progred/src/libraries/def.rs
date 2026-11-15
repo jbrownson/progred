@@ -12,7 +12,8 @@
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::{
-    Completion, CompletionKind, CompletionRequest, CompletionScope, Picker, picker, ranked,
+    Completion, CompletionKind, CompletionRequest, CompletionScope, CompletionText, Picker, picker,
+    ranked,
 };
 use crate::libraries::presentation::vocabulary::VALUE;
 use crate::libraries::{Library, layout, name};
@@ -39,6 +40,10 @@ pub mod vocabulary {
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
     /// A library's functions, each a cell holding one.
     pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);
+    /// What a place for a field offers, on the field's definition: a Grap
+    /// expression evaluating to a list of the values that fit, or to a
+    /// function of the record being filled (`value`) that returns one.
+    pub const OFFERS: CellId = CellId::from_u128(0x6b258b5bc6d970abc5fb8b6ada32a4b9);
 }
 use vocabulary::*;
 
@@ -52,6 +57,7 @@ pub fn library<W: Host>() -> Library<W> {
             (LIBRARY, "library"),
             (DEFS, "defs"),
             (FUNCTIONS, "functions"),
+            (OFFERS, "offers"),
         ],
         ::grap::ForeignFunctions::default(),
     )
@@ -70,19 +76,95 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     (request.kind == CompletionKind::Value && request.value().is_none()).then_some(())?;
     Some(match request.scope {
         CompletionScope::Start => vec![starter()],
-        CompletionScope::Everything => std::iter::once(new_library())
+        CompletionScope::Everything => field_offers(request, |_| true)
+            .chain(std::iter::once(new_library()))
             .chain(new_records(request, |_| true))
             .collect(),
         CompletionScope::Literal => {
             let typed = request.query.trim().to_lowercase();
-            new_records(request, |name| {
+            let begun = |name: &str| {
                 let name = name.to_lowercase();
                 !typed.is_empty()
                     && (name.starts_with(&typed) || format!("new {name}").starts_with(&typed))
-            })
-            .collect()
+            };
+            // What's read as typed lists every reading, so a field's offers
+            // are those whose label holds what's typed.
+            field_offers(request, |label| label.to_lowercase().contains(&typed))
+                .chain(new_records(request, begun))
+                .collect()
         }
     })
+}
+
+/// What the field a place is under says fits there, those whose label is
+/// `wanted`: its definition's `offers`, evaluated, a list of values, or a
+/// function of the record being filled, given as `value`, that returns
+/// one. Each is labelled as it reads and says which field offers it.
+fn field_offers<'r>(
+    request: &'r CompletionRequest<'_>,
+    wanted: impl Fn(&str) -> bool + 'r,
+) -> impl Iterator<Item = Completion> + 'r {
+    let offered = || {
+        let (gid::Step::Key(field), record) = request.path.split_last()? else {
+            return None;
+        };
+        let env = request.env?;
+        let offers: RuntimeValue = (request.resolve)(*field)?
+            .value
+            .as_record()?
+            .get(&OFFERS)?
+            .clone()
+            .into();
+        let evaluated = env.evaluate_runtime(&offers, crate::sources::DEFAULT_FUEL, &[]);
+        let list = match evaluated.list_values() {
+            Some(_) => evaluated,
+            None => env.apply_expression_runtime(
+                &offers,
+                &[(VALUE, (request.value_at)(record)?.clone().into())],
+            ),
+        };
+        let values: Vec<Value> = list.list_values()?.map(|value| value.to_value()).collect();
+        Some((*field, values))
+    };
+    offered()
+        .into_iter()
+        .flat_map(|(field, values)| values.into_iter().map(move |value| (field, value)))
+        .filter_map(move |(field, value)| {
+            let label = label(request, &value);
+            wanted(&label).then(|| {
+                crate::libraries::completion::select(CompletionText::Literal(label), value)
+                    .with_detail(field)
+            })
+        })
+}
+
+/// How an offered value reads: a cell or a record by its name, text quoted,
+/// a number as its digits, a record of a kind by the kind.
+fn label(request: &CompletionRequest<'_>, value: &Value) -> String {
+    let named = |cell: CellId| {
+        (request.name)(cell)
+            .map(|name| name.spelling().into_owned())
+            .unwrap_or_else(|| crate::identity::short_id(cell))
+    };
+    if let Some(cell) = value.as_cell() {
+        return named(cell);
+    }
+    if let Some(text) = crate::libraries::text::read(value) {
+        return format!("\"{text}\"");
+    }
+    let number = crate::libraries::f64::read(value)
+        .or_else(|| crate::libraries::f32::read(value).map(f64::from))
+        .or_else(|| crate::libraries::u64::read(value).map(|n| n as f64));
+    if let Some(number) = number {
+        return number.to_string();
+    }
+    match value.as_record() {
+        Some(fields) => name::read(value)
+            .map(str::to_owned)
+            .or_else(|| ::grap::isa::of(fields).map(named))
+            .unwrap_or_else(|| "record".to_owned()),
+        None => "list".to_owned(),
+    }
 }
 
 /// A new record of each of the document's kinds whose name is `wanted`.

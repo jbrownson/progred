@@ -197,6 +197,7 @@ fn located_query<W: Host>(
         root: sources.root(),
         name: &|cell| toolkit.name(cell),
         libraries: toolkit.completions(),
+        env: Some(&sources),
     };
     let entries: Rc<[Entry<W>]> = (picker.offers)(&request).into();
     let presentation = LineEditPresentation::new(styles.label.size, styles.label.brush.clone());

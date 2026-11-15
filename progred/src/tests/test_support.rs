@@ -201,6 +201,7 @@ pub(crate) fn bare_request(
         root: None,
         name: &|_| None,
         libraries: None,
+        env: None,
     }
 }
 
@@ -225,6 +226,7 @@ pub(crate) fn ask_over<R>(
         root: sources.root(),
         name: &|cell| crate::libraries::name::of(sources, cell),
         libraries: None,
+        env: Some(sources),
     })
 }
 
@@ -276,6 +278,7 @@ pub(crate) fn completion_entries_with(
         root: sources.root(),
         name: &|cell| crate::libraries::name::of(sources, cell),
         libraries: providers,
+        env: Some(sources),
     })
     .into_iter()
     .map(|entry| test_entry(entry, *kind))
