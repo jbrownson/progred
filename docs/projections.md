@@ -448,14 +448,20 @@ An evaluation, `{isa: evaluation, expression}`, is a Grap-library kind whose
 projection shows an expression's result, not evaluator syntax or a field hook
 in the structural walk. The evaluator never observes it; a host that never
 loads the projection never sees it. It shows the stored expression at its real
-`…/expression` path, a dim `→` that selects the whole record, and the returned value from its own read-only `at` occurrence, all in
-one group. When wrapped, the arrow stays with the stored
-expression and the result is indented underneath. Result children are ordinary
-navigation stops and can be copied and folded independently. An absent result
-projects like any other computed value. Recognition is open like text and f64:
-other fields do not block it and follow as a trailing record, and an earlier
-partial in the composition wins if several match. Raw shows only the stored
-record.
+`…/expression` path, a dim `→` that selects the whole record, and the returned
+value from its own read-only `at` occurrence, all in one group. When wrapped,
+the arrow stays with the stored expression and the result is indented
+underneath. It evaluates at its own occurrence, so its result is memoized like
+a pane's and recomputes when a cell it reads changes, and an error in it opens
+to its callers. One with nothing to evaluate yet, its expression missing or a
+cell with no definition, draws its expression and arrow with no result, so a
+new one shows no error. Result children are ordinary navigation stops and can
+be copied and folded independently. An absent result projects like any other
+computed value. Recognition is open like text and f64: other fields do not
+block it and follow as a trailing record, and an earlier partial in the
+composition wins if several match. Raw shows only the stored record. A
+reference to an evaluation gets the record, so what others read is its
+expression, kept in a cell where it's to be shared.
 
 A closure, as a result shows one, reads as the record it is, its fields in a
 fixed order: its lambda, drawn as a lambda is, then the environment it closes
@@ -471,24 +477,21 @@ and draws the program `grap` names as an expression slot: the cell keeps its
 parentheses, and an empty program offers Grap's suggestions rather than the
 whole vocabulary.
 
-Grap's other root template is a notebook, `{isa: notebook, entries}`, whose
-entries are cells. The record and its list are one thing, the notebook, marked by a
-bar down its side that selects it; its entries are stops inside, numbered in
-its margin, a number selecting its entry. Each entry draws as its cell's
-expression, an arrow, and what it evaluates to, beside it or below it where
-there's no room. An entry whose cell has no definition yet draws its expression
-and arrow, with no result, so a new entry shows no error.
-Each entry evaluates at its own occurrence, so its result is memoized like a
-pane's and recomputes when a cell it reads changes, and an error in it opens to
-its callers. Entries refer to one another the standard ways: Cmd-clicking,
-copying, or naming. The entries are drawn as a list, with a list's editing:
-clicking between two inserts a place for one there, and deleting one leaves its
-place to fill. Such a place offers "new entry", a fresh cell whose expression
-starts from what was typed. Enter on an entry, once its own handlers decline
-it, starts a new entry after it, or with Shift before it, going straight to its
-expression. An empty notebook draws a "new entry" that starts its first. An
-element that isn't a cell draws as plain data. The arrow selects the entry
-itself rather than its expression.
+Grap's other root template is a notebook, `{isa: notebook, entries}`: a list
+of entries, each drawn as it would be anywhere, a library as a library, a
+section as a section. The record and its list are one thing, the notebook,
+marked by a bar down its side that selects it; its entries are stops inside,
+numbered in its margin, a number selecting its entry. A new entry is an
+evaluation of a new cell, `{isa: evaluation, expression: (…)}`, whose
+definition is picked next; it reads as the cell, in its parentheses, an arrow,
+and what it evaluates to. The cell is what another entry refers to, the
+standard ways: Cmd-clicking, copying, or naming. The entries are drawn as a
+list, with a list's editing: clicking between two inserts a place for one
+there, and deleting one leaves its place to fill. Such a place offers "new
+entry", whose expression starts from what was typed. Enter on an entry, once
+its own handlers decline it, starts a new entry after it, or with Shift before
+it, going straight to its expression. An empty notebook draws a "new entry"
+that starts its first.
 
 The presentation library offers an opt-in interpreter for a projected value,
 `{isa: projected value, value: source, projection: function}`. Pane views try it

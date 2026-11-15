@@ -667,6 +667,9 @@ fn value_display<W: Host>(
 }
 
 /// An expression and its result, beside it when they fit, else below it.
+/// One with nothing to evaluate yet, its expression missing or a cell with
+/// no definition, still shows its arrow, so it reads as an evaluation, not as
+/// the place for an expression, and shows no error.
 fn evaluation_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -676,16 +679,29 @@ fn evaluation_display<W: Host>(
         vocabulary::kind::EVALUATION,
         [EXPRESSION],
         |[expression]| {
-            let result = input.env.evaluate_runtime(
-                &expression?,
-                crate::sources::DEFAULT_FUEL,
-                &[Step::Key(EXPRESSION)],
+            let steps = [Step::Key(EXPRESSION)];
+            let shown = expression_path(input, steps.clone());
+            let arrow = selectable(crate::display::arrow(), &input.site());
+            // A new cell's expression is still to pick.
+            let Some(expression) = expression.filter(|expression| {
+                expression
+                    .as_cell()
+                    .is_none_or(|cell| input.env.resolve(cell).is_some())
+            }) else {
+                return Some(row(6.0, [shown, arrow]));
+            };
+            let result = crate::display::at_evaluated(
+                [Step::Key(
+                    crate::libraries::presentation::vocabulary::RESULT,
+                )],
+                input
+                    .env
+                    .evaluate_runtime_memo(&expression, crate::sources::DEFAULT_FUEL, &steps),
+                input
+                    .env
+                    .evaluation(&expression, crate::sources::DEFAULT_FUEL, &steps),
             );
-            Some(with_result(
-                expression_path(input, [Step::Key(EXPRESSION)]),
-                selectable(crate::display::arrow(), &input.site()),
-                crate::libraries::presentation::result_layout(&result),
-            ))
+            Some(with_result(shown, arrow, result))
         },
     )
 }

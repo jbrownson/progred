@@ -1700,8 +1700,9 @@ From the same month's discussion, none of it started:
 A Grap notebook in the style of Jupyter, but reactive like Pluto, marimo and
 Observable: changing a cell recomputes the cells that use it, so there is no
 hidden state from running cells out of order. A first one is Grap's notebook
-starting point ([projections](projections.md)): a projection of a list of entry
-cells, each drawn as its expression and its result, with a new entry on Enter.
+starting point ([projections](projections.md)): a list of entries, each drawn
+as it would be anywhere, a new one on Enter an evaluation of a new cell, drawn
+as its expression and its result.
 Results project through the normal projections (pictures, tool previews, 3D
 views), and observed evaluation tracks the cell definitions an evaluation reads.
 Still to come:
@@ -1714,13 +1715,13 @@ Still to come:
 - An entry referred to without a name reads as its short ID, as any unnamed
   cell does.
 
-- Entries are cells, and one refers to another the standard ways: Cmd-clicking
-  it into a slot, copy and paste, or naming it and referring to it by name. No
-  automatic names. The picker doesn't yet offer named cells that aren't
-  functions, a gap to note rather than fix first.
-- The notebook knows what it is, so an entry is its expression alone, with no
-  wrapper. An evaluation record is a poor design as it stands: a reference to
-  one gets the record, not its result.
+- An entry's expression is a cell, and another entry refers to it the
+  standard ways: Cmd-clicking it into a slot, copy and paste, or naming it and
+  referring to it by name. No automatic names. The picker doesn't yet offer
+  named cells that aren't functions, a gap to note rather than fix first.
+- An entry is an evaluation of its cell, `{isa: evaluation, expression}`, so a
+  reference reaches the expression, not the record that shows its result; the
+  cell reads in its parentheses.
 
 - A REPL pane evaluates in the scope of the selection. After Cmd-clicking an
   output, the call that drew it supplies the bindings, as a debugger console

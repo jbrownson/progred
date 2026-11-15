@@ -6,7 +6,8 @@ use crate::libraries::grap::numbers;
 use crate::libraries::{f32, f64, presentation};
 use crate::occurrence;
 use crate::selection::Stage;
-use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
+use ::grap::vocabulary::EXPRESSION;
+use gid::{Cells, Document, Step, Value, new_cell_id};
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
 /// `rest` within entry `index`.
@@ -14,9 +15,28 @@ fn entry(driver: &Driver, index: usize, rest: &[Step]) -> Vec<Step> {
     driver.element(&[Step::Key(ENTRIES)], index, rest)
 }
 
-/// Where entry `index`'s expression is: its cell's definition.
+/// Where entry `index`'s expression is: in the entry, or in its cell where
+/// it keeps it in one.
 fn expression(driver: &Driver, index: usize) -> Vec<Step> {
-    entry(driver, index, &[Step::Follow])
+    let at = entry(driver, index, &[Step::Key(EXPRESSION)]);
+    match driver
+        .editor()
+        .sources()
+        .resolve_path(&at)
+        .and_then(Value::as_cell)
+    {
+        Some(_) => [at, vec![Step::Follow]].concat(),
+        None => at,
+    }
+}
+
+/// An entry evaluating `expression`, or one whose expression is still to
+/// pick.
+fn evaluation(expression: Option<Value>) -> Value {
+    ::grap::isa::record(
+        super::super::vocabulary::kind::EVALUATION,
+        expression.map(|expression| (EXPRESSION, expression)),
+    )
 }
 
 fn result_path(driver: &Driver, index: usize) -> occurrence::Path {
@@ -39,14 +59,15 @@ fn result(driver: &mut Driver, index: usize) -> Option<Value> {
     driver.copied()
 }
 
-fn notebook(entries: &[CellId], cells: Cells) -> Driver {
+/// A notebook of an entry evaluating each of `expressions`, with `cells`.
+fn notebook(expressions: &[Option<Value>], cells: Cells) -> Driver {
     Driver::new(
         crate::test_editor(Document {
             root: Some(::grap::isa::record(
                 kind::NOTEBOOK,
                 [(
                     ENTRIES,
-                    Value::list(entries.iter().map(|&entry| entry.into())),
+                    Value::list(expressions.iter().cloned().map(evaluation)),
                 )],
             )),
             cells,
@@ -81,10 +102,13 @@ fn an_empty_document_starts_as_a_notebook_whose_entries_show_their_results() {
         occurrence::below(&[], &expression(&driver, 1))
     );
     assert_eq!(driver.stage(), Some(Stage::Pending));
-    assert!(
-        driver.value(&entry(&driver, 1, &[])).as_cell().is_some(),
-        "the entry is a cell"
+    let kept = driver.value(&entry(&driver, 1, &[Step::Key(EXPRESSION)]));
+    assert_eq!(
+        driver.value(&entry(&driver, 1, &[])),
+        evaluation(Some(kept.clone())),
+        "the entry is an evaluation"
     );
+    assert!(kept.as_cell().is_some(), "of a cell, which others can read");
 }
 
 #[test]
@@ -92,12 +116,12 @@ fn shift_enter_starts_an_entry_before() {
     let first = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(first, f64::value(1.0));
-    let mut driver = notebook(&[first], cells);
+    let mut driver = notebook(&[Some(first.into())], cells);
     driver.select(&expression(&driver, 0));
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), Modifiers::SHIFT));
     assert_eq!(
         driver.value(&entry(&driver, 1, &[])),
-        Value::from(first),
+        evaluation(Some(first.into())),
         "the first entry moved down one"
     );
     assert_eq!(
@@ -121,7 +145,7 @@ fn an_entry_that_reads_another_follows_it() {
             ],
         ),
     );
-    let mut driver = notebook(&[width, area], cells);
+    let mut driver = notebook(&[Some(width.into()), Some(area.into())], cells);
     assert_eq!(result(&mut driver, 1), Some(f64::value(6.0)));
 
     driver.double_click(&expression(&driver, 0));
@@ -153,7 +177,7 @@ fn the_arrow_selects_an_entry_to_delete() {
     let mut cells = Cells::new();
     cells.set_value(first, f64::value(1.0));
     cells.set_value(second, f64::value(2.0));
-    let mut driver = notebook(&[first, second], cells);
+    let mut driver = notebook(&[Some(first.into()), Some(second.into())], cells);
     let first_entry = occurrence::below(&[], &entry(&driver, 0, &[]));
     driver.click_at(
         driver.locate(crate::frame::Hovered::Tree(crate::hover::Hover::Value(
@@ -163,7 +187,10 @@ fn the_arrow_selects_an_entry_to_delete() {
     assert_eq!(driver.selection(), first_entry);
     driver.press(NamedKey::Backspace);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 1);
-    assert_eq!(driver.value(&entry(&driver, 0, &[])), Value::from(second));
+    assert_eq!(
+        driver.value(&entry(&driver, 0, &[])),
+        evaluation(Some(second.into()))
+    );
 }
 
 #[test]
@@ -182,7 +209,7 @@ fn a_closure_reads_as_its_lambda_then_what_it_closes_over_then_its_origin_shut()
             [(x, f64::value(1.0))],
         ),
     );
-    let mut driver = notebook(&[entry], cells);
+    let mut driver = notebook(&[Some(entry.into())], cells);
     let closure = result_path(&driver, 0);
     let at = |steps: &[Step]| occurrence::below(&closure, steps);
     let before = |first: &[Step], second: &[Step]| {
@@ -213,7 +240,7 @@ fn a_closure_in_a_result_reads_its_lambda_as_the_source_does() {
     let mut cells = Cells::new();
     cells.set_value(parameter, Value::record([]));
     cells.set_value(entry, ::grap::lambda([parameter], parameter.into()));
-    let driver = notebook(&[entry], cells);
+    let driver = notebook(&[Some(entry.into())], cells);
     let in_source = occurrence::below(
         &[],
         &[expression(&driver, 0), vec![Step::Key(BODY)]].concat(),
@@ -247,7 +274,7 @@ fn a_closure_calls_the_unnamed_bindings_it_holds_e_subscript_numbered_and_its_la
             [(outer, f64::value(2.0))],
         ),
     );
-    let driver = notebook(&[entry], cells);
+    let driver = notebook(&[Some(entry.into())], cells);
     let closure = result_path(&driver, 0);
     let used = driver.glyphs_at(&occurrence::below(
         &closure,
@@ -266,10 +293,7 @@ fn a_closure_calls_the_unnamed_bindings_it_holds_e_subscript_numbered_and_its_la
 
 #[test]
 fn arrows_go_into_a_notebook_from_its_whole_down_to_an_entry_s_expression() {
-    let entry_cell = new_cell_id();
-    let mut cells = Cells::new();
-    cells.set_value(entry_cell, f64::value(42.0));
-    let mut driver = notebook(&[entry_cell], cells);
+    let mut driver = notebook(&[Some(f64::value(42.0))], Cells::new());
     let arrow = |driver: &mut Driver, key| {
         assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
         driver.selection()
@@ -290,7 +314,7 @@ fn a_deleted_entry_leaves_its_place_to_start_another() {
     let mut cells = Cells::new();
     cells.set_value(first, f64::value(1.0));
     cells.set_value(second, f64::value(2.0));
-    let mut driver = notebook(&[first, second], cells);
+    let mut driver = notebook(&[Some(first.into()), Some(second.into())], cells);
     driver.select(&entry(&driver, 0, &[]));
     driver.press(NamedKey::Backspace);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 1);
@@ -303,7 +327,10 @@ fn a_deleted_entry_leaves_its_place_to_start_another() {
     driver.press(NamedKey::Enter);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 2);
     assert_eq!(driver.value(&expression(&driver, 0)), f32::value(7.0));
-    assert_eq!(driver.value(&entry(&driver, 1, &[])), Value::from(second));
+    assert_eq!(
+        driver.value(&entry(&driver, 1, &[])),
+        evaluation(Some(second.into()))
+    );
 }
 
 #[test]
@@ -312,7 +339,7 @@ fn a_click_between_entries_starts_one_there() {
     let mut cells = Cells::new();
     cells.set_value(first, f64::value(1.0));
     cells.set_value(second, f64::value(2.0));
-    let mut driver = notebook(&[first, second], cells);
+    let mut driver = notebook(&[Some(first.into()), Some(second.into())], cells);
     driver.click_between(&[Step::Key(ENTRIES)], 0);
     assert_eq!(driver.picker_entries(), Some(vec!["new entry".into()]));
 
@@ -320,16 +347,22 @@ fn a_click_between_entries_starts_one_there() {
     driver.press(NamedKey::Enter);
     driver.press(NamedKey::Enter);
     assert_eq!(driver.positions(&[Step::Key(ENTRIES)]).len(), 3);
-    assert_eq!(driver.value(&entry(&driver, 0, &[])), Value::from(first));
+    assert_eq!(
+        driver.value(&entry(&driver, 0, &[])),
+        evaluation(Some(first.into()))
+    );
     assert_eq!(driver.value(&expression(&driver, 1)), f32::value(7.0));
     assert_eq!(result(&mut driver, 1), Some(f32::value(7.0)));
-    assert_eq!(driver.value(&entry(&driver, 2, &[])), Value::from(second));
+    assert_eq!(
+        driver.value(&entry(&driver, 2, &[])),
+        evaluation(Some(second.into()))
+    );
 }
 
 #[test]
 fn a_call_of_a_lambda_returning_a_lambda_shows_the_closure_with_what_it_closes_over() {
     use ::grap::vocabulary::{BODY, ENVIRONMENT, FUNCTION, LAMBDA, PARAMS};
-    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let mut driver = notebook(&[None], Cells::new());
     let call = expression(&driver, 0);
     driver.select(&call);
     driver.choose("new call");
@@ -379,7 +412,7 @@ fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
         vocabulary::LEFT,
     };
     use ::grap::vocabulary::FUNCTION;
-    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let mut driver = notebook(&[None], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
     let offers = driver.picker_entries().unwrap();
@@ -421,7 +454,7 @@ fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
 #[test]
 fn a_call_left_without_its_function_stays_a_call_and_says_what_it_lacks() {
     use ::grap::vocabulary::{FUNCTION, kind::CALL};
-    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let mut driver = notebook(&[None], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
     driver.choose("new call");
@@ -451,7 +484,7 @@ fn a_call_left_without_its_function_stays_a_call_and_says_what_it_lacks() {
 #[test]
 fn backspacing_a_call_s_function_leaves_the_call_and_then_steps_back() {
     use ::grap::vocabulary::{FUNCTION, kind::CALL};
-    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let mut driver = notebook(&[None], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
     driver.choose("new call");

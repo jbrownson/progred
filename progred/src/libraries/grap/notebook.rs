@@ -1,7 +1,9 @@
-//! A Grap notebook: a list of entry cells, each drawn as its expression and
-//! its result. Entries are cells like any other, so one refers to another
-//! the standard ways, in either direction, and a change to one recomputes
-//! the entries that read it. They're drawn as a list, with a list's editing;
+//! A notebook: a list of entries, one under another, each drawn as it would
+//! be anywhere, a library as a library, a section as a section. A new entry
+//! is an evaluation, `{isa: evaluation, expression}`, which draws as its
+//! expression and its result; the expression is a new cell, picked next, so
+//! another entry refers to it the standard ways, and a change to it
+//! recomputes the entries that read it. They're drawn as a list, with a list's editing;
 //! Enter on an entry starts a new one after it, and an empty notebook offers
 //! its first.
 
@@ -111,17 +113,27 @@ fn first_entry<W: Host>(list: crate::editing::Site) -> Layout<W> {
     )
 }
 
-/// An entry, or the place for one the list leaves to fill.
+/// An entry is drawn as it would be anywhere; the place for one the list
+/// leaves to fill offers a new one.
 fn entry<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    match input.value {
-        Some(reference) => entry_of(input, reference),
-        None => Some(new_entry_hole()),
-    }
+    input.value.is_none().then(new_entry_hole)
 }
 
+/// A new entry: an evaluation of a new cell, whose expression is picked next.
+fn new_entry_value() -> Value {
+    ::grap::isa::record(
+        super::vocabulary::kind::EVALUATION,
+        [(::grap::vocabulary::EXPRESSION, gid::new_cell_id().into())],
+    )
+}
+
+/// Where a new entry's expression is picked, from the entry: its cell's
+/// definition.
+const EXPRESSION: [Step; 2] = [Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
+
 /// A place for an entry, as between two or where one was deleted: its one
-/// offer starts an entry there, a new cell whose expression starts from
-/// what was typed.
+/// offer starts an entry there, its expression starting from what was
+/// typed.
 fn new_entry_hole<W: Host>() -> Layout<W> {
     crate::display::picker(crate::display::Picker::new(
         crate::display::CompletionKind::Value,
@@ -132,9 +144,9 @@ fn new_entry_hole<W: Host>() -> Layout<W> {
                 Completion::new("new entry", move |session| {
                     if let Some(picking) = session.pending() {
                         picking.commit(
-                            gid::new_cell_id().into(),
+                            new_entry_value(),
                             Some(crate::selection::at(
-                                &[Step::Follow],
+                                &EXPRESSION,
                                 crate::selection::payload::pending(&typed),
                             )),
                         );
@@ -142,41 +154,6 @@ fn new_entry_hole<W: Host>() -> Layout<W> {
                 }),
             )]
         }),
-    ))
-}
-
-/// An entry is its cell's expression, then, once the cell has one, what it
-/// evaluates to, beside it or below it where there's no room.
-fn entry_of<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    reference: &::grap::RuntimeValue,
-) -> Option<Layout<W>> {
-    let definition = input.env.resolve(reference.as_cell()?);
-    let expression = super::expression_path(input, [Step::Follow]);
-    let site = input.site();
-    // An entry with nothing to evaluate yet still shows its arrow, so it
-    // reads as an entry, not as the expression it holds.
-    if definition.is_none() {
-        return Some(row(
-            6.0,
-            [expression, selectable(crate::display::arrow(), &site)],
-        ));
-    }
-    let result = crate::display::at_evaluated(
-        [Step::Key(
-            crate::libraries::presentation::vocabulary::RESULT,
-        )],
-        input
-            .env
-            .evaluate_runtime_memo(reference, crate::sources::DEFAULT_FUEL, &[]),
-        input
-            .env
-            .evaluation(reference, crate::sources::DEFAULT_FUEL, &[]),
-    );
-    Some(super::with_result(
-        expression,
-        selectable(crate::display::arrow(), &site),
-        result,
     ))
 }
 
@@ -235,8 +212,7 @@ fn new_entry(
     }
 }
 
-/// Starts an entry between `low` and `high`, a new cell whose expression is
-/// picked next.
+/// Starts an entry between `low` and `high`, its expression picked next.
 fn start_entry(
     session: &mut crate::editing::Session<'_>,
     list: &crate::editing::Site,
@@ -248,8 +224,8 @@ fn start_entry(
     };
     let entry = list.below(&[Step::Element(fresh)]);
     let mut edit = entry.open(session);
-    edit.replace(gid::new_cell_id().into()) && {
-        edit.pend(&[Step::Follow]);
+    edit.replace(new_entry_value()) && {
+        edit.pend(&EXPRESSION);
         true
     }
 }
@@ -267,20 +243,17 @@ pub(super) fn starter() -> Completion {
                     vocabulary::kind::NOTEBOOK,
                     [(
                         vocabulary::ENTRIES,
-                        Value::List(
-                            [(first.clone(), gid::new_cell_id().into())]
-                                .into_iter()
-                                .collect(),
-                        ),
+                        Value::List([(first.clone(), new_entry_value())].into_iter().collect()),
                     )],
                 )
             }
         },
-        Some(crate::selection::pending_at(&[
-            Step::Key(vocabulary::ENTRIES),
-            Step::Element(first),
-            Step::Follow,
-        ])),
+        Some(crate::selection::pending_at(
+            &[Step::Key(vocabulary::ENTRIES), Step::Element(first)]
+                .into_iter()
+                .chain(EXPRESSION)
+                .collect::<Vec<_>>(),
+        )),
     )
     .with_detail(super::ID)
 }
