@@ -13,17 +13,6 @@ pub(crate) fn initial_cascade() -> CascadePoint {
     NSPoint::new(0.0, 0.0)
 }
 
-pub(crate) fn palette(
-    preference: Option<winit::window::Theme>,
-    observed: Option<winit::window::Theme>,
-) -> crate::display::widget::style::Palette {
-    match preference.or(observed) {
-        Some(winit::window::Theme::Dark) => crate::display::widget::style::Theme::Dark,
-        _ => crate::display::widget::style::Theme::Light,
-    }
-    .palette()
-}
-
 /// The AppKit view Winit draws `window` in, which it owns for at least as
 /// long as `window`.
 pub(crate) fn ns_view(window: &Window) -> NonNull<c_void> {

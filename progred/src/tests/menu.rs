@@ -324,7 +324,7 @@ fn an_open_menu_captures_other_key_downs() {
 fn the_drawn_tree_lists_every_command_once() {
     let definition = definition([], []);
     let commands = commands(&definition).collect::<Vec<_>>();
-    assert_eq!(commands.len(), 23 + Example::ALL.len());
+    assert_eq!(commands.len(), 26 + Example::ALL.len());
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));
     }
@@ -351,6 +351,19 @@ fn the_file_menu_carries_the_application_lifecycle() {
             Entry::Command(Command::App(AppCommand::Quit)),
         ]
     );
+}
+
+#[test]
+fn the_view_menu_ends_with_the_appearance_choices() {
+    use winit::window::Theme::{Dark, Light};
+    let definition = definition([], []);
+    let view = definition.iter().find(|menu| menu.label == "View").unwrap();
+    assert!(view.entries.ends_with(&[
+        Entry::Separator,
+        Entry::Command(Command::App(AppCommand::Appearance(None))),
+        Entry::Command(Command::App(AppCommand::Appearance(Some(Light)))),
+        Entry::Command(Command::App(AppCommand::Appearance(Some(Dark)))),
+    ]));
 }
 
 #[test]

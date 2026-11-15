@@ -45,11 +45,10 @@ fn the_native_tree_lists_every_command_once() {
 }
 
 #[test]
-fn both_menu_systems_expose_the_same_commands_except_native_appearance() {
+fn both_menu_systems_expose_the_same_commands() {
     let stack = crate::stack::load();
     let libraries = || crate::libraries::name::library_names(&stack.libraries);
     let mut native = commands(&definition(stack.switchable(), libraries()));
-    native.retain(|command| !matches!(command, Command::App(AppCommand::Appearance(_))));
     let drawn_definition = crate::menu::definition(
         stack.switchable().map(|(library, _)| library),
         libraries().map(|(library, _)| library),

@@ -177,7 +177,6 @@ impl EditorRunner {
         self.refresh_frame(scale, viewport);
     }
 
-    #[cfg(any(target_os = "macos", target_arch = "wasm32", test))]
     pub(crate) fn palette_changed(
         &mut self,
         palette: crate::display::widget::style::Palette,

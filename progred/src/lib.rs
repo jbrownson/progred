@@ -3,6 +3,8 @@
 
 mod annotations;
 mod app;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod appearance;
 #[cfg(feature = "cam-profile")]
 mod cam_profile;
 mod clipboard;

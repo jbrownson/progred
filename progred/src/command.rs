@@ -73,7 +73,8 @@ pub enum AppCommand {
     Close,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Quit,
-    #[cfg(target_os = "macos")]
+    /// Light or dark for every window; `None` follows the system.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     Appearance(Option<winit::window::Theme>),
     Example(Example),
 }
@@ -281,7 +282,7 @@ pub fn spec(command: Command) -> Spec {
         Command::App(AppCommand::Close) => item("Close", Some(Shortcut::plain(ShortcutKey::W))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Quit) => item("Quit", Some(Shortcut::plain(ShortcutKey::Q))),
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Appearance(theme)) => toggle(
             match theme {
                 None => "Follow System Appearance",
@@ -415,11 +416,16 @@ pub struct Toggles {
     pub shown: crate::workspace::Shown,
     /// The preset they make, if any.
     pub preset: Option<Preset>,
+    /// The appearance chosen for every window.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub appearance: Option<winit::window::Theme>,
 }
 
 impl Toggles {
     pub fn checked(&self, command: Command) -> bool {
         match command {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Command::App(AppCommand::Appearance(theme)) => self.appearance == theme,
             Command::Doc(DocCommand::Preset(preset)) => self.preset == Some(preset),
             Command::Doc(DocCommand::Projection(library)) => self.shown.shows(library),
             _ => false,

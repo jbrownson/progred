@@ -51,7 +51,7 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
     assert_eq!(text::read(&driver.value(&[])), Some("hello"));
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
     use winit::window::Theme::{Dark, Light};
@@ -65,7 +65,9 @@ fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
         (None, Some(Dark), style::Theme::Dark),
         (None, None, style::Theme::Light),
     ] {
-        driver.palette(crate::macos_window::palette(preference, observed));
+        driver.palette(crate::appearance::palette(crate::appearance::resolve(
+            preference, observed,
+        )));
         assert_eq!(driver.editor().palette, expected.palette());
         assert!(Rc::ptr_eq(&document, &driver.editor().model.doc));
     }

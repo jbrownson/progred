@@ -204,6 +204,32 @@ fn clicking_a_command_executes_it_and_closes_the_menu() {
 }
 
 #[test]
+fn the_appearance_choices_are_drawn_enabled_and_check_the_chosen_one() {
+    use winit::window::Theme::{Dark, Light};
+    let mut driver = empty();
+    let view = menus(&driver)
+        .iter()
+        .position(|menu| menu.label == "View")
+        .unwrap();
+    let heading = point_for(&driver, Hover::Heading(view));
+    driver.click_at(heading);
+    let choices = [None, Some(Light), Some(Dark)];
+    for chosen in choices {
+        driver.runner.editor.appearance = chosen;
+        driver.runner.refresh_frame(1.0, VIEWPORT);
+        for choice in choices {
+            let command = Command::App(AppCommand::Appearance(choice));
+            point_for(&driver, Hover::Item(command));
+            assert!(driver.runner.editor.menu_availability().enabled(command));
+            assert_eq!(
+                driver.runner.editor.menu_toggles().checked(command),
+                choice == chosen
+            );
+        }
+    }
+}
+
+#[test]
 fn bar_hit_height_tracks_display_scale() {
     // Room for the largest scale, so the whole bar is found at each.
     let mut driver = driver_in(Document::default(), VIEWPORT * 2.0);

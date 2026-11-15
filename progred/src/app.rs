@@ -1,6 +1,10 @@
 //! The application: windows, their lifecycle, and app-level commands.
 
 use crate::UserEvent;
+#[cfg(target_os = "macos")]
+use crate::appearance;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::appearance::Appearance;
 use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
@@ -77,8 +81,8 @@ pub(crate) struct App {
     fonts: FontContext,
     #[cfg(target_os = "macos")]
     native_menu: native_menu::Menu,
-    #[cfg(target_os = "macos")]
-    appearance: Option<winit::window::Theme>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    appearance: Appearance,
     proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -238,7 +242,7 @@ impl ApplicationHandler<UserEvent> for App {
         #[cfg(target_os = "macos")]
         {
             self.native_menu.install();
-            self.native_menu.sync(None, self.appearance);
+            self.native_menu.sync(None, self.appearance.chosen);
         }
 
         for index in 0..self.editors.len() {
@@ -317,8 +321,8 @@ impl App {
             stack,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             fonts,
-            #[cfg(target_os = "macos")]
-            appearance: None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            appearance: Appearance::default(),
             proxy,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             drawn_menu,
@@ -384,7 +388,7 @@ impl App {
             }
             // The resident menu bar grays every document command.
             #[cfg(target_os = "macos")]
-            self.native_menu.sync(None, self.appearance);
+            self.native_menu.sync(None, self.appearance.chosen);
         }
     }
 
@@ -431,11 +435,11 @@ impl App {
         if let RenderState::Suspended(cached) = &mut self.editors[index].editor.state {
             let cached = cached.take();
             let window = cached.unwrap_or_else(|| self.create_window(event_loop, index));
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             {
-                window.set_theme(self.appearance);
-                self.editors[index].editor.palette =
-                    macos_window::palette(self.appearance, window.theme());
+                let editor = &mut self.editors[index].editor;
+                editor.palette = self.appearance.apply(&window);
+                editor.appearance = self.appearance.chosen;
             }
             let state = self.activate(window.clone());
             let runner = &mut self.editors[index];
@@ -457,7 +461,7 @@ impl App {
         let editor = &self.editors[index].editor;
         let attributes = Window::default_attributes().with_title(editor.title());
         #[cfg(target_os = "macos")]
-        let attributes = attributes.with_theme(self.appearance);
+        let attributes = attributes.with_theme(self.appearance.chosen);
         #[cfg(not(target_arch = "wasm32"))]
         let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
         // The app id must match linux/progred.desktop for compositors
@@ -555,7 +559,10 @@ impl App {
             if matches!(event, WindowEvent::ThemeChanged(_)) {
                 change_palette(
                     runner,
-                    macos_window::palette(self.appearance, window.theme()),
+                    appearance::palette(appearance::resolve(
+                        self.appearance.chosen,
+                        window.theme(),
+                    )),
                 );
             }
 
@@ -665,7 +672,6 @@ impl App {
 
 /// Draws `runner`'s editor in `palette` from now on: an active window
 /// repaints now, a suspended one when it resumes.
-#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
 fn change_palette(runner: &mut EditorRunner, palette: crate::display::widget::style::Palette) {
     match runner.editor.active_window() {
         Some(window) => {
@@ -687,7 +693,7 @@ impl App {
             let editor = &self.editors[index].editor;
             self.native_menu.sync(
                 Some((editor.menu_availability(), editor.menu_toggles())),
-                self.appearance,
+                self.appearance.chosen,
             );
         }
         #[cfg(not(target_os = "macos"))]
@@ -762,20 +768,30 @@ impl App {
                 Ok((doc, binders)) => self.new_document(event_loop, doc, binders),
                 Err(error) => panic!("built-in example failed to parse: {error}"),
             },
-            #[cfg(target_os = "macos")]
-            AppCommand::Appearance(appearance) => {
-                self.appearance = appearance;
-                for runner in &mut self.editors {
-                    if let Some(window) = runner.editor.window() {
-                        window.set_theme(appearance);
-                        change_palette(runner, macos_window::palette(appearance, window.theme()));
-                    }
-                }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            AppCommand::Appearance(chosen) => {
+                self.change_appearance(Appearance {
+                    chosen,
+                    ..self.appearance
+                });
+                #[cfg(target_os = "macos")]
                 if let Some(index) = self.focused_index() {
                     self.sync_menus(index);
                 } else {
-                    self.native_menu.sync(None, appearance);
+                    self.native_menu.sync(None, chosen);
                 }
+            }
+        }
+    }
+
+    /// Shows every window in `appearance` from now on.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn change_appearance(&mut self, appearance: Appearance) {
+        self.appearance = appearance;
+        for runner in &mut self.editors {
+            runner.editor.appearance = appearance.chosen;
+            if let Some(window) = runner.editor.window() {
+                change_palette(runner, appearance.apply(&window));
             }
         }
     }

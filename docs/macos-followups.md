@@ -80,6 +80,16 @@ tested on Linux only; its macOS code was checked with
   libraries' names beside the projections. Choose a library: a pane on the
   right shows its name over its cells; choosing it again selects that pane.
 
+- **Appearance, shared with Linux.** The Light, Dark and Follow System
+  Appearance choice now goes through `appearance.rs`'s `Appearance::apply`
+  and `App::change_appearance`, which Linux shares, in place of
+  `macos_window::palette` and app.rs's own branches; the drawn menu's View
+  menu lists the choice too. Checked with `--target aarch64-apple-darwin` but
+  not run. In the app: switch between the three with the system in light and
+  in dark mode, change the system's mode while following it and while not,
+  and open a new window after each. With `PROGRED_DRAWN_MENU` set, choose them
+  from the drawn View menu and see the check follow.
+
 ## Later
 
 - **Rust 1.100, due 12 November 2026.** Move the wrappers' `update` (and

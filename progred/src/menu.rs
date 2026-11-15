@@ -71,15 +71,20 @@ pub fn definition(
         Entry::Separator,
         Entry::Command(C::App(A::Quit)),
     ];
-    // The browser's own page zoom serves the web.
+    // The browser's own page zoom serves the web, and the page chooses its
+    // appearance.
     #[cfg(target_arch = "wasm32")]
-    let zoom_entries = Vec::new();
+    let window_entries = Vec::new();
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let zoom_entries = vec![
+    let window_entries = vec![
         Entry::Separator,
         Entry::Command(C::Doc(D::ActualSize)),
         Entry::Command(C::Doc(D::ZoomIn)),
         Entry::Command(C::Doc(D::ZoomOut)),
+        Entry::Separator,
+        Entry::Command(C::App(A::Appearance(None))),
+        Entry::Command(C::App(A::Appearance(Some(winit::window::Theme::Light)))),
+        Entry::Command(C::App(A::Appearance(Some(winit::window::Theme::Dark)))),
     ];
     let libraries: Vec<_> = libraries
         .into_iter()
@@ -121,7 +126,7 @@ pub fn definition(
                 Entry::Command(C::Doc(D::MovePane(Move::Right))),
             ]
             .into_iter()
-            .chain(zoom_entries)
+            .chain(window_entries)
             .collect(),
         },
         Menu {

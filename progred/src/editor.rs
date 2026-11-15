@@ -95,6 +95,9 @@ pub(crate) fn viewport(window: &Window) -> Size {
 /// world type.
 pub(crate) struct Editor {
     pub(crate) palette: style::Palette,
+    /// The appearance chosen for every window, which a drawn menu shows.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) appearance: Option<winit::window::Theme>,
     pub(crate) command_modifier: puri::keyboard::CommandModifier,
     pub(crate) computations: computations::Computations,
     pub(crate) timers: timers::Timers,
@@ -324,6 +327,8 @@ pub(crate) fn new_editor(
         .unwrap_or_default();
     Editor {
         palette,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        appearance: None,
         command_modifier,
         computations,
         timers: timers::Timers::default(),
@@ -490,6 +495,8 @@ impl Editor {
         command::Toggles {
             shown: pane.shown.clone(),
             preset: self.stack.preset(&pane.shown),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            appearance: self.appearance,
         }
     }
 
@@ -856,6 +863,8 @@ impl Editor {
         // Exhaustive: a new Editor field must explicitly choose its lifetime here.
         let Self {
             palette: _,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+                appearance: _,
             computations,
             command_modifier: _,
             timers,
