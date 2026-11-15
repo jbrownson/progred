@@ -65,7 +65,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
         let site = input.site();
         let name = d::descend(
             [Step::Key(name::vocabulary::NAME)],
-            Some(d::first(input, name::projection(Some("section".into())))),
+            Some(d::first(input, name::slot())),
             None,
         );
         let body = d::indent(18.0, d::descend([Step::Key(BODY)], None, None));

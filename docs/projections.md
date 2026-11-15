@@ -148,15 +148,19 @@ composed in load order, or declines where the kind provides none or the record
 says no kind, and the libraries' partials are tried in load order, then their
 fallbacks, how a library draws what none of them draws, before Raw. The isa
 library's fallback draws a record with a kind or a name by them
-([`isa.rs`](../progred/src/libraries/isa.rs)): `def "fraction" {fields: …,
+([`isa.rs`](../progred/src/libraries/isa.rs)): `def fraction {fields: …,
 projection: …}`, its kind, then its name, either alone where the record lacks
 the other, then its other fields between braces, which show even where there
-are none, so a record that's only a name, `"button" {}`, doesn't read as
-text. Its kind's def's fields come first, in the def's order, each a place to
+are none, so a record that's only a name reads as one, `button {}`. The name
+is edited where it's drawn; where the record's kind says its records are
+named, a def's fields listing `name` or the record being a def, a missing
+name is a place to type one, showing what the document calls a name dim, as
+a section's heading does. Its kind's def's fields come first, in the def's
+order, each a place to
 fill where the record lacks it, then any others, and a field being added
 offers the def's fields the record lacks. So a kind with a def but no
 projection reads this way, and in Plain every call reads as `call {function:
-…}` and every lambda as `lambda "name" {…}`. The def library's own records,
+…}` and every lambda as `lambda name {…}`. The def library's own records,
 defs and libraries, read the same way with their own fields' editors. Projection
 inputs carry the provided projections, so a projection can ask another cell for
 its own: Grap's call kind draws a call as its function provides, else as a
@@ -539,8 +543,8 @@ are explicit inputs. This memo retains only the computed Value, never widgets,
 handlers, or rendered output.
 
 A section, `{isa: section, name, body}` ([`section.rs`](../progred/src/libraries/section.rs)),
-is a name over a thing: its name, edited where it's drawn, beside a disclosure
-mark, and under them its body, indented and drawn as it would be anywhere. The
+is a name over a thing: its name, edited where it's drawn and showing what the
+document calls a name dim until one is typed, beside a disclosure mark, and under them its body, indented and drawn as it would be anywhere. The
 mark folds the body, as an undoable fold at the body's occurrence that changes
 nothing in the document, and selects the section; a folded body opens around
 the selection. A section goes wherever a value does and only labels what it

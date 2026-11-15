@@ -6,7 +6,7 @@
 //! document's library defines.
 //!
 //! A record no library draws otherwise reads by what it is and what it's
-//! called, `def "fraction" {…}`: its kind, its name, and then its other
+//! called, `def fraction {…}`: its kind, its name, and then its other
 //! fields, those its kind's def lists first, in the def's order, each a place
 //! to fill where the record lacks it, then any others. A field being added
 //! offers the def's fields the record lacks.
@@ -42,9 +42,16 @@ pub fn library<W: Host>() -> Library<W> {
         let defined = defined_fields(input.value?, &|cell| {
             Some(input.env.resolve(cell)?.value.into())
         });
+        // A name its kind lists goes in the heading, not among the fields.
+        let named = defined.contains(&name::vocabulary::NAME);
+        let defined: Vec<_> = defined
+            .into_iter()
+            .filter(|field| *field != name::vocabulary::NAME)
+            .collect();
         form(
             input,
             Fields::default().leading(defined.clone()).slots(defined),
+            named,
         )
     }))
     .with_completions(completions)
@@ -67,19 +74,28 @@ fn defined_fields(
 /// A record by its kind and its name, either where it lacks the other, then
 /// its other fields as `fields` draws them, between braces, which show even
 /// where there are none, so a record that's only a name reads as a record,
-/// `"button" {}`, not as text. A record with neither declines. The kind and
-/// name are stops of their own, inside the record's.
+/// `button {}`. Where it's `named`, as its kind says its
+/// records are, a missing name is a place to type one, showing `name` dim.
+/// A record with neither declines. The kind and name are stops of their
+/// own, inside the record's.
 pub(crate) fn form<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     fields: Fields<W>,
+    named: bool,
 ) -> Option<Layout<W>> {
     let value = input.value?;
     value.record_keys()?;
-    let heading: Vec<_> = [vocabulary::ISA, name::vocabulary::NAME]
-        .into_iter()
-        .filter(|key| value.contains_field(*key))
-        .map(|key| descend([Step::Key(key)], None, None))
-        .collect();
+    let kind = value
+        .contains_field(vocabulary::ISA)
+        .then(|| descend([Step::Key(vocabulary::ISA)], None, None));
+    let name = (named || value.contains_field(name::vocabulary::NAME)).then(|| {
+        descend(
+            [Step::Key(name::vocabulary::NAME)],
+            Some(crate::display::first(input, name::slot())),
+            None,
+        )
+    });
+    let heading: Vec<_> = kind.into_iter().chain(name).collect();
     (!heading.is_empty()).then_some(())?;
     let rest = fields.shown_empty().rest(input, |key| {
         key == vocabulary::ISA || key == name::vocabulary::NAME

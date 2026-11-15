@@ -137,3 +137,47 @@ fn a_field_being_added_offers_the_kinds_fields_the_record_lacks() {
         crate::libraries::f32::value(1.0)
     );
 }
+
+#[test]
+fn a_kind_that_lists_a_name_shows_a_place_for_it() {
+    let [kind, over] = std::array::from_fn(|_| gid::new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(over, name::record("over", []));
+    cells.set_value(
+        kind,
+        ::grap::isa::record(
+            DEF,
+            [(
+                FIELDS,
+                Value::list([name::vocabulary::NAME.into(), over.into()]),
+            )],
+        ),
+    );
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(::grap::isa::record(kind, [])),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    let name = [Step::Key(name::vocabulary::NAME)];
+    // The name is in the heading, a place to type one, and not among the
+    // fields after it.
+    assert!(driver.drawn(&name));
+    assert!(driver.rect(&name).x1 <= driver.rect(&[Step::Key(over)]).x0);
+    driver.select(&name);
+    driver.type_text("half");
+    assert_eq!(driver.value(&name), crate::libraries::text::value("half"));
+}
+
+#[test]
+fn a_def_without_a_name_shows_a_place_for_one() {
+    let driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(::grap::isa::record(DEF, [])),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    assert!(driver.drawn(&[Step::Key(name::vocabulary::NAME)]));
+}

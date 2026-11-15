@@ -218,6 +218,7 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                     )))
                 })
             }),
+        false,
     )
 }
 
@@ -274,10 +275,10 @@ pub fn by_def<W: Host>() -> Partial<W> {
     })
 }
 
-/// A def as its author edits it, `def "fraction" {fields, projection}`: its
-/// fields declared by name, and its projection, which where it's a template
-/// is edited as a template for the def's own fields. Each is a place to fill
-/// until it's there.
+/// A def as its author edits it, `def fraction {fields, projection}`: its
+/// name, its fields declared by name, and its projection, which where it's a
+/// template is edited as a template for the def's own fields. Each is a
+/// place to fill until it's there.
 fn def_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let parts: Rc<[CellId]> = Def::read(input.value?)?.fields.into();
     let fields = [FIELDS, PROJECTION];
@@ -293,6 +294,8 @@ fn def_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<
                 PROJECTION => Some(layout::template::editor(parts.clone())),
                 _ => None,
             }),
+        // A def names its kind.
+        true,
     )
 }
 
