@@ -100,10 +100,22 @@ fn closed<W: Host>(
 /// `child` with the fold keys, acting while the occurrence at `site` is
 /// selected as a whole.
 fn fold_keys<W: Host>(child: Layout<W>, site: crate::editing::Site, default: bool) -> Layout<W> {
+    keys_folding(child, site.clone(), site, default)
+}
+
+/// `child` with the fold keys, acting while the occurrence at `selected` is
+/// selected as a whole on the fold at `folded`, whose state is `default`
+/// until set: as a section's do on its body.
+pub(crate) fn keys_folding<W: Host>(
+    child: Layout<W>,
+    selected: crate::editing::Site,
+    folded: crate::editing::Site,
+    default: bool,
+) -> Layout<W> {
     crate::display::widget::around(
         child,
         Rc::new(move |_| {
-            let site = site.clone();
+            let (selected, folded) = (selected.clone(), folded.clone());
             Box::new(move |child| {
                 crate::display::widget::before_place(child, move |_, output| {
                     let command = output.input.command_modifier;
@@ -117,11 +129,11 @@ fn fold_keys<W: Host>(child: Layout<W>, site: crate::editing::Site, default: boo
                             };
                             let mut session = world.session();
                             let whole = session.model.selection.as_ref().is_some_and(|selection| {
-                                site.holds(selection)
+                                selected.holds(selection)
                                     && selection.stage(&session.sources())
                                         == crate::selection::Stage::Edge
                             });
-                            whole && site.open(&mut session).fold(default, closed)
+                            whole && folded.open(&mut session).fold(default, closed)
                         });
                 })
             })

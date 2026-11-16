@@ -212,3 +212,21 @@ fn an_empty_isa_offers_the_loaded_libraries_kinds_too() {
         Value::from(crate::libraries::section::vocabulary::SECTION)
     );
 }
+
+#[test]
+fn space_folds_a_selected_records_fields() {
+    let (mut driver, [_, under, _]) = half();
+    driver.select::<Step>(&[]);
+    assert!(driver.drawn(&[Step::Key(under)]));
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Character(" ".into()),
+        ui_events::keyboard::Modifiers::empty()
+    ));
+    assert!(!driver.drawn(&[Step::Key(under)]), "folded to its heading");
+    assert!(driver.drawn(&[Step::Key(name::vocabulary::NAME)]));
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Character(" ".into()),
+        ui_events::keyboard::Modifiers::empty()
+    ));
+    assert!(driver.drawn(&[Step::Key(under)]));
+}

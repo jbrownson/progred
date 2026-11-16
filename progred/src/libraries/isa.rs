@@ -74,7 +74,8 @@ fn defined_fields(
 /// A record by its kind and its name, either where it lacks the other, then
 /// its other fields as `fields` draws them, between braces, which show even
 /// where there are none, so a record that's only a name reads as a record,
-/// `button {}`. Where it's `named`, as its kind says its
+/// `button {}`. They fold, as a record's do, Space folding them while the
+/// record is selected. Where it's `named`, as its kind says its
 /// records are, a missing name is a place to type one, showing `name` dim.
 /// A record with neither declines. The kind and name are stops of their
 /// own, inside the record's.
@@ -109,6 +110,8 @@ pub(crate) fn form<W: Host>(
     let rest = fields.shown_empty().rest(input, |key| {
         key == vocabulary::ISA || key == name::vocabulary::NAME
     })?;
+    // The braces fold, to `kind name {…}`, as a record's do.
+    let rest = crate::display::fold::starting_open(crate::display::Delim::Brace, rest);
     Some(crate::display::structure::authoring(selectable(
         crate::display::hug(row(6.0, heading), rest, 6.0),
         &input.site(),

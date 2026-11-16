@@ -126,3 +126,20 @@ fn an_empty_place_offers_a_new_section_its_name_typed_next() {
         )
     );
 }
+
+#[test]
+fn space_folds_a_selected_sections_body() {
+    let mut driver = numbers();
+    let body = [Step::Key(BODY)];
+    driver.select::<Step>(&[]);
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Character(" ".into()),
+        ui_events::keyboard::Modifiers::empty()
+    ));
+    assert!(!driver.drawn(&body));
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Character(" ".into()),
+        ui_events::keyboard::Modifiers::empty()
+    ));
+    assert!(driver.drawn(&body));
+}

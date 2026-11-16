@@ -59,7 +59,8 @@ const CLOSED: bool = false;
 
 /// The section's name beside a disclosure mark, and under them, unless it's
 /// folded, its body, drawn as it would be anywhere. The mark folds the body
-/// and selects the section; the name is edited where it's drawn.
+/// and selects the section, and with the section selected, Space does; the
+/// name is edited where it's drawn.
 fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     d::structure::kind_form(input, SECTION, [name::vocabulary::NAME, BODY], |_| {
         let site = input.site();
@@ -81,6 +82,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
         Some(Layout::program(Rc::new(move |context, build| {
             let open = open(context.viewing());
             let folding = context.site().below(&[Step::Key(BODY)]);
+            let body_fold = folding.clone();
             let section = site.clone();
             let target = W::Hover::from(site.hover());
             let mark = d::widget::hover::on_hover(
@@ -95,14 +97,20 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
                 ),
                 target,
             );
-            col(
+            let layout = col(
                 0,
                 8.0,
                 [row(6.0, [mark, name.clone()])]
                     .into_iter()
                     .chain(open.then(|| body.clone())),
-            )
-            .measure(context, build)
+            );
+            // Selected, Space folds the body, as the mark does.
+            let layout = if context.toolkit.selected() {
+                d::fold::keys_folding(layout, context.site(), body_fold, CLOSED)
+            } else {
+                layout
+            };
+            layout.measure(context, build)
         })))
     })
 }
