@@ -78,7 +78,7 @@ fn hex_editor(bytes: &[u8]) -> crate::display::LineEdit {
 }
 
 /// A cell as its value, followed where it resolves, between parentheses;
-/// closed, as its name.
+/// closed, as its name, after its value's kind where it says one.
 fn cell_view<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     cell: gid::CellId,
@@ -92,9 +92,19 @@ fn cell_view<W: Host>(
         return open;
     };
     let value = definition.value.clone();
-    let name = match input.env.name(cell) {
-        Some(name) => crate::display::named(&name, Face::Name),
+    let named = |cell, face| match input.env.name(cell) {
+        Some(name) => crate::display::named(&name, face),
         None => crate::display::faced(crate::identity::short_id(cell), Face::Id),
+    };
+    // Closed, it reads as its kind, where its value says one, then its name,
+    // as a record of a kind reads open.
+    let kind = value
+        .as_record()
+        .and_then(::grap::isa::of)
+        .map(|kind| named(kind, Face::Dim));
+    let name = match kind {
+        Some(kind) => crate::display::row(4.0, [kind, named(cell, Face::Name)]),
+        None => named(cell, Face::Name),
     };
     foldable(
         Delim::Paren,

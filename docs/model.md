@@ -132,10 +132,14 @@ tree owned by the view, a node per path step, so a projection carries the node
 for where it draws and reaches a child's by its one step; folding is one
 convention in those records. A projection folds what it draws by
 consulting that state through [`display::fold`](../progred/src/display/fold.rs),
-and decides how it starts: Raw's cells, lists and records fold, as do Grap's
-calls and the control forms. Space folds and unfolds the selected occurrence
-where its projection folds. Clicking a fold's `…` selects the occurrence as it
-opens it, so Space closes it again.
+and decides how it starts: Raw's cells, lists and records fold, as do the
+lists and records projections draw through the shared structure, records read
+by their kind and name, sections, Grap's calls and the control forms; an empty
+list or record has nothing to fold. Space folds and unfolds the selected
+occurrence where its projection folds. Clicking a fold's `…` selects the
+occurrence as it opens it, so Space closes it again. A closed cell reads as its
+name, after its value's kind, dim, where the value says one: `(def fraction
+…)`.
 
 Raw's lists and records start open. A cell starts closed where drawing it would
 draw its value again inside itself, a cycle, and where it sits inside another

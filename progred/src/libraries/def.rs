@@ -70,7 +70,8 @@ pub fn library<W: Host>() -> Library<W> {
     )
     .with_kinds([
         (DEF, vec![name::vocabulary::NAME, FIELDS]),
-        (LIBRARY, vec![DEFS, FUNCTIONS, FOREIGN, FIELDS]),
+        // Each of a library's lists is empty where it's missing.
+        (LIBRARY, vec![]),
     ])
     .with_projections_for([
         (DEF, crate::display::runtime_partial(def_display)),
@@ -342,12 +343,10 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
             }
         })))
     };
-    let lists = [DEFS, FUNCTIONS, FOREIGN, FIELDS];
     crate::libraries::isa::form(
         input,
         crate::display::structure::Fields::default()
-            .leading(lists)
-            .slots(lists)
+            .leading([DEFS, FUNCTIONS, FOREIGN, FIELDS])
             .child(move |key| match key {
                 DEFS => Some(listing(|typed| {
                     name::new_cell(
