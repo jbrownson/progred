@@ -450,3 +450,58 @@ fn a_librarys_foreign_functions_are_the_loaded_stubs_it_lists() {
         [stub]
     );
 }
+
+#[test]
+fn space_folds_a_defs_and_a_librarys_lists() {
+    let [kind, over] = std::array::from_fn(|_| gid::new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(over, name::record("over", []));
+    cells.set_value(
+        kind,
+        name::record(
+            "fraction",
+            [
+                (::grap::isa::ISA, Value::from(DEF)),
+                (FIELDS, Value::list([over.into()])),
+            ],
+        ),
+    );
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(::grap::isa::record(
+                LIBRARY,
+                [(DEFS, Value::list([kind.into()]))],
+            )),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    let space = |driver: &mut Driver| {
+        assert!(driver.keystroke(
+            ui_events::keyboard::Key::Character(" ".into()),
+            ui_events::keyboard::Modifiers::empty()
+        ));
+    };
+    let defs = [Step::Key(DEFS)];
+    let fields = [
+        Step::Key(DEFS),
+        Step::Element(first_position(&driver, &defs)),
+        Step::Follow,
+        Step::Key(FIELDS),
+    ];
+    let field = [
+        &fields[..],
+        &[Step::Element(first_position(&driver, &fields))],
+    ]
+    .concat();
+    // The def's fields, drawn flowing.
+    driver.select(&fields);
+    space(&mut driver);
+    assert!(!driver.drawn(&field));
+    space(&mut driver);
+    assert!(driver.drawn(&field));
+    // The library's defs, drawn one to a line.
+    driver.select(&defs);
+    space(&mut driver);
+    assert!(!driver.drawn(&fields));
+}

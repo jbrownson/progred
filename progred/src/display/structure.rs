@@ -6,12 +6,16 @@ use super::*;
 use puri::handler::HasHandler;
 use ui_events::keyboard::{Key, NamedKey};
 
+/// A list between brackets, one item to a line where they don't fit on one,
+/// folding as Raw's lists do.
 pub fn list<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
     runtime_partial(move |input| {
-        Some(list_layout_at(
-            input,
-            input.value?.list_positions()?,
-            child.clone(),
+        let positions = input.value?.list_positions()?;
+        let empty = positions.is_empty();
+        Some(crate::display::fold::folding_unless(
+            empty,
+            Delim::Bracket,
+            list_layout_at(input, positions, child.clone()),
         ))
     })
 }
@@ -174,10 +178,13 @@ fn comma_separated<W: Host>(
 /// A list between brackets whose items flow: on one line where they fit,
 /// and taking further lines as a paragraph's words do where they don't, each
 /// item keeping its comma. For many small things of a kind, which read
-/// across, as a function's parameters do; [`list`] puts one to a line.
+/// across, as a function's parameters do; [`list`] puts one to a line. It
+/// folds as Raw's lists do.
 pub fn list_flowing<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
     runtime_partial(move |input| {
-        let items = list_items_at(input, input.value?.list_positions()?, child.clone());
+        let positions = input.value?.list_positions()?;
+        let empty = positions.is_empty();
+        let items = list_items_at(input, positions, child.clone());
         let mut separated = comma_separated(input, &items).into_iter();
         let items = std::iter::from_fn(|| {
             let item = separated.next()?;
@@ -186,10 +193,14 @@ pub fn list_flowing<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
                 None => item,
             })
         });
-        Some(authoring(selectable_bracket(
+        Some(crate::display::fold::folding_unless(
+            empty,
             Delim::Bracket,
-            flow(0.0, 2.0, items.collect::<Vec<_>>()),
-        )))
+            authoring(selectable_bracket(
+                Delim::Bracket,
+                flow(0.0, 2.0, items.collect::<Vec<_>>()),
+            )),
+        ))
     })
 }
 

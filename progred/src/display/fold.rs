@@ -160,6 +160,16 @@ pub fn folding<W: Host>(partial: Partial<W>) -> Partial<W> {
     })
 }
 
+/// `open` folding between `delim`, starting open, unless it's `empty`, with
+/// nothing to fold away.
+pub(crate) fn folding_unless<W: Host>(empty: bool, delim: Delim, open: Layout<W>) -> Layout<W> {
+    if empty {
+        open
+    } else {
+        starting_open(delim, open)
+    }
+}
+
 /// `open` folding between `delim`, with no name, starting open.
 pub fn starting_open<W: Host>(delim: Delim, open: Layout<W>) -> Layout<W> {
     foldable(delim, None, |_| false, open)

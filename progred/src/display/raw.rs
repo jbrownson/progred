@@ -2,7 +2,7 @@
 //! constructors and what's typed read as a value. Raw's holes list the
 //! offers, and a projection can offer them among its own, as Grap's slots do.
 
-use crate::display::fold::{cell_starts_closed, foldable, starting_open};
+use crate::display::fold::{cell_starts_closed, foldable, folding_unless};
 use crate::display::host::{Layout, ProjectionInput};
 use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
@@ -52,16 +52,6 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
             )
         }
     })
-}
-
-/// `open` folding between `delim`, starting open, unless it's `empty`, with
-/// nothing to fold away.
-fn folding_unless<W: Host>(empty: bool, delim: Delim, open: Layout<W>) -> Layout<W> {
-    if empty {
-        open
-    } else {
-        starting_open(delim, open)
-    }
 }
 
 /// The most bytes a blob shows whole; a longer one shows its first eight
