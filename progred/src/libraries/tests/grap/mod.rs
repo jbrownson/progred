@@ -1559,3 +1559,26 @@ fn a_slot_offers_the_functions_libraries_in_reach_list_and_no_others() {
             .any(|entry| entry == "stray function")
     );
 }
+
+#[test]
+fn space_folds_a_record_a_projection_draws() {
+    // A record naming a program, drawn by Grap's projection of it.
+    let program = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(program, crate::libraries::f64::value(1.0));
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([(vocabulary::GRAP, program.into())])),
+            cells,
+        }),
+        crate::driver::Driver::VIEWPORT,
+    );
+    let field = [Step::Key(vocabulary::GRAP)];
+    driver.select::<Step>(&[]);
+    assert!(driver.drawn(&field));
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Character(" ".into()),
+        ui_events::keyboard::Modifiers::empty()
+    ));
+    assert!(!driver.drawn(&field));
+}

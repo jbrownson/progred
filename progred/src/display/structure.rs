@@ -272,16 +272,23 @@ impl<W: Host> Fields<W> {
         self
     }
 
-    /// The whole record, its fields between braces.
+    /// The whole record, its fields between braces, folding as Raw's records
+    /// do.
     pub(crate) fn record(
         self,
         input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     ) -> Option<Layout<W>> {
         let labels = input.value?.record_keys()?;
-        Some(self.record_of(input, labels))
+        let empty = labels.is_empty();
+        Some(crate::display::fold::folding_unless(
+            empty,
+            Delim::Brace,
+            self.record_of(input, labels),
+        ))
     }
 
-    /// [`Fields::record`] for a record already read as one, with `labels`.
+    /// The whole record, its fields between braces, without the fold, for a
+    /// view that folds it itself, as Raw does.
     pub(crate) fn record_of(
         self,
         input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,

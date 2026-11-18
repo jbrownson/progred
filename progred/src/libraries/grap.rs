@@ -601,8 +601,14 @@ fn closure_display<W: Host>(
         .child(|key| match key {
             ENVIRONMENT => Some(crate::display::runtime_partial(environment)),
             BODY_ORIGIN => Some(crate::display::runtime_partial(|input| {
-                let open = (input.default_projection)(input)
-                    .or_else(|| crate::display::structure::Fields::default().record(input))?;
+                // Folded here, starting shut, so drawn without a fold of
+                // its own.
+                let open = (input.default_projection)(input).or_else(|| {
+                    Some(
+                        crate::display::structure::Fields::default()
+                            .record_of(input, input.value?.record_keys()?),
+                    )
+                })?;
                 Some(crate::display::fold::foldable(
                     Delim::Brace,
                     None,
@@ -622,17 +628,13 @@ fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
     let computed = unnamed_bindings(&bindings, &|cell| {
         input.env.resolve(cell).map(|definition| definition.value)
     });
-    let open = crate::display::structure::Fields::default()
+    crate::display::structure::Fields::default()
         .label(move |key| {
             computed
                 .get(&key)
                 .map(|name| crate::display::named(name, Face::Dim))
         })
-        .record(input)?;
-    Some(match bindings.is_empty() {
-        true => open,
-        false => crate::display::fold::starting_open(Delim::Brace, open),
-    })
+        .record(input)
 }
 
 /// A named expression, not a lexical binding. The name slot is always
