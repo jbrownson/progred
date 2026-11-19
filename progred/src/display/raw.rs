@@ -125,21 +125,27 @@ pub fn start_picker<W: Host>() -> Picker<W> {
     Picker::new(CompletionKind::Value, start()).with_keys(|| keys(CompletionKind::Value))
 }
 
-/// What the libraries start a document as, then Raw's [`entries`].
+/// What the libraries start a document as, then Raw's [`entries`]; but an
+/// offer that spells what's typed exactly, such as a number read from it,
+/// leads, as one of Raw's does among its own.
 fn start<W: Host>() -> HoleOffers<W> {
     Rc::new(|request| {
         let start = CompletionRequest {
             scope: CompletionScope::Start,
             ..*request
         };
-        request
+        let typed = request.query.trim();
+        let (exact, rest): (Vec<_>, Vec<_>) = request
             .libraries
             .and_then(|provider| provider(&start))
             .map(|offers| rank(offers, request))
             .unwrap_or_default()
             .into_iter()
             .chain(entries(request))
-            .collect()
+            .partition(|entry: &Entry<W>| {
+                !typed.is_empty() && entry.display.eq_ignore_ascii_case(typed)
+            });
+        exact.into_iter().chain(rest).collect()
     })
 }
 

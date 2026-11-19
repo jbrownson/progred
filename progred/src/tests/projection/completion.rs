@@ -526,6 +526,18 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     assert_eq!(grap.kind.as_deref(), Some("library"));
     // It's the library's own, as what the library defines is.
     assert_eq!(grap.detail.as_deref(), Some("grap"));
+    // What's typed, read as a number, leads the libraries' starting points
+    // whose names hold it, as `f32`'s does `3`.
+    let typed = |query: &str| {
+        projected_completion_entries(
+            &doc,
+            &crate::selection::pending_with_query(&crate::test_document(), vec![], query),
+        )
+    };
+    let three = typed("3");
+    assert_eq!(three[0].display, "3");
+    assert!(three.iter().any(|entry| entry.display == "f32"));
+    assert_eq!(typed("grap")[0].display, "grap");
     let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);
     assert_eq!(entries[0].display, "fidget");

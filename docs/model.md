@@ -471,6 +471,9 @@ constructors the query names, the other readings in library order, text (or a
 new label), then constructors the query matches only loosely. The editor does
 not distinguish particular numeric representations for ranking. Explicit quoted
 text and blob syntax lead instead. Numeric providers decline label requests.
+At a document's root, the libraries' starting points come before Raw's offers,
+but an offer that spells the query exactly leads them all, so `3` reads as a
+number before the `f32` library whose name holds it.
 
 Raw's holes, and a document's root, make the editor's constructors from their
 delimiters: typed into an empty query, `(` makes a new cell, `[` a new list, and `{` a new record; a field
