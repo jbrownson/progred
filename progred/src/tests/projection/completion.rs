@@ -479,7 +479,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         .into_iter()
         // The loaded libraries, each offered to look through, have a test
         // of their own.
-        .filter(|entry| entry.detail.as_deref() != Some("loaded library"))
+        .filter(|entry| entry.detail.as_deref() != Some("loaded"))
         .map(|entry| entry.display)
         .collect::<Vec<_>>()
     };
@@ -509,6 +509,18 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         details,
         ["def", "notebook", "fidget", "grap"].map(|library| Some(library.to_owned()))
     );
+    // A starting point makes something new, so it reads no kind; a loaded
+    // library offered there is one, and reads as a library.
+    let entries = projected_completion_entries(
+        &doc,
+        &crate::selection::pending_with_query(&crate::test_document(), vec![], ""),
+    );
+    assert!(entries.iter().take(4).all(|entry| entry.kind.is_none()));
+    let grap = entries
+        .iter()
+        .find(|entry| entry.detail.as_deref() == Some("loaded") && entry.display == "grap")
+        .unwrap();
+    assert_eq!(grap.kind.as_deref(), Some("library"));
     let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);
     assert_eq!(entries[0].display, "fidget");
@@ -677,7 +689,7 @@ fn an_empty_document_can_start_as_any_loaded_library_by_its_name() {
     let entries = projected_completion_entries(&doc, &selection);
     let libraries: Vec<_> = entries
         .iter()
-        .filter(|entry| entry.detail.as_deref() == Some("loaded library"))
+        .filter(|entry| entry.detail.as_deref() == Some("loaded"))
         .collect();
     let names: Vec<_> = libraries
         .iter()

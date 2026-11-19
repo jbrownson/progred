@@ -92,8 +92,7 @@ fn completions(
                     == Some(LIBRARY)
             })
             .map(|library| {
-                crate::libraries::completion::select(library, library.into())
-                    .with_detail("loaded library")
+                crate::libraries::completion::select(library, library.into()).with_detail("loaded")
             })
             .collect(),
     )

@@ -9,8 +9,9 @@ pub struct Entry<C> {
     pub display: String,
     /// Where in `display` its subscripts are.
     pub subscripts: Vec<Range<usize>>,
-    /// What kind of thing the existing one it names or refers to is, as its
-    /// definition says: offers that make something new say what they make.
+    /// What kind of thing the existing one it puts in is, as its definition
+    /// says: the cell it refers to, or the function of the call it makes.
+    /// Offers that make something new say what they make.
     pub kind: Option<String>,
     pub detail: Option<String>,
     pub matches: Vec<Range<usize>>,
@@ -129,13 +130,15 @@ fn listed<W: Host>(
 ) -> Entry<W> {
     let activate = offer.activate;
     let source = offer.preview.as_ref().and_then(Value::as_cell);
-    // The existing thing it names, as a call offer names its function, or
-    // else the one it refers to.
-    let named = match &offer.display {
-        CompletionText::Name(cell) => Some(*cell),
-        _ => source,
-    };
-    let kind = named
+    // The existing thing it puts in: the cell it refers to, or the function
+    // of the call it makes. An offer that makes something new, though it's
+    // labelled by a cell, as a starting point is, puts in no such thing.
+    let inserted = source.or_else(|| {
+        let call = offer.preview.as_ref()?.as_record()?;
+        (::grap::isa::of(call)? == ::grap::vocabulary::kind::CALL).then_some(())?;
+        call.get(&::grap::vocabulary::FUNCTION)?.as_cell()
+    });
+    let kind = inserted
         .and_then(|cell| (request.resolve)(cell))
         .and_then(|definition| ::grap::isa::of(definition.value.as_record()?))
         .map(|kind| text(request, &CompletionText::Name(kind)).0);
