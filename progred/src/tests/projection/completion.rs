@@ -50,7 +50,7 @@ fn a_grap_program_offers_grap_suggestions() {
     };
     assert_eq!(offered("\"")[0], "quote");
     let lambda = offered("lam");
-    assert!(lambda.contains(&"new lambda".to_owned()));
+    assert!(lambda.contains(&"lambda".to_owned()));
     assert!(
         !lambda.contains(&"malformed lambda".to_owned()),
         "error messages stay behind the expansion"
@@ -68,13 +68,13 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         cells: Cells::new(),
     };
     let path = vec![Step::Key(GRAP), Step::Follow];
-    for query in ["new lambda", "lambda", "λ"] {
+    for query in ["lambda", "lambda", "λ"] {
         let pending =
             crate::selection::pending_with_query(&crate::test_document(), path.clone(), query);
         let entries = projected_completion_entries(&doc, &pending);
         let entry = entries
             .iter()
-            .find(|entry| entry.display == "new lambda")
+            .find(|entry| entry.display == "lambda")
             .expect("lambda is available without expanding");
         assert_eq!(entry.detail.as_deref(), Some("grap"));
         let mut world = activate_projected(&doc, &pending, entry);
@@ -278,7 +278,7 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
             .iter()
             .any(|entry| entry.display == "clouds" && entry.detail.as_deref() == Some("call"))
     );
-    assert!(entries.iter().any(|entry| entry.display == "new lambda"));
+    assert!(entries.iter().any(|entry| entry.display == "lambda"));
     // The editor's constructors open as they're made: the cell's value
     // pending, an element pending in the list, a field's label on the record.
     // Grap's slot has no keys of its own, so a delimiter is typed as text,
@@ -288,21 +288,21 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
     let record = |value: &Value| *value == Value::record([]);
     let made: [(&str, &str, &dyn Fn(&Value) -> bool, _, _); 3] = [
         (
-            "new cell",
+            "cell",
             "(",
             &fresh_cell,
             crate::selection::Stage::Pending,
             path.len() + 1,
         ),
         (
-            "new list",
+            "list",
             "[",
             &list,
             crate::selection::Stage::Pending,
             path.len() + 1,
         ),
         (
-            "new record",
+            "record",
             "{",
             &record,
             crate::selection::Stage::Label,
@@ -486,14 +486,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     assert_eq!(
         displays(""),
         [
-            "library",
-            "notebook",
-            "fidget",
-            "grap",
-            "new cell",
-            "new list",
-            "new record",
-            "\"\""
+            "library", "notebook", "fidget", "grap", "cell", "list", "record", "\"\""
         ]
     );
     // Each starting point names the library it comes from.
@@ -509,13 +502,18 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         details,
         ["def", "notebook", "fidget", "grap"].map(|library| Some(library.to_owned()))
     );
-    // A starting point makes something new, so it reads no kind; a loaded
-    // library offered there is one, and reads as a library.
+    // A starting point makes something new, and reads so; a loaded library
+    // offered there is one already, and reads as a library.
     let entries = projected_completion_entries(
         &doc,
         &crate::selection::pending_with_query(&crate::test_document(), vec![], ""),
     );
-    assert!(entries.iter().take(4).all(|entry| entry.kind.is_none()));
+    assert!(
+        entries
+            .iter()
+            .take(4)
+            .all(|entry| entry.kind.as_deref() == Some("new"))
+    );
     let grap = entries
         .iter()
         .find(|entry| entry.detail.as_deref() == Some("loaded") && entry.display == "grap")
@@ -554,7 +552,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         &list,
         &crate::selection::pending_with_query(&crate::test_document(), element, ""),
     );
-    assert_eq!(entries[0].display, "new cell");
+    assert_eq!(entries[0].display, "cell");
 }
 
 #[test]

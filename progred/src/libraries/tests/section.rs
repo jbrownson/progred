@@ -112,7 +112,7 @@ fn an_empty_place_offers_a_new_section_its_name_typed_next() {
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.choose("notebook");
-    driver.choose("new section");
+    driver.choose("section");
     driver.type_text("Notes");
     let section = driver.element(&[Step::Key(ENTRIES)], 0, &[]);
     assert_eq!(

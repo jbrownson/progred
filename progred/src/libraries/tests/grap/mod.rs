@@ -1292,7 +1292,7 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
         .picker_entries()
         .expect("the empty parameter shows its picker");
     assert_eq!(entries[0], "x");
-    assert_eq!(driver.picker_detail("x").as_deref(), Some("new parameter"));
+    assert_eq!(driver.picker_kind("x").as_deref(), Some("new parameter"));
     driver.press(NamedKey::Enter);
     let added = driver
         .value(&params)
@@ -1339,10 +1339,7 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
         ui_events::keyboard::Key::Named(NamedKey::Enter),
         crate::test_support::command()
     ));
-    assert_eq!(
-        driver.picker_entries(),
-        Some(vec!["new parameter".to_owned()])
-    );
+    assert_eq!(driver.picker_entries(), Some(vec!["parameter".to_owned()]));
     driver.press(NamedKey::Enter);
     let parameter = driver.element(&params, 0, &[]);
     let name = [
@@ -1408,10 +1405,10 @@ fn a_new_lambda_starts_at_its_first_parameter() {
     let program = [Step::Key(vocabulary::GRAP), Step::Follow];
     driver.select(&program);
     driver.type_text("λ");
-    driver.choose("new lambda");
+    driver.choose("lambda");
     assert_eq!(
         driver.picker_entries(),
-        Some(vec!["new parameter".to_owned()]),
+        Some(vec!["parameter".to_owned()]),
         "the parameter list's slot is open"
     );
     driver.press(NamedKey::Enter);
@@ -1446,13 +1443,13 @@ fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
         crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
     let program = [Step::Key(vocabulary::GRAP), Step::Follow];
     driver.select(&program);
-    driver.choose("new call");
+    driver.choose("call");
     let function = [&program[..], &[Step::Key(FUNCTION)]].concat();
     assert_eq!(driver.selection(), crate::occurrence::below(&[], &function));
     assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
 
     // The function is code like any other slot's.
-    driver.choose("new lambda");
+    driver.choose("lambda");
     driver.press(NamedKey::Enter);
     driver.type_text("x");
     driver.press(NamedKey::Enter);

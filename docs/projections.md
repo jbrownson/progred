@@ -288,13 +288,12 @@ projections retain their quotes.
 Library completion providers compose separately, so multiple libraries
 can contribute offers to one picker.
 
-Grap's expression slots offer a `new lambda` value completion (aliases `lambda`
-and `λ`). It inserts `{isa: lambda, params: []}` and
+Grap's expression slots offer a new `lambda` (alias `λ`). It inserts `{isa: lambda, params: []}` and
 opens its first parameter, whose slot offers a new one; Tab goes on to the
 missing body.
 The lambda projection draws that unfinished lambda and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
-Beside it Grap offers `new call`, which inserts `{isa: call}` and opens its
+Beside it Grap offers a new `call`, which inserts `{isa: call}` and opens its
 `function` field. It's a call before its function is picked, and stays one if
 it's left unfinished or its function is deleted, so the call projection draws
 its function slot open, an expression slot like any other: a binding, a

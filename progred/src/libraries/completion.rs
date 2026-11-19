@@ -1,9 +1,11 @@
 //! Small combinators for a projection's completion vocabulary.
 
-use crate::display::{Completion, CompletionProvider, CompletionText};
+use crate::display::{Completion, CompletionProvider, CompletionText, Offered};
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
+/// `value`, which is already there, a cell or a value as it reads, put in
+/// and selected.
 pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
     insert(
         display,
@@ -12,25 +14,58 @@ pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
     )
 }
 
+/// `value`, which is already there, a cell or a value as it reads, put in.
 pub fn insert(
     display: impl Into<CompletionText>,
     value: Value,
     on_commit: Option<crate::site::Continuation>,
 ) -> Completion {
+    let offered = Offered::Value(value.clone());
+    insertion(display, offered, move || value.clone(), on_commit)
+}
+
+/// `value`, made around the existing `cell`, put in: listed as `cell`.
+pub fn uses(
+    display: impl Into<CompletionText>,
+    cell: CellId,
+    value: Value,
+    on_commit: Option<crate::site::Continuation>,
+) -> Completion {
     insertion(
         display,
-        Some(value.clone()),
+        Offered::Use(cell),
         move || value.clone(),
         on_commit,
     )
 }
 
+/// Something new, `value`, which is `what`, put in.
+pub fn make(
+    display: impl Into<CompletionText>,
+    what: Option<CompletionText>,
+    value: Value,
+    on_commit: Option<crate::site::Continuation>,
+) -> Completion {
+    generated(display, what, move || value.clone(), on_commit)
+}
+
+/// A new record of `kind`, `value`, named as the kind, put in.
+pub fn make_kind(
+    kind: CellId,
+    value: Value,
+    on_commit: Option<crate::site::Continuation>,
+) -> Completion {
+    make(kind, Some(kind.into()), value, on_commit)
+}
+
+/// Something new, which is `what`, made as it's put in.
 pub fn generated(
     display: impl Into<CompletionText>,
+    what: Option<CompletionText>,
     create: impl Fn() -> Value + 'static,
     on_commit: Option<crate::site::Continuation>,
 ) -> Completion {
-    insertion(display, None, create, on_commit)
+    insertion(display, Offered::New(what), create, on_commit)
 }
 
 /// Starts an empty document as a row: what `pane` makes of a new cell on the
@@ -42,6 +77,7 @@ pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Complet
     let second = gid::position::spread(2).remove(1);
     generated(
         key,
+        None,
         move || {
             let cell = gid::new_cell_id();
             row([pane(cell), Value::record([(key, cell.into())])])
@@ -58,25 +94,22 @@ pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Complet
 
 fn insertion(
     display: impl Into<CompletionText>,
-    preview: Option<Value>,
+    offered: Offered,
     create: impl Fn() -> Value + 'static,
     on_commit: Option<crate::site::Continuation>,
 ) -> Completion {
-    Completion {
-        preview,
-        ..Completion::new(display, move |session| {
-            if let Some(picking) = session.pending() {
-                let value = create();
-                if picking.stage() == crate::selection::Stage::Label {
-                    if let Some(cell) = value.as_cell() {
-                        picking.commit_label(cell, None, on_commit.clone());
-                    }
-                } else {
-                    picking.commit(value, on_commit.clone());
+    Completion::new(display, offered, move |session| {
+        if let Some(picking) = session.pending() {
+            let value = create();
+            if picking.stage() == crate::selection::Stage::Label {
+                if let Some(cell) = value.as_cell() {
+                    picking.commit_label(cell, None, on_commit.clone());
                 }
+            } else {
+                picking.commit(value, on_commit.clone());
             }
-        })
-    }
+        }
+    })
 }
 
 /// Combine applicable providers, each a library's, in order. An offer that

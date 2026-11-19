@@ -35,7 +35,9 @@ fn numeric_completions_offer_only_what_reads_as_a_number() {
             };
             assert_eq!(offer.display, "0".into());
             assert_eq!(offer.detail, Some(representation.into()));
-            assert_eq!(offer.preview.as_ref(), Some(&zero));
+            assert!(
+                matches!(&offer.offered, crate::display::Offered::Value(value) if *value == zero)
+            );
         }
         // An empty query reads as no number, nor does one that isn't.
         for query in ["", " \t\n", "not a number", "-", ".", "1e"] {

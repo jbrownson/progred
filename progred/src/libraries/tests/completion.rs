@@ -62,6 +62,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         let count = count.clone();
         Some(vec![crate::libraries::completion::generated(
             "generated",
+            None,
             move || {
                 count.set(count.get() + 1);
                 new_cell_id().into()

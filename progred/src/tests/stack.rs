@@ -66,7 +66,7 @@ fn a_library_switched_off_offers_nothing() {
         ))
         .unwrap_or_default()
         .iter()
-        .any(|offer| offer.display == "new color".into())
+        .any(|offer| offer.display == "color".into())
     };
     assert!(offered(&stack.completions));
     assert!(offered(&stack.completions_without(&[])));

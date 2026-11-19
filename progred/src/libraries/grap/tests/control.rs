@@ -1235,7 +1235,7 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     let program = vec![Step::Key(GRAP), Step::Follow];
     driver.select(&program);
     driver.type_text("λ");
-    driver.choose("new lambda");
+    driver.choose("lambda");
     driver.select(&[&program[..], &[Step::Key(BODY)]].concat());
     let offered = |driver: &mut Driver| {
         driver

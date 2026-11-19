@@ -86,9 +86,33 @@ pub struct Completion {
     pub detail: Option<CompletionText>,
     pub activate: Rc<dyn Fn(&mut crate::editing::Session<'_>)>,
     pub face: Face,
-    /// Optional advertised value, for source attribution and contextual filtering.
-    /// Activation never derives its behavior from this metadata.
-    pub preview: Option<Value>,
+    /// What choosing it puts in, which the picker tells apart. Activation
+    /// never derives its behavior from this.
+    pub offered: Offered,
+}
+
+/// What an offer puts in: something that's already there, or something new.
+#[derive(Clone)]
+pub enum Offered {
+    /// This value: a cell, which refers to that existing cell, or a value
+    /// as it reads, such as a number.
+    Value(Value),
+    /// Something made around an existing cell, listed as that cell, as a
+    /// call is made around its function.
+    Use(CellId),
+    /// Something new, what it is said if it says: a kind's name, or a word.
+    New(Option<CompletionText>),
+}
+
+impl Offered {
+    /// The existing cell it puts in or uses.
+    pub fn existing(&self) -> Option<CellId> {
+        match self {
+            Self::Value(value) => value.as_cell(),
+            Self::Use(cell) => Some(*cell),
+            Self::New(_) => None,
+        }
+    }
 }
 
 /// Names are resolved from the current sources when the picker is built,
@@ -169,6 +193,7 @@ pub fn named<World: 'static, Hover: 'static>(name: &Name<'_>, face: Face) -> Lay
 impl Completion {
     pub fn new(
         display: impl Into<CompletionText>,
+        offered: Offered,
         activate: impl Fn(&mut crate::editing::Session<'_>) + 'static,
     ) -> Self {
         Self {
@@ -177,7 +202,7 @@ impl Completion {
             detail: None,
             activate: Rc::new(activate),
             face: Face::Label,
-            preview: None,
+            offered,
         }
     }
 

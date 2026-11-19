@@ -196,7 +196,7 @@ fn parameter<W: Host>(
             ranked(std::rc::Rc::new(|request| {
                 Some(vec![name::new_cell(
                     request.query.trim().to_owned(),
-                    "parameter",
+                    Some("parameter".into()),
                     vec![],
                 )])
             })),
@@ -270,25 +270,31 @@ fn definition_hole<W: Host>() -> Layout<W> {
                 "no name".to_owned()
             };
             Some(vec![
-                Completion::new(display, move |session| {
-                    if let Some(picking) = session.pending() {
-                        let (definition, then) = if named {
-                            (
-                                name::record(&spelling, []),
-                                crate::selection::at(
-                                    &[Step::Key(name::vocabulary::NAME)],
-                                    crate::selection::payload::edge(),
-                                ),
-                            )
-                        } else {
-                            (
-                                Value::record([]),
-                                crate::selection::pending_at(&[Step::Key(name::vocabulary::NAME)]),
-                            )
-                        };
-                        picking.commit(definition, Some(then));
-                    }
-                })
+                Completion::new(
+                    display,
+                    crate::display::Offered::New(None),
+                    move |session| {
+                        if let Some(picking) = session.pending() {
+                            let (definition, then) = if named {
+                                (
+                                    name::record(&spelling, []),
+                                    crate::selection::at(
+                                        &[Step::Key(name::vocabulary::NAME)],
+                                        crate::selection::payload::edge(),
+                                    ),
+                                )
+                            } else {
+                                (
+                                    Value::record([]),
+                                    crate::selection::pending_at(&[Step::Key(
+                                        name::vocabulary::NAME,
+                                    )]),
+                                )
+                            };
+                            picking.commit(definition, Some(then));
+                        }
+                    },
+                )
                 .with_detail("name"),
             ])
         })),
@@ -438,14 +444,19 @@ fn is_foreign(value: &Value) -> bool {
     value.as_record().and_then(::grap::isa::of) == Some(kind::FOREIGN_FUNCTION)
 }
 
-/// Construct a call and focus its first declared parameter, when known.
+/// A call of `function`, focusing its first declared parameter, when known.
 fn call_completion<'a>(
-    function: Value,
-    display: impl Into<crate::display::CompletionText>,
+    function: CellId,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Completion {
-    let continuation = after_function(&(&function).into(), resolve);
-    crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
+    let function_value = Value::from(function);
+    let continuation = after_function(&(&function_value).into(), resolve);
+    crate::libraries::completion::uses(
+        function,
+        function,
+        ::grap::call(function_value, []),
+        Some(continuation),
+    )
 }
 
 /// Where a call goes once it has `function`: to its first declared
@@ -891,7 +902,8 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
 fn new_evaluation() -> Completion {
     use ::grap::vocabulary::EXPRESSION;
     crate::libraries::completion::generated(
-        "new evaluation",
+        vocabulary::kind::EVALUATION,
+        Some(vocabulary::kind::EVALUATION.into()),
         || {
             ::grap::isa::record(
                 vocabulary::kind::EVALUATION,
@@ -903,7 +915,7 @@ fn new_evaluation() -> Completion {
             Step::Follow,
         ])),
     )
-    .with_aliases(["=", "evaluation"])
+    .with_aliases(["="])
 }
 
 /// What Grap builds in a slot that names no function: a lambda, its first
@@ -911,18 +923,18 @@ fn new_evaluation() -> Completion {
 /// a function, or anything else that evaluates to one.
 fn constructs() -> [Completion; 2] {
     [
-        crate::libraries::completion::insert(
-            "new lambda",
+        crate::libraries::completion::make_kind(
+            kind::LAMBDA,
             ::grap::isa::record(kind::LAMBDA, [(PARAMS, Value::list([]))]),
             Some(crate::selection::pending_at(&[
                 Step::Key(PARAMS),
                 Step::Element(gid::position::between(None, None).expect("an empty list has room")),
             ])),
         )
-        .with_aliases(["lambda", "λ"])
+        .with_aliases(["λ"])
         .with_detail(ID),
-        crate::libraries::completion::insert(
-            "new call",
+        crate::libraries::completion::make_kind(
+            kind::CALL,
             ::grap::isa::record(kind::CALL, []),
             Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
         )
@@ -986,17 +998,19 @@ fn function_offers(
         .filter_map(|cell| {
             let definition = (request.resolve)(cell)?;
             let name = name::of_cell(&resolve, cell)?.spelling();
-            let offer =
-                if as_function {
-                    function_completion(cell, request.resolve).with_detail(function_detail(
-                        request,
-                        "function",
-                        definition.library,
-                    ))
-                } else {
-                    call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(function_detail(request, "call", definition.library))
-                };
+            let offer = if as_function {
+                function_completion(cell, request.resolve).with_detail(function_detail(
+                    request,
+                    "function",
+                    definition.library,
+                ))
+            } else {
+                call_completion(cell, request.resolve).with_detail(function_detail(
+                    request,
+                    "call",
+                    definition.library,
+                ))
+            };
             Some((definition.library.is_some(), name, offer))
         })
         .collect();

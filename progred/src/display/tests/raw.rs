@@ -43,20 +43,18 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
             .map(|entry| entry.display)
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        displays(false, ""),
-        ["new cell", "new list", "new record", "\"\""]
-    );
-    assert_eq!(displays(true, ""), ["new cell"]);
+    assert_eq!(displays(false, ""), ["cell", "list", "record", "\"\""]);
+    assert_eq!(displays(true, ""), ["cell"]);
     assert_eq!(displays(true, "roof"), ["roof"]);
     // An existing cell is pointed at or pasted, not named here, and what a
     // projection offers, such as a new lambda, is that projection's own.
+    let grap = |entry: &Entry<_>| entry.detail.as_deref() == Some("grap");
     for query in ["roof", "lambda", "λ"] {
         for labels in [false, true] {
             assert!(
                 completion_entries(&sources, labels, query)
                     .iter()
-                    .all(|entry| entry.source.is_none() && entry.display != "new lambda"),
+                    .all(|entry| entry.source.is_none() && !grap(entry)),
                 "{query}"
             );
         }
@@ -71,7 +69,7 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
             Some(&crate::libraries::grap::test_support::slot_offers()),
         )
         .iter()
-        .any(|entry| entry.display == "new lambda")
+        .any(|entry| entry.display == "lambda" && grap(entry))
     );
 }
 
@@ -83,7 +81,7 @@ fn a_typed_blob_leads_the_value_offers_and_names_a_new_label() {
 
     let label_blob = completion_entries(&sources, true, "0xff");
     assert_eq!(label_blob[0].display, "0xff");
-    assert_eq!(label_blob[0].detail.as_deref(), Some("new label"));
+    assert_eq!(label_blob[0].kind.as_deref(), Some("new label"));
     assert_eq!(
         name::read(activated(&label_blob[0]).label.unwrap().1.as_ref().unwrap()),
         Some("0xff")
@@ -139,7 +137,7 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
     // An empty query is no number, but it is the empty string; whitespace is
     // text too.
     for (query, expected) in [
-        ("", &["new cell", "new list", "new record", "\"\""][..]),
+        ("", &["cell", "list", "record", "\"\""][..]),
         (" \t", &["\" \t\""]),
     ] {
         let displays = completion_entries(&sources, false, query)
@@ -339,16 +337,13 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
     let entries = completion_entries(&sources, false, "");
     let bare = entries
         .iter()
-        .find(|entry| entry.display == "new cell")
+        .find(|entry| entry.display == "cell")
         .unwrap();
     assert_eq!(bare.source, None);
     let first = activated(bare).value.unwrap().as_cell().unwrap();
     let second = activated(&bare.clone()).value.unwrap().as_cell().unwrap();
     assert_ne!(first, second);
-    for (display, expected) in [
-        ("new list", Value::list([])),
-        ("new record", Value::record([])),
-    ] {
+    for (display, expected) in [("list", Value::list([])), ("record", Value::record([]))] {
         let entry = entries
             .iter()
             .find(|entry| entry.display == display)
@@ -384,9 +379,9 @@ fn completion_constructor_aliases_rank_ahead_of_literal_text() {
     let libraries = crate::library::Libraries::default();
     let sources = src(&document, &libraries);
     for (query, display, value) in [
-        ("[", "new list", Some(Value::list([]))),
-        ("(", "new cell", None),
-        ("{", "new record", Some(Value::record([]))),
+        ("[", "list", Some(Value::list([]))),
+        ("(", "cell", None),
+        ("{", "record", Some(Value::record([]))),
     ] {
         let entries = completion_entries(&sources, false, query);
         assert_eq!(entries[0].display, display);
@@ -404,7 +399,7 @@ fn completion_constructor_aliases_rank_ahead_of_literal_text() {
         assert_eq!(activated(&quoted[0]).value, Some(text::value(query)));
         let labels = completion_entries(&sources, true, query);
         if query == "(" {
-            assert_eq!(labels[0].display, "new cell");
+            assert_eq!(labels[0].display, "cell");
             assert!(activated(&labels[0]).label.is_some());
         } else {
             assert!(labels.iter().all(|entry| entry.display != display));

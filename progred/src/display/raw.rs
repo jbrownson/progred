@@ -7,7 +7,7 @@ use crate::display::host::{Layout, ProjectionInput};
 use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
 use crate::display::{
-    Completion, CompletionKind, CompletionRequest, CompletionScope, Delim, Face, Host,
+    Completion, CompletionKind, CompletionRequest, CompletionScope, Delim, Face, Host, Offered,
 };
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
@@ -154,7 +154,7 @@ pub fn constructors(kind: CompletionKind) -> Vec<Completion> {
 /// the list and `{` for the record. Raw's holes make one at once when its
 /// delimiter is typed into an empty query.
 fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
-    let cell = Completion::new("new cell", move |session| {
+    let cell = Completion::new("cell", Offered::New(None), move |session| {
         if let Some(picking) = session.pending() {
             match kind {
                 CompletionKind::Value => picking.commit_container(new_cell_id().into()),
@@ -167,13 +167,13 @@ fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
         }
     });
     let containers = [
-        ("[", "new list", Value::list([])),
-        ("{", "new record", Value::record([])),
+        ("[", "list", Value::list([])),
+        ("{", "record", Value::record([])),
     ]
     .into_iter()
     .filter(|_| kind == CompletionKind::Value)
     .map(|(delimiter, display, value)| {
-        let offer = Completion::new(display, move |session| {
+        let offer = Completion::new(display, Offered::New(None), move |session| {
             if let Some(picking) = session.pending() {
                 picking.commit_container(value.clone());
             }
@@ -199,8 +199,7 @@ fn typed_blob(blob: gid::Blob) -> Completion {
     let committed = value.clone();
     Completion {
         face: Face::Id,
-        preview: Some(value.clone()),
-        ..Completion::new(spelling, move |session| {
+        ..Completion::new(spelling, Offered::Value(value), move |session| {
             if let Some(picking) = session.pending() {
                 picking.commit(
                     committed.clone(),
@@ -230,11 +229,7 @@ fn literals(request: &CompletionRequest<'_>) -> (Vec<Completion>, Vec<Completion
         .unwrap_or_default()
         .into_iter()
         .partition(|offer| {
-            offer
-                .preview
-                .as_ref()
-                .and_then(::grap::text::read)
-                .is_some()
+            matches!(&offer.offered, Offered::Value(value) if ::grap::text::read(value).is_some())
         });
     (readings, strings)
 }

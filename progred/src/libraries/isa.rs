@@ -14,8 +14,8 @@
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::structure::Fields;
 use crate::display::{
-    Completion, CompletionKind, CompletionRequest, CompletionScope, Picker, descend, picker,
-    ranked, row, selectable,
+    Completion, CompletionKind, CompletionRequest, CompletionScope, Offered, Picker, descend,
+    picker, ranked, row, selectable,
 };
 use crate::libraries::{Library, def, name};
 use gid::{CellId, Step};
@@ -133,7 +133,7 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
             .into_iter()
             .filter(|field| fields.get(field).is_none())
             .map(|field| {
-                Completion::new(field, move |session| {
+                Completion::new(field, Offered::Value(field.into()), move |session| {
                     if let Some(picking) = session.pending() {
                         picking.commit_label(field, None, Some(crate::selection::pending_at(&[])));
                     }

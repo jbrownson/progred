@@ -84,7 +84,7 @@ fn evaluate(driver: &mut Driver) {
         driver
             .picker_entries()
             .and_then(|entries| entries.first().cloned()),
-        Some("new evaluation".into())
+        Some("evaluation".into())
     );
     driver.press(NamedKey::Enter);
 }
@@ -185,7 +185,7 @@ fn an_empty_notebook_offers_its_first_entry() {
     // nothing of its own.
     assert_eq!(driver.stage(), Some(Stage::Pending));
     let offers = driver.picker_entries().unwrap();
-    for offer in ["new evaluation", "new section", "new library", "new list"] {
+    for offer in ["evaluation", "section", "library", "list"] {
         assert!(
             offers.iter().any(|entry| entry == offer),
             "{offer} in {offers:?}"
@@ -193,11 +193,11 @@ fn an_empty_notebook_offers_its_first_entry() {
     }
     // Each names the library it comes from.
     for (offer, library) in [
-        ("new evaluation", "grap"),
-        ("new section", "section"),
-        ("new library", "def"),
+        ("evaluation", "grap"),
+        ("section", "section"),
+        ("library", "def"),
         // Said by the libraries' combined offers, not each offer.
-        ("new color", "color"),
+        ("color", "color"),
     ] {
         assert_eq!(driver.picker_detail(offer).as_deref(), Some(library));
     }
@@ -394,14 +394,14 @@ fn a_call_of_a_lambda_returning_a_lambda_shows_the_closure_with_what_it_closes_o
     let mut driver = notebook(&[None], Cells::new());
     let call = expression(&driver, 0);
     driver.select(&call);
-    driver.choose("new call");
+    driver.choose("call");
     let function = [&call[..], &[Step::Key(FUNCTION)]].concat();
-    driver.choose("new lambda");
+    driver.choose("lambda");
     driver.press(NamedKey::Enter);
     driver.type_text("x");
     driver.press(NamedKey::Enter);
     driver.press(NamedKey::Tab);
-    driver.choose("new lambda");
+    driver.choose("lambda");
     driver.press(NamedKey::Enter);
     driver.type_text("y");
     driver.press(NamedKey::Enter);
@@ -445,16 +445,16 @@ fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
     let slot = expression(&driver, 0);
     driver.select(&slot);
     let offers = driver.picker_entries().unwrap();
-    assert_eq!(offers[..2], ["new lambda", "new call"]);
+    assert_eq!(offers[..2], ["lambda", "call"]);
     let place = |display: &str| offers.iter().position(|offer| offer == display).unwrap();
     assert!(
-        place("+f64") < place("new color"),
+        place("+f64") < place("color"),
         "functions come before other libraries' values"
     );
 
     // A new call's function is picked from the functions themselves, and
     // its first argument next, as picking the call whole does.
-    driver.choose("new call");
+    driver.choose("call");
     assert_eq!(
         driver.picker_detail("+f64").as_deref(),
         Some("function · grap")
@@ -486,7 +486,7 @@ fn a_call_left_without_its_function_stays_a_call_and_says_what_it_lacks() {
     let mut driver = notebook(&[None], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
-    driver.choose("new call");
+    driver.choose("call");
     let function = [slot.clone(), vec![Step::Key(FUNCTION)]].concat();
     driver.press(NamedKey::Escape);
     assert!(driver.editor().model.selection.is_none());
@@ -516,7 +516,7 @@ fn backspacing_a_call_s_function_leaves_the_call_and_then_steps_back() {
     let mut driver = notebook(&[None], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
-    driver.choose("new call");
+    driver.choose("call");
     driver.choose("+f64");
     let function = [slot.clone(), vec![Step::Key(FUNCTION)]].concat();
     driver.select(&function);

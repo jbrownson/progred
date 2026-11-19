@@ -40,17 +40,14 @@ fn completions(request: &d::CompletionRequest<'_>) -> Option<Vec<d::Completion>>
         && request.scope == d::CompletionScope::Everything
         && request.value().is_none())
     .then(|| {
-        vec![
-            crate::libraries::completion::insert(
-                "new section",
-                ::grap::isa::record(SECTION, []),
-                Some(crate::selection::at(
-                    &[Step::Key(name::vocabulary::NAME)],
-                    crate::selection::payload::edge(),
-                )),
-            )
-            .with_aliases(["section"]),
-        ]
+        vec![crate::libraries::completion::make_kind(
+            SECTION,
+            ::grap::isa::record(SECTION, []),
+            Some(crate::selection::at(
+                &[Step::Key(name::vocabulary::NAME)],
+                crate::selection::payload::edge(),
+            )),
+        )]
     })
 }
 

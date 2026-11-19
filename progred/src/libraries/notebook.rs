@@ -252,7 +252,7 @@ fn start_entry(
 /// Starts an empty document as a notebook, its first entry picked next.
 fn starter() -> Completion {
     let first = gid::position::between(None, None).expect("an empty list has room");
-    crate::libraries::completion::insert(
+    crate::libraries::completion::make_kind(
         vocabulary::kind::NOTEBOOK,
         ::grap::isa::record(
             vocabulary::kind::NOTEBOOK,

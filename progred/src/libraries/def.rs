@@ -96,8 +96,7 @@ fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
             let typed = request.query.trim().to_lowercase();
             let begun = |name: &str| {
                 let name = name.to_lowercase();
-                !typed.is_empty()
-                    && (name.starts_with(&typed) || format!("new {name}").starts_with(&typed))
+                !typed.is_empty() && name.starts_with(&typed)
             };
             // What's read as typed lists every reading, so a field's offers
             // are those whose label holds what's typed.
@@ -191,19 +190,18 @@ fn new_records<'r>(
                 .map(|name| name.spelling().into_owned())
                 .unwrap_or_else(|| crate::identity::short_id(kind));
             wanted(&name).then(|| {
-                crate::libraries::completion::select(
-                    format!("new {name}"),
+                crate::libraries::completion::make_kind(
+                    kind,
                     ::grap::isa::record(kind, []),
+                    Some(crate::selection::at(&[], crate::selection::payload::edge())),
                 )
-                .with_aliases([name])
             })
         })
 }
 
 /// A new library, its first def made next.
 fn new_library() -> Completion {
-    crate::libraries::completion::insert("new library", empty_library(), Some(first_def()))
-        .with_aliases(["library"])
+    crate::libraries::completion::make_kind(LIBRARY, empty_library(), Some(first_def()))
 }
 
 /// A library with nothing in it yet.
@@ -227,8 +225,9 @@ fn first_def() -> crate::site::Continuation {
 fn starter() -> Completion {
     use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
     let first = || gid::position::between(None, None).expect("an empty list has room");
-    crate::libraries::completion::insert(
+    crate::libraries::completion::make(
         LIBRARY,
+        None,
         ::grap::isa::record(
             NOTEBOOK,
             [(
@@ -351,14 +350,14 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                 DEFS => Some(listing(|typed| {
                     name::new_cell(
                         typed,
-                        "def",
+                        Some(DEF.into()),
                         vec![(::grap::isa::ISA, DEF.into()), (FIELDS, Value::list([]))],
                     )
                 })),
                 FUNCTIONS => Some(listing(|typed| {
                     name::new_cell(
                         typed,
-                        "function",
+                        Some(::grap::vocabulary::kind::LAMBDA.into()),
                         vec![
                             (
                                 ::grap::isa::ISA,
@@ -371,7 +370,9 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                 FOREIGN => Some(crate::display::structure::list(Some(
                     crate::display::runtime_partial(foreign_function),
                 ))),
-                FIELDS => Some(listing(|typed| name::new_cell(typed, "field", vec![]))),
+                FIELDS => Some(listing(|typed| {
+                    name::new_cell(typed, Some("field".into()), vec![])
+                })),
                 _ => None,
             }),
         false,
@@ -412,7 +413,9 @@ fn foreign_function<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Op
 fn field<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     match input.value {
         Some(_) => crate::libraries::grap::declaration_cell(input, None),
-        None => Some(new_place(|typed| name::new_cell(typed, "field", vec![]))),
+        None => Some(new_place(|typed| {
+            name::new_cell(typed, Some("field".into()), vec![])
+        })),
     }
 }
 

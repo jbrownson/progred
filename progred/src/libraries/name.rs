@@ -4,7 +4,10 @@
 //! need not.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face, Name};
+use crate::display::{
+    Completion, CompletionKind, CompletionRequest, CompletionScope, CompletionText, Face, Name,
+    Offered,
+};
 use crate::libraries::{Library, text};
 use crate::library::{Definitions, Libraries};
 use crate::sources::Sources;
@@ -301,36 +304,41 @@ fn new_label(spelling: &str) -> Completion {
     let name = spelling.to_string();
     Completion {
         face: Face::Dim,
-        ..Completion::new(spelling, move |session| {
-            if let Some(picking) = session.pending() {
-                picking.commit_label(
-                    gid::new_cell_id(),
-                    Some(record(&name, [])),
-                    Some(crate::selection::pending_at(&[])),
-                );
-            }
-        })
-        .with_detail("new label")
+        ..Completion::new(
+            spelling,
+            Offered::New(Some("label".into())),
+            move |session| {
+                if let Some(picking) = session.pending() {
+                    picking.commit_label(
+                        gid::new_cell_id(),
+                        Some(record(&name, [])),
+                        Some(crate::selection::pending_at(&[])),
+                    );
+                }
+            },
+        )
     }
 }
 
 /// A new cell of `fields`, named `spelling`, then selected; with nothing
 /// spelled, it has no name, and its name is picked next. `what` says what
 /// the cell is to whoever is choosing it.
-pub(crate) fn new_cell(spelling: String, what: &str, fields: Vec<(CellId, Value)>) -> Completion {
+pub(crate) fn new_cell(
+    spelling: String,
+    what: Option<CompletionText>,
+    fields: Vec<(CellId, Value)>,
+) -> Completion {
     let named = !spelling.is_empty();
     let then = if named {
         crate::selection::at(&[], crate::selection::payload::edge())
     } else {
         crate::selection::pending_at(&[gid::Step::Follow, gid::Step::Key(vocabulary::NAME)])
     };
-    let what = format!("new {what}");
-    let display = if named {
-        spelling.clone()
-    } else {
-        what.clone()
+    let display = match (named, &what) {
+        (false, Some(what)) => what.clone(),
+        _ => spelling.clone().into(),
     };
-    let offer = Completion::new(display, move |session| {
+    Completion::new(display, Offered::New(what), move |session| {
         if let Some(picking) = session.pending() {
             let definition = if named {
                 record(&spelling, fields.clone())
@@ -339,12 +347,7 @@ pub(crate) fn new_cell(spelling: String, what: &str, fields: Vec<(CellId, Value)
             };
             picking.commit_new_cell(definition, Some(then.clone()));
         }
-    });
-    if named {
-        offer.with_detail(what)
-    } else {
-        offer
-    }
+    })
 }
 
 /// A named cell as its name, a reference to it, where a projection means the

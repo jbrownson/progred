@@ -202,7 +202,7 @@ impl<P> Driver<P> {
         Some(
             self.offers()?
                 .into_iter()
-                .map(|(display, _)| display)
+                .map(|(display, _, _)| display)
                 .collect(),
         )
     }
@@ -211,20 +211,34 @@ impl<P> Driver<P> {
     pub(crate) fn picker_detail(&mut self, display: &str) -> Option<String> {
         self.offers()?
             .into_iter()
-            .find(|(shown, _)| shown == display)
-            .and_then(|(_, detail)| detail)
+            .find(|(shown, _, _)| shown == display)
+            .and_then(|(_, _, detail)| detail)
     }
 
-    /// The open picker's entries and the details beside them. They're read
-    /// from the document view framed again, the shown frame keeping no
-    /// offers, so a picker open in a pane isn't found.
-    fn offers(&mut self) -> Option<Vec<(String, Option<String>)>> {
+    /// What the open picker says its entry `display` puts in, just after it.
+    pub(crate) fn picker_kind(&mut self, display: &str) -> Option<String> {
+        self.offers()?
+            .into_iter()
+            .find(|(shown, _, _)| shown == display)
+            .and_then(|(_, kind, _)| kind)
+    }
+
+    /// The open picker's entries, their kinds and the details beside them.
+    /// They're read from the document view framed again, the shown frame
+    /// keeping no offers, so a picker open in a pane isn't found.
+    fn offers(&mut self) -> Option<Vec<(String, Option<String>, Option<String>)>> {
         let frame = crate::frame::test_support::editing_frame(&mut self.runner.editor);
         frame.completion.map(|offers| {
             offers
                 .entries
                 .iter()
-                .map(|entry| (entry.display.clone(), entry.detail.clone()))
+                .map(|entry| {
+                    (
+                        entry.display.clone(),
+                        entry.kind.clone(),
+                        entry.detail.clone(),
+                    )
+                })
                 .collect()
         })
     }

@@ -143,7 +143,7 @@ fn picker_selection(hue: f64) -> Value {
 }
 
 fn new_color() -> crate::display::Completion {
-    crate::display::Completion::new("new color", |session| {
+    crate::display::Completion::new("color", crate::display::Offered::New(None), |session| {
         if let Some(picking) = session.pending()
             && picking.stage() == crate::selection::Stage::Pending
             && picking.value().is_none()
@@ -151,7 +151,7 @@ fn new_color() -> crate::display::Completion {
             picking.select_with(picker_selection(0.0));
         }
     })
-    .with_aliases(["color", "colour"])
+    .with_aliases(["colour"])
 }
 
 fn completions(

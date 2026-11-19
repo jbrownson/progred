@@ -31,8 +31,11 @@ fn a_new_label_is_the_typed_text_as_a_cell_name_and_nothing_else() {
         .ok()
         .unwrap();
     assert_eq!(label.display, "width".into());
-    assert_eq!(label.detail, Some("new label".into()));
-    assert!(label.preview.is_none());
+    assert!(label.detail.is_none());
+    assert!(matches!(
+        label.offered,
+        crate::display::Offered::New(Some(ref what)) if *what == "label".into()
+    ));
     assert!(ask(CompletionKind::Field, CompletionScope::Literal, " ").is_none());
     assert!(ask(CompletionKind::Value, CompletionScope::Literal, "width").is_none());
     assert!(ask(CompletionKind::Field, CompletionScope::Everything, "width").is_none());

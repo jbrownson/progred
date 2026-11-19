@@ -386,11 +386,19 @@ Grap's slots ask for their offers anywhere. They answer in library order; `None`
 means a library has nothing to add.
 
 Completion display text and detail can be literal text or a named cell reference.
-An entry naming an existing thing, as a call offer names its function, or
-referring to one, reads that thing's kind dim just after it, as its definition
-says (`list length  foreign function  call · list`); one that makes something
-new says what it makes in its text instead. The detail on the right says what
-the offer is, or where it doesn't, which library it's from.
+Every offer says what choosing it puts in (`Offered`): a value that's already
+there, a cell, which refers to that existing cell, or a value as it reads, such
+as a number; something made around an existing cell, listed as that cell, as a
+call is made around its function; or something new, saying what it is if it
+can, by a kind's name or a word. The picker reads that dim just after the
+entry: an existing cell's kind, as its definition says
+(`list length  foreign function  call · list`), or for something new, `new`
+and what it makes, unless the entry is listed as that already (`section  new`,
+`shape  new def`). Labels name what they put in and never spell `new`
+themselves. A field's label is a cell, existing or new, so a label's place
+takes only those offers, and only labels the record doesn't have yet. The detail
+on the right says what the offer is, or where it doesn't, which library it's
+from.
 Library, constructor, parameter, and numeric-type labels use references; the
 picker resolves their current names before filtering each frame. Renaming a
 definition therefore updates even retained offers without changing their
@@ -499,7 +507,7 @@ Raw without an override, since that projection contains no atomic line editor.
 Enter commits only through the placed completion control; the shell has no
 fallback which inserts query text after its offers decline.
 
-The color library's `new color` offer changes selection to picker state at the
+The color library's `color` offer, a new one, changes selection to picker state at the
 same missing location. No color is inserted and no undo entry is made until the
 first picker interaction. List insertion positions remain stable through that
 transition. The existing point-control gesture writes the selected color and

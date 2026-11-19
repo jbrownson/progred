@@ -13,7 +13,7 @@ use crate::display::{
     Completion, CompletionKind, CompletionRequest, CompletionText, Delim, Face, Picker, descend,
     dim, first, picker, ranked, row, runtime_partial, selectable, selectable_bracket,
 };
-use crate::libraries::completion::{insert, select};
+use crate::libraries::completion::{make, make_kind, select, uses};
 use crate::selection::{at, payload, pending_at};
 use ::grap::RuntimeValue;
 use gid::{CellId, Step, Value};
@@ -174,21 +174,26 @@ fn offers(request: &CompletionRequest<'_>, parts: &[CellId]) -> Vec<Completion> 
     // around it: `center` over a part centers the part.
     let held = request.value();
     let holding = |kind: CellId| match held {
-        Some(held) => select(kind, node(kind, vec![(l::CHILD, held.clone())])),
-        None => insert(
+        Some(held) => make_kind(
+            kind,
+            node(kind, vec![(l::CHILD, held.clone())]),
+            Some(at(&[], payload::edge())),
+        ),
+        None => make_kind(
             kind,
             node(kind, vec![]),
             Some(pending_at(&[Step::Key(l::CHILD)])),
         ),
     };
     let arranging = |kind: CellId| match held {
-        Some(held) => select(
+        Some(held) => make_kind(
             kind,
             node(kind, vec![(l::CHILDREN, Value::list([held.clone()]))]),
+            Some(at(&[], payload::edge())),
         ),
         None => {
             let first = gid::position::between(None, None).expect("an empty list has room");
-            insert(
+            make_kind(
                 kind,
                 node(kind, vec![(l::CHILDREN, Value::list([]))]),
                 Some(pending_at(&[Step::Key(l::CHILDREN), Step::Element(first)])),
@@ -204,16 +209,18 @@ fn offers(request: &CompletionRequest<'_>, parts: &[CellId]) -> Vec<Completion> 
             let name = (request.name)(*key)
                 .map(|name| name.spelling().into_owned())
                 .unwrap_or_else(|| crate::identity::short_id(*key));
-            select(
+            uses(
                 CompletionText::Literal(format!("{name} slider")),
+                *key,
                 part_with(*key, crate::libraries::controls::vocabulary::AS_SLIDER),
+                Some(at(&[], payload::edge())),
             )
             .with_detail("part")
         })
         .collect();
     parts
         .into_iter()
-        .map(|key| select(key, part(key)).with_detail("part"))
+        .map(|key| uses(key, key, part(key), Some(at(&[], payload::edge()))).with_detail("part"))
         .chain(sliders)
         .chain(CONTAINERS.map(arranging))
         .chain([
@@ -221,8 +228,12 @@ fn offers(request: &CompletionRequest<'_>, parts: &[CellId]) -> Vec<Completion> 
             holding(kind::PAD),
             holding(kind::BORDER),
             holding(kind::BRACKET),
-            select(kind::RULE, node(kind::RULE, vec![])),
-            insert(
+            make_kind(
+                kind::RULE,
+                node(kind::RULE, vec![]),
+                Some(at(&[], payload::edge())),
+            ),
+            make_kind(
                 kind::TEXT,
                 node(
                     kind::TEXT,
@@ -237,12 +248,14 @@ fn offers(request: &CompletionRequest<'_>, parts: &[CellId]) -> Vec<Completion> 
         })
         // What's typed, as the text it would draw.
         .chain((!typed.is_empty()).then(|| {
-            select(
+            make(
                 CompletionText::Literal(format!("\"{typed}\"")),
+                Some(kind::TEXT.into()),
                 node(
                     kind::TEXT,
                     vec![(l::CONTENT, crate::libraries::text::value(typed))],
                 ),
+                Some(at(&[], payload::edge())),
             )
         }))
         .collect()

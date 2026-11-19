@@ -220,7 +220,7 @@ fn a_new_def_and_its_fields_are_made_where_they_go() {
     driver.select(&defs);
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("shape");
-    assert_eq!(driver.picker_detail("shape").as_deref(), Some("new def"));
+    assert_eq!(driver.picker_kind("shape").as_deref(), Some("new def"));
     driver.press(NamedKey::Enter);
     let (shape, definition) = first_cell(&driver, &defs);
     assert_eq!(
@@ -243,7 +243,7 @@ fn a_new_def_and_its_fields_are_made_where_they_go() {
     driver.select(&fields);
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("radius");
-    assert_eq!(driver.picker_detail("radius").as_deref(), Some("new field"));
+    assert_eq!(driver.picker_kind("radius").as_deref(), Some("new field"));
     driver.press(NamedKey::Enter);
     let (radius, definition) = first_cell(&driver, &fields);
     assert_eq!(definition, name::record("radius", []));
@@ -294,17 +294,17 @@ fn an_empty_place_offers_a_new_record_of_each_kind_the_library_defines() {
     assert!(
         driver
             .picker_entries()
-            .is_some_and(|entries| entries.iter().any(|entry| entry == "new fraction"))
+            .is_some_and(|entries| entries.iter().any(|entry| entry == "fraction"))
     );
     driver.type_text("q");
     assert!(
         !driver
             .picker_entries()
-            .is_some_and(|entries| entries.iter().any(|entry| entry == "new fraction")),
+            .is_some_and(|entries| entries.iter().any(|entry| entry == "fraction")),
         "a kind whose name what's typed doesn't begin isn't offered"
     );
     driver.press(NamedKey::Backspace);
-    driver.choose("new fraction");
+    driver.choose("fraction");
     let position = first_position(&driver, &list);
     assert_eq!(
         driver.value(&[Step::Key(items), Step::Element(position)]),

@@ -1,5 +1,6 @@
 use crate::display::{
     Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionText, Face, Host,
+    Offered,
 };
 use crate::identity::name_or_short_id;
 use gid::{CellId, Value};
@@ -9,9 +10,8 @@ pub struct Entry<C> {
     pub display: String,
     /// Where in `display` its subscripts are.
     pub subscripts: Vec<Range<usize>>,
-    /// What kind of thing the existing one it puts in is, as its definition
-    /// says: the cell it refers to, or the function of the call it makes.
-    /// Offers that make something new say what they make.
+    /// What it puts in: the kind of the existing cell, as its definition
+    /// says, or, new, what it makes.
     pub kind: Option<String>,
     pub detail: Option<String>,
     pub matches: Vec<Range<usize>>,
@@ -75,11 +75,11 @@ pub(crate) fn rank<W: Host>(
             .into_iter()
             .filter(|offer| {
                 fits(request, offer)
-                    && !offer
-                        .preview
-                        .as_ref()
-                        .and_then(Value::as_cell)
-                        .is_some_and(|cell| taken.is_some_and(|fields| fields.get(&cell).is_some()))
+                    && !match &offer.offered {
+                        Offered::Value(value) => value.as_cell(),
+                        _ => None,
+                    }
+                    .is_some_and(|cell| taken.is_some_and(|fields| fields.get(&cell).is_some()))
             })
             .map(|offer| (text(request, &offer.display), offer))
             .collect(),
@@ -98,14 +98,16 @@ pub(crate) fn rank<W: Host>(
     .collect()
 }
 
-/// Whether `offer` fits the hole: labels can only be cells, so an offer
-/// advertising another value is not one.
+/// Whether `offer` fits the hole: labels can only be cells, an existing
+/// one or a new one, so an offer of another value, or of something made
+/// around a cell, is not one.
 fn fits(request: &CompletionRequest<'_>, offer: &Completion) -> bool {
     request.kind == CompletionKind::Value
-        || offer
-            .preview
-            .as_ref()
-            .is_none_or(|value| value.as_cell().is_some())
+        || match &offer.offered {
+            Offered::Value(value) => value.as_cell().is_some(),
+            Offered::Use(_) => false,
+            Offered::New(_) => true,
+        }
 }
 
 /// `offer` as listed, if it fits the hole.
@@ -129,19 +131,14 @@ fn listed<W: Host>(
     offer: Completion,
 ) -> Entry<W> {
     let activate = offer.activate;
-    let source = offer.preview.as_ref().and_then(Value::as_cell);
-    // The existing thing it puts in: the cell it refers to, or the function
-    // of the call it makes. An offer that makes something new, though it's
-    // labelled by a cell, as a starting point is, puts in no such thing.
-    let inserted = source.or_else(|| {
-        let call = offer.preview.as_ref()?.as_record()?;
-        (::grap::isa::of(call)? == ::grap::vocabulary::kind::CALL).then_some(())?;
-        call.get(&::grap::vocabulary::FUNCTION)?.as_cell()
-    });
-    let kind = inserted
-        .and_then(|cell| (request.resolve)(cell))
-        .and_then(|definition| ::grap::isa::of(definition.value.as_record()?))
-        .map(|kind| text(request, &CompletionText::Name(kind)).0);
+    let source = offer.offered.existing();
+    let kind = match &offer.offered {
+        Offered::New(what) => Some(new(request, &display, what.as_ref())),
+        _ => source
+            .and_then(|cell| (request.resolve)(cell))
+            .and_then(|definition| ::grap::isa::of(definition.value.as_record()?))
+            .map(|kind| text(request, &CompletionText::Name(kind)).0),
+    };
     Entry {
         display,
         subscripts,
@@ -151,6 +148,15 @@ fn listed<W: Host>(
         face: offer.face,
         source,
         activate: Rc::new(move |world: &mut W| activate(&mut world.session())),
+    }
+}
+
+/// A new offer's kind: new, and what it makes, unless that's what it's
+/// listed as.
+fn new(request: &CompletionRequest<'_>, display: &str, what: Option<&CompletionText>) -> String {
+    match what.map(|what| text(request, what).0) {
+        Some(what) if what != display => format!("new {what}"),
+        _ => "new".to_owned(),
     }
 }
 

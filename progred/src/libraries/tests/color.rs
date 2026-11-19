@@ -324,8 +324,8 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
     let path = vec![Step::Key(argument)];
     let open = |driver: &mut Driver| {
         driver.select(&path);
-        driver.type_text("new color");
-        driver.choose("new color");
+        driver.type_text("color");
+        driver.choose("color");
     };
     let document = driver.editor().model.doc.clone();
     let unchanged = |driver: &Driver| {

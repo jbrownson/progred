@@ -65,7 +65,7 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
 fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
     let library = (request.resolve)(control::QUOTE)?.library;
     Some(
-        super::call_completion(control::QUOTE.into(), control::QUOTE, request.resolve)
+        super::call_completion(control::QUOTE, request.resolve)
             .with_detail(super::function_detail(request, "call", library))
             .with_aliases(["\""]),
     )
@@ -73,8 +73,9 @@ fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
 
 /// Unquote is drawn as `` ` ``; its hole is code again, inside the template.
 fn unquote() -> Completion {
-    crate::libraries::completion::insert(
+    crate::libraries::completion::make(
         control::UNQUOTE,
+        Some(control::kind::UNQUOTE.into()),
         ::grap::isa::record(control::kind::UNQUOTE, []),
         Some(crate::selection::pending_at(&[Step::Key(control::UNQUOTE)])),
     )

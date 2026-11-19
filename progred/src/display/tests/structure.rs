@@ -49,7 +49,7 @@ fn cmd_clicking_a_label_picks_the_label_not_its_value() {
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.type_text("{");
-    driver.choose("new cell");
+    driver.choose("cell");
     let [Step::Key(label)] = driver.selection()[..] else {
         panic!("the new field's value is pending")
     };
