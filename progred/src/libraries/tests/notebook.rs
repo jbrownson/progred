@@ -556,3 +556,16 @@ fn a_place_for_an_entry_is_numbered_and_lined_up_where_it_will_be() {
         "{place:?} under {first:?}"
     );
 }
+
+#[test]
+fn a_new_entrys_expression_offers_what_a_grap_slot_does() {
+    let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
+    driver.click::<Step>(&[]);
+    driver.choose("notebook");
+    evaluate(&mut driver);
+    driver.type_text("list len");
+    assert_eq!(
+        driver.picker_detail("list length").as_deref(),
+        Some("call · list")
+    );
+}

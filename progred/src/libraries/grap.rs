@@ -681,7 +681,24 @@ fn evaluation_display<W: Host>(
         [EXPRESSION],
         |[expression]| {
             let steps = [Step::Key(EXPRESSION)];
-            let shown = expression_path(input, steps.clone());
+            // The cell an evaluation keeps its expression in, as a new one
+            // does, keeps its parentheses, and what fills it is an
+            // expression, as a program's is; a named one reads by its name.
+            let kept = expression.as_ref().and_then(|expression| {
+                let cell = expression.as_cell()?;
+                input.env.name(cell).is_none().then_some(cell)
+            });
+            let shown = match kept {
+                Some(_) => descend(
+                    steps.clone(),
+                    Some(crate::display::first(
+                        input,
+                        crate::display::runtime_partial(program),
+                    )),
+                    None,
+                ),
+                None => expression_path(input, steps.clone()),
+            };
             let arrow = selectable(crate::display::arrow(), &input.site());
             // A new cell's expression is still to pick.
             let Some(expression) = expression.filter(|expression| {

@@ -482,7 +482,9 @@ An evaluation, `{isa: evaluation, expression}`, is a Grap-library kind whose
 projection shows an expression's result, not evaluator syntax or a field hook
 in the structural walk. The evaluator never observes it; a host that never
 loads the projection never sees it. It shows the stored expression at its real
-`…/expression` path, a dim `→` that selects the whole record, and the returned
+`…/expression` path (where that's a cell with no name, as a new notebook
+entry's is, in the cell's parentheses with an expression slot inside, as a
+program's cell is), a dim `→` that selects the whole record, and the returned
 value from its own read-only `at` occurrence, all in one group. When wrapped,
 the arrow stays with the stored expression and the result is indented
 underneath. It evaluates at its own occurrence, so its result is memoized like
