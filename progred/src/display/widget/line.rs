@@ -83,14 +83,12 @@ pub fn view<W: Host>(
                         .edit_line(&edit_line, operation)
                 });
             });
-            match line.placeholder.as_deref().filter(|_| empty) {
-                // The caret over the placeholder's start, so the line is
-                // as wide as it was before it was edited, and nothing
-                // after it moves.
-                Some(placeholder) => {
-                    let placeholder = placeholder_text(context, line, placeholder);
-                    let ascent = placeholder.extent.ascent;
-                    measured::overlay_into(placeholder, edit, move |placement, extent| {
+            // Empty, it's drawn over what the line shows empty, its caret
+            // at that's start, so starting to edit it doesn't resize it.
+            match empty.then(|| empty_look(context, line)).flatten() {
+                Some(look) => {
+                    let ascent = look.extent.ascent;
+                    measured::overlay_into(look, edit, move |placement, extent| {
                         let rect = placement.rect;
                         let baseline = rect.y0 + ascent;
                         Some(Placement::new(
@@ -107,11 +105,13 @@ pub fn view<W: Host>(
                 None => edit,
             }
         }
-        None => match line.placeholder.as_deref().filter(|_| line.text.is_empty()) {
-            Some(placeholder) => placeholder_text(context, line, placeholder),
-            None if line.prefix.is_empty() && line.text.is_empty() && line.suffix.is_empty() => {
-                crate::display::widget::empty(context.text, context.toolkit.styles())
-            }
+        None => match line
+            .text
+            .is_empty()
+            .then(|| empty_look(context, line))
+            .flatten()
+        {
+            Some(look) => look,
             None => {
                 let text = puri::text::text(
                     context.text,
@@ -211,6 +211,21 @@ pub fn view<W: Host>(
         crate::display::widget::before_place(content, move |_, output| {
             output.navigation_stop(path, selected);
         })
+    }
+}
+
+/// What `line` shows with nothing in it: its placeholder, dim, or else an
+/// empty frame; none where its affixes show, which say it's there.
+fn empty_look<W: Host>(
+    context: &mut Context<'_, '_, W, W::Hover>,
+    line: &LineEdit,
+) -> Option<Measured<HoverPass<W, W::Hover>>> {
+    match line.placeholder.as_deref() {
+        Some(placeholder) => Some(placeholder_text(context, line, placeholder)),
+        None if line.prefix.is_empty() && line.suffix.is_empty() => Some(
+            crate::display::widget::empty(context.text, context.toolkit.styles()),
+        ),
+        None => None,
     }
 }
 

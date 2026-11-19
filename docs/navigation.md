@@ -177,7 +177,7 @@ first.
 
 The anonymous lambda's `λ` marker is the missing name's place, an arrow stop
 like any drawn occurrence and a tab stop. Arriving there types into the name
-as a line, with no completion.
+as a line, with no completion, the `λ` its placeholder.
 
 Revealing a destination follows [selection and reveal](puri.md#selection-and-reveal).
 

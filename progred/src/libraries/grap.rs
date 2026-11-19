@@ -305,8 +305,11 @@ fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
         // The missing name's place, which Tab stops at as it does any;
-        // selected, it's an empty name to type into.
-        None if input.selection.is_some() => crate::display::line_edit(name::line(None)?),
+        // selected, it's an empty name to type into, the λ its placeholder.
+        None if input.selection.is_some() => crate::display::line_edit(crate::display::LineEdit {
+            placeholder: Some("λ".to_owned()),
+            ..name::line(None)?
+        }),
         None => {
             let site = input.site();
             crate::display::to_fill(selectable(faced("λ", Face::Name), &site))

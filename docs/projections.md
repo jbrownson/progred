@@ -282,7 +282,8 @@ read-only definition is still replaceable at its writable occurrence.
 
 The lambda-name partial shows `λ` when the name is missing and unselected.
 Activation selects that missing location for entry. Once selected, it draws an
-empty name editor, and the first edit writes the name, creating the field.
+empty name editor whose placeholder is the `λ`, so nothing moves, and the
+first edit writes the name, creating the field.
 Neither pointer activation nor navigation supplies editor
 state. The editor uses defaults for an ordinary selection, including an empty payload.
 The name library offers what's typed as a new field's label, a new cell named that. Existing names
@@ -324,8 +325,11 @@ value, and the selection stays on it at its edge, typing going on in its line
 from the same caret, the write and the rest of the typing one undo step; Enter
 with nothing typed writes the empty string, which names nothing. A line's
 placeholder (`LineEdit::placeholder`) shows dim where its text goes while
-there's none, the caret before it; with nothing to show and no placeholder, a
-line shows an empty frame. A
+there's none; with nothing to show and no placeholder, a line shows an empty
+frame. An empty line being edited is drawn over what it shows empty, the
+caret at its start, so starting to edit it never resizes it: the text layout
+gives an empty editor a space's width, and nothing else reserves room for the
+caret, which is drawn past the text's end without taking any. A
 reference finds its list by walking out from where it's stored, the same walk a
 slot's offers make to find what's in scope, so each list names its own; an
 inner lambda's first unnamed parameter is `a` too. In a computed value, such as
