@@ -645,10 +645,11 @@ pub(crate) fn to_fill<W: Host>(child: host::Layout<W>) -> host::Layout<W> {
         Rc::new(|context| {
             let path = context.path().clone();
             let writable = context.toolkit.writable();
+            let arrive = widget::navigation::arrival(context.site());
             Box::new(move |child| {
-                widget::before_place(child, move |_, output| {
+                widget::before_place(child, move |placement, output| {
                     if writable {
-                        output.tab_stop(path);
+                        output.tab_stop(placement.rect, Some(path), arrive);
                     }
                 })
             })

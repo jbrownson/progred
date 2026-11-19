@@ -67,7 +67,6 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             select: Rc::new(|_, _| false),
             secondary: None,
             selected: false,
-            tab_stop: false,
         },
         Landmark {
             area: Some(root.clone()),
@@ -77,7 +76,6 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             select: Rc::new(|_, _| false),
             secondary: None,
             selected: false,
-            tab_stop: false,
         },
     ];
     let regions = [ViewRegion {
@@ -88,7 +86,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     }];
     let geometry = Geometry {
         landmarks: &landmarks,
-        insertions: &[],
+        tab_stops: &[],
         view_regions: &regions,
         scale: 2.0,
     };

@@ -121,19 +121,20 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.navigation.stop(path, selected);
     }
 
-    /// Marks this occurrence as a place to fill in, which Tab visits.
-    pub fn tab_stop(&mut self, path: crate::occurrence::Trail) {
-        self.output.tab_stop = Some(path);
-    }
-
-    /// Marks `rect` as a place where something can be added, which Tab
-    /// visits, arriving through `select`.
-    pub fn insertion(&mut self, rect: Rect, select: Select<C>) {
+    /// Records `rect` as a place Tab visits, arriving through `select`: the
+    /// place to fill in `at` is, or with none, where something can be added.
+    pub fn tab_stop(
+        &mut self,
+        rect: Rect,
+        at: Option<crate::occurrence::Trail>,
+        select: Select<C>,
+    ) {
         let order = self.navigation.place();
-        self.output.insertions.push(super::navigation::Insertion {
+        self.output.tab_stops.push(super::navigation::TabStop {
             area: None,
-            rect,
             order,
+            rect,
+            at,
             select,
         });
     }
@@ -439,7 +440,7 @@ pub struct DispatchContext<C, Hover> {
     /// another event that every handler sees in the usual order.
     pub handler: Rc<Handler<C, DispatchContext<C, Hover>>>,
     pub landmarks: std::rc::Rc<[Landmark<C>]>,
-    pub insertions: std::rc::Rc<[super::navigation::Insertion<C>]>,
+    pub tab_stops: std::rc::Rc<[super::navigation::TabStop<C>]>,
     pub view_regions: std::rc::Rc<[ViewRegion]>,
     pub area: Option<Area>,
     pub hovered: Option<Hover>,
@@ -457,7 +458,7 @@ impl<C, Hover> Default for DispatchContext<C, Hover> {
         Self {
             handler: Default::default(),
             landmarks: Default::default(),
-            insertions: Default::default(),
+            tab_stops: Default::default(),
             view_regions: Default::default(),
             area: None,
             hovered: None,
@@ -490,7 +491,7 @@ impl<C, Hover> DispatchContext<C, Hover> {
     pub(crate) fn geometry(&self, scale: f64) -> super::navigation::Geometry<'_, C> {
         super::navigation::Geometry {
             landmarks: &self.landmarks,
-            insertions: &self.insertions,
+            tab_stops: &self.tab_stops,
             view_regions: &self.view_regions,
             scale,
         }
@@ -535,7 +536,7 @@ pub struct FrameOutput<C, H> {
     pub renders: Vec<Render>,
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
     pub landmarks: Vec<Landmark<C>>,
-    pub insertions: Vec<super::navigation::Insertion<C>>,
+    pub tab_stops: Vec<super::navigation::TabStop<C>>,
     pub view_regions: Vec<ViewRegion>,
     pub hover_geometry: HoverGeometry<H>,
     pub input_area: Option<Rect>,
@@ -565,18 +566,13 @@ pub struct HoverOutput<C, Hover> {
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C, DispatchContext<C, Hover>>>,
     pub landmarks: Vec<Landmark<C>>,
-    /// Where something can be added, which Tab visits besides the landmarks
-    /// marked as places to fill in.
-    pub insertions: Vec<super::navigation::Insertion<C>>,
+    /// The places Tab visits, as the widgets drawn there recorded them.
+    pub tab_stops: Vec<super::navigation::TabStop<C>>,
     pub view_regions: Vec<ViewRegion>,
     /// A projected control may override how its occurrence's landmark is
     /// selected. The nearest enclosing landmark consumes this while
     /// assembling this frame, so it never leaks into an ancestor.
     pub landmark_select: Option<(crate::occurrence::Trail, Select<C>)>,
-    /// A widget marks its occurrence as a place to fill in, which Tab
-    /// visits. The nearest enclosing landmark consumes it, as it does an
-    /// arrival override.
-    pub tab_stop: Option<crate::occurrence::Trail>,
     pub completion: Option<Offers<C>>,
     /// The focused text editor's caret, for platform text composition.
     pub input_area: Option<Rect>,
@@ -602,10 +598,9 @@ impl<C: 'static, Hover: 'static> Default for HoverOutput<C, Hover> {
             hover_geometry: HoverGeometry::default(),
             handler: None,
             landmarks: Vec::new(),
-            insertions: Vec::new(),
+            tab_stops: Vec::new(),
             view_regions: Vec::new(),
             landmark_select: None,
-            tab_stop: None,
             completion: None,
             input_area: None,
             after_hover: AfterHover::default(),
@@ -630,10 +625,9 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             (Some(base), Some(above)) => Some(base.over(above)),
         };
         append(&mut self.landmarks, above.landmarks);
-        append(&mut self.insertions, above.insertions);
+        append(&mut self.tab_stops, above.tab_stops);
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
-        self.tab_stop = above.tab_stop.or(self.tab_stop);
         self.completion = above.completion.or(self.completion);
         self.input_area = above.input_area.or(self.input_area);
         self.after_hover.append(above.after_hover);
@@ -653,8 +647,8 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         for landmark in &mut self.landmarks {
             landmark.area = Some(area.clone());
         }
-        for insertion in &mut self.insertions {
-            insertion.area = Some(area.clone());
+        for stop in &mut self.tab_stops {
+            stop.area = Some(area.clone());
         }
         let area = area.clone();
         self.map_effects(
@@ -678,7 +672,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             renders: effects.renders,
             handler: effects.handler,
             landmarks: self.landmarks,
-            insertions: self.insertions,
+            tab_stops: self.tab_stops,
             view_regions: self.view_regions,
             hover_geometry: self.hover_geometry,
             input_area: self.input_area,

@@ -40,9 +40,6 @@ pub struct Landmark<World> {
     pub secondary: Option<Secondary>,
     /// Whether it carries the primary highlight.
     pub selected: bool,
-    /// Whether Tab visits it: a place to fill in, as the widget drawn there
-    /// marked it.
-    pub tab_stop: bool,
 }
 
 impl<World> Clone for Landmark<World> {
@@ -55,42 +52,49 @@ impl<World> Clone for Landmark<World> {
             select: self.select.clone(),
             secondary: self.secondary.clone(),
             selected: self.selected,
-            tab_stop: self.tab_stop,
         }
     }
 }
 
-/// A place where something can be added, which Tab visits and arrows don't:
-/// a list's insertion point, say, or the end of a record, where a field is
-/// added. It stands for no occurrence yet, so it's no landmark, and nothing
-/// finds it by a path; arriving opens it to fill in.
-pub struct Insertion<World> {
+/// A place Tab visits: one to fill in, such as an empty hole or a missing
+/// name, or one where something can be added, such as a list's insertion
+/// point or the end of a record. Each is recorded by the widget drawn there,
+/// apart from the landmarks: one where something's added stands for no
+/// occurrence yet, so nothing finds it by a path.
+pub struct TabStop<World> {
     pub area: Option<Area>,
-    pub rect: Rect,
-    /// Its place in the view's traversal, as a landmark's.
+    /// Its place in the view's traversal: the order Tab goes through.
     pub order: usize,
+    pub rect: Rect,
+    /// The occurrence it is, a place to fill in, which Tab goes on from
+    /// when it's selected; none for a place where something's added.
+    pub at: Option<Trail>,
+    /// How arriving opens it.
     pub select: Select<World>,
 }
 
-impl<World> Clone for Insertion<World> {
+impl<World> Clone for TabStop<World> {
     fn clone(&self) -> Self {
         Self {
             area: self.area.clone(),
-            rect: self.rect,
             order: self.order,
+            rect: self.rect,
+            at: self.at.clone(),
             select: self.select.clone(),
         }
     }
 }
 
-/// `child` marking where something can be added, which arriving at through
-/// `select` opens: an [`Insertion`] over its bounds.
-pub(crate) fn insertion<World: 'static, H: 'static>(
+/// `child` as a tab stop over its bounds, which arriving at through `select`
+/// opens: the place to fill in `at` is, or with none, where something can be
+/// added.
+pub(crate) fn tab_stop<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
+    at: Option<Trail>,
     select: Select<World>,
 ) -> Measured<HoverPass<World, H>> {
     super::before_place(child, move |placement, output| {
-        output.insertion(placement.rect, select);
+        output.tab_stop(placement.rect, at, select);
     })
 }
 
@@ -119,13 +123,12 @@ pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Second
 
 /// `child` drawn as part of the occurrence around it, as [`landmark`] but
 /// with no stop of its own, so arrows pass from what's around it to what's
-/// inside. A control drawn for it, such as the line of a definition yet to
-/// be written, still declares its stop there, and then it's reached and
-/// revealed as a landmark is.
+/// inside. A control drawn for it that names its own arrival, such as the
+/// line of a definition yet to be written, is reached and revealed as a
+/// landmark is.
 pub(crate) fn part_landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     path: Trail,
-    select: Select<World>,
     selected: bool,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
@@ -133,18 +136,15 @@ pub(crate) fn part_landmark<World: 'static, H: 'static>(
         pass.scope(
             |pass| inner.place_into(pass),
             move |mut output| {
-                let arrival = take_arrival(&mut output, &path);
-                let tab_stop = output.tab_stop.take().is_some_and(|at| at == path);
-                if arrival.is_some() || tab_stop {
+                if let Some(arrival) = take_arrival(&mut output, &path) {
                     output.landmarks.push(Landmark {
                         area: None,
                         path,
                         rect: placement.rect,
                         order,
-                        select: arrival.unwrap_or(select),
+                        select: arrival,
                         secondary: None,
                         selected,
-                        tab_stop,
                     });
                 }
                 output
@@ -180,13 +180,6 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
             },
             move |mut output| {
                 let select = take_arrival(&mut output, &path).unwrap_or(select);
-                let tab_stop = match output.tab_stop.take() {
-                    Some(at) => {
-                        debug_assert!(at == path, "tab stop at another occurrence");
-                        at == path
-                    }
-                    None => false,
-                };
                 output.landmarks.push(Landmark {
                     area: None,
                     path,
@@ -195,7 +188,6 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     select,
                     secondary,
                     selected,
-                    tab_stop,
                 });
                 output
             },

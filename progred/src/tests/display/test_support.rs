@@ -523,7 +523,7 @@ impl<W> Default for widget::navigation::Geometry<'_, W> {
     fn default() -> Self {
         Self {
             landmarks: &[],
-            insertions: &[],
+            tab_stops: &[],
             view_regions: &[],
             scale: 1.0,
         }

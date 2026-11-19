@@ -36,7 +36,7 @@ pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
     pub(crate) pointer_area: Option<Area>,
     pub(crate) landmarks: Rc<[Landmark<Editor>]>,
-    pub(crate) insertions: Rc<[crate::display::widget::navigation::Insertion<Editor>]>,
+    pub(crate) tab_stops: Rc<[crate::display::widget::navigation::TabStop<Editor>]>,
     pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
 }
@@ -89,7 +89,7 @@ impl Dispatch {
     pub(crate) fn geometry(&self, scale: f64) -> Geometry<'_, Editor> {
         Geometry {
             landmarks: &self.landmarks,
-            insertions: &self.insertions,
+            tab_stops: &self.tab_stops,
             view_regions: &self.view_regions,
             scale,
         }
@@ -119,7 +119,7 @@ impl Dispatch {
         DispatchContext {
             handler: self.handler.clone(),
             landmarks: self.landmarks.clone(),
-            insertions: self.insertions.clone(),
+            tab_stops: self.tab_stops.clone(),
             view_regions: self.view_regions.clone(),
             pointer: editor.pointer,
             modifiers: editor.modifiers,
@@ -373,7 +373,7 @@ fn compute_hover(
         renders,
         handler,
         landmarks,
-        insertions,
+        tab_stops,
         view_regions,
         hover_geometry,
         input_area,
@@ -385,7 +385,7 @@ fn compute_hover(
             handler: Rc::new(handler.unwrap_or_else(Handler::new)),
             pointer_area,
             landmarks: landmarks.into(),
-            insertions: insertions.into(),
+            tab_stops: tab_stops.into(),
             view_regions: view_regions.into(),
             hover_geometry,
         },

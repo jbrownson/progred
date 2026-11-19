@@ -927,7 +927,6 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             }),
             secondary: None,
             selected: false,
-            tab_stop: false,
         }]);
         let event = primary_press(Point::new(5.0, 5.0), crate::test_support::command());
         assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(

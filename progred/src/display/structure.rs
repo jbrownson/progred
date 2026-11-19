@@ -167,7 +167,7 @@ pub(crate) fn insertion<W: Host>(
         child,
         Rc::new(move |_| {
             let select = select.clone();
-            Box::new(move |child| widget::navigation::insertion(child, select))
+            Box::new(move |child| widget::navigation::tab_stop(child, None, select))
         }),
     )
 }

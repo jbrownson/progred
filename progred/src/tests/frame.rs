@@ -82,7 +82,6 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         select: Rc::new(|_, _| true),
         secondary: Some(secondary.clone()),
         selected: false,
-        tab_stop: false,
     }];
     let hover = Some(Hovered::Tree(hover::Hover::Value(occurrence.clone())));
     let resolved = attribute(
@@ -161,7 +160,6 @@ fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
         select: Rc::new(|_, _| true),
         secondary: Some(place.clone()),
         selected: true,
-        tab_stop: false,
     }];
     let entry = |source| crate::display::widget::offers::Entry {
         display: "offer".to_owned(),
@@ -959,7 +957,6 @@ fn a_drawing_source_selects_the_occurrence_of_its_definition() {
         }),
         secondary: None,
         selected: false,
-        tab_stop: false,
     }];
     let trace = SourceTrace::InCell {
         cell,

@@ -159,7 +159,7 @@ pub fn view<W: Host>(
         });
         crate::display::widget::before_place(content, move |placement: Placement, output| {
             if missing {
-                output.tab_stop(stop.clone());
+                output.tab_stop(placement.rect, Some(stop.clone()), navigation.clone());
             }
             output.navigation_stop(stop.clone(), selected);
             // Arriving from the left or right places the caret at that edge.

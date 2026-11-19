@@ -990,14 +990,10 @@ fn prepare_value(
                     let scale = cx.styles.scale;
                     let palette = cx.styles.palette;
                     let path = path.clone();
-                    let select = crate::display::widget::navigation::arrival(
-                        crate::editing::Site::new(path.clone()),
-                    );
                     ChoiceLayout::map(inner, move |inner| {
                         crate::display::widget::navigation::part_landmark(
                             highlighted(palette, selected, scale, path.clone(), None, inner),
                             path,
-                            select,
                             selected,
                         )
                     })

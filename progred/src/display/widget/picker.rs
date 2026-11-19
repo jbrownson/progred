@@ -88,23 +88,17 @@ pub(crate) fn hole<W: Host>(
     }
 }
 
-/// A new field's label being picked, as part of the record it's added to:
-/// the place in it being filled, where Tab goes on from and what's shown of
-/// it, with no stop of its own apart from the record's.
+/// A new field's label being picked, in the record it's added to: the
+/// place in it being filled, where Tab goes on from, with no arrow stop of
+/// its own apart from the record's.
 fn label_target<W: Host>(
     toolkit: &dyn Toolkit,
     child: Measured<HoverPass<W, W::Hover>>,
 ) -> Measured<HoverPass<W, W::Hover>> {
-    let path = toolkit.path().clone();
-    let stop = path.clone();
-    let child = crate::display::widget::before_place(child, move |_, output| {
-        output.tab_stop(stop);
-    });
-    crate::display::widget::navigation::part_landmark(
+    crate::display::widget::navigation::tab_stop(
         child,
-        path,
+        Some(toolkit.path().clone()),
         crate::display::widget::navigation::arrival(toolkit.site()),
-        toolkit.selected(),
     )
 }
 
@@ -144,9 +138,10 @@ fn pending_target<W: Host>(
     let writable = toolkit.writable();
     let select = crate::display::widget::navigation::selecting(toolkit.site());
     let stop = path.clone();
-    let child = crate::display::widget::before_place(child, move |_, output| {
+    let arrive = crate::display::widget::navigation::arrival(toolkit.site());
+    let child = crate::display::widget::before_place(child, move |placement, output| {
         if writable {
-            output.tab_stop(stop.clone());
+            output.tab_stop(placement.rect, Some(stop.clone()), arrive);
         }
         output.navigation_stop(stop, selected);
     });

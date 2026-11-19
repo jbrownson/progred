@@ -2,7 +2,7 @@
 //! once the frame is placed: scrolling a view to show a place, arriving at a
 //! landmark, and Tab's search for the next place to fill in.
 
-use super::{Insertion, Landmark, Select, landmark_at};
+use super::{Landmark, TabStop, landmark_at};
 use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
 use crate::display::widget::view::Area;
@@ -14,7 +14,7 @@ use puri::handler::NavigationDirection;
 /// Borrowed geometry from the installed frame, used by explicit navigation actions.
 pub(crate) struct Geometry<'a, W> {
     pub landmarks: &'a [Landmark<W>],
-    pub insertions: &'a [Insertion<W>],
+    pub tab_stops: &'a [TabStop<W>],
     pub view_regions: &'a [ViewRegion],
     pub scale: f64,
 }
@@ -127,21 +127,34 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
                     .area_of(selection.view(), selection.path())
             },
         );
+        let mut stops: Vec<_> = geometry
+            .tab_stops
+            .iter()
+            .filter(|stop| stop.area.as_ref() == Some(&area))
+            .collect();
+        stops.sort_by_key(|stop| stop.order);
+        // Where the selection is in that order: the place to fill in it's
+        // at, or else what's drawn there.
         let anchor = selection.and_then(|selection| {
-            landmark_at(geometry.landmarks, Some(&area), selection.path())
-                .map(|landmark| landmark.order)
+            stops
+                .iter()
+                .find(|stop| stop.at.as_ref().is_some_and(|at| *at == selection.path()))
+                .map(|stop| stop.order)
+                .or_else(|| {
+                    landmark_at(geometry.landmarks, Some(&area), selection.path())
+                        .map(|landmark| landmark.order)
+                })
         });
-        let stops = tab_stops(geometry, &area);
         let target = match (anchor, back) {
             (None, false) => stops.first(),
             (None, true) => stops.last(),
-            (Some(anchor), false) => stops.iter().find(|stop| stop.0 > anchor),
-            (Some(anchor), true) => stops.iter().rev().find(|stop| stop.0 < anchor),
+            (Some(anchor), false) => stops.iter().find(|stop| stop.order > anchor),
+            (Some(anchor), true) => stops.iter().rev().find(|stop| stop.order < anchor),
         }
-        .cloned();
+        .map(|stop| (stop.rect, stop.select.clone()));
         (area, target)
     };
-    target.is_some_and(|(_, rect, select)| {
+    target.is_some_and(|(rect, select)| {
         let handled = select(world, None);
         if handled {
             // What it opens isn't drawn yet, so it's shown where it will be.
@@ -149,27 +162,6 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
         }
         handled
     })
-}
-
-/// The area's tab stops, the places to fill in that its widgets marked and
-/// where something can be added, each with its place in the view's
-/// traversal, where it's drawn and how it's arrived at, in that order.
-fn tab_stops<W>(geometry: Geometry<'_, W>, area: &Area) -> Vec<(usize, Rect, Select<W>)> {
-    let mut stops: Vec<_> = geometry
-        .landmarks
-        .iter()
-        .filter(|landmark| landmark.tab_stop && landmark.area.as_ref() == Some(area))
-        .map(|landmark| (landmark.order, landmark.rect, landmark.select.clone()))
-        .chain(
-            geometry
-                .insertions
-                .iter()
-                .filter(|insertion| insertion.area.as_ref() == Some(area))
-                .map(|insertion| (insertion.order, insertion.rect, insertion.select.clone())),
-        )
-        .collect();
-    stops.sort_by_key(|stop| stop.0);
-    stops
 }
 
 #[cfg(test)]

@@ -139,24 +139,30 @@ before, within the selection's area, its pane's part of the view, in the order
 the view is drawn: the chosen layout's traversal, so a container comes before
 what's inside it. That order is the layout's, not where things land, so
 opening a place, which draws it, or a line reflowing around it, doesn't change
-where Tab goes next. A tab stop is either of:
+where Tab goes next. Each tab stop is recorded by the widget drawn there,
+apart from the landmarks, with its place in that order, where it's drawn,
+and how arriving opens it, and it's either of:
 
-- A place to fill in. A widget marks its own occurrence as one, as it
-  registers an arrow stop. The picker marks every empty, writable hole it
-  draws, optional ones such as a value's missing name included, so navigation
-  needn't know which fields are optional; so does a line drawn for a missing
-  value, and the anonymous lambda's `λ`, its missing name's place. The picker
-  for a new field's label is the place being filled in its record.
+- A place to fill in, which is its own occurrence: the stop says which, so
+  Tab goes on from it while it's selected. The picker records every empty,
+  writable hole it draws, optional ones such as a value's missing name
+  included, so navigation needn't know which fields are optional; so does a
+  line drawn for a missing value, and the anonymous lambda's `λ`, its missing
+  name's place. The picker for a new field's label is the place being filled
+  in its record.
 - A place where something can be added: each place in a list an element can
   go, before the first, between two, after the last, or in an empty list, and
   the end of each record that takes new fields, as Cmd+Enter would add one.
-  A record of a kind has none, since its kind lists its fields.
-  These stand for no occurrence yet, so they're no landmarks, and arrows pass
-  them by. A list's is its separator, a comma or the gap between lines, where
+  A record of a kind has none, since its kind lists its fields. These stand
+  for no occurrence yet, so nothing finds them by a path, and arrows pass them
+  by. A list's is its separator, a comma or the gap between lines, where
   clicking adds one too, and at the ends of a list on one line, nothing drawn
   at all. Arriving opens the place, a pending element or a new field's label,
   and leaving it untouched adds nothing. Beside an element being added, a
   list's places are that element's.
+
+Tab goes on from the selection's place in the order: the place to fill in it
+is, or else what's drawn there, which comes before what's inside it.
 
 With nothing selected, Tab starts at the first. In a picker, Tab first commits
 what was typed, as Enter would. It stays there when that opened a slot of its
