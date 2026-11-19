@@ -24,6 +24,37 @@ to suggest one.
 
 ## Log
 
+- 2026-11-19 (`d4da08e0`), on a cloud VM.
+  - **Advisories:** Cargo still reports only RUSTSEC-2026-0192, `ttf-parser`
+    unmaintained through winit, waiting on winit 0.31. Both npm lockfiles are
+    clean.
+  - **Applied:** compatible Cargo updates to 33 packages, through the sandboxed
+    `update`: wgpu and naga 30.0.2, wasm-bindgen 0.2.130 with js-sys and
+    web-sys, `syn` 3.0.10, `cc` 1.11.1, `log` 0.4.35, `utf8_iter` 1.1.0, `winnow`
+    1.0.5 and smaller releases. New to the lockfile: `smallvec-macro` 0.0.0,
+    which the smallvec 2 beta Fidget's `facet` uses now needs, a 30-line
+    attribute that only reorders tokens, from smallvec's own repository; and
+    `utf_types` 1.0.0, `no_std` code-unit types with no dependencies, by
+    `utf8_iter`'s author. `make test`, the browser build, the Mac check and the
+    navigation sweeps pass.
+  - **Performance:** the weekly record is the first on this VM's processor
+    (family 6, model 173), so the editor canaries were interleaved with builds
+    of the last recorded commit, `01c18b67`, on it: their medians differ within
+    the VM's noise. Callgrind counts 2.3% more instructions for the CAM scroll
+    canary and 5.7% more per frame for the forest hover canary, mostly Grap
+    evaluation and allocation, across 356 commits that include Grap's
+    evaluator redesign; not bisected.
+  - **Toolchain:** Rust 1.100 is stable, so moving the wrappers' `update` and
+    `resolve` to stable Cargo, in the [macOS follow-ups](macos-followups.md),
+    is due.
+  - **Fidget:** no release after 0.5.1.
+  - **Verus:** pinned at 0.2026.10.26; rolling releases continue daily, with
+    nothing needed from them.
+  - **Deferred:** playwright-core 1.65.1 for the tools package, for a check on
+    macOS, where `make test-web-gpu` runs. Breaking upgrades: parley 0.13,
+    vello 0.12, skrifa 0.50, rfd 0.18, pollster 1.0, getrandom 0.4 and base64
+    0.23. Inside the cutoff: `pin-project` 1.2, `regex` 1.13.2, `zbus` 6.3,
+    `rand` 0.10.4, `bytes` 1.12.2 and `smallvec` 1.16.6, among others.
 - 2026-11-05 (`d121dc44`), on a cloud VM.
   - **Advisories:** Cargo reports RUSTSEC-2026-0192, `ttf-parser` unmaintained
     through winit, still waiting on winit 0.31; RUSTSEC-2026-0386, tokio
