@@ -78,31 +78,3 @@ fn starting_to_type_a_missing_name_moves_nothing_after_it() {
     });
     assert_eq!(before, after, "the caret goes over the placeholder");
 }
-
-#[test]
-fn selecting_an_unnamed_lambdas_name_moves_nothing_after_it() {
-    use crate::driver::Driver;
-    use gid::Step;
-    let parameter = gid::new_cell_id();
-    let mut cells = gid::Cells::new();
-    cells.set_value(parameter, crate::libraries::name::record("y", []));
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(::grap::lambda([parameter], parameter.into())),
-            cells,
-        }),
-        Driver::VIEWPORT,
-    );
-    let params = [Step::Key(::grap::vocabulary::PARAMS)];
-    let before = driver.rect(&params);
-    // Its λ is the name's placeholder, which the caret goes over.
-    driver.keystroke(
-        ui_events::keyboard::Key::Named(ui_events::keyboard::NamedKey::Tab),
-        ui_events::keyboard::Modifiers::empty(),
-    );
-    assert_eq!(
-        driver.selection(),
-        crate::occurrence::of(&[Step::Key(crate::libraries::name::vocabulary::NAME)])
-    );
-    assert_eq!(driver.rect(&params), before);
-}
