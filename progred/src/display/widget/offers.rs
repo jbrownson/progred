@@ -9,6 +9,9 @@ pub struct Entry<C> {
     pub display: String,
     /// Where in `display` its subscripts are.
     pub subscripts: Vec<Range<usize>>,
+    /// What kind of thing the existing one it names or refers to is, as its
+    /// definition says: offers that make something new say what they make.
+    pub kind: Option<String>,
     pub detail: Option<String>,
     pub matches: Vec<Range<usize>>,
     pub face: Face,
@@ -21,6 +24,7 @@ impl<C> Clone for Entry<C> {
         Self {
             display: self.display.clone(),
             subscripts: self.subscripts.clone(),
+            kind: self.kind.clone(),
             detail: self.detail.clone(),
             matches: self.matches.clone(),
             face: self.face,
@@ -124,13 +128,25 @@ fn listed<W: Host>(
     offer: Completion,
 ) -> Entry<W> {
     let activate = offer.activate;
+    let source = offer.preview.as_ref().and_then(Value::as_cell);
+    // The existing thing it names, as a call offer names its function, or
+    // else the one it refers to.
+    let named = match &offer.display {
+        CompletionText::Name(cell) => Some(*cell),
+        _ => source,
+    };
+    let kind = named
+        .and_then(|cell| (request.resolve)(cell))
+        .and_then(|definition| ::grap::isa::of(definition.value.as_record()?))
+        .map(|kind| text(request, &CompletionText::Name(kind)).0);
     Entry {
         display,
         subscripts,
+        kind,
         detail: offer.detail.as_ref().map(|detail| text(request, detail).0),
         matches: Vec::new(),
         face: offer.face,
-        source: offer.preview.as_ref().and_then(Value::as_cell),
+        source,
         activate: Rc::new(move |world: &mut W| activate(&mut world.session())),
     }
 }

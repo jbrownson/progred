@@ -1553,6 +1553,18 @@ fn a_slot_offers_the_functions_libraries_in_reach_list_and_no_others() {
             .iter()
             .any(|entry| entry == "listed function")
     );
+    // An existing thing says what kind it is, after its name.
+    let listed_entry = completion_entries_with(
+        &sources,
+        &CompletionKind::Value,
+        "listed",
+        None,
+        Some(&everything),
+    )
+    .into_iter()
+    .find(|entry| entry.display == "listed function")
+    .unwrap();
+    assert_eq!(listed_entry.kind.as_deref(), Some("lambda"));
     assert!(
         !offered("stray")
             .iter()

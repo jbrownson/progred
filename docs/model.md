@@ -386,6 +386,11 @@ Grap's slots ask for their offers anywhere. They answer in library order; `None`
 means a library has nothing to add.
 
 Completion display text and detail can be literal text or a named cell reference.
+An entry naming an existing thing, as a call offer names its function, or
+referring to one, reads that thing's kind dim just after it, as its definition
+says (`list length  foreign function  call · list`); one that makes something
+new says what it makes in its text instead. The detail on the right says what
+the offer is, or where it doesn't, which library it's from.
 Library, constructor, parameter, and numeric-type labels use references; the
 picker resolves their current names before filtering each frame. Renaming a
 definition therefore updates even retained offers without changing their

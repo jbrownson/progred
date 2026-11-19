@@ -159,6 +159,7 @@ fn entry_hover_marks_follow_the_visible_offers() {
         entries: Rc::from([Entry {
             display: "offer".to_string(),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: vec![],
             face: crate::display::Face::Label,

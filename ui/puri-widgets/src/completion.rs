@@ -10,10 +10,15 @@ pub struct Entry<'a> {
     pub display: &'a str,
     /// Where in `display` its subscripts are.
     pub subscripts: &'a [Range<usize>],
+    /// What kind of thing it is, read dim just after it.
+    pub kind: Option<&'a str>,
     pub detail: Option<&'a str>,
     pub matches: &'a [Range<usize>],
     pub style: &'a TextStyle,
 }
+
+/// The room between an entry and its kind, before scaling.
+const KIND_GAP: f64 = 6.0;
 
 pub struct Style<'a> {
     pub detail: &'a TextStyle,
@@ -70,6 +75,7 @@ impl Line {
 
 pub struct Row {
     display: Line,
+    kind: Option<Line>,
     detail: Option<Line>,
     metrics: TextMetrics,
     scale: f64,
@@ -77,23 +83,24 @@ pub struct Row {
 }
 
 impl Row {
-    fn new(display: Line, detail: Option<Line>, style: &Style<'_>) -> Self {
+    fn new(display: Line, kind: Option<Line>, detail: Option<Line>, style: &Style<'_>) -> Self {
         let padding = 2.0 * style.scale;
+        let lines = || std::iter::once(&display).chain(&kind).chain(&detail);
         Self {
             metrics: TextMetrics {
                 width: display.metrics.width
+                    + kind
+                        .as_ref()
+                        .map_or(0.0, |kind| KIND_GAP * style.scale + kind.metrics.width)
                     + detail
                         .as_ref()
                         .map_or(0.0, |detail| 8.0 * style.scale + detail.metrics.width)
                     + 16.0 * style.scale,
-                ascent: detail.as_ref().map_or(display.metrics.ascent, |detail| {
-                    display.metrics.ascent.max(detail.metrics.ascent)
-                }) + padding,
-                descent: detail.as_ref().map_or(display.metrics.descent, |detail| {
-                    display.metrics.descent.max(detail.metrics.descent)
-                }) + padding,
+                ascent: lines().map(|line| line.metrics.ascent).fold(0.0, f64::max) + padding,
+                descent: lines().map(|line| line.metrics.descent).fold(0.0, f64::max) + padding,
             },
             display,
+            kind,
             detail,
             scale: style.scale,
             chosen: style.chosen,
@@ -114,7 +121,11 @@ impl Row {
         }
         let x = placement.rect.x0 + 8.0 * self.scale;
         let baseline = placement.rect.y0 + self.metrics.ascent;
+        let after = x + self.display.metrics.width + KIND_GAP * self.scale;
         self.display.draw(canvas, x, baseline, placement.clip_rect);
+        if let Some(kind) = self.kind {
+            kind.draw(canvas, after, baseline, placement.clip_rect);
+        }
         if let Some(detail) = self.detail {
             let detail_x = placement.rect.x1 - 8.0 * self.scale - detail.metrics.width;
             detail.draw(canvas, detail_x, baseline, placement.clip_rect);
@@ -181,10 +192,13 @@ pub fn rows<'a>(
                 entry.style,
                 style.detail,
             );
+            let kind = entry
+                .kind
+                .map(|kind| Line::one(puri::text(tcx, kind, style.detail)));
             let detail = entry
                 .detail
                 .map(|detail| Line::one(puri::text(tcx, detail, style.detail)));
-            Row::new(display, detail, &style)
+            Row::new(display, kind, detail, &style)
         })
         .collect::<Vec<_>>();
     let width = rows.iter().map(|row| row.metrics.width).fold(0.0, f64::max);

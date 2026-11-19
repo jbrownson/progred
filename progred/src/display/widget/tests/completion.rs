@@ -33,6 +33,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
     let entries = [Entry {
         display: "no edit".into(),
         subscripts: Vec::new(),
+        kind: None,
         detail: None,
         matches: vec![],
         face: Face::Label,
@@ -71,6 +72,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
         let entries = [Entry {
             display: "entry".into(),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: Vec::new(),
             face: Face::Name,
@@ -141,6 +143,7 @@ fn completion_details_share_the_cards_right_edge() {
         .map(|(display, detail)| Entry {
             display: display.into(),
             subscripts: Vec::new(),
+            kind: None,
             detail: Some(detail.into()),
             matches: Vec::new(),
             face: Face::Name,
@@ -185,6 +188,7 @@ fn a_rows_subscript_is_smaller_and_dim_where_its_name_has_one() {
     let entries = [Entry {
         display: "+f64".into(),
         subscripts: vec![1..4],
+        kind: None,
         detail: None,
         matches: vec![0..1],
         face: Face::Name,
@@ -220,6 +224,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         Entry {
             display: "\"x\"".to_string(),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: Vec::new(),
             face: Face::String,
@@ -229,6 +234,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         Entry {
             display: "new list".to_string(),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: Vec::new(),
             face: Face::Dim,
@@ -282,6 +288,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         .map(|index| Entry {
             display: format!("entry {index}"),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: Vec::new(),
             face: Face::Dim,
@@ -430,6 +437,7 @@ fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
         .map(|index| Entry {
             display: format!("entry {index}"),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: Vec::new(),
             face: Face::Dim,
@@ -499,6 +507,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         .map(|index| Entry {
             display: format!("entry {index}"),
             subscripts: Vec::new(),
+            kind: None,
             detail: None,
             matches: Vec::new(),
             face: Face::Name,
@@ -651,6 +660,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     let entries = [Entry {
         display: "new list".into(),
         subscripts: Vec::new(),
+        kind: None,
         detail: None,
         matches: Vec::new(),
         face: Face::Dim,
@@ -704,6 +714,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         Entry {
             display: "new record".into(),
             subscripts: Vec::new(),
+            kind: None,
             activate: Rc::new(|world: &mut World| {
                 world.committed = Some(Value::record([]));
             }),
