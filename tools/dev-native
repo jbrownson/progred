@@ -3,7 +3,8 @@
 r"""Rebuild after app exit or Ctrl+C; stop on Ctrl+\ or terminal exit.
 
 With --pull, each build first fast-forwards the checked-out branch to its
-upstream, saying what arrived, or why nothing did, and building what's here.
+upstream, showing git's output and the commits that arrived; where it can't,
+it builds what's here.
 """
 
 import os
@@ -31,12 +32,13 @@ def stop(process):
             process.wait()
 
 
-def git(arguments, requests):
-    """Run git here, its output kept; None if a request stopped it first."""
+def git(arguments, requests, shown=False):
+    """Run git here, its output kept, or shown as it runs; None if a request
+    stopped it first."""
     process = subprocess.Popen(
         ["git", *arguments],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stdout=None if shown else subprocess.PIPE,
+        stderr=None if shown else subprocess.STDOUT,
         text=True,
         start_new_session=True,
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
@@ -44,7 +46,7 @@ def git(arguments, requests):
     while True:
         try:
             output, _ = process.communicate(timeout=0.05)
-            return process.returncode, output.strip()
+            return process.returncode, (output or "").strip()
         except subprocess.TimeoutExpired:
             if requests:
                 stop(process)
@@ -53,20 +55,18 @@ def git(arguments, requests):
 
 
 def pull(requests):
-    """Fast-forward the checked-out branch to its upstream, never merging:
-    print the commits that arrived, or why none could."""
+    """Fast-forward the checked-out branch to its upstream, never merging,
+    git's own output shown: then the commits that arrived, or that it
+    builds what's here."""
     head = git(["rev-parse", "HEAD"], requests)
-    pulled = head and git(["pull", "--ff-only", "--quiet"], requests)
+    if not head:
+        return
+    print("git pull --ff-only", flush=True)
+    pulled = git(["pull", "--ff-only"], requests, shown=True)
     if not pulled:
         return
-    status, output = pulled
-    if status != 0:
-        lines = output.splitlines()
-        reason = next(
-            (line.split(":", 1)[1] for line in lines if line.startswith(("fatal:", "error:"))),
-            lines[0] if lines else f"git exited {status}",
-        )
-        print(f"Not pulled: {reason.strip().rstrip('.')}. Building what's here.", flush=True)
+    if pulled[0] != 0:
+        print("Not pulled. Building what's here.", flush=True)
         return
     arrived = git(["log", "--oneline", "--reverse", f"{head[1]}..HEAD"], requests)
     if arrived and arrived[1]:

@@ -212,6 +212,7 @@ class DevelopmentTests(unittest.TestCase):
                 git(there, "push", "--quiet", "origin", "HEAD:main")
                 process.send_signal(signal.SIGINT)
                 restarted = read_until(process, "RUNNING")
+                self.assertIn("Fast-forward", restarted)
                 self.assertIn("Pulled:", restarted)
                 self.assertLess(restarted.index("second"), restarted.index("BUILD"))
                 process.send_signal(signal.SIGQUIT)
@@ -225,7 +226,8 @@ class DevelopmentTests(unittest.TestCase):
             git(there, "push", "--quiet", "origin", "HEAD:main")
             with session([command("print('BUILD')"), command(WAITING)], True, here) as process:
                 started = read_until(process, "RUNNING")
-                self.assertIn("Not pulled:", started)
+                self.assertIn("Not possible to fast-forward", started)
+                self.assertIn("Not pulled.", started)
                 self.assertLess(started.index("Not pulled"), started.index("BUILD"))
                 process.send_signal(signal.SIGQUIT)
                 read_until(process, "STOPPED")

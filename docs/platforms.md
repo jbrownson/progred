@@ -19,9 +19,10 @@ app, rebuilds, and launches again; Ctrl+\ quits the session, as does closing the
 terminal. Quitting the app also rebuilds and restarts it. A failed command waits
 for Ctrl+C instead of retrying. Restarting discards unsaved changes. With
 `PULL=1` (the loop's `--pull`), each build first fast-forwards the checked-out
-branch to its upstream and lists the commits that arrived; where it can't, as
-offline, with a local edit in the way, or with history that diverged, it says
-why and builds what's here, never merging or resetting. A pulled change to the
+branch to its upstream, showing git's output and then the commits that
+arrived; where it can't, as offline, with a local edit in the way, or with
+history that diverged, git says why and the loop builds what's here, never
+merging or resetting. A pulled change to the
 loop itself takes effect when the session is started again. The loop,
 `tools/dev-native`, owns a process group for each command; on macOS its small
 native launcher opens the bundle through `NSWorkspace` and keeps the returned
