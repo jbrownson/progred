@@ -83,11 +83,11 @@ pub fn library<W: Host>() -> Library<W> {
 /// For an empty place: a new library, and a new record of each kind the
 /// document's libraries define, selected as it's made; where what's typed is
 /// read, those kinds whose name it begins. An empty document can start as a
-/// notebook of a library.
+/// library.
 fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     (request.kind == CompletionKind::Value && request.value().is_none()).then_some(())?;
     Some(match request.scope {
-        CompletionScope::Start => vec![starter()],
+        CompletionScope::Start => vec![new_library()],
         CompletionScope::Everything => field_offers(request, |_| true)
             .chain(std::iter::once(new_library()))
             .chain(new_records(request, |_| true))
@@ -218,30 +218,6 @@ fn first_def() -> crate::site::Continuation {
         gid::Step::Key(DEFS),
         gid::Step::Element(gid::position::between(None, None).expect("an empty list has room")),
     ])
-}
-
-/// Starts an empty document as a notebook whose first entry is a library,
-/// its first def made next.
-fn starter() -> Completion {
-    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
-    let first = || gid::position::between(None, None).expect("an empty list has room");
-    crate::libraries::completion::make(
-        LIBRARY,
-        None,
-        ::grap::isa::record(
-            NOTEBOOK,
-            [(
-                ENTRIES,
-                Value::List([(first(), empty_library())].into_iter().collect()),
-            )],
-        ),
-        Some(crate::selection::pending_at(&[
-            gid::Step::Key(ENTRIES),
-            gid::Step::Element(first()),
-            gid::Step::Key(DEFS),
-            gid::Step::Element(first()),
-        ])),
-    )
 }
 
 /// What a document holds where things are looked for: its root, and what

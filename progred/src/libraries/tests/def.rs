@@ -313,24 +313,15 @@ fn an_empty_place_offers_a_new_record_of_each_kind_the_library_defines() {
 }
 
 #[test]
-fn an_empty_document_starts_as_a_notebook_of_a_library_its_first_def_made_next() {
-    use crate::libraries::notebook::vocabulary::{ENTRIES, kind::NOTEBOOK};
+fn an_empty_document_starts_as_a_library_its_first_def_made_next() {
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.choose("library");
     driver.type_text("shape");
     driver.press(ui_events::keyboard::NamedKey::Enter);
     let root = driver.value(&[]);
-    assert_eq!(::grap::isa::of(root.as_record().unwrap()), Some(NOTEBOOK));
-    let library = [
-        Step::Key(ENTRIES),
-        Step::Element(first_position(&driver, &[Step::Key(ENTRIES)])),
-    ];
-    assert_eq!(
-        ::grap::isa::of(driver.value(&library).as_record().unwrap()),
-        Some(LIBRARY)
-    );
-    let (shape, definition) = first_cell(&driver, &[&library[..], &[Step::Key(DEFS)]].concat());
+    assert_eq!(::grap::isa::of(root.as_record().unwrap()), Some(LIBRARY));
+    let (shape, definition) = first_cell(&driver, &[Step::Key(DEFS)]);
     let doc = &driver.editor().model.doc;
     assert_eq!(defs_of(root.clone(), doc.cells.clone()), [shape]);
     assert_eq!(name::read(&definition), Some("shape"));

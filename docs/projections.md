@@ -155,8 +155,8 @@ each read as it's drawn and saying which field offers it, and what's typed
 narrows them. A list whose values are computed is quoted, its elements
 unquoted, as Grap builds any data. Completion requests carry the sources they
 read as an `Env`, so a computed offer can be evaluated. An
-empty place offers a new library, and an empty document can start as a
-notebook whose first entry is a library, its first def made next. Next, it draws as its kind provides,
+empty place offers a new library, its first def made next, and an empty
+document can start as one. Next, it draws as its kind provides,
 ahead of every library's partial: the stack's next partial reads the record's
 `isa` and applies the projection its libraries registered under that kind's cell,
 composed in load order, or declines where the kind provides none or the record
