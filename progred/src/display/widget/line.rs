@@ -84,10 +84,26 @@ pub fn view<W: Host>(
                 });
             });
             match line.placeholder.as_deref().filter(|_| empty) {
-                Some(placeholder) => measured::row(
-                    0.0,
-                    vec![edit, placeholder_text(context, line, placeholder)],
-                ),
+                // The caret over the placeholder's start, so the line is
+                // as wide as it was before it was edited, and nothing
+                // after it moves.
+                Some(placeholder) => {
+                    let placeholder = placeholder_text(context, line, placeholder);
+                    let ascent = placeholder.extent.ascent;
+                    measured::overlay_into(placeholder, edit, move |placement, extent| {
+                        let rect = placement.rect;
+                        let baseline = rect.y0 + ascent;
+                        Some(Placement::new(
+                            kurbo::Rect::new(
+                                rect.x0,
+                                baseline - extent.ascent,
+                                rect.x0 + extent.width,
+                                baseline + extent.descent,
+                            ),
+                            placement.clip_rect,
+                        ))
+                    })
+                }
                 None => edit,
             }
         }

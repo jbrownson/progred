@@ -62,3 +62,19 @@ fn sample_text_line_click_mounts_its_own_editor() {
     let (anchor, focus) = driver.line_selection().unwrap();
     assert_eq!(anchor, focus);
 }
+
+#[test]
+fn starting_to_type_a_missing_name_moves_nothing_after_it() {
+    use crate::driver::Driver;
+    use crate::libraries::def::vocabulary::{DEFS, LIBRARY};
+    use gid::Step;
+    let mut driver = Driver::of(::grap::isa::record(LIBRARY, [(DEFS, gid::Value::list([]))]));
+    let name = [Step::Key(crate::libraries::name::vocabulary::NAME)];
+    let [before, after] = [false, true].map(|editing| {
+        if editing {
+            driver.select(&name);
+        }
+        [driver.rect(&name), driver.rect(&[Step::Key(DEFS)])]
+    });
+    assert_eq!(before, after, "the caret goes over the placeholder");
+}
