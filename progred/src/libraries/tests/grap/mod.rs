@@ -1292,7 +1292,8 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
         .picker_entries()
         .expect("the empty parameter shows its picker");
     assert_eq!(entries[0], "x");
-    assert_eq!(driver.picker_kind("x").as_deref(), Some("new parameter"));
+    assert_eq!(driver.picker_kind("x").as_deref(), Some("parameter"));
+    assert!(driver.picker_new("x"));
     driver.press(NamedKey::Enter);
     let added = driver
         .value(&params)

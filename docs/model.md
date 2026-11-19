@@ -391,12 +391,13 @@ Every offer says what choosing it puts in (`Offered`): a value that's already
 there, a cell, which refers to that existing cell, or a value as it reads, such
 as a number; something made around an existing cell, listed as that cell, as a
 call is made around its function; or something new, saying what it is if it
-can, by a kind's name or a word. The picker reads that dim just after the
-entry: an existing cell's kind, as its definition says
-(`list length  foreign function  call · list`), or for something new, `new`
-and what it makes, unless the entry is listed as that already (`section  new`,
-`shape  new def`). Labels name what they put in and never spell `new`
-themselves. A field's label is a cell, existing or new, so a label's place
+can, by a kind's name or a word. The picker reads something new with `new`
+dim just before the entry, and then, dim just after it, the kind of what goes
+in: an existing cell's, as its definition says
+(`list length  foreign function  call · list`), or what something new is,
+unless the entry is listed as that already (`new section`, `new shape  def`).
+The `new` is how it's drawn, not part of what's matched, and the entry keeps
+its colors. Labels name what they put in and never spell `new` themselves. A field's label is a cell, existing or new, so a label's place
 takes only those offers, and only labels the record doesn't have yet. The detail
 on the right says what the offer is, or where it doesn't, which library it's
 from.

@@ -422,6 +422,7 @@ pub(crate) fn test_entry(
         display: entry.display,
         subscripts: entry.subscripts,
         kind: entry.kind,
+        new: entry.new,
         detail: entry.detail,
         matches: entry.matches,
         face: entry.face,

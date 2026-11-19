@@ -81,7 +81,8 @@ fn a_typed_blob_leads_the_value_offers_and_names_a_new_label() {
 
     let label_blob = completion_entries(&sources, true, "0xff");
     assert_eq!(label_blob[0].display, "0xff");
-    assert_eq!(label_blob[0].kind.as_deref(), Some("new label"));
+    assert!(label_blob[0].new);
+    assert_eq!(label_blob[0].kind.as_deref(), Some("label"));
     assert_eq!(
         name::read(activated(&label_blob[0]).label.unwrap().1.as_ref().unwrap()),
         Some("0xff")

@@ -502,8 +502,8 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         details,
         ["def", "notebook", "fidget", "grap"].map(|library| Some(library.to_owned()))
     );
-    // A starting point makes something new, and reads so; a loaded library
-    // offered there is one already, and reads as a library.
+    // A starting point makes something new, and reads so, `new` before it;
+    // a loaded library offered there is one already, and reads as a library.
     let entries = projected_completion_entries(
         &doc,
         &crate::selection::pending_with_query(&crate::test_document(), vec![], ""),
@@ -512,7 +512,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         entries
             .iter()
             .take(4)
-            .all(|entry| entry.kind.as_deref() == Some("new"))
+            .all(|entry| entry.new && entry.kind.is_none())
     );
     let grap = entries
         .iter()

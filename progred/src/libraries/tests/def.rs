@@ -220,7 +220,8 @@ fn a_new_def_and_its_fields_are_made_where_they_go() {
     driver.select(&defs);
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("shape");
-    assert_eq!(driver.picker_kind("shape").as_deref(), Some("new def"));
+    assert_eq!(driver.picker_kind("shape").as_deref(), Some("def"));
+    assert!(driver.picker_new("shape"));
     driver.press(NamedKey::Enter);
     let (shape, definition) = first_cell(&driver, &defs);
     assert_eq!(
@@ -243,7 +244,8 @@ fn a_new_def_and_its_fields_are_made_where_they_go() {
     driver.select(&fields);
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("radius");
-    assert_eq!(driver.picker_kind("radius").as_deref(), Some("new field"));
+    assert_eq!(driver.picker_kind("radius").as_deref(), Some("field"));
+    assert!(driver.picker_new("radius"));
     driver.press(NamedKey::Enter);
     let (radius, definition) = first_cell(&driver, &fields);
     assert_eq!(definition, name::record("radius", []));

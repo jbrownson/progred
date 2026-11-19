@@ -215,6 +215,18 @@ impl<P> Driver<P> {
             .and_then(|(_, _, detail)| detail)
     }
 
+    /// Whether the open picker reads its entry `display` as making
+    /// something new.
+    pub(crate) fn picker_new(&mut self, display: &str) -> bool {
+        let frame = crate::frame::test_support::editing_frame(&mut self.runner.editor);
+        frame.completion.is_some_and(|offers| {
+            offers
+                .entries
+                .iter()
+                .any(|entry| entry.display == display && entry.new)
+        })
+    }
+
     /// What the open picker says its entry `display` puts in, just after it.
     pub(crate) fn picker_kind(&mut self, display: &str) -> Option<String> {
         self.offers()?

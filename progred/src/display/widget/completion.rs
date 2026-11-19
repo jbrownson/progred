@@ -64,6 +64,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
     let set_view = move |world: &mut C, scroll, choice| set_view(world, State { scroll, choice });
     let scale = styles.scale;
     let widget_entries = entries.iter().map(|entry| puri_widgets::completion::Entry {
+        prefix: entry.new.then_some("new"),
         display: &entry.display,
         subscripts: &entry.subscripts,
         kind: entry.kind.as_deref(),

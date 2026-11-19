@@ -7,11 +7,15 @@ use gid::{CellId, Value};
 use std::{ops::Range, rc::Rc};
 
 pub struct Entry<C> {
+    /// Whether it makes something new, which reads `new` just before it,
+    /// apart from what's matched.
+    pub new: bool,
     pub display: String,
     /// Where in `display` its subscripts are.
     pub subscripts: Vec<Range<usize>>,
-    /// What it puts in: the kind of the existing cell, as its definition
-    /// says, or, new, what it makes.
+    /// What kind of thing it puts in: the existing cell's kind, as its
+    /// definition says, or what something new is, unless it's listed as
+    /// that already.
     pub kind: Option<String>,
     pub detail: Option<String>,
     pub matches: Vec<Range<usize>>,
@@ -23,6 +27,7 @@ pub struct Entry<C> {
 impl<C> Clone for Entry<C> {
     fn clone(&self) -> Self {
         Self {
+            new: self.new,
             display: self.display.clone(),
             subscripts: self.subscripts.clone(),
             kind: self.kind.clone(),
@@ -133,13 +138,17 @@ fn listed<W: Host>(
     let activate = offer.activate;
     let source = offer.offered.existing();
     let kind = match &offer.offered {
-        Offered::New(what) => Some(new(request, &display, what.as_ref())),
+        Offered::New(what) => what
+            .as_ref()
+            .map(|what| text(request, what).0)
+            .filter(|what| *what != display),
         _ => source
             .and_then(|cell| (request.resolve)(cell))
             .and_then(|definition| ::grap::isa::of(definition.value.as_record()?))
             .map(|kind| text(request, &CompletionText::Name(kind)).0),
     };
     Entry {
+        new: matches!(offer.offered, Offered::New(_)),
         display,
         subscripts,
         kind,
@@ -148,15 +157,6 @@ fn listed<W: Host>(
         face: offer.face,
         source,
         activate: Rc::new(move |world: &mut W| activate(&mut world.session())),
-    }
-}
-
-/// A new offer's kind: new, and what it makes, unless that's what it's
-/// listed as.
-fn new(request: &CompletionRequest<'_>, display: &str, what: Option<&CompletionText>) -> String {
-    match what.map(|what| text(request, what).0) {
-        Some(what) if what != display => format!("new {what}"),
-        _ => "new".to_owned(),
     }
 }
 

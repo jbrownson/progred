@@ -167,6 +167,7 @@ fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
         display: "offer".to_owned(),
         subscripts: Vec::new(),
         kind: None,
+        new: false,
         detail: None,
         matches: Vec::new(),
         face: crate::display::Face::Label,

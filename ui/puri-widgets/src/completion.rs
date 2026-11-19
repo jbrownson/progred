@@ -7,6 +7,8 @@ use puri::{Affine, Color, Placement, Rect, RoundedRect, Text, TextCtx, TextMetri
 use std::ops::Range;
 
 pub struct Entry<'a> {
+    /// A word read dim just before it, such as `new`.
+    pub prefix: Option<&'a str>,
     pub display: &'a str,
     /// Where in `display` its subscripts are.
     pub subscripts: &'a [Range<usize>],
@@ -17,7 +19,7 @@ pub struct Entry<'a> {
     pub style: &'a TextStyle,
 }
 
-/// The room between an entry and its kind, before scaling.
+/// The room between an entry and its prefix or kind, before scaling.
 const KIND_GAP: f64 = 6.0;
 
 pub struct Style<'a> {
@@ -74,6 +76,7 @@ impl Line {
 }
 
 pub struct Row {
+    prefix: Option<Line>,
     display: Line,
     kind: Option<Line>,
     detail: Option<Line>,
@@ -83,12 +86,27 @@ pub struct Row {
 }
 
 impl Row {
-    fn new(display: Line, kind: Option<Line>, detail: Option<Line>, style: &Style<'_>) -> Self {
+    fn new(
+        prefix: Option<Line>,
+        display: Line,
+        kind: Option<Line>,
+        detail: Option<Line>,
+        style: &Style<'_>,
+    ) -> Self {
         let padding = 2.0 * style.scale;
-        let lines = || std::iter::once(&display).chain(&kind).chain(&detail);
+        let lines = || {
+            prefix
+                .iter()
+                .chain(std::iter::once(&display))
+                .chain(&kind)
+                .chain(&detail)
+        };
         Self {
             metrics: TextMetrics {
-                width: display.metrics.width
+                width: prefix
+                    .as_ref()
+                    .map_or(0.0, |prefix| prefix.metrics.width + KIND_GAP * style.scale)
+                    + display.metrics.width
                     + kind
                         .as_ref()
                         .map_or(0.0, |kind| KIND_GAP * style.scale + kind.metrics.width)
@@ -99,6 +117,7 @@ impl Row {
                 ascent: lines().map(|line| line.metrics.ascent).fold(0.0, f64::max) + padding,
                 descent: lines().map(|line| line.metrics.descent).fold(0.0, f64::max) + padding,
             },
+            prefix,
             display,
             kind,
             detail,
@@ -119,8 +138,13 @@ impl Row {
                 Affine::IDENTITY,
             );
         }
-        let x = placement.rect.x0 + 8.0 * self.scale;
+        let mut x = placement.rect.x0 + 8.0 * self.scale;
         let baseline = placement.rect.y0 + self.metrics.ascent;
+        if let Some(prefix) = self.prefix {
+            let width = prefix.metrics.width;
+            prefix.draw(canvas, x, baseline, placement.clip_rect);
+            x += width + KIND_GAP * self.scale;
+        }
         let after = x + self.display.metrics.width + KIND_GAP * self.scale;
         self.display.draw(canvas, x, baseline, placement.clip_rect);
         if let Some(kind) = self.kind {
@@ -184,6 +208,9 @@ pub fn rows<'a>(
     let mut rows = entries
         .into_iter()
         .map(|entry| {
+            let prefix = entry
+                .prefix
+                .map(|prefix| Line::one(puri::text(tcx, prefix, style.detail)));
             let display = highlighted(
                 tcx,
                 entry.display,
@@ -198,7 +225,7 @@ pub fn rows<'a>(
             let detail = entry
                 .detail
                 .map(|detail| Line::one(puri::text(tcx, detail, style.detail)));
-            Row::new(display, kind, detail, &style)
+            Row::new(prefix, display, kind, detail, &style)
         })
         .collect::<Vec<_>>();
     let width = rows.iter().map(|row| row.metrics.width).fold(0.0, f64::max);
