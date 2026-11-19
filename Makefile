@@ -18,7 +18,7 @@ endif
 help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once"
-	@echo "  make dev          Rebuild after app exit or Ctrl+C"
+	@echo "  make dev          Rebuild after app exit or Ctrl+C (PULL=1 pulls before each build)"
 	@echo "  make control      Serve a headless editor for tools/control (ARGS='--document PATH')"
 	@echo "  make run-web      Serve the website and its editor on port 8081"
 	@echo "  make build-web    Build the browser editor; the servers build it first"
@@ -57,7 +57,7 @@ unsupported-native-platform:
 	@exit 1
 
 dev:
-	@./tools/dev-native $(ARGS)
+	@./tools/dev-native $(if $(filter 1,$(PULL)),--pull) $(ARGS)
 
 control:
 	@$(NATIVE_CARGO) build -p progred --features control --bin progred-control

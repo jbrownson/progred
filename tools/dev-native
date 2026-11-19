@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-r"""Rebuild after app exit or Ctrl+C; stop on Ctrl+\ or terminal exit."""
+r"""Rebuild after app exit or Ctrl+C; stop on Ctrl+\ or terminal exit.
+
+With --pull, each build first fast-forwards the checked-out branch to its
+upstream, saying what arrived, or why nothing did, and building what's here.
+"""
 
 import os
 from collections import deque
@@ -27,7 +31,49 @@ def stop(process):
             process.wait()
 
 
-def develop(commands):
+def git(arguments, requests):
+    """Run git here, its output kept; None if a request stopped it first."""
+    process = subprocess.Popen(
+        ["git", *arguments],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
+    while True:
+        try:
+            output, _ = process.communicate(timeout=0.05)
+            return process.returncode, output.strip()
+        except subprocess.TimeoutExpired:
+            if requests:
+                stop(process)
+                process.communicate()
+                return None
+
+
+def pull(requests):
+    """Fast-forward the checked-out branch to its upstream, never merging:
+    print the commits that arrived, or why none could."""
+    head = git(["rev-parse", "HEAD"], requests)
+    pulled = head and git(["pull", "--ff-only", "--quiet"], requests)
+    if not pulled:
+        return
+    status, output = pulled
+    if status != 0:
+        lines = output.splitlines()
+        reason = next(
+            (line.split(":", 1)[1] for line in lines if line.startswith(("fatal:", "error:"))),
+            lines[0] if lines else f"git exited {status}",
+        )
+        print(f"Not pulled: {reason.strip().rstrip('.')}. Building what's here.", flush=True)
+        return
+    arrived = git(["log", "--oneline", "--reverse", f"{head[1]}..HEAD"], requests)
+    if arrived and arrived[1]:
+        print(f"Pulled:\n{arrived[1]}", flush=True)
+
+
+def develop(commands, pulling=False):
     requests = deque()
 
     def request(signum, _):
@@ -43,6 +89,8 @@ def develop(commands):
             if requests and requests.popleft() != signal.SIGINT:
                 return 0
             status = 0
+            if pulling:
+                pull(requests)
             for command in commands:
                 if requests:
                     break
@@ -76,6 +124,9 @@ def main():
     if not sys.stdin.isatty():
         print("make dev needs an interactive terminal; use make run for a single run", file=sys.stderr)
         return 2
+    arguments = sys.argv[1:]
+    pulling = "--pull" in arguments
+    arguments = [argument for argument in arguments if argument != "--pull"]
     root = Path(__file__).resolve().parent.parent
     os.chdir(root)
     if sys.platform == "darwin":
@@ -85,11 +136,11 @@ def main():
              str(root / "target/sandbox/app/Progred.app")],
         ]
     elif sys.platform == "linux":
-        commands = [[str(root / "tools/run-linux"), *sys.argv[1:]]]
+        commands = [[str(root / "tools/run-linux"), *arguments]]
     else:
         print(f"native Progred is not supported on {sys.platform}", file=sys.stderr)
         return 2
-    return develop(commands)
+    return develop(commands, pulling)
 
 
 if __name__ == "__main__":

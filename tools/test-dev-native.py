@@ -18,16 +18,18 @@ PYTHON = sys.executable
 
 
 @contextlib.contextmanager
-def session(commands):
+def session(commands, pulling=False, cwd=None):
     program = (
         f"import runpy; dev = runpy.run_path({str(ROOT / 'tools/dev-native')!r}); "
-        f"raise SystemExit(dev['develop']({commands!r}))"
+        f"raise SystemExit(dev['develop']({commands!r}, {pulling!r}))"
     )
     process = subprocess.Popen(
         [PYTHON, "-u", "-c", program],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        cwd=cwd,
+        env={**os.environ, **GIT_IDENTITY},
     )
     try:
         yield process
@@ -65,6 +67,37 @@ def read_until(process, needle, timeout=5):
 
 def command(program):
     return [PYTHON, "-u", "-c", program]
+
+
+GIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@example.invalid",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@example.invalid",
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+
+
+def git(directory, *arguments):
+    subprocess.run(
+        ["git", *arguments], cwd=directory, check=True, capture_output=True,
+        env={**os.environ, **GIT_IDENTITY},
+    )
+
+
+@contextlib.contextmanager
+def repositories():
+    """An upstream, a clone the session pulls into, and another clone that
+    pushes to the upstream, each with one commit."""
+    with tempfile.TemporaryDirectory() as directory:
+        upstream, here, there = (Path(directory) / name for name in ("upstream", "here", "there"))
+        git(directory, "init", "--quiet", "--bare", "--initial-branch=main", str(upstream))
+        git(directory, "clone", "--quiet", str(upstream), str(there))
+        git(there, "commit", "--quiet", "--allow-empty", "-m", "first")
+        git(there, "push", "--quiet", "origin", "HEAD:main")
+        git(directory, "clone", "--quiet", "--branch", "main", str(upstream), str(here))
+        yield here, there
 
 
 WAITING = """
@@ -169,6 +202,47 @@ class DevelopmentTests(unittest.TestCase):
             restarted = read_until(process, "RUNNING")
             self.assertIn("STOPPED", restarted)
             self.assertNotIn("APP MUST NOT RUN", restarted)
+
+    def test_pull_fast_forwards_before_each_build_and_says_what_arrived(self):
+        with repositories() as (here, there):
+            with session([command("print('BUILD')"), command(WAITING)], True, here) as process:
+                first = read_until(process, "RUNNING")
+                self.assertNotIn("Pulled", first)
+                git(there, "commit", "--quiet", "--allow-empty", "-m", "second")
+                git(there, "push", "--quiet", "origin", "HEAD:main")
+                process.send_signal(signal.SIGINT)
+                restarted = read_until(process, "RUNNING")
+                self.assertIn("Pulled:", restarted)
+                self.assertLess(restarted.index("second"), restarted.index("BUILD"))
+                process.send_signal(signal.SIGQUIT)
+                read_until(process, "STOPPED")
+                self.assertEqual(process.wait(timeout=3), 0)
+
+    def test_a_pull_that_cannot_fast_forward_builds_what_is_here(self):
+        with repositories() as (here, there):
+            git(here, "commit", "--quiet", "--allow-empty", "-m", "mine")
+            git(there, "commit", "--quiet", "--allow-empty", "-m", "theirs")
+            git(there, "push", "--quiet", "origin", "HEAD:main")
+            with session([command("print('BUILD')"), command(WAITING)], True, here) as process:
+                started = read_until(process, "RUNNING")
+                self.assertIn("Not pulled:", started)
+                self.assertLess(started.index("Not pulled"), started.index("BUILD"))
+                process.send_signal(signal.SIGQUIT)
+                read_until(process, "STOPPED")
+                self.assertEqual(process.wait(timeout=3), 0)
+
+    def test_make_passes_pull_as_the_loop_s_flag(self):
+        apart = {
+            name: value
+            for name, value in os.environ.items()
+            if name not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
+        }
+        for pull, expected in (("1", "./tools/dev-native --pull"), ("0", "./tools/dev-native")):
+            result = subprocess.run(
+                ["make", "-n", "dev", f"PULL={pull}"], cwd=ROOT, capture_output=True, text=True,
+                timeout=3, env=apart,
+            )
+            self.assertEqual(result.stdout.strip(), expected)
 
     def test_terminal_keys_work_through_make(self):
         commands = [command("print('BUILD')"), command(WAITING)]

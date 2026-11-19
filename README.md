@@ -126,6 +126,8 @@ workflow.
 For repeated editing and testing, use `make dev`. Ctrl+C rebuilds and restarts;
 quitting the app also restarts it. Ctrl+\ ends the session. A failed build waits
 for another Ctrl+C. Restarting this development loop discards unsaved changes.
+`make dev PULL=1` also pulls before each build, fast-forwarding the checked-out
+branch to its upstream, so each restart runs what was last pushed there.
 
 ### A first tour
 
