@@ -91,9 +91,7 @@ fn completions(
                     .and_then(::grap::isa::of)
                     == Some(LIBRARY)
             })
-            .map(|library| {
-                crate::libraries::completion::select(library, library.into()).with_detail("loaded")
-            })
+            .map(|library| crate::libraries::completion::select(library, library.into()))
             .collect(),
     )
 }

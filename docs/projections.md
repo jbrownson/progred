@@ -169,8 +169,7 @@ the other, then its other fields between braces, which show even where there
 are none, so a record that's only a name reads as one, `button {}`. The kind
 is the record's label, as a field's name is its field's: a click on it
 selects the record, a Cmd+click picks the kind, and it's no place of its own,
-so it isn't changed here; a kind can be changed in a rawer view, or later by
-an action of its own. The name
+so it isn't changed here; a rawer view of the record can. The name
 is edited where it's drawn; where the record's kind says its records are
 named, a def's fields listing `name` or the record being a def, a missing
 name is a place to type one, showing what the document calls a name dim, as

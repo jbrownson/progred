@@ -468,6 +468,11 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
     }
 }
 
+/// Whether `entry` offers a loaded library, there already, to look through.
+fn loaded_library<W>(entry: &crate::display::widget::offers::Entry<W>) -> bool {
+    !entry.new && entry.kind.as_deref() == Some("library")
+}
+
 #[test]
 fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     let doc = Document::default();
@@ -479,7 +484,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         .into_iter()
         // The loaded libraries, each offered to look through, have a test
         // of their own.
-        .filter(|entry| entry.detail.as_deref() != Some("loaded"))
+        .filter(|entry| !loaded_library(entry))
         .map(|entry| entry.display)
         .collect::<Vec<_>>()
     };
@@ -516,7 +521,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     );
     let grap = entries
         .iter()
-        .find(|entry| entry.detail.as_deref() == Some("loaded") && entry.display == "grap")
+        .find(|entry| loaded_library(entry) && entry.display == "grap")
         .unwrap();
     assert_eq!(grap.kind.as_deref(), Some("library"));
     let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "sdf");
@@ -687,7 +692,7 @@ fn an_empty_document_can_start_as_any_loaded_library_by_its_name() {
     let entries = projected_completion_entries(&doc, &selection);
     let libraries: Vec<_> = entries
         .iter()
-        .filter(|entry| entry.detail.as_deref() == Some("loaded"))
+        .filter(|entry| loaded_library(entry))
         .collect();
     let names: Vec<_> = libraries
         .iter()
