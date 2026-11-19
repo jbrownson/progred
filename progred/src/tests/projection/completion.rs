@@ -524,6 +524,8 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         .find(|entry| loaded_library(entry) && entry.display == "grap")
         .unwrap();
     assert_eq!(grap.kind.as_deref(), Some("library"));
+    // It's the library's own, as what the library defines is.
+    assert_eq!(grap.detail.as_deref(), Some("grap"));
     let selection = crate::selection::pending_with_query(&crate::test_document(), vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);
     assert_eq!(entries[0].display, "fidget");

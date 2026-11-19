@@ -74,7 +74,7 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 /// An empty document can start as any loaded library, by its name, to look
-/// through what it defines.
+/// through what it defines, saying it's that library's own.
 fn completions(
     request: &crate::display::CompletionRequest<'_>,
 ) -> Option<Vec<crate::display::Completion>> {
@@ -91,7 +91,11 @@ fn completions(
                     .and_then(::grap::isa::of)
                     == Some(LIBRARY)
             })
-            .map(|library| crate::libraries::completion::select(library, library.into()))
+            // A library's description is the library's own, as anything it
+            // defines is, so it names the library.
+            .map(|library| {
+                crate::libraries::completion::select(library, library.into()).with_detail(library)
+            })
             .collect(),
     )
 }
