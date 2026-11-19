@@ -371,13 +371,18 @@ impl LineEditState {
                         _ => false,
                     }
                 }
+                // Select All handles only when it selects more: with the
+                // text all selected already, or none to select, it declines,
+                // so the caller can select around it.
                 Key::Character(c) if action_mod && c.to_lowercase() == "a" => {
                     if shift {
                         drv.collapse_selection();
+                        true
                     } else {
+                        let before = clamp(cursor_of(drv.editor.raw_selection()));
                         drv.select_all();
+                        clamp(cursor_of(drv.editor.raw_selection())) != before
                     }
-                    true
                 }
                 // Arrows handle only when the caret actually moves:
                 // at the text's boundary they decline, so the caller

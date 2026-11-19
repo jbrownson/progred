@@ -345,7 +345,8 @@ source/selection policy.
 
 Cmd+A (Ctrl+A on non-Mac hosts) selects the root of the selection's area through its
 landmark's direct-selection callback. With no selection, it targets the document view's whole area. Focused text fields
-handle the shortcut first and select their own text.
+handle the shortcut first and select their own text; with it all selected
+already, or empty, they pass it on, so pressing it again selects the root.
 
 ## Completion
 

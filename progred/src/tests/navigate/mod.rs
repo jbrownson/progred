@@ -110,6 +110,37 @@ fn command_a_selects_the_current_views_root() {
     }
 }
 
+#[test]
+fn command_a_in_a_text_box_selects_its_text_then_around_it() {
+    use crate::driver::Driver;
+    let field = gid::new_cell_id();
+    let path = [gid::Step::Key(field)];
+    let editing = |text: &str| {
+        let mut driver = Driver::of(gid::Value::record([(
+            field,
+            crate::libraries::text::value(text),
+        )]));
+        driver.click(&path);
+        driver
+    };
+    let select_all = |driver: &mut Driver| {
+        driver.keystroke(Key::Character("a".into()), crate::test_support::command())
+    };
+    // Empty, there's nothing in it to select, so the document's root is.
+    let mut driver = editing("");
+    assert_eq!(driver.line(), Some(""));
+    assert!(select_all(&mut driver));
+    assert_eq!(driver.selection(), crate::occurrence::Path::default());
+    // With text in it, it selects that first, then the root.
+    let mut driver = editing("ab");
+    assert_eq!(driver.line(), Some("ab"));
+    assert!(select_all(&mut driver));
+    assert_eq!(driver.selection(), crate::occurrence::of(&path));
+    assert_eq!(driver.line_selection(), Some((0, 2)));
+    assert!(select_all(&mut driver));
+    assert_eq!(driver.selection(), crate::occurrence::Path::default());
+}
+
 mod dead_ends;
 mod frames;
 mod logical;
