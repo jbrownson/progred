@@ -122,11 +122,7 @@
   "root": {
     isa: notebook,
     entries: [
-      {
-        isa: section,
-        name: "Library",
-        section_body: {isa: library, defs: [fraction, angle], functions: [add_fractions, dial]},
-      },
+      {isa: library, name: "Fractions and angles", defs: [fraction, angle], functions: [add_fractions, dial]},
       {isa: section, name: "Fractions", section_body: [half, quarter]},
       {isa: section, name: "Sum", section_body: {isa: evaluation, expression: {isa: call, function: add_fractions, p: half, q: quarter}}},
       {isa: section, name: "Angles", section_body: [{isa: angle, degrees: {f64: 0x0000000000804640}}, {isa: angle, degrees: {f64: 0x0000000000005e40}}]},

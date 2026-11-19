@@ -313,14 +313,24 @@ fn an_empty_place_offers_a_new_record_of_each_kind_the_library_defines() {
 }
 
 #[test]
-fn an_empty_document_starts_as_a_library_its_first_def_made_next() {
+fn an_empty_document_starts_as_a_library_its_name_typed_then_its_first_def() {
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
     driver.click::<Step>(&[]);
     driver.choose("library");
-    driver.type_text("shape");
+    driver.type_text("shapes");
     driver.press(ui_events::keyboard::NamedKey::Enter);
     let root = driver.value(&[]);
     assert_eq!(::grap::isa::of(root.as_record().unwrap()), Some(LIBRARY));
+    assert_eq!(name::read(&root), Some("shapes"));
+    // Its first def is made in its defs, opened as any list is.
+    driver.click(&[Step::Key(DEFS)]);
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Named(ui_events::keyboard::NamedKey::Enter),
+        crate::test_support::command()
+    ));
+    driver.type_text("shape");
+    driver.press(ui_events::keyboard::NamedKey::Enter);
+    let root = driver.value(&[]);
     let (shape, definition) = first_cell(&driver, &[Step::Key(DEFS)]);
     let doc = &driver.editor().model.doc;
     assert_eq!(defs_of(root.clone(), doc.cells.clone()), [shape]);

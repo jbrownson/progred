@@ -71,7 +71,7 @@ pub fn library<W: Host>() -> Library<W> {
     .with_kinds([
         (DEF, vec![name::vocabulary::NAME, FIELDS]),
         // Each of a library's lists is empty where it's missing.
-        (LIBRARY, vec![]),
+        (LIBRARY, vec![name::vocabulary::NAME]),
     ])
     .with_projections_for([
         (DEF, crate::display::runtime_partial(def_display)),
@@ -199,9 +199,16 @@ fn new_records<'r>(
         })
 }
 
-/// A new library, its first def made next.
+/// A new library, its name typed next.
 fn new_library() -> Completion {
-    crate::libraries::completion::make_kind(LIBRARY, empty_library(), Some(first_def()))
+    crate::libraries::completion::make_kind(
+        LIBRARY,
+        empty_library(),
+        Some(crate::selection::at(
+            &[gid::Step::Key(name::vocabulary::NAME)],
+            crate::selection::payload::edge(),
+        )),
+    )
 }
 
 /// A library with nothing in it yet.
@@ -210,14 +217,6 @@ fn empty_library() -> Value {
         LIBRARY,
         [DEFS, FUNCTIONS, FOREIGN, FIELDS].map(|list| (list, Value::list([]))),
     )
-}
-
-/// Where a new library's first def is made, from the library.
-fn first_def() -> crate::site::Continuation {
-    crate::selection::pending_at(&[
-        gid::Step::Key(DEFS),
-        gid::Step::Element(gid::position::between(None, None).expect("an empty list has room")),
-    ])
 }
 
 /// What a document holds where things are looked for: its root, and what
@@ -298,7 +297,7 @@ pub(crate) fn document_functions<'a>(
 }
 
 /// A library as it's read and edited, a loaded one as a document's: its
-/// defs, its functions, its foreign functions and its fields, each a list. A cell
+/// name, its defs, its functions, its foreign functions and its fields, each a list. A cell
 /// another library defines reads by its name, opening to its definition; one
 /// the document defines reads in place, where it's edited. A place in a list
 /// offers a new def, function or field, named as typed.
@@ -351,7 +350,7 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                 })),
                 _ => None,
             }),
-        false,
+        true,
     )
 }
 

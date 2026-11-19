@@ -28,10 +28,10 @@ pub fn read<'a>(doc: &'a gid::Document, path: &[Step]) -> &'a Value {
         .unwrap_or_else(|| panic!("nothing at {path:?}"))
 }
 
-/// Where the `nth` section named `name` is stored among the entries of the
-/// notebook at `notebook`, from the root of `doc`: its entry, followed where
-/// it's a shared section's cell.
-pub fn section(doc: &gid::Document, notebook: &[Step], name: &str, nth: usize) -> Vec<Step> {
+/// Where the `nth` entry named `name`, a section or a library, say, is
+/// stored among the entries of the notebook at `notebook`, from the root of
+/// `doc`: its entry, followed where it's a shared one's cell.
+pub fn entry(doc: &gid::Document, notebook: &[Step], name: &str, nth: usize) -> Vec<Step> {
     use crate::libraries::notebook::vocabulary::ENTRIES;
     let entries = [notebook, &[Step::Key(ENTRIES)]].concat();
     read(doc, &entries)
@@ -47,13 +47,13 @@ pub fn section(doc: &gid::Document, notebook: &[Step], name: &str, nth: usize) -
             (crate::libraries::name::read(read(doc, &at)) == Some(name)).then_some(at)
         })
         .nth(nth)
-        .unwrap_or_else(|| panic!("no section {name:?} ({nth})"))
+        .unwrap_or_else(|| panic!("no entry {name:?} ({nth})"))
 }
 
-/// Where the body of the section [`section`] finds is stored.
+/// Where the body of the section [`entry`] finds is stored.
 pub fn section_body(doc: &gid::Document, notebook: &[Step], name: &str, nth: usize) -> Vec<Step> {
     [
-        section(doc, notebook, name, nth),
+        entry(doc, notebook, name, nth),
         vec![Step::Key(crate::libraries::section::vocabulary::BODY)],
     ]
     .concat()

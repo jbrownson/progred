@@ -1196,20 +1196,17 @@
   "root": {
     entries: [
       0x40: {
-        name: "Library",
-        section_body: {
-          functions: [
-            0x40: figure_layout,
-            0x80: rendered,
-            0xc0: meshed,
-          ],
-          defs: [
-            0x55: figure,
-            0xaa: mesh_figure,
-          ],
-          isa: library,
-        },
-        isa: section,
+        name: "Shapes",
+        functions: [
+          0x40: figure_layout,
+          0x80: rendered,
+          0xc0: meshed,
+        ],
+        defs: [
+          0x55: figure,
+          0xaa: mesh_figure,
+        ],
+        isa: library,
       },
       0xc0: {
         name: "Figures",

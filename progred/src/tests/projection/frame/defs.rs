@@ -68,9 +68,9 @@ fn the_example_kinds_draw_fractions_angles_and_their_functions() {
     // Where each of the example's sections keeps what it holds.
     let section = |name: &str| crate::test_examples::section_body(&doc, &[], name, 0);
     let [fractions, angles, sum] = ["Fractions", "Angles", "Sum"].map(section);
-    // The functions are the library's, under its section.
+    // The functions are the library's.
     let functions = [
-        section("Library"),
+        crate::test_examples::entry(&doc, &[], "Fractions and angles", 0),
         vec![Step::Key(crate::libraries::def::vocabulary::FUNCTIONS)],
     ]
     .concat();
