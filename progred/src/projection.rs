@@ -830,7 +830,7 @@ fn highlighted(
                 secondary_highlight(palette, scale, cv, outline, true);
             } else if matches!(
                 tree_hovered(hover),
-                Some(Hover::Value(hovered) | Hover::Label(hovered))
+                Some(Hover::Value(hovered) | Hover::Label(hovered) | Hover::Kind(hovered))
                     if *hovered == path
             ) {
                 hover_highlight(palette, scale, cv, outline);

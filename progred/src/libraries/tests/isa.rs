@@ -107,7 +107,9 @@ fn a_record_reads_by_its_kind_and_name_then_its_kinds_fields_then_others() {
         a.y1 <= b.y0 || (a.y0 < b.y1 && b.y0 < a.y1 && a.x1 <= b.x0)
     };
     let order = [
-        rect(vocabulary::ISA),
+        driver
+            .kind_label::<Step>(&[])
+            .expect("the kind, as the record's label"),
         rect(name::vocabulary::NAME),
         // The def's fields in its order, the missing one a place to fill.
         rect(over),
@@ -229,4 +231,24 @@ fn space_folds_a_selected_records_fields() {
         ui_events::keyboard::Modifiers::empty()
     ));
     assert!(driver.drawn(&[Step::Key(under)]));
+}
+
+#[test]
+fn a_records_kind_is_its_label_which_a_click_selects_it_by() {
+    let (mut driver, [over, ..]) = half();
+    driver.select(&[Step::Key(over)]);
+    let kind = driver
+        .kind_label::<Step>(&[])
+        .expect("the kind, as the record's label");
+    driver.click_at(kind.center());
+    assert_eq!(driver.selection(), crate::occurrence::Path::default());
+    // The kind is no place of its own to select or type over.
+    assert!(!driver.drawn(&[Step::Key(vocabulary::ISA)]));
+    // A Cmd+click on it picks the kind, as one on a field's name picks the
+    // name: into the place to fill.
+    let fraction = driver.value(&[Step::Key(vocabulary::ISA)]);
+    driver.select(&[Step::Key(over)]);
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
+    driver.pick_at(kind.center());
+    assert_eq!(driver.value(&[Step::Key(over)]), fraction);
 }

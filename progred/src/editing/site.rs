@@ -50,6 +50,11 @@ impl Site {
         Hover::Label(self.path.clone())
     }
 
+    /// What hovering this occurrence's kind, drawn as its label, shows.
+    pub(crate) fn kind_hover(&self) -> Hover {
+        Hover::Kind(self.path.clone())
+    }
+
     /// What hovering what opens this occurrence's fold shows.
     pub(crate) fn toggle_hover(&self) -> Hover {
         Hover::Toggle(self.path.clone())

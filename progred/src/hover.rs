@@ -19,6 +19,9 @@ pub enum Hover {
     /// The label of the field at this path. Activate here selects the field;
     /// pick picks the label, not the field's value.
     Label(Trail),
+    /// The kind of the record at this path, drawn as its label. Activate
+    /// here selects the record; pick picks the kind, not the record.
+    Kind(Trail),
     /// A generated widget or drawing linked to its source expression.
     Source(SourceTrace),
     /// A drawing's dynamic call ancestry; the UI chooses the innermost
@@ -125,7 +128,7 @@ pub(crate) fn hover_secondary<C>(
         Hover::Source(source) => Some(Secondary::from_trace(source, &area?.view)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
-        Hover::Toggle(_) | Hover::Label(_) => None,
+        Hover::Toggle(_) | Hover::Label(_) | Hover::Kind(_) => None,
     }
 }
 

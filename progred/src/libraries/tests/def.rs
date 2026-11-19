@@ -59,7 +59,7 @@ fn a_record_is_drawn_by_its_kinds_def() {
     };
     let (mut driver, [fraction_cell, over, under, half]) = fraction(None);
     // With no projection, the record is drawn as a record, its kind shown.
-    assert!(driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
+    assert!(driver.kind_label(&[Step::Key(half)]).is_some());
     // A field the record lacks is a place to fill.
     let mut doc = (*driver.editor().model.doc).clone();
     let without = driver
@@ -107,7 +107,7 @@ fn a_record_is_drawn_by_its_kinds_def() {
     driver.runner.editor.model.doc = Rc::new(doc);
     driver.present();
     assert!(driver.drawn(&[Step::Key(half), Step::Key(under)]));
-    assert!(!driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
+    assert!(driver.kind_label(&[Step::Key(half)]).is_none());
     // Switched off in a view, the def draws nothing and the record is a record.
     driver
         .runner
@@ -116,7 +116,7 @@ fn a_record_is_drawn_by_its_kinds_def() {
         .workspace
         .show(None, crate::workspace::Shown::AllBut(vec![super::ID]));
     driver.present();
-    assert!(driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
+    assert!(driver.kind_label(&[Step::Key(half)]).is_some());
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn a_def_that_declines_passes_its_record_on() {
     // A projection that isn't a template or a function draws nothing, so the
     // record is drawn as it otherwise would be.
     let (driver, [_, _, _, half]) = fraction(Some(Value::list([])));
-    assert!(driver.drawn(&[Step::Key(half), Step::Key(::grap::isa::ISA)]));
+    assert!(driver.kind_label(&[Step::Key(half)]).is_some());
 }
 
 /// The defs of a document of `root` and `cells`, read as the editor reads

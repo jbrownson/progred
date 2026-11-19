@@ -537,10 +537,8 @@ pub(crate) fn field_name<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
     }
 }
 
-/// The label of the field `key` here, read as `name`, then its colon. It
-/// hovers apart from the field's value, so a Cmd+click picks the label, not
-/// the value, or, with no slot open, acts as a click; a click selects the
-/// field where `selects`.
+/// The label of the field `key` here, read as `name`, then its colon, as
+/// [`label`] draws it: a click selects the field where `selects`.
 pub(crate) fn field_label<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
@@ -548,12 +546,28 @@ pub(crate) fn field_label<W: Host>(
     selects: bool,
 ) -> Layout<W> {
     let site = input.site().below(&[Step::Key(key)]);
-    let target = W::Hover::from(site.label_hover());
+    let hover = site.label_hover();
+    label(site, hover, key, row(0.0, [name, dim(":")]), selects)
+}
+
+/// `name`, which labels what's at `site` as the cell `cell`, as a field's
+/// name does its field and a record's kind the record. It hovers as `hover`,
+/// apart from what it labels, so a Cmd+click picks `cell`, not what's
+/// labelled, or, with no slot open, acts as a click; a click selects `site`
+/// where `selects`.
+pub(crate) fn label<W: Host>(
+    site: crate::editing::Site,
+    hover: crate::hover::Hover,
+    cell: CellId,
+    name: Layout<W>,
+    selects: bool,
+) -> Layout<W> {
+    let target = W::Hover::from(hover);
     let hover = target.clone();
     let select = selects.then(|| widget::navigation::selecting(site));
-    let label = ::grap::RuntimeValue::from(Value::from(key));
+    let label = ::grap::RuntimeValue::from(Value::from(cell));
     let pressed = widget::before(
-        row(0.0, [name, dim(":")]),
+        name,
         Rc::new(move |_| {
             let target = target.clone();
             let select = select.clone();

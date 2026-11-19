@@ -77,8 +77,9 @@ fn defined_fields(
 /// `button {}`. They fold, as a record's do, Space folding them while the
 /// record is selected. Where it's `named`, as its kind says its
 /// records are, a missing name is a place to type one, showing `name` dim.
-/// A record with neither declines. The kind and name are stops of their
-/// own, inside the record's.
+/// A record with neither declines. The kind is the record's label, as a
+/// field's name is its field's: a click selects the record, and a Cmd+click
+/// picks the kind, which isn't changed here. The name is a stop of its own.
 pub(crate) fn form<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     fields: Fields<W>,
@@ -86,9 +87,23 @@ pub(crate) fn form<W: Host>(
 ) -> Option<Layout<W>> {
     let value = input.value?;
     value.record_keys()?;
+    // The kind is the record's label: a click selects the record, and a
+    // Cmd+click picks the kind. One that isn't a cell is drawn as it is.
     let kind = value
-        .contains_field(vocabulary::ISA)
-        .then(|| descend([Step::Key(vocabulary::ISA)], None, None));
+        .field(vocabulary::ISA)
+        .map(|kind| match kind.as_cell() {
+            Some(kind) => crate::display::structure::label(
+                input.site(),
+                input.site().kind_hover(),
+                kind,
+                match input.env.name(kind) {
+                    Some(name) => crate::display::named(&name, crate::display::Face::Name),
+                    None => crate::display::id(crate::identity::short_id(kind)),
+                },
+                true,
+            ),
+            None => descend([Step::Key(vocabulary::ISA)], None, None),
+        });
     let name = (named || value.contains_field(name::vocabulary::NAME)).then(|| {
         descend(
             [Step::Key(name::vocabulary::NAME)],

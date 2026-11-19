@@ -295,6 +295,20 @@ impl<P> Driver<P> {
         self.landmark(path).is_some()
     }
 
+    /// Where the record at `path` has its kind drawn as its label, which
+    /// the pointer lands on as that, if anywhere.
+    pub(crate) fn kind_label<S: Clone + Into<Occurs> + std::fmt::Debug>(
+        &self,
+        path: &[S],
+    ) -> Option<Rect> {
+        let wanted = Hovered::Tree(crate::hover::Hover::Kind(crate::occurrence::Trail::of(
+            &occurrence(path),
+        )));
+        self.drawn(path)
+            .then(|| self.find(self.rect(path), |hovered| *hovered == wanted))
+            .flatten()
+    }
+
     /// Whether the last frame draws `path` in `view`, of the views that may
     /// draw the same path.
     pub(crate) fn drawn_in<S: Clone + Into<Occurs>>(
