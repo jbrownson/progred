@@ -2,7 +2,7 @@
 //! once the frame is placed: scrolling a view to show a place, arriving at a
 //! landmark, and Tab's search for the next place to fill in.
 
-use super::{Landmark, landmark_at};
+use super::{Insertion, Landmark, Select, landmark_at};
 use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
 use crate::display::widget::view::Area;
@@ -14,6 +14,7 @@ use puri::handler::NavigationDirection;
 /// Borrowed geometry from the installed frame, used by explicit navigation actions.
 pub(crate) struct Geometry<'a, W> {
     pub landmarks: &'a [Landmark<W>],
+    pub insertions: &'a [Insertion<W>],
     pub view_regions: &'a [ViewRegion],
     pub scale: f64,
 }
@@ -112,9 +113,9 @@ fn reveal_axis(
 }
 
 /// Selects the next tab stop after the selection, or with `back` the one
-/// before it, if there is one.
+/// before it, if there is one, in the order the view is drawn in.
 pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: bool) -> bool {
-    let target = {
+    let (area, target) = {
         let session = world.session();
         let selection = session.model.selection.as_ref();
         let area = selection.map_or_else(
@@ -128,56 +129,47 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
         );
         let anchor = selection.and_then(|selection| {
             landmark_at(geometry.landmarks, Some(&area), selection.path())
-                .map(|landmark| landmark.rect)
+                .map(|landmark| landmark.order)
         });
-        let stops = tab_stops(geometry.landmarks, &area);
-        match (anchor, back) {
+        let stops = tab_stops(geometry, &area);
+        let target = match (anchor, back) {
             (None, false) => stops.first(),
             (None, true) => stops.last(),
-            (Some(anchor), false) => stops.iter().find(|stop| follows(stop.rect, anchor)),
-            (Some(anchor), true) => stops.iter().rev().find(|stop| follows(anchor, stop.rect)),
+            (Some(anchor), false) => stops.iter().find(|stop| stop.0 > anchor),
+            (Some(anchor), true) => stops.iter().rev().find(|stop| stop.0 < anchor),
         }
-        .map(|stop| (*stop).clone())
+        .cloned();
+        (area, target)
     };
-    target.is_some_and(|stop| geometry.arrive(world, &stop, None))
+    target.is_some_and(|(_, rect, select)| {
+        let handled = select(world, None);
+        if handled {
+            // What it opens isn't drawn yet, so it's shown where it will be.
+            geometry.reveal_rect(world.session().model, &area, rect);
+        }
+        handled
+    })
 }
 
-/// The view's tab stops, the places to fill in that its widgets marked, in
-/// reading order: line by line, where a line is what overlaps vertically,
-/// then left to right.
-fn tab_stops<'a, W>(landmarks: &'a [Landmark<W>], area: &Area) -> Vec<&'a Landmark<W>> {
-    let mut stops: Vec<_> = landmarks
+/// The area's tab stops, the places to fill in that its widgets marked and
+/// where something can be added, each with its place in the view's
+/// traversal, where it's drawn and how it's arrived at, in that order.
+fn tab_stops<W>(geometry: Geometry<'_, W>, area: &Area) -> Vec<(usize, Rect, Select<W>)> {
+    let mut stops: Vec<_> = geometry
+        .landmarks
         .iter()
         .filter(|landmark| landmark.tab_stop && landmark.area.as_ref() == Some(area))
+        .map(|landmark| (landmark.order, landmark.rect, landmark.select.clone()))
+        .chain(
+            geometry
+                .insertions
+                .iter()
+                .filter(|insertion| insertion.area.as_ref() == Some(area))
+                .map(|insertion| (insertion.order, insertion.rect, insertion.select.clone())),
+        )
         .collect();
-    stops.sort_by(|a, b| a.rect.y0.total_cmp(&b.rect.y0));
-    let mut lines: Vec<(f64, Vec<&Landmark<W>>)> = Vec::new();
-    for stop in stops {
-        match lines.last_mut() {
-            Some((bottom, line)) if stop.rect.y0 < *bottom => {
-                *bottom = bottom.max(stop.rect.y1);
-                line.push(stop);
-            }
-            _ => lines.push((stop.rect.y1, vec![stop])),
-        }
-    }
-    lines
-        .into_iter()
-        .flat_map(|(_, mut line)| {
-            line.sort_by(|a, b| a.rect.x0.total_cmp(&b.rect.x0));
-            line
-        })
-        .collect()
-}
-
-/// Whether `rect` comes after `anchor` in reading order: further along a
-/// line they share, or below it.
-fn follows(rect: Rect, anchor: Rect) -> bool {
-    if rect.y0 < anchor.y1 && anchor.y0 < rect.y1 {
-        rect.x0 > anchor.x0
-    } else {
-        rect.y0 >= anchor.y1
-    }
+    stops.sort_by_key(|stop| stop.0);
+    stops
 }
 
 #[cfg(test)]

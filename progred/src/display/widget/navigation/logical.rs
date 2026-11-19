@@ -315,9 +315,19 @@ pub(crate) struct Collector {
     /// The open landmarks, innermost last, each with whether a stop of its
     /// own has been declared inside it yet.
     landmarks: Vec<(Stop, bool)>,
+    /// How many places the traversal has passed.
+    passed: usize,
 }
 
 impl Collector {
+    /// The next place in the chosen layout's traversal: what Tab goes
+    /// through in order, which opening a place or a line reflowing doesn't
+    /// change, as where they're drawn can.
+    pub fn place(&mut self) -> usize {
+        self.passed += 1;
+        self.passed
+    }
+
     /// A stop placed where it's drawn, as a control's is. It's its
     /// occurrence's own stop, so the landmark there adds none.
     pub fn stop(&mut self, path: OccurrencePath, selected: bool) {

@@ -137,18 +137,23 @@ fn numbered(number: usize, digits: usize) -> String {
     "\u{2007}".repeat(digits.saturating_sub(number.len())) + &number
 }
 
-/// A click on what an empty notebook draws opens a place for its first entry.
+/// A click on what an empty notebook draws, or Tab to it, opens a place for
+/// its first entry.
 fn first_entry<W: Host>(list: crate::editing::Site) -> Layout<W> {
     let target = W::Hover::from(list.hover());
     let start: crate::display::Action =
         Rc::new(move |session| start_entry(session, &list, None, None));
-    crate::display::widget::hover::on_hover(
-        crate::display::widget::interaction::on_activate(
-            crate::display::dim("new entry"),
-            target.clone(),
-            start,
+    let arrive = start.clone();
+    crate::display::structure::insertion(
+        crate::display::widget::hover::on_hover(
+            crate::display::widget::interaction::on_activate(
+                crate::display::dim("new entry"),
+                target.clone(),
+                start,
+            ),
+            target,
         ),
-        target,
+        Rc::new(move |world: &mut W, _| arrive(&mut world.session())),
     )
 }
 

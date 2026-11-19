@@ -22,6 +22,9 @@ pub struct Session<'a> {
     pub(crate) libraries: &'a Libraries,
     /// The drag a press started, which owns motion until release.
     pub(crate) gesture: &'a mut Option<Active>,
+    /// A Tab a handler leaves until the next frame draws what it committed,
+    /// back with Shift.
+    pub(crate) tab_drawn: &'a mut Option<bool>,
     /// Frame wakeups a handler schedules, such as the end of a debounce.
     pub(crate) timers: &'a mut Timers,
     pub(crate) text: TextTools<'a>,
@@ -61,6 +64,7 @@ impl Session<'_> {
             model: &mut *self.model,
             libraries: self.libraries,
             gesture: &mut *self.gesture,
+            tab_drawn: &mut *self.tab_drawn,
             timers: &mut *self.timers,
             text: TextTools {
                 fonts: &mut *self.text.fonts,

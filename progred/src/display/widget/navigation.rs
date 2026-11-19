@@ -32,6 +32,9 @@ pub struct Landmark<World> {
     pub area: Option<Area>,
     pub path: Trail,
     pub rect: Rect,
+    /// Its place in the view's traversal, before what's drawn inside it:
+    /// the order Tab goes through.
+    pub order: usize,
     pub select: Select<World>,
     /// What it shares with other projections of the same thing.
     pub secondary: Option<Secondary>,
@@ -48,12 +51,47 @@ impl<World> Clone for Landmark<World> {
             area: self.area.clone(),
             path: self.path.clone(),
             rect: self.rect,
+            order: self.order,
             select: self.select.clone(),
             secondary: self.secondary.clone(),
             selected: self.selected,
             tab_stop: self.tab_stop,
         }
     }
+}
+
+/// A place where something can be added, which Tab visits and arrows don't:
+/// a list's insertion point, say, or the end of a record, where a field is
+/// added. It stands for no occurrence yet, so it's no landmark, and nothing
+/// finds it by a path; arriving opens it to fill in.
+pub struct Insertion<World> {
+    pub area: Option<Area>,
+    pub rect: Rect,
+    /// Its place in the view's traversal, as a landmark's.
+    pub order: usize,
+    pub select: Select<World>,
+}
+
+impl<World> Clone for Insertion<World> {
+    fn clone(&self) -> Self {
+        Self {
+            area: self.area.clone(),
+            rect: self.rect,
+            order: self.order,
+            select: self.select.clone(),
+        }
+    }
+}
+
+/// `child` marking where something can be added, which arriving at through
+/// `select` opens: an [`Insertion`] over its bounds.
+pub(crate) fn insertion<World: 'static, H: 'static>(
+    child: Measured<HoverPass<World, H>>,
+    select: Select<World>,
+) -> Measured<HoverPass<World, H>> {
+    super::before_place(child, move |placement, output| {
+        output.insertion(placement.rect, select);
+    })
 }
 
 /// The landmark drawn at `path` in the area `area`.
@@ -91,6 +129,7 @@ pub(crate) fn part_landmark<World: 'static, H: 'static>(
     selected: bool,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
+        let order = pass.navigation.place();
         pass.scope(
             |pass| inner.place_into(pass),
             move |mut output| {
@@ -101,6 +140,7 @@ pub(crate) fn part_landmark<World: 'static, H: 'static>(
                         area: None,
                         path,
                         rect: placement.rect,
+                        order,
                         select: arrival.unwrap_or(select),
                         secondary: None,
                         selected,
@@ -131,6 +171,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
         let stop = path.clone();
+        let order = pass.navigation.place();
         pass.scope(
             |pass| {
                 pass.navigation.begin_landmark(stop, selected);
@@ -150,6 +191,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     area: None,
                     path,
                     rect: placement.rect,
+                    order,
                     select,
                     secondary,
                     selected,

@@ -63,6 +63,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             area: Some(other.clone()),
             path: crate::occurrence::Trail::root(crate::test_document()),
             rect: Rect::new(0.0, 0.0, 20.0, 20.0),
+            order: 0,
             select: Rc::new(|_, _| false),
             secondary: None,
             selected: false,
@@ -72,6 +73,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             area: Some(root.clone()),
             path: crate::occurrence::Trail::root(crate::test_document()),
             rect: Rect::new(0.0, 1_000.0, 20.0, 1_060.0),
+            order: 0,
             select: Rc::new(|_, _| false),
             secondary: None,
             selected: false,
@@ -86,6 +88,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     }];
     let geometry = Geometry {
         landmarks: &landmarks,
+        insertions: &[],
         view_regions: &regions,
         scale: 2.0,
     };

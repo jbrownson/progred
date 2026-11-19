@@ -32,6 +32,52 @@ fn every_drawn_occurrence_in_the_examples_can_be_left_by_an_arrow() {
     }
 }
 
+#[test]
+fn tab_and_shift_tab_pass_each_place_in_the_sample_once() {
+    tab_sweep("sample", include_str!("../../../../examples/sample.gid"));
+}
+
+#[test]
+#[ignore = "tabs through every example, about a minute"]
+fn tab_and_shift_tab_pass_each_place_in_the_examples_once() {
+    for example in crate::command::Example::ALL {
+        tab_sweep(example.file_stem(), example.source());
+    }
+    tab_sweep(
+        "navigation",
+        include_str!("../../../../examples/navigation.gid"),
+    );
+}
+
+/// Tabs through every place `source` has to fill in or add to, from nothing
+/// selected until Tab has nowhere left, and back with Shift+Tab: each is
+/// passed once, and back in the opposite order.
+fn tab_sweep(name: &str, source: &str) {
+    let (doc, _) = crate::gid_text::parse(source).unwrap();
+    let mut driver = Driver::new(crate::test_editor(doc), kurbo::Size::new(1400.0, 1000.0));
+    let mut pass = |back: bool| {
+        let modifiers = if back {
+            Modifiers::SHIFT
+        } else {
+            Modifiers::empty()
+        };
+        let mut passed = Vec::new();
+        loop {
+            driver.keystroke(Key::Named(NamedKey::Tab), modifiers);
+            if driver.editor().model.selection.is_none() {
+                return passed;
+            }
+            let at = (driver.selection(), driver.stage());
+            assert!(!passed.contains(&at), "{name}: Tab came back to {at:?}");
+            passed.push(at);
+        }
+    };
+    let forward = pass(false);
+    let mut back = pass(true);
+    back.reverse();
+    assert_eq!(forward, back, "{name}: Shift+Tab retraces Tab");
+}
+
 /// Selects each occurrence `source` draws and checks some arrow leaves it.
 fn sweep(name: &str, source: &str) {
     let (doc, _) = crate::gid_text::parse(source).unwrap();

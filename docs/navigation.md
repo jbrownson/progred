@@ -133,24 +133,44 @@ projection draws itself, such as a number's digits, gets none. A document
 whose root is a row or column draws each part in its own pane, so the row
 isn't drawn and nothing selects it.
 
-Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one
-before, in reading order within the selection's area, its pane's part of the
-view: line by line, where a
-line is what overlaps vertically, then left to right. A widget marks its own
-occurrence as a tab stop, as it registers an arrow stop. The picker marks
-every empty, writable hole it draws, optional ones such as a value's missing
-name included, so navigation needn't know which fields are optional.
+Tab goes through the places you add things, and arrows through the things
+that are there. Tab moves to the next tab stop, and Shift+Tab to the one
+before, within the selection's area, its pane's part of the view, in the order
+the view is drawn: the chosen layout's traversal, so a container comes before
+what's inside it. That order is the layout's, not where things land, so
+opening a place, which draws it, or a line reflowing around it, doesn't change
+where Tab goes next. A tab stop is either of:
+
+- A place to fill in. A widget marks its own occurrence as one, as it
+  registers an arrow stop. The picker marks every empty, writable hole it
+  draws, optional ones such as a value's missing name included, so navigation
+  needn't know which fields are optional; so does a line drawn for a missing
+  value, and the anonymous lambda's `λ`, its missing name's place. The picker
+  for a new field's label is the place being filled in its record.
+- A place where something can be added: each place in a list an element can
+  go, before the first, between two, after the last, or in an empty list, and
+  the end of each record that takes new fields, as Cmd+Enter would add one.
+  These stand for no occurrence yet, so they're no landmarks, and arrows pass
+  them by. A list's is its separator, a comma or the gap between lines, where
+  clicking adds one too, and at the ends of a list on one line, nothing drawn
+  at all. Arriving opens the place, a pending element or a new field's label,
+  and leaving it untouched adds nothing. Beside an element being added, a
+  list's places are that element's.
+
 With nothing selected, Tab starts at the first. In a picker, Tab first commits
 what was typed, as Enter would. It stays there when that opened a slot of its
-own, such as a new call's first argument, or when no tab stop is left, so the
-commit shows before focus moves on. A Tab with nothing to commit and nowhere
-to go declines, so a browser moves focus on to the rest of its page, which
-clears the selection. A window has nowhere else to go, so there that Tab clears
-the selection itself, and the next starts over from the first.
+own, such as a new call's first argument; otherwise it moves on from what it
+committed once that's drawn, so a place the commit made, as after a list's new
+element, comes next: typing, Tab, typing fills a list. It stays when no tab
+stop is left, so the commit shows before focus moves on. A Tab with nothing to
+commit and nowhere to go declines, so a browser moves focus on to the rest of
+its page, which clears the selection. A window has nowhere else to go, so
+there that Tab clears the selection itself, and the next starts over from the
+first.
 
 The anonymous lambda's `λ` marker is the missing name's place, an arrow stop
-like any drawn occurrence. Arriving there types into the name as a line, with
-no completion; it isn't a tab stop, since the name is optional.
+like any drawn occurrence and a tab stop. Arriving there types into the name
+as a line, with no completion.
 
 Revealing a destination follows [selection and reveal](puri.md#selection-and-reveal).
 

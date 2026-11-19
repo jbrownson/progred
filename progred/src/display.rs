@@ -637,6 +637,25 @@ pub use widget::handle::handle;
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
 
+/// `child` as its occurrence's place to fill in, which Tab stops at, where
+/// it's writable.
+pub(crate) fn to_fill<W: Host>(child: host::Layout<W>) -> host::Layout<W> {
+    widget::around(
+        child,
+        Rc::new(|context| {
+            let path = context.path().clone();
+            let writable = context.toolkit.writable();
+            Box::new(move |child| {
+                widget::before_place(child, move |_, output| {
+                    if writable {
+                        output.tab_stop(path);
+                    }
+                })
+            })
+        }),
+    )
+}
+
 /// `child`, which hovers `site` and selects it when activated.
 pub(crate) fn selectable<W: Host>(
     child: host::Layout<W>,
@@ -885,17 +904,24 @@ pub struct RecordField<World, Hover> {
 /// Fields between braces, the record's own or the rest of one a form draws
 /// in part, flat or one to a line. Labels already include their punctuation
 /// and interaction target; trailing rows can be incomplete field editors.
+/// `adding`, where a field can be added, ends the last line, taking no room.
 pub fn record_braces<W: Host>(
     fields: impl IntoIterator<Item = RecordField<W, W::Hover>>,
     trailing: impl IntoIterator<Item = host::Layout<W>>,
+    adding: Option<host::Layout<W>>,
 ) -> host::Layout<W> {
-    selectable_bracket(Delim::Brace, alternatives(record_forms(fields, trailing)))
+    selectable_bracket(
+        Delim::Brace,
+        alternatives(record_forms(fields, trailing, adding)),
+    )
 }
 
 fn record_forms<W: 'static, H: Clone + 'static>(
     fields: impl IntoIterator<Item = RecordField<W, H>>,
     trailing: impl IntoIterator<Item = Layout<W, H>>,
+    adding: Option<Layout<W, H>>,
 ) -> [Layout<W, H>; 2] {
+    let adding = adding.map(shared);
     let fields = fields
         .into_iter()
         .map(|field| RecordField {
@@ -910,11 +936,19 @@ fn record_forms<W: 'static, H: Clone + 'static>(
         .chain(trailing.iter().cloned())
         .enumerate()
         .flat_map(|(index, item)| (index > 0).then(|| dim(", ")).into_iter().chain([item]))
+        .chain(adding.clone())
         .collect::<Vec<_>>();
-    let rows = fields
+    let mut rows = fields
         .into_iter()
         .map(|field| hug(field.label, field.value, 6.0))
-        .chain(trailing);
+        .chain(trailing)
+        .collect::<Vec<_>>();
+    if let Some(adding) = adding {
+        match rows.pop() {
+            Some(last) => rows.push(row(0.0, [last, adding])),
+            None => rows.push(adding),
+        }
+    }
     [row(0.0, flat), col(0, 2.0, rows)]
 }
 

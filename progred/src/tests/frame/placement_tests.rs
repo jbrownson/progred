@@ -917,6 +917,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             area: Some(editor.model.workspace.document_area()),
             path: crate::occurrence::Trail::root(crate::test_document()),
             rect: placement.rect,
+            order: 0,
             select: std::rc::Rc::new({
                 let count = count.clone();
                 move |_, _| {

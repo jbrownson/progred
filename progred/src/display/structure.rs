@@ -29,16 +29,13 @@ pub(crate) fn list_column_with<W: Host>(
     item: impl Fn(gid::Position, Layout<W>) -> Layout<W>,
 ) -> Option<Layout<W>> {
     let items = list_items(input, child)?;
+    let separated = list_with(input, &items, item, |before, after| {
+        list_gap(gap, before, after)
+    });
     Some(authoring(if items.is_empty() {
-        selectable_bracket(Delim::Bracket, row(0.0, []))
+        selectable_bracket(Delim::Bracket, row(0.0, separated))
     } else {
-        col(
-            1,
-            0.0,
-            list_with(input, &items, item, |before, after| {
-                list_gap(gap, before, after)
-            }),
-        )
+        col(1, 0.0, separated)
     }))
 }
 
@@ -79,6 +76,11 @@ fn list_items_at<W: Host>(
 /// One interleaved presentation of `list_items` for this input. The caller
 /// supplies item decoration and separator paint; this function owns insertion
 /// eligibility and interaction. Arrange the returned sequence with row/col/etc.
+/// Each place an element can go, before the first, between two, after the
+/// last, or in an empty list, is an insertion point, which a click on its
+/// separator or Tab opens, where there's no separator drawn, as at the ends
+/// of a list on one line, by Tab alone. One beside an element being added
+/// is that element's place, so it isn't another.
 pub fn list_with<W: Host, S>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     items: &[(gid::Position, Layout<W>)],
@@ -88,37 +90,86 @@ pub fn list_with<W: Host, S>(
 where
     S: FnOnce(Option<W::Hover>) -> Layout<W>,
 {
-    let gap = |before: Option<&gid::Position>, after: Option<&gid::Position>| {
-        separator(before, after).map(|render| {
-            let beside_pending = matches!(
-                &input.pending,
-                Some(Pending::Child(Step::Element(position)))
-                    if before == Some(position) || after == Some(position)
-            );
-            let site = (input.writable && !beside_pending)
-                .then(|| gid::position::between(before, after))
-                .flatten()
-                .map(|position| input.site().below(&[Step::Element(position)]));
-            let content = render(site.as_ref().map(|site| W::Hover::from(site.hover())));
-            widget::fill_width(match site {
-                Some(site) => selectable(content, &site),
-                None => content,
-            })
-        })
-    };
+    let (items, last) = list_parts(input, items, item, separator);
     // Sized for every gap and item, so the list fills it without regrowing.
     let mut separated = Vec::with_capacity(items.len() * 2 + 1);
-    separated.extend((0..=items.len()).flat_map(|index| {
-        let before = index
-            .checked_sub(1)
-            .and_then(|i| items.get(i))
-            .map(|(p, _)| p);
-        let after = items.get(index);
-        gap(before, after.map(|(p, _)| p))
-            .into_iter()
-            .chain(after.map(|(position, layout)| item(position.clone(), layout.clone())))
-    }));
+    for (gap, item) in items {
+        separated.extend(gap);
+        separated.push(item);
+    }
+    separated.extend(last);
     separated
+}
+
+/// [`list_with`]'s presentation as each item with the gap before it, and
+/// the gap after the last.
+fn list_parts<W: Host, S>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    items: &[(gid::Position, Layout<W>)],
+    item: impl Fn(gid::Position, Layout<W>) -> Layout<W>,
+    separator: impl Fn(Option<&gid::Position>, Option<&gid::Position>) -> Option<S>,
+) -> ListParts<W>
+where
+    S: FnOnce(Option<W::Hover>) -> Layout<W>,
+{
+    let gap = |before: Option<&gid::Position>, after: Option<&gid::Position>| {
+        let beside_pending = matches!(
+            &input.pending,
+            Some(Pending::Child(Step::Element(position)))
+                if before == Some(position) || after == Some(position)
+        );
+        let site = (input.writable && !beside_pending)
+            .then(|| gid::position::between(before, after))
+            .flatten()
+            .map(|position| input.site().below(&[Step::Element(position)]));
+        let content = separator(before, after)
+            .map(|render| render(site.as_ref().map(|site| W::Hover::from(site.hover()))));
+        match (content, site) {
+            (Some(content), Some(site)) => Some(widget::fill_width(insertion_point(
+                selectable(content, &site),
+                &site,
+            ))),
+            (Some(content), None) => Some(widget::fill_width(content)),
+            (None, Some(site)) => Some(insertion_point(row(0.0, []), &site)),
+            (None, None) => None,
+        }
+    };
+    let parts = items
+        .iter()
+        .enumerate()
+        .map(|(index, (position, layout))| {
+            let before = index.checked_sub(1).map(|i| &items[i].0);
+            (
+                gap(before, Some(position)),
+                item(position.clone(), layout.clone()),
+            )
+        })
+        .collect();
+    (parts, gap(items.last().map(|(p, _)| p), None))
+}
+
+/// Each item with the gap before it, if any, and the gap after the last.
+type ListParts<W> = (Vec<(Option<Layout<W>>, Layout<W>)>, Option<Layout<W>>);
+
+/// `child` as the place `site` names, where something can be added: Tab
+/// stops there, and arriving opens it to fill in.
+pub(crate) fn insertion_point<W: Host>(child: Layout<W>, site: &crate::editing::Site) -> Layout<W> {
+    insertion(child, widget::navigation::arrival(site.clone()))
+}
+
+/// `child` as a place where something can be added, which Tab stops at and
+/// arrives at through `select`.
+pub(crate) fn insertion<W: Host>(
+    child: Layout<W>,
+    select: widget::navigation::Select<W>,
+) -> Layout<W> {
+    widget::around(
+        child,
+        Rc::new(move |_| {
+            let select = select.clone();
+            Box::new(move |child| widget::navigation::insertion(child, select))
+        }),
+    )
 }
 
 fn list_gap<W: Host>(
@@ -159,20 +210,21 @@ fn comma_separated<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     items: &[(gid::Position, Layout<W>)],
 ) -> Vec<Layout<W>> {
-    list_with(
-        input,
-        items,
-        |_, item| item,
-        |before, after| {
-            (before.is_some() && after.is_some()).then_some(|hover| {
-                let comma = dim(", ");
-                match hover {
-                    Some(hover) => hover_highlight(comma, hover),
-                    None => comma,
-                }
-            })
-        },
-    )
+    list_with(input, items, |_, item| item, comma)
+}
+
+/// The comma between two items, highlighted where hovering it adds one.
+fn comma<W: Host>(
+    before: Option<&gid::Position>,
+    after: Option<&gid::Position>,
+) -> Option<impl FnOnce(Option<W::Hover>) -> Layout<W> + use<W>> {
+    (before.is_some() && after.is_some()).then_some(|hover: Option<W::Hover>| {
+        let comma = dim(", ");
+        match hover {
+            Some(hover) => hover_highlight(comma, hover),
+            None => comma,
+        }
+    })
 }
 
 /// A list between brackets whose items flow: on one line where they fit,
@@ -185,14 +237,30 @@ pub fn list_flowing<W: Host>(child: Option<Partial<W>>) -> Partial<W> {
         let positions = input.value?.list_positions()?;
         let empty = positions.is_empty();
         let items = list_items_at(input, positions, child.clone());
-        let mut separated = comma_separated(input, &items).into_iter();
-        let items = std::iter::from_fn(|| {
-            let item = separated.next()?;
-            Some(match separated.next() {
-                Some(comma) => row(0.0, [item, comma]),
-                None => item,
-            })
-        });
+        let (items, last) = list_parts(
+            input,
+            &items,
+            |_, item| item,
+            |before, after| comma(before, after),
+        );
+        // Each item flows with what follows it, its comma or the place after
+        // the last, and the first with the place before it too.
+        let mut groups: Vec<Vec<Layout<W>>> = Vec::new();
+        for (index, (gap, item)) in items.into_iter().enumerate() {
+            match groups.last_mut() {
+                Some(previous) => previous.extend(gap),
+                None => groups.push(gap.into_iter().collect()),
+            }
+            if index > 0 {
+                groups.push(Vec::new());
+            }
+            groups.last_mut().expect("a group").push(item);
+        }
+        match groups.last_mut() {
+            Some(previous) => previous.extend(last),
+            None => groups.push(last.into_iter().collect()),
+        }
+        let items = groups.into_iter().map(|parts| row(0.0, parts));
         Some(crate::display::fold::folding_unless(
             empty,
             Delim::Bracket,
@@ -217,6 +285,7 @@ pub(crate) struct Fields<W: Host> {
     child: Rc<dyn Fn(CellId) -> Option<Partial<W>>>,
     label: Rc<dyn Fn(CellId) -> Option<Layout<W>>>,
     shown_empty: bool,
+    adding: bool,
 }
 
 impl<W: Host> Default for Fields<W> {
@@ -228,6 +297,7 @@ impl<W: Host> Default for Fields<W> {
             child: Rc::new(|_| None),
             label: Rc::new(|_| None),
             shown_empty: false,
+            adding: false,
         }
     }
 }
@@ -272,6 +342,13 @@ impl<W: Host> Fields<W> {
         self
     }
 
+    /// A field can be added to the record among these, which Tab stops at
+    /// the end of: for a view that offers [`authoring`] around them.
+    pub(crate) fn adding(mut self) -> Self {
+        self.adding = true;
+        self
+    }
+
     /// The whole record, its fields between braces, folding as Raw's records
     /// do.
     pub(crate) fn record(
@@ -298,6 +375,7 @@ impl<W: Host> Fields<W> {
         authoring(record_braces(
             keys.into_iter().map(|key| self.field(input, key)),
             pending_field(input),
+            adding_field(input),
         ))
     }
 
@@ -372,8 +450,14 @@ impl<W: Host> Fields<W> {
     ) -> Option<Layout<W>> {
         let keys = self.keys(input.value?.record_keys()?, input, drawn);
         let pending = pending_field(input);
-        (self.shown_empty || !keys.is_empty() || pending.is_some())
-            .then(|| record_braces(keys.into_iter().map(|key| self.field(input, key)), pending))
+        let adding = self.adding.then(|| adding_field(input)).flatten();
+        (self.shown_empty || !keys.is_empty() || pending.is_some()).then(|| {
+            record_braces(
+                keys.into_iter().map(|key| self.field(input, key)),
+                pending,
+                adding,
+            )
+        })
     }
 
     /// The keys to draw but those `drawn` covers: the record's `labels`, its
@@ -538,6 +622,25 @@ pub fn authoring<W: Host>(child: Layout<W>) -> Layout<W> {
             })
         }),
     )
+}
+
+/// Where a field can be added to the record here, which Tab stops at and
+/// arriving opens for its label: none while one is being added, which is
+/// that place.
+fn adding_field<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    (input.writable && !matches!(input.pending, Some(Pending::Field))).then(|| {
+        let site = input.site();
+        insertion(
+            row(0.0, []),
+            Rc::new(move |world: &mut W, _| {
+                site.open(&mut world.session())
+                    .select_with(crate::selection::payload::label(""));
+                true
+            }),
+        )
+    })
 }
 
 pub(crate) fn pending_field<W: Host>(

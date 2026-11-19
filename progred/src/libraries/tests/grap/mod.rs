@@ -1427,6 +1427,23 @@ fn a_new_lambda_starts_at_its_first_parameter() {
             .map(|definition| definition.value.clone()),
         Some(crate::libraries::name::record("x", []))
     );
+    // Tab goes on to the place for another parameter, then the body.
+    driver.press(NamedKey::Tab);
+    assert_eq!(
+        driver.selection(),
+        crate::occurrence::below(
+            &[],
+            &[
+                &params[..],
+                &[Step::Element(
+                    gid::position::between(driver.positions(&params).first(), None).unwrap()
+                )]
+            ]
+            .concat()
+        ),
+        "Tab goes on to the place after the parameter"
+    );
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
     driver.press(NamedKey::Tab);
     assert_eq!(
         driver.selection(),
@@ -1462,6 +1479,8 @@ fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
         driver.drawn(&argument),
         "a lambda has its parameters, so the call its arguments, before its body is written"
     );
+    // Past the place for another parameter, Tab goes on to the body.
+    driver.press(NamedKey::Tab);
     driver.press(NamedKey::Tab);
     assert_eq!(
         driver.selection(),

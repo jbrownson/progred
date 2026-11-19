@@ -437,6 +437,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
                         area: None,
                         path: path.clone(),
                         rect: Default::default(),
+                        order: 0,
                         select: Rc::new(move |visits: &mut Vec<usize>, _| {
                             visits.push(view * 10 + index);
                             true

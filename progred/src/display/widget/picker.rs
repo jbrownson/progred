@@ -78,11 +78,34 @@ pub(crate) fn hole<W: Host>(
 ) -> Measured<HoverPass<W, W::Hover>> {
     match picker.kind {
         CompletionKind::Value => pending_view(toolkit, tcx, picker),
-        CompletionKind::Field => toolkit
-            .label_query()
-            .map(|query| label_query(toolkit, tcx, query, picker))
-            .unwrap_or_else(|| text(tcx, "…", &toolkit.styles().dim)),
+        CompletionKind::Field => label_target(
+            toolkit,
+            toolkit
+                .label_query()
+                .map(|query| label_query(toolkit, tcx, query, picker))
+                .unwrap_or_else(|| text(tcx, "…", &toolkit.styles().dim)),
+        ),
     }
+}
+
+/// A new field's label being picked, as part of the record it's added to:
+/// the place in it being filled, where Tab goes on from and what's shown of
+/// it, with no stop of its own apart from the record's.
+fn label_target<W: Host>(
+    toolkit: &dyn Toolkit,
+    child: Measured<HoverPass<W, W::Hover>>,
+) -> Measured<HoverPass<W, W::Hover>> {
+    let path = toolkit.path().clone();
+    let stop = path.clone();
+    let child = crate::display::widget::before_place(child, move |_, output| {
+        output.tab_stop(stop);
+    });
+    crate::display::widget::navigation::part_landmark(
+        child,
+        path,
+        crate::display::widget::navigation::arrival(toolkit.site()),
+        toolkit.selected(),
+    )
 }
 
 /// A missing value with ordinary selection and navigation behavior.
@@ -250,8 +273,10 @@ fn located_query<W: Host>(
         .then(|| (picker.keys)())
         .filter(|keys| !keys.is_empty());
     // Tab commits what's been typed, as Enter would, then moves on to the
-    // next empty slot, unless the commit opened one of its own, such as a new
-    // call's first argument. With no slot left it stays on what it committed;
+    // next place to fill in, unless the commit opened one of its own, such as
+    // a new call's first argument. It moves on from what it committed once
+    // that's drawn, so a place the commit makes, as after a list's new
+    // element, comes next. With no place left it stays on what it committed;
     // the next Tab lets go. An empty query leaves Tab to the editor.
     let typed = (!query.text().is_empty())
         .then(|| entries.get(choice).map(|entry| entry.activate.clone()))
@@ -273,25 +298,20 @@ fn located_query<W: Host>(
             None => measured,
         };
         before(measured, move |p, _| {
-            p.handler().on_key_with(move |world: &mut W, event, input| {
+            p.handler().on_key_with(move |world: &mut W, event, _| {
                 if event.state.is_down()
                     && event.key == Key::Named(NamedKey::Tab)
                     && crate::modifiers::at_most_shift(&event.modifiers)
                     && let Some(activate) = typed.as_ref()
                 {
                     activate(world);
-                    let committed = {
-                        let session = world.session();
+                    let session = world.session();
+                    let committed =
                         session.model.selection.as_ref().is_some_and(|selected| {
                             selected.stage(&session.sources()) == Stage::Edge
-                        })
-                    };
+                        });
                     if committed {
-                        crate::display::widget::navigation::advance(
-                            world,
-                            input.geometry(scale),
-                            event.modifiers.shift(),
-                        );
+                        *session.tab_drawn = Some(event.modifiers.shift());
                     }
                     true
                 } else {

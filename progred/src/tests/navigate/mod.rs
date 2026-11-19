@@ -11,6 +11,7 @@ fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Landmark<()> {
         area: None,
         path: path.into(),
         rect: Rect::new(x0, y0, x1, y1),
+        order: 0,
         select: Rc::new(|_, _| true),
         secondary: None,
         selected: false,

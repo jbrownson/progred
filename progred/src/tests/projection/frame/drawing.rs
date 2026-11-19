@@ -272,6 +272,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             area: Some(Area::whole(crate::test_document())),
             path: crate::occurrence::of(&program).into(),
             rect: bounds,
+            order: 0,
             select: Rc::new(move |_, _| {
                 picked.borrow_mut().push(source.clone());
                 true
@@ -402,6 +403,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         area: Some(source_view.clone()),
         path: crate::occurrence::of(&path).into(),
         rect: Rect::new(0.0, 500.0, 20.0, 530.0),
+        order: 0,
         select: Rc::new({
             let path = path.clone();
             move |editor: &mut crate::Editor, _| {

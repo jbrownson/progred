@@ -78,6 +78,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         path: occurrence.clone(),
         area: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+        order: 0,
         select: Rc::new(|_, _| true),
         secondary: Some(secondary.clone()),
         selected: false,
@@ -156,6 +157,7 @@ fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
         path: Trail::root(crate::test_document()),
         area: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+        order: 0,
         select: Rc::new(|_, _| true),
         secondary: Some(place.clone()),
         selected: true,
@@ -949,6 +951,7 @@ fn a_drawing_source_selects_the_occurrence_of_its_definition() {
         area: Some(root.clone()),
         path: Trail::from([Occurs::Follow, Occurs::Key(call)]),
         rect,
+        order: 0,
         select: Rc::new(|selected, _| {
             *selected = true;
             true

@@ -147,6 +147,9 @@ pub(crate) struct Editor {
     pub(crate) pressed: bool,
     /// The continuation installed by the accepting projection handler.
     pub(crate) gesture: Option<gesture::Active>,
+    /// A Tab to take once the next frame is drawn, back with Shift, from
+    /// what a commit just put in, which this frame doesn't draw yet.
+    pub(crate) tab_drawn: Option<bool>,
     pub(crate) reducer: WindowEventReducer,
     /// Carries the application commands the drawn menu chooses to the app.
     pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
@@ -359,6 +362,7 @@ pub(crate) fn new_editor(
         modifiers: Modifiers::empty(),
         pressed: false,
         gesture: None,
+        tab_drawn: None,
         reducer: WindowEventReducer::default(),
         proxy,
         pending_discard: None,
@@ -372,6 +376,7 @@ impl Editor {
             model: &mut self.model,
             libraries: &self.stack.libraries,
             gesture: &mut self.gesture,
+            tab_drawn: &mut self.tab_drawn,
             timers: &mut self.timers,
             text: crate::editing::TextTools {
                 fonts: &mut self.font_cx,
@@ -892,6 +897,7 @@ impl Editor {
             modifiers: _,
             pressed,
             gesture: _,
+            tab_drawn,
             reducer: _,
             proxy: _,
             pending_discard,
@@ -906,6 +912,7 @@ impl Editor {
         computations.reset();
         *timers = timers::Timers::default();
         *pressed = false;
+        *tab_drawn = None;
         *menu = menu::State::default();
         *binders = text_binders;
         *doc_path = path;

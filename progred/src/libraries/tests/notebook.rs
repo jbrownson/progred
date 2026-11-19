@@ -400,11 +400,14 @@ fn a_call_of_a_lambda_returning_a_lambda_shows_the_closure_with_what_it_closes_o
     driver.press(NamedKey::Enter);
     driver.type_text("x");
     driver.press(NamedKey::Enter);
+    // Past the place for another parameter, to the body.
+    driver.press(NamedKey::Tab);
     driver.press(NamedKey::Tab);
     driver.choose("lambda");
     driver.press(NamedKey::Enter);
     driver.type_text("y");
     driver.press(NamedKey::Enter);
+    driver.press(NamedKey::Tab);
     driver.press(NamedKey::Tab);
     driver.type_text("y");
     driver.choose("y");

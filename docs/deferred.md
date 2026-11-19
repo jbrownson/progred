@@ -790,8 +790,10 @@ first:
        - ~~Tab's skipping of name slots.~~ Done on 17 October 2026, at the
          owner's direction: Tab visits tab stops, which a widget marks on its
          occurrence as it registers an arrow stop. The picker marks every
-         empty, writable hole, so an unnamed value's name is one, while an
-         unnamed lambda's `λ`, a marker to click, isn't;
+         empty, writable hole, so an unnamed value's name is one; since 19
+         November 2026 an unnamed lambda's `λ` is too, and Tab visits the
+         places where something can be added (see
+         [navigation](navigation.md));
        - ~~the cells that label Grap handlers' event records~~. Done on 18
          October 2026: the records stay, since Grap handlers need values, and
          the core's `site::event` owns their cells and encoding, which the
@@ -1747,7 +1749,6 @@ Still to come:
   computed while the frame is drawn, as a pane's is.
 - Selecting an entry itself, to delete it, has its arrow and its number in the
   list's margin; moving one has no gesture.
-- Reaching the empty notebook's "new entry" from the keyboard.
 - An entry referred to without a name reads as its short ID, as any unnamed
   cell does.
 

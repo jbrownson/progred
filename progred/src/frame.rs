@@ -36,6 +36,7 @@ pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
     pub(crate) pointer_area: Option<Area>,
     pub(crate) landmarks: Rc<[Landmark<Editor>]>,
+    pub(crate) insertions: Rc<[crate::display::widget::navigation::Insertion<Editor>]>,
     pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
 }
@@ -88,6 +89,7 @@ impl Dispatch {
     pub(crate) fn geometry(&self, scale: f64) -> Geometry<'_, Editor> {
         Geometry {
             landmarks: &self.landmarks,
+            insertions: &self.insertions,
             view_regions: &self.view_regions,
             scale,
         }
@@ -117,6 +119,7 @@ impl Dispatch {
         DispatchContext {
             handler: self.handler.clone(),
             landmarks: self.landmarks.clone(),
+            insertions: self.insertions.clone(),
             view_regions: self.view_regions.clone(),
             pointer: editor.pointer,
             modifiers: editor.modifiers,
@@ -370,6 +373,7 @@ fn compute_hover(
         renders,
         handler,
         landmarks,
+        insertions,
         view_regions,
         hover_geometry,
         input_area,
@@ -381,6 +385,7 @@ fn compute_hover(
             handler: Rc::new(handler.unwrap_or_else(Handler::new)),
             pointer_area,
             landmarks: landmarks.into(),
+            insertions: insertions.into(),
             view_regions: view_regions.into(),
             hover_geometry,
         },
@@ -525,8 +530,18 @@ impl EditorRunner {
     }
 
     /// Build the successor's projection, hover, handlers, and deferred paint.
+    /// A Tab left for it is taken there, and drawn in its own successor.
     pub(crate) fn refresh_frame(&mut self, scale: f64, viewport: Size) {
         self.rebuild_frame(scale, viewport);
+        if let Some(back) = self.editor.tab_drawn.take()
+            && crate::display::widget::navigation::advance(
+                &mut self.editor,
+                self.frame.dispatch.geometry(scale),
+                back,
+            )
+        {
+            self.rebuild_frame(scale, viewport);
+        }
         self.notify_hover_changed(scale, viewport);
     }
 

@@ -290,7 +290,7 @@ can contribute offers to one picker.
 
 Grap's expression slots offer a new `lambda` (alias `λ`). It inserts `{isa: lambda, params: []}` and
 opens its first parameter, whose slot offers a new one; Tab goes on to the
-missing body.
+place for another parameter, then the missing body.
 The lambda projection draws that unfinished lambda and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
 Beside it Grap offers a new `call`, which inserts `{isa: call}` and opens its
@@ -305,8 +305,8 @@ argument, as picking its call whole does elsewhere. Once the function is
 callable (a lambda needs its body), its parameters show as the call's argument
 slots, which Tab visits next.
 An empty parameter slot offers only a new parameter, a new document cell: for
-whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
-parameter`, which has no name yet, and whose name is picked next.
+whatever is typed, `x`, read as a new parameter, named `x`; with nothing
+typed, `parameter`, which has no name yet, and whose name is picked next.
 
 A parameter with no name of its own, or an empty one, is called what its list
 calls it: in order, the first of a, b, c… that none of the list's named

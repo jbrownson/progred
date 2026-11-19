@@ -159,6 +159,7 @@ fn record_braces_keep_the_supplied_order_in_both_responsive_forms() {
             value: at([Step::Key(key)], value, None, None),
         }),
         [],
+        None,
     );
     let layout = record(&layout);
     let (_, child, _) = crate::display::test_support::delimited(&layout);

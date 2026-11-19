@@ -304,12 +304,12 @@ fn definition_hole<W: Host>() -> Layout<W> {
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
-        // The missing name's place; selected, it's an empty name to type
-        // into.
+        // The missing name's place, which Tab stops at as it does any;
+        // selected, it's an empty name to type into.
         None if input.selection.is_some() => crate::display::line_edit(name::line(None)?),
         None => {
             let site = input.site();
-            selectable(faced("λ", Face::Name), &site)
+            crate::display::to_fill(selectable(faced("λ", Face::Name), &site))
         }
     })
 }
