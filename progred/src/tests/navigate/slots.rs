@@ -243,6 +243,32 @@ fn tab_stops_where_a_field_can_be_added_to_a_record() {
         Some((crate::occurrence::Path::default(), Some(Stage::Label)))
     );
     assert_eq!(tabbed(&mut driver, false), None);
+    // A record of a kind has none: its kind lists its fields.
+    use crate::libraries::def::vocabulary::{DEF, FIELDS};
+    let kind = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(
+        kind,
+        ::grap::isa::record(
+            DEF,
+            [
+                (name::vocabulary::NAME, text::value("box")),
+                (FIELDS, Value::list([label.into()])),
+            ],
+        ),
+    );
+    cells.set_value(label, name::record("size", []));
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(::grap::isa::record(
+                kind,
+                [(label, crate::libraries::f64::value(1.0))],
+            )),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    assert_eq!(tabbed(&mut driver, false), None);
 }
 
 #[test]

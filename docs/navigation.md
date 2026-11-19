@@ -150,6 +150,7 @@ where Tab goes next. A tab stop is either of:
 - A place where something can be added: each place in a list an element can
   go, before the first, between two, after the last, or in an empty list, and
   the end of each record that takes new fields, as Cmd+Enter would add one.
+  A record of a kind has none, since its kind lists its fields.
   These stand for no occurrence yet, so they're no landmarks, and arrows pass
   them by. A list's is its separator, a comma or the gap between lines, where
   clicking adds one too, and at the ends of a list on one line, nothing drawn

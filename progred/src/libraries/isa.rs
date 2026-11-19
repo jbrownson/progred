@@ -107,7 +107,7 @@ pub(crate) fn form<W: Host>(
     });
     let heading: Vec<_> = kind.into_iter().chain(name).collect();
     (!heading.is_empty()).then_some(())?;
-    let rest = fields.shown_empty().adding().rest(input, |key| {
+    let rest = fields.shown_empty().rest(input, |key| {
         key == vocabulary::ISA || key == name::vocabulary::NAME
     })?;
     // The braces fold, to `kind name {…}`, as a record's do.

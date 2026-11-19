@@ -285,7 +285,6 @@ pub(crate) struct Fields<W: Host> {
     child: Rc<dyn Fn(CellId) -> Option<Partial<W>>>,
     label: Rc<dyn Fn(CellId) -> Option<Layout<W>>>,
     shown_empty: bool,
-    adding: bool,
 }
 
 impl<W: Host> Default for Fields<W> {
@@ -297,7 +296,6 @@ impl<W: Host> Default for Fields<W> {
             child: Rc::new(|_| None),
             label: Rc::new(|_| None),
             shown_empty: false,
-            adding: false,
         }
     }
 }
@@ -339,13 +337,6 @@ impl<W: Host> Fields<W> {
     /// call's arguments are.
     pub(crate) fn shown_empty(mut self) -> Self {
         self.shown_empty = true;
-        self
-    }
-
-    /// A field can be added to the record among these, which Tab stops at
-    /// the end of: for a view that offers [`authoring`] around them.
-    pub(crate) fn adding(mut self) -> Self {
-        self.adding = true;
         self
     }
 
@@ -450,12 +441,11 @@ impl<W: Host> Fields<W> {
     ) -> Option<Layout<W>> {
         let keys = self.keys(input.value?.record_keys()?, input, drawn);
         let pending = pending_field(input);
-        let adding = self.adding.then(|| adding_field(input)).flatten();
         (self.shown_empty || !keys.is_empty() || pending.is_some()).then(|| {
             record_braces(
                 keys.into_iter().map(|key| self.field(input, key)),
                 pending,
-                adding,
+                None,
             )
         })
     }
@@ -626,11 +616,12 @@ pub fn authoring<W: Host>(child: Layout<W>) -> Layout<W> {
 
 /// Where a field can be added to the record here, which Tab stops at and
 /// arriving opens for its label: none while one is being added, which is
-/// that place.
+/// that place, nor in a record of a kind, whose kind lists its fields.
 fn adding_field<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    (input.writable && !matches!(input.pending, Some(Pending::Field))).then(|| {
+    let kinded = input.value.and_then(|value| value.kind()).is_some();
+    (input.writable && !kinded && !matches!(input.pending, Some(Pending::Field))).then(|| {
         let site = input.site();
         insertion(
             row(0.0, []),
