@@ -1305,9 +1305,31 @@ construction is separate work, not solved by inventing identities in the widget.
 ## Keyboard navigation and list reordering
 
 Ordinary arrows use [layout-derived navigation](navigation.md), and Tab moves
-between the places to fill in. Grow-selection commands, directional history, and moving a list
+between the places to fill in and where things are added. Grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
+
+## What placement records for navigation
+
+Placement records what input needs from a frame, mostly as flat lists: the
+landmarks, the tab stops, view regions, hover probes. Two things still pass
+from a widget to what's around it in other ways, as Tab's flag did until 19
+November 2026, when tab stops became records of their own:
+
+- A widget's own arrival, such as a line editor's caret at the edge it's
+  arrived from, is left in a slot on the output (`landmark_select`), which the
+  enclosing landmark at the same occurrence takes up as its `select`. The
+  engine draws that landmark around what `descend` reaches, so the widget
+  can't hand it an argument. The widget could instead record its occurrence
+  itself, as the picker does, the engine's landmark standing aside.
+- Arrows keep their stops in the view's collector, which needs the rows and
+  columns, apart from the landmark records: each occurrence is both, and a
+  control that declares its own stop is noted against the landmarks open
+  around it. The collector could order stops it's given from the landmark
+  records instead.
+
+Neither is wrong; they're the least consistent part of navigation, worth
+taking up when arrows next need work.
 
 ## One control-state model
 
