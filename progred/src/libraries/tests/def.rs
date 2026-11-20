@@ -508,3 +508,34 @@ fn space_folds_a_defs_and_a_librarys_lists() {
     space(&mut driver);
     assert!(!driver.drawn(&fields));
 }
+
+#[test]
+fn a_loaded_librarys_own_entries_are_drawn_in_place_and_others_by_name() {
+    use ui_events::keyboard::{Key, Modifiers};
+    // Its own description, drawn at its own cell: a foreign function of its
+    // own is there, folded, and opens to its stub.
+    let mut driver = Driver::of(Value::from(crate::libraries::png::ID));
+    let foreign = [Step::Follow, Step::Key(FOREIGN)];
+    let first = [
+        &foreign[..],
+        &[Step::Element(driver.positions(&foreign)[0].clone())],
+    ]
+    .concat();
+    driver.select(&first);
+    assert!(driver.keystroke(Key::Character(" ".into()), Modifiers::empty()));
+    assert!(driver.drawn(&[&first[..], &[Step::Follow]].concat()));
+    // A document's library that names another library's stub reads it by
+    // its name, a reference, which has nothing to open.
+    let stub = driver.value(&first).as_cell().unwrap();
+    let mut driver = Driver::of(::grap::isa::record(
+        LIBRARY,
+        [(FOREIGN, Value::list([stub.into()]))],
+    ));
+    let first = [
+        Step::Key(FOREIGN),
+        Step::Element(driver.positions(&[Step::Key(FOREIGN)])[0].clone()),
+    ];
+    driver.select(&first);
+    driver.keystroke(Key::Character(" ".into()), Modifiers::empty());
+    assert!(!driver.drawn(&[&first[..], &[Step::Follow]].concat()));
+}

@@ -312,17 +312,14 @@ pub(crate) fn document_functions<'a>(
 /// named as typed.
 fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.kind()? == LIBRARY).then_some(())?;
+    let owner = owner(input);
     // A list whose entries read as above, and whose empty place offers what
     // `new` makes of what's typed.
-    let listing = |new: fn(String) -> Completion| {
+    let listing = move |new: fn(String) -> Completion| {
         crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
             match input.value {
                 None => Some(new_place(new)),
-                Some(entry) => {
-                    let cell = entry.as_cell()?;
-                    input.env.resolve(cell)?.library?;
-                    name::shallow_cell(input)
-                }
+                Some(_) => elsewhere(input, owner),
             }
         })))
     };
@@ -352,7 +349,7 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                     )
                 })),
                 FOREIGN => Some(crate::display::structure::list(Some(
-                    crate::display::runtime_partial(foreign_function),
+                    crate::display::runtime_partial(move |input| foreign_function(input, owner)),
                 ))),
                 FIELDS => Some(listing(|typed| {
                     name::new_cell(typed, Some("field".into()), vec![])
@@ -369,12 +366,64 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
     )
 }
 
-/// A library's foreign function: its stub, by its name. A place for one
-/// offers the loaded libraries' stubs, as a document says which foreign
+/// The loaded library whose own description the library `input` draws is:
+/// where it's stored is the start of a library's own cell's definition. A
+/// document's library is none.
+fn owner<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<CellId> {
+    let location = input.site().location()?;
+    // Where it's stored: the cell its last Follow enters, or its own start.
+    let (start, rest) = match location
+        .path
+        .iter()
+        .rposition(|step| *step == gid::Step::Follow)
+    {
+        Some(follow) => (
+            crate::location::Start::Cell(
+                input
+                    .env
+                    .read_from(location.start, &location.path[..follow])?
+                    .as_cell()?,
+            ),
+            &location.path[follow + 1..],
+        ),
+        None => (location.start, &location.path[..]),
+    };
+    let crate::location::Start::Cell(cell) = start else {
+        return None;
+    };
+    (rest.is_empty() && input.env.resolve(cell)?.library == Some(cell)).then_some(cell)
+}
+
+/// An entry of the library `owner` describes, or of a document's library
+/// where it's none: another library's cell by its name, a reference; one of
+/// its own that's only a name as a declaration, as a def's fields are; and
+/// any other of its own in place, drawn as it would be anywhere.
+fn elsewhere<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+    owner: Option<CellId>,
+) -> Option<Layout<W>> {
+    let cell = input.value?.as_cell()?;
+    let definition = input.env.resolve(cell)?;
+    if definition.library != owner {
+        return name::shallow_cell(input);
+    }
+    let only_named = definition
+        .value
+        .as_record()
+        .is_some_and(|record| record.keys().all(|key| *key == name::vocabulary::NAME));
+    only_named.then(|| crate::libraries::grap::declaration_cell(input, None))?
+}
+
+/// A library's foreign function: its stub, by its name where another library
+/// defines it, and in place in its own library's description. A place for
+/// one offers the loaded libraries' stubs, as a document says which foreign
 /// functions it uses; the code behind a stub is the host's.
-fn foreign_function<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+fn foreign_function<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+    owner: Option<CellId>,
+) -> Option<Layout<W>> {
     match input.value {
-        Some(_) => name::shallow_cell(input),
+        Some(_) => elsewhere(input, owner),
         None => Some(picker(Picker::new(
             CompletionKind::Value,
             ranked(Rc::new(|request| {
