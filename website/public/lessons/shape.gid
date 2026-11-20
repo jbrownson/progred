@@ -1390,7 +1390,7 @@
         function: do,
       },
     },
-    tool_diameter: {name: "tool diameter", isa: f64, bytes: 0x000000000000c03f},
+    tool_diameter: {isa: value_wrapper, name: "tool diameter", grap_value: {isa: f64, bytes: 0x000000000000c03f}},
     tooled_groups: {
       isa: lambda_2,
       name: "tool for path groups",

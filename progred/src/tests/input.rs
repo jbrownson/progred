@@ -95,15 +95,26 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
     let cell_path = vec![Step::Element(
         list.as_list().unwrap().keys().next().unwrap().clone(),
     )];
-    let name_path = cell_path
-        .iter()
-        .cloned()
-        .chain([Step::Follow, Step::Key(name::vocabulary::NAME)])
-        .collect::<Vec<_>>();
+    let below = |steps: &[Step]| {
+        cell_path
+            .iter()
+            .cloned()
+            .chain(steps.iter().cloned())
+            .collect::<Vec<_>>()
+    };
+    let named_path = below(&[Step::Follow]);
+    let name_path = below(&[Step::Follow, Step::Key(name::vocabulary::NAME)]);
     let mut cells = Cells::new();
+    // A named number, `tilt = 45`.
     cells.set_value(
         cell,
-        name::record("tilt", f64::value(45.0).as_record().unwrap().clone()),
+        ::grap::isa::record(
+            ::grap::vocabulary::kind::VALUE_WRAPPER,
+            [
+                (name::vocabulary::NAME, text::value("tilt")),
+                (::grap::vocabulary::VALUE, f64::value(45.0)),
+            ],
+        ),
     );
     let mut runner = EditorRunner::new(crate::test_editor(Document {
         root: Some(list),
@@ -115,20 +126,25 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
         cell_path.clone(),
     ));
     runner.refresh_frame(1.0, VIEWPORT);
-    assert!(!runner.keyboard_event(
-        &key_down(NamedKey::ArrowDown, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        name_path
-    );
+    let press = |runner: &mut EditorRunner, key| {
+        runner.keyboard_event(&key_down(key, Modifiers::empty()), 1.0, VIEWPORT)
+    };
+    let selected = |runner: &EditorRunner| {
+        runner
+            .editor
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_vec()
+    };
+    assert!(!press(&mut runner, NamedKey::ArrowDown));
+    // Right enters the cell's named number, then its name, at its start.
+    for expected in [&named_path, &name_path] {
+        assert!(press(&mut runner, NamedKey::ArrowRight));
+        assert_eq!(selected(&runner), *expected);
+    }
     assert_eq!(
         runner
             .editor
@@ -141,36 +157,12 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
             .selection_offsets(),
         (0, 0)
     );
-    // Backward traversal visits the cell, then its enclosing list.
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        cell_path
-    );
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    assert!(
-        runner
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .path()
-            .is_empty()
-    );
-    assert!(!runner.keyboard_event(
-        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
+    // Backward traversal visits the named number, the cell, then the list.
+    for expected in [&named_path, &cell_path, &vec![]] {
+        assert!(press(&mut runner, NamedKey::ArrowLeft));
+        assert_eq!(selected(&runner), *expected);
+    }
+    assert!(!press(&mut runner, NamedKey::ArrowLeft));
 }
 
 #[test]
@@ -265,95 +257,6 @@ fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
             );
         }
     }
-}
-
-#[test]
-fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
-    use crate::libraries::name;
-    use ui_events::keyboard::NamedKey;
-    let list = gid::Value::list([
-        text::value("before"),
-        name::record("tilt", f64::value(45.0).as_record().unwrap().clone()),
-        text::value("after"),
-    ]);
-    let paths: Vec<_> = list
-        .as_list()
-        .unwrap()
-        .keys()
-        .map(|position| vec![crate::occurrence::Step::Element(position.clone())])
-        .collect();
-    let name_path: Vec<_> = paths[1]
-        .iter()
-        .cloned()
-        .chain([crate::occurrence::Step::Key(name::vocabulary::NAME)])
-        .collect();
-    let mut runner = EditorRunner::new(crate::editor_of(list));
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &crate::test_document(),
-        name_path.clone(),
-    ));
-    runner.refresh_frame(1.0, VIEWPORT);
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    let selected = runner.editor.model.selection.as_ref().unwrap();
-    assert_eq!(selected.path(), paths[1]);
-    assert_eq!(selected.edit().unwrap().selection_offsets(), (0, 0));
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    let selected = runner.editor.model.selection.as_ref().unwrap();
-    assert_eq!(selected.path(), name_path);
-    assert_eq!(selected.edit().unwrap().selection_offsets(), (4, 4));
-
-    for _ in 0.."tilt".len() {
-        assert!(runner.keyboard_event(
-            &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-            1.0,
-            VIEWPORT
-        ));
-    }
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        paths[0]
-    );
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        name_path
-    );
-    for _ in 0.."tilt".len() + 1 + "45".len() + 1 {
-        assert!(runner.keyboard_event(
-            &key_down(NamedKey::ArrowRight, Modifiers::empty()),
-            1.0,
-            VIEWPORT
-        ));
-    }
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        paths[2]
-    );
-    assert!(runner.keyboard_event(
-        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
-        1.0,
-        VIEWPORT
-    ));
-    let selected = runner.editor.model.selection.as_ref().unwrap();
-    assert_eq!(selected.path(), paths[1]);
-    assert_eq!(selected.edit().unwrap().selection_offsets(), (2, 2));
 }
 
 #[test]

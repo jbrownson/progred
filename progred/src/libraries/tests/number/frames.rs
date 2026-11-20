@@ -6,65 +6,23 @@ use crate::frame::test_support::editing_frame;
 use crate::hover::Hover;
 use crate::libraries::{f32, f64, text, u64};
 use crate::projection::test_support::*;
-use crate::selection::pending_value;
 use crate::test_values::numeric_calls;
 use gid::{Cells, Document, Step, new_cell_id};
 use kurbo::Point;
 use puri::hover::Claim;
 
 #[test]
-fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
-    let cell = new_cell_id();
-    let number_path = [Step::Follow];
-    let name_path = [number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
-    for (before, after) in [
-        (f64::value(45.0), f64::value(455.0)),
-        (f32::value(45.0), f32::value(455.0)),
-        (u64::value(45), u64::value(455)),
-    ] {
-        let named = name::record("tilt", before.as_record().unwrap().clone());
-        let mut cells = Cells::new();
-        cells.set_value(cell, named);
-        let mut driver = Driver::new(
-            crate::test_editor(Document {
-                root: Some(cell.into()),
-                cells,
-            }),
-            Driver::VIEWPORT,
-        );
-        for (path, typed) in [(&name_path[..], " angle"), (&number_path[..], "5")] {
-            driver.select(path);
-            driver.type_text(typed);
-        }
-        let doc = &driver.editor().model.doc;
-        assert_eq!(doc.root, Some(cell.into()));
-        assert_eq!(
-            doc.cells.value(cell),
-            Some(&name::record(
-                "tilt angle",
-                after.as_record().unwrap().clone()
-            )),
-        );
-    }
-}
-
-#[test]
-fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
+fn numeric_scrubbing_includes_the_representation() {
     for number in [f64::value(45.0), f32::value(45.0), u64::value(45)] {
         for (contact, pick) in [
-            ("name", true),
             ("digits", true),
             ("representation", true),
             ("representation", false),
         ] {
-            let name_contact = contact == "name";
-            let scrub = pick && !name_contact;
-            let value = name::record("tilt", number.as_record().unwrap().clone());
             let cell = new_cell_id();
-            let number_path = vec![Step::Follow];
-            let name_path = vec![number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
+            let path = vec![Step::Follow];
             let mut cells = Cells::new();
-            cells.set_value(cell, value.clone());
+            cells.set_value(cell, number.clone());
             let mut driver = Driver::new(
                 crate::test_editor(Document {
                     root: Some(cell.into()),
@@ -72,17 +30,10 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 }),
                 Driver::VIEWPORT,
             );
-            let path = if name_contact {
-                name_path.clone()
-            } else {
-                number_path.clone()
-            };
-            let rect = driver.rect(&name_path);
-            let number_rect = driver.rect(&number_path);
+            let rect = driver.rect(&path);
             let point = match contact {
-                "name" => rect.center(),
-                "digits" => Point::new(rect.x1 + 8.0, rect.center().y),
-                _ => Point::new(number_rect.x1 - 0.5, number_rect.y1 - 0.5),
+                "digits" => Point::new(rect.x0 + 4.0, rect.center().y),
+                _ => Point::new(rect.x1 - 0.5, rect.y1 - 0.5),
             };
             assert_eq!(
                 driver.hover_at(point),
@@ -95,51 +46,13 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 driver.hold_command();
             }
             driver.press_at(point);
-            assert_eq!(driver.editor().gesture.is_some(), scrub, "{contact}");
-            if !name_contact {
-                assert_eq!(driver.selection(), path);
-            }
-            assert_eq!(driver.editor().model.doc.cells.value(cell), Some(&value));
+            assert_eq!(driver.editor().gesture.is_some(), pick, "{contact}");
+            assert_eq!(driver.selection(), path);
+            assert_eq!(driver.editor().model.doc.cells.value(cell), Some(&number));
             driver.move_to(Point::new(point.x + 48.0, point.y));
             driver.release();
-            let doc = &driver.editor().model.doc;
-            assert_eq!(doc.root, Some(cell.into()));
-            let edited = doc.cells.value(cell).unwrap();
-            assert_eq!(name::read(edited), Some("tilt"));
-            assert_eq!(*edited == value, !scrub, "{contact}");
-        }
-    }
-}
-
-#[test]
-fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible() {
-    let path = [Step::Key(name::vocabulary::NAME)];
-    for number in [
-        f64::value(1.0),
-        f64::value(f64::INFINITY),
-        f32::value(1.0),
-        u64::value(1),
-    ] {
-        let mut world = crate::editor_of(number.clone());
-        let plain = editing_frame(&mut world);
-        assert!(!plain.landmarks.landmark(&path).is_some());
-        world.model.selection = Some(pending_value(
-            &crate::test_document(),
-            crate::occurrence::of(&path),
-        ));
-        assert!(
-            editing_frame(&mut world)
-                .landmarks
-                .landmark(&path)
-                .is_some()
-        );
-        world.model.selection = None;
-        for name in [text::value(""), Value::list([text::value("unusual name")])] {
-            let mut named = number.as_record().unwrap().clone();
-            named.extend([(name::vocabulary::NAME, name)]);
-            Rc::make_mut(&mut world.model.doc).root = Some(named.into());
-            let frame = editing_frame(&mut world);
-            assert!(frame.landmarks.landmark(&path).is_some());
+            let edited = driver.editor().model.doc.cells.value(cell).unwrap();
+            assert_eq!(*edited == number, !pick, "{contact}");
         }
     }
 }

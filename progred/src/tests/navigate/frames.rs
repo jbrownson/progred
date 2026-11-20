@@ -371,13 +371,17 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
 
 #[test]
 fn navigation_named_number_hands_off_from_name_at_text_boundary() {
-    let mut driver = Driver::of(name::record(
-        "tilt",
-        f64::value(45.0).as_record().unwrap().clone(),
+    // `tilt = 45`: Right at the end of the name goes on to the number.
+    let mut driver = Driver::of(::grap::isa::record(
+        ::grap::vocabulary::kind::VALUE_WRAPPER,
+        [
+            (name::vocabulary::NAME, text::value("tilt")),
+            (::grap::vocabulary::VALUE, f64::value(45.0)),
+        ],
     ));
     driver.select(&[Step::Key(name::vocabulary::NAME)]);
     driver.press(NamedKey::ArrowRight);
-    assert!(driver.selection().is_empty());
+    assert_eq!(driver.selection(), [Step::Key(::grap::vocabulary::VALUE)]);
     assert_eq!(driver.line_selection(), Some((0, 0)));
 }
 
@@ -463,8 +467,9 @@ fn navigation_workshop_nested_sections_preserve_occurrences_and_shared_edits() {
         let checks = crate::test_examples::section_body(&doc, &inspection, "Checks", occurrence);
         let body = crate::occurrence::of(&checks);
         let [first, cell, ..]: [_; 3] = elements(&doc, &checks).try_into().unwrap();
-        let name =
-            crate::occurrence::below(&cell, &[Step::Follow, Step::Key(name::vocabulary::NAME)]);
+        // The cell holds a named number, whose name is a stop inside it.
+        let named = crate::occurrence::below(&cell, &[Step::Follow]);
+        let name = crate::occurrence::below(&named, &[Step::Key(name::vocabulary::NAME)]);
         let mut world = crate::test_editor(document.clone());
         let before = world.model.doc.clone();
         world.model.selection = Some(crate::selection::Selection::edge(
@@ -474,6 +479,7 @@ fn navigation_workshop_nested_sections_preserve_occurrences_and_shared_edits() {
         for (direction, path) in [
             (NavigationDirection::Down, &first),
             (NavigationDirection::Down, &cell),
+            (NavigationDirection::Right, &named),
             (NavigationDirection::Right, &name),
         ] {
             let frame = editing_frame(&mut world);
@@ -611,16 +617,13 @@ fn navigation_section_connects_heading_and_body_before_adjacent_sections() {
 #[test]
 fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
     let (world, cells) = navigation_example_cells();
-    let name = crate::occurrence::below(
-        &cells[0],
-        &[Step::Follow, Step::Key(name::vocabulary::NAME)],
-    );
+    let named = crate::occurrence::below(&cells[0], &[Step::Follow]);
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&cells[0]);
     for (key, expected) in [
         (NamedKey::ArrowDown, &cells[1]),
         (NamedKey::ArrowUp, &cells[0]),
-        (NamedKey::ArrowRight, &name),
+        (NamedKey::ArrowRight, &named),
         (NamedKey::ArrowDown, &cells[1]),
     ] {
         driver.press(key);
@@ -661,9 +664,13 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
 #[test]
 fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
     let (world, cells) = navigation_example_cells();
-    let number = |cell: &crate::occurrence::Path| crate::occurrence::below(cell, &[Step::Follow]);
+    // Each cell holds a named number, `first = 45`.
+    let named = |cell: &crate::occurrence::Path| crate::occurrence::below(cell, &[Step::Follow]);
     let name = |cell: &crate::occurrence::Path| {
-        crate::occurrence::below(&number(cell), &[Step::Key(name::vocabulary::NAME)])
+        crate::occurrence::below(&named(cell), &[Step::Key(name::vocabulary::NAME)])
+    };
+    let number = |cell: &crate::occurrence::Path| {
+        crate::occurrence::below(&named(cell), &[Step::Key(::grap::vocabulary::VALUE)])
     };
     let document = world.model.doc.clone();
     let mut driver = Driver::new(world, Driver::VIEWPORT);
@@ -674,6 +681,7 @@ fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
         assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
         assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
     };
+    step(NamedKey::ArrowRight, named(&cells[0]), None);
     step(NamedKey::ArrowRight, name(&cells[0]), Some(0));
     for offset in 1..=5 {
         step(NamedKey::ArrowRight, name(&cells[0]), Some(offset));
@@ -682,7 +690,7 @@ fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
     step(NamedKey::ArrowRight, number(&cells[0]), Some(1));
     step(NamedKey::ArrowRight, number(&cells[0]), Some(2));
     step(NamedKey::ArrowRight, cells[1].clone(), None);
-    step(NamedKey::ArrowRight, name(&cells[1]), Some(0));
+    step(NamedKey::ArrowRight, named(&cells[1]), None);
     step(NamedKey::ArrowLeft, cells[1].clone(), None);
     step(NamedKey::ArrowLeft, number(&cells[0]), Some(2));
     step(NamedKey::ArrowLeft, number(&cells[0]), Some(1));
@@ -691,6 +699,7 @@ fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
     for offset in (0..5).rev() {
         step(NamedKey::ArrowLeft, name(&cells[0]), Some(offset));
     }
+    step(NamedKey::ArrowLeft, named(&cells[0]), None);
     step(NamedKey::ArrowLeft, cells[0].clone(), None);
     step(NamedKey::ArrowDown, cells[1].clone(), None);
     step(NamedKey::ArrowUp, cells[0].clone(), None);

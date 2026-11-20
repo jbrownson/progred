@@ -285,34 +285,6 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
     })
 }
 
-/// Explicitly include the stored name beside a facet's own presentation.
-/// This is decoration, not a binding or a record field/value pair.
-pub(crate) fn with_name<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    content: Layout<W>,
-) -> Layout<W> {
-    use crate::display::{Pending, descend};
-    let step = gid::Step::Key(vocabulary::NAME);
-    let has_name = input
-        .value
-        .is_some_and(|value| value.contains_field(vocabulary::NAME));
-    if has_name || input.pending == Some(Pending::Child(step.clone())) {
-        crate::display::row(
-            6.0,
-            [
-                descend(
-                    [step],
-                    Some(crate::display::first(input, projection(None))),
-                    None,
-                ),
-                content,
-            ],
-        )
-    } else {
-        content
-    }
-}
-
 pub fn library<W: Host>() -> Library<W> {
     named_library(
         ID,

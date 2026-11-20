@@ -24,7 +24,7 @@ fn new_color_is_only_offered_where_its_picker_can_be_presented() {
 use crate::display::recording::{Recordable, Recorded};
 
 use crate::display::RowAlignment;
-use crate::display::test_support::{NoEval, ProjectionCall, inspect};
+use crate::display::test_support::NoEval;
 use crate::libraries::test_widgets::projection_input;
 use gid::{Cells, new_cell_id};
 
@@ -180,38 +180,6 @@ fn a_read_only_color_draws_no_picker_for_a_picker_selection() {
                 child.as_ref(),
                 Recorded::Before { child, .. } if matches!(child.as_ref(), Recorded::Widget(_))
             )
-    ));
-}
-
-#[test]
-fn a_named_color_projects_its_editable_name_and_hex() {
-    let color = name::record("rebeccapurple", Encoded::Rgb([0x66, 0x33, 0x99]).fields());
-    let layout =
-        present(&projection_input(&NoEval, &(&color).into())).expect("named color projection");
-    let Recorded::Row { children, .. } = layout.record() else {
-        panic!("named color projection is one row")
-    };
-    let [name_field, drawn] = children.as_slice() else {
-        panic!("its name, then the color")
-    };
-    // The name reads as a name, as a number's does, not as quoted text.
-    assert!(matches!(&inspect(name_field),
-        ProjectionCall::Descend {
-            steps,
-            projection: Some(_),
-            ..
-        } if *steps == [Step::Key(name::vocabulary::NAME)]
-    ));
-    let Recorded::Row { children, .. } = drawn.content() else {
-        panic!("the color is a row")
-    };
-    let [_, spelling] = children.as_slice() else {
-        panic!("a swatch and its spelling")
-    };
-    assert!(matches!(spelling, Recorded::Widget(_)));
-    assert!(matches!(
-        hex_editor(encoded(&color).unwrap()),
-        line if line.text == "663399"
     ));
 }
 

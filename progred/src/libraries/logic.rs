@@ -56,8 +56,7 @@ fn spelled(spelling: &str) -> Option<bool> {
     }
 }
 
-/// A boolean reads as its spelling, edited in place, after any name, then
-/// any other fields.
+/// A boolean reads as its spelling, edited in place, then any other fields.
 fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let value = input.value?.as_bool()?;
     let line = crate::display::line_edit(crate::display::LineEdit {
@@ -71,11 +70,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
         family: crate::display::TextFamily::SystemUi,
         placeholder: None,
     });
-    Some(crate::display::structure::Fields::default().after(
-        input,
-        |key| isa::literal_field(key) || key == name::vocabulary::NAME,
-        name::with_name(input, line),
-    ))
+    Some(crate::display::structure::Fields::default().after(input, isa::literal_field, line))
 }
 
 /// What's typed, the start of `true` or `false`: read as a new boolean, and

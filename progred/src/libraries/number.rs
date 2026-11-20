@@ -52,7 +52,8 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
     }
 
     /// A number reads as its spelling, then any other fields, including one
-    /// being added.
+    /// being added. It doesn't carry a name: a named number is a constant,
+    /// Grap's value wrapper around it.
     pub fn display<W: Host>(
         self,
         input: &ProjectionInput<'_, W, RuntimeValue>,
@@ -94,11 +95,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
         } else {
             line
         };
-        Some(crate::display::structure::Fields::default().after(
-            input,
-            |key| isa::literal_field(key) || key == name::vocabulary::NAME,
-            name::with_name(input, line),
-        ))
+        Some(crate::display::structure::Fields::default().after(input, isa::literal_field, line))
     }
 
     pub fn completions(self, query: &str) -> Vec<crate::display::Completion> {

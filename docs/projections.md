@@ -432,12 +432,10 @@ definition, and renaming f64 renames the subscript. The label still selects
 the call's `function` field. A comparison's subscript identifies its operand
 representation, not its boolean result. Fidget's arithmetic is named the same
 way, with fidget's tag.
-Numbers explicitly include an optional stored name beside the number,
-separated by spacing rather than binding or record-field punctuation. The shared
-name decorator descends to the real `name` field with an unquoted text editor;
-the number retains its own editor and scrub target. The numeric target includes
-the representation subscript: clicking it selects the number, and modified
-dragging scrubs just as over the digits. It does not include the name. While
+A literal doesn't carry a name: a named number, color or boolean is Grap's
+value wrapper around it, `tilt = 45`, its name the wrapper's. A number's
+target includes the representation subscript: clicking it selects the number,
+and modified dragging scrubs just as over the digits. While
 the command modifier is held, a writable number's digits are outlined as a
 hovered value is, in the number's own color rather than the selection's, and
 the pointer over it is a left-right arrow, which a drag keeps until release.
@@ -455,7 +453,7 @@ follows as a trailing record, and both editors retain their stored field paths. 
 `let` binding; the evaluator ignores its name. A library's constants, such as
 `π`, the named colors and `true`, are value wrappers too, so evaluating one
 gives the value alone, not one that says it's the constant. A named number in
-a document, `{name, isa: f64, bytes}`, stays a number that carries its name.
+a document is one too.
 
 Within Grap's library, calls, lambdas, and value wrappers are tried in evaluator
 precedence order. Each remains an ordinary partial: malformed contents decline

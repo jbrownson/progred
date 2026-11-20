@@ -333,7 +333,7 @@ fn swatch<W: Host>(color: Color) -> Layout<W> {
     }))
 }
 
-/// A color as its swatch, any text name, and its hex spelling.
+/// A color as its swatch and its hex spelling.
 fn present<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let value = input.value?;
     let encoded = encoded_runtime(value)?;
@@ -368,8 +368,8 @@ fn present<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
     let spelling = crate::display::line_edit(hex_editor(encoded));
     Some(crate::display::structure::Fields::default().after(
         input,
-        |key| crate::libraries::isa::literal_field(key) || key == name::vocabulary::NAME,
-        name::with_name(input, centered_row(4.0, [swatch, spelling])),
+        crate::libraries::isa::literal_field,
+        centered_row(4.0, [swatch, spelling]),
     ))
 }
 

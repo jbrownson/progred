@@ -477,29 +477,6 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
 }
 
 #[test]
-fn named_color_name_and_spelling_form_one_horizontal_row() {
-    use NavigationDirection::*;
-    let color = crate::libraries::color::tests::value(peniko::Color::new([0.7, 0.3, 0.1, 1.0]));
-    let color = Value::record(
-        color
-            .as_record()
-            .unwrap()
-            .with(name::vocabulary::NAME, text::value("copper")),
-    );
-    let mut f = Fixture::new(color, Cells::new());
-    let name = f.child([Step::Key(name::vocabulary::NAME)]);
-    for (from, direction, to) in [
-        (name.clone(), Right, f.whole.clone()),
-        (f.whole.clone(), Left, name.clone()),
-        (name.clone(), Down, f.after.clone()),
-        (name, Up, f.before.clone()),
-        (f.whole.clone(), Right, f.after.clone()),
-    ] {
-        f.check(1500.0, &from, direction, &to);
-    }
-}
-
-#[test]
 fn tutorial_slots_use_vertical_flow_including_missing_slots() {
     use NavigationDirection::*;
     let first = gid::new_cell_id();
