@@ -990,7 +990,12 @@ A boolean is a literal of the bool kind, `{isa: bool, bytes}`, its one byte 1
 for true and 0 for false. The logic library draws it as `true` or `false` and
 keeps the constants `true` and `false`, which evaluate to those literals: in a
 Grap slot, typing `true` offers the constant, by name, and `new true`, a
-boolean of its own. Its `require` function takes a `condition`, returning `{}` for true and a
+boolean of its own. A pattern is data, compared as written, so a place for one
+offers only `new true`: the constant there would be its cell, matching only
+itself. Record patterns are open, so a boolean carrying a name or other fields
+still matches the literal. Patterns are for structure, kinds and identities;
+values are compared by their kinds' functions, such as f64's `=`, since equal
+floats can differ in their bits. Its `require` function takes a `condition`, returning `{}` for true and a
 condition-not-met absent for false; a condition that isn't a boolean, or is
 absent, makes it "invalid arguments" as for any function. This is an ordinary
 guard used in `do`, not evaluator syntax or a configurable bind mechanism.

@@ -1280,3 +1280,40 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     driver.type_text("\"");
     assert_eq!(offered(&mut driver)[0], "quote", "the hole is code again");
 }
+
+/// A pattern is data, compared as written, so a place for one offers a new
+/// boolean, which matches one, and not the constant `true`, a cell, which
+/// would match only itself; an argument, evaluated, offers both.
+#[test]
+fn a_pattern_offers_a_new_boolean_and_an_argument_the_constant_too() {
+    let case = ::grap::isa::record(
+        vocabulary::kind::CASE,
+        [(grap::vocabulary::EXPRESSION, blob("matched"))],
+    );
+    let root = match_call(blob("subject"), [case]);
+    let doc = gid::Document {
+        root: Some(root.clone()),
+        cells: gid::Cells::new(),
+    };
+    let cases = crate::test_support::value_at(&root, &[Step::Key(vocabulary::CASES)]).unwrap();
+    let position = cases.as_list().unwrap().iter().next().unwrap().0.clone();
+    let offered = |path: &[Step]| {
+        let selection = crate::selection::pending_with_query(
+            &crate::test_document(),
+            crate::occurrence::of(path),
+            "tr",
+        );
+        crate::test_support::projected_completion_entries(&doc, &selection)
+            .into_iter()
+            .filter(|entry| entry.display == "true")
+            .map(|entry| entry.new)
+            .collect::<Vec<_>>()
+    };
+    let pattern = [
+        Step::Key(vocabulary::CASES),
+        Step::Element(position),
+        Step::Key(vocabulary::PATTERN),
+    ];
+    assert_eq!(offered(&pattern), [true]);
+    assert_eq!(offered(&[Step::Key(vocabulary::VALUE)]), [false, true]);
+}
