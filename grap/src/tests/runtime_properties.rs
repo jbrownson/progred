@@ -10,24 +10,20 @@ use proptest::prelude::*;
 const A: CellId = CellId::from_u128(0x5e1f0c6a1b2d4e8f9a0b1c2d3e4f5a6b);
 const B: CellId = CellId::from_u128(0x7c3a9e1d5b2f4a6c8e0d1f3b5a7c9e2d);
 
-/// Labels a record may have: plain ones, the conventions' and Grap's own.
-const LABELS: [CellId; 12] = [
+/// Labels a record may have: plain ones, a literal's and Grap's own.
+const LABELS: [CellId; 8] = [
     A,
     B,
     isa::ISA,
-    crate::f64::F64,
-    crate::f32::F32,
-    crate::u64::U64,
-    crate::text::TEXT,
-    crate::logic::BOOL,
+    vocabulary::BYTES,
     vocabulary::FUNCTION,
     vocabulary::PARAMS,
     vocabulary::BODY,
     vocabulary::VALUE,
 ];
 
-/// Cells a reference may name: the labels, and the kinds and booleans the
-/// conventions recognize.
+/// Cells a reference may name: the labels, and the kinds Grap recognizes,
+/// literals' among them.
 fn cell() -> impl Strategy<Value = CellId> {
     prop_oneof![
         prop::sample::select(LABELS.to_vec()),
@@ -37,8 +33,11 @@ fn cell() -> impl Strategy<Value = CellId> {
             vocabulary::kind::VALUE_WRAPPER,
             vocabulary::kind::CLOSURE,
             vocabulary::kind::ABSENT,
-            crate::logic::TRUE,
-            crate::logic::FALSE,
+            crate::f64::F64,
+            crate::f32::F32,
+            crate::u64::U64,
+            crate::text::TEXT,
+            crate::logic::BOOL,
         ]),
     ]
 }

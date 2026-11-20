@@ -524,10 +524,10 @@
                   subject: {isa: call, right: state, function: less, left: rows},
                   function: match,
                   cases: [
-                    {isa: case, pattern: {bool: true}, expression: {isa: absent, reason: done}},
+                    {isa: case, pattern: {isa: bool, bytes: 0x01}, expression: {isa: absent, reason: done}},
                     {
                       isa: case,
-                      pattern: {bool: false},
+                      pattern: {isa: bool, bytes: 0x00},
                       expression: {
                         isa: call,
                         expressions: [
@@ -1145,8 +1145,8 @@
         },
         function: match,
         cases: [
-          {isa: case, pattern: {bool: true}, expression: {isa: f64, bytes: 0x000000000000f0bf}},
-          {isa: case, pattern: {bool: false}, expression: {isa: f64, bytes: 0x000000000000f03f}},
+          {isa: case, pattern: {isa: bool, bytes: 0x01}, expression: {isa: f64, bytes: 0x000000000000f0bf}},
+          {isa: case, pattern: {isa: bool, bytes: 0x00}, expression: {isa: f64, bytes: 0x000000000000f03f}},
         ],
       },
     },
@@ -1210,10 +1210,10 @@
                   subject: {isa: call, right: state, function: less, left: segments},
                   function: match,
                   cases: [
-                    {isa: case, pattern: {bool: true}, expression: {isa: absent, reason: done}},
+                    {isa: case, pattern: {isa: bool, bytes: 0x01}, expression: {isa: absent, reason: done}},
                     {
                       isa: case,
-                      pattern: {bool: false},
+                      pattern: {isa: bool, bytes: 0x00},
                       expression: {
                         isa: call,
                         expressions: [

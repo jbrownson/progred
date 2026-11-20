@@ -350,30 +350,6 @@ fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
 }
 
 #[test]
-fn interpreting_an_unboxed_boolean_as_code_preserves_syntax_precedence() {
-    let interpret = new_cell_id();
-    let source = gid::Record::from_iter([
-        (crate::logic::BOOL, crate::logic::encode(true)),
-        (isa::ISA, Value::from(vocabulary::kind::VALUE_WRAPPER)),
-        (vocabulary::VALUE, f64::value(9.0)),
-    ]);
-    let value = unboxed(source);
-    let receiver = host(vec![(
-        interpret,
-        TestDefinition::foreign(
-            interpret,
-            gid::Record::default(),
-            ForeignFunction::new(move |context, _, environment| {
-                context.eval_runtime_code(&value, environment)
-            }),
-        ),
-    )]);
-    let result = Evaluator::new(&receiver, 100).evaluate(&call(interpret.into(), []));
-    assert_eq!(result.halt, None);
-    assert_eq!(result.result.as_f64(), Some(9.0));
-}
-
-#[test]
 fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
     let metadata = new_cell_id();
     let closure = Evaluator::new(&host(vec![]), 100)
@@ -654,74 +630,6 @@ fn runtime_built_callable_records_match_their_gid_forms() {
                 .to_value(),
             expected.result.to_value()
         );
-    }
-}
-
-#[test]
-fn unboxed_values_keep_the_callable_facets_of_their_records() {
-    let (identity, argument) = (new_cell_id(), new_cell_id());
-    let receiver = host(vec![(
-        identity,
-        TestDefinition::foreign(
-            identity,
-            gid::Record::default(),
-            ForeignFunction::new(move |context, call, environment| {
-                context.eval(call.field(argument).unwrap(), environment)
-            }),
-        ),
-    )]);
-    let closure = gid::Record::from_iter([
-        (crate::logic::BOOL, crate::logic::encode(true)),
-        (isa::ISA, Value::from(vocabulary::kind::CLOSURE)),
-        (
-            vocabulary::LAMBDA,
-            Value::record([
-                (vocabulary::PARAMS, Value::list([])),
-                (vocabulary::BODY, Value::from(argument)),
-            ]),
-        ),
-        (
-            vocabulary::ENVIRONMENT,
-            Value::record([(argument, f64::value(8.0))]),
-        ),
-    ]);
-    let overlay = ForeignFunctions::default();
-    for record in [closure] {
-        let unboxed = unboxed(record.clone());
-        assert!(
-            matches!(&unboxed.0, RuntimeValueKind::Unboxed(value) if matches!(value.native(), Native::Bool(true)))
-        );
-        // The boolean answers each call as its record form does.
-        for function in [RuntimeValue::from(Value::Record(record)), unboxed] {
-            let arguments = || [(argument, RuntimeValue::f64(8.0))];
-            assert_eq!(
-                Evaluator::new(&receiver, 100)
-                    .apply(&function, arguments())
-                    .result
-                    .as_f64(),
-                Some(8.0)
-            );
-            assert_eq!(
-                Evaluator::new(&receiver, 100)
-                    .apply_expression(&function, arguments())
-                    .result
-                    .as_f64(),
-                Some(8.0)
-            );
-            let expression = runtime_call(
-                [(vocabulary::FUNCTION, function.clone())]
-                    .into_iter()
-                    .chain(arguments()),
-            );
-            assert_eq!(
-                Evaluator::new(&receiver, 100)
-                    .functions(overlay.clone())
-                    .evaluate_runtime(&expression, None)
-                    .result
-                    .as_f64(),
-                Some(8.0)
-            );
-        }
     }
 }
 

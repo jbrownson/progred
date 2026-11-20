@@ -802,9 +802,10 @@ pub const STEP_FOLLOW: u128 = 0x33c6fb363ddc6f13fd054c68f7a37a98;
 
 pub const STEP_INDEXABLE: u128 = 0xbd69ea5a7f839fe98dab761c01c22c13;
 
-// The number and boolean conventions Grap holds natively, the same
+// The number and boolean kinds Grap holds natively, the same
 // identities as in grap's f64, f32, u64 and logic modules. A number is
-// `{isa: <its kind>, bytes: <blob>}`.
+// `{isa: <its kind>, bytes: <blob>}`, and a boolean `{isa: bool, bytes}`,
+// one byte.
 
 pub const BYTES: u128 = 0xfe06bf0459d2598aa29b30302e3b29b8;
 
@@ -821,9 +822,5 @@ pub const U64: u128 = 0xfc77282178c2fa31b80aed2b8b6f7888;
 pub const NOT_U64: u128 = 0xae77a805a7ce41dbac03b292d2685918;
 
 pub const BOOL: u128 = 0xb2d13b64336a9e808133d0c7d5e4981e;
-
-pub const TRUE: u128 = 0x04831f9b704935059231eb111770e62e;
-
-pub const FALSE: u128 = 0x8fcc0a2e5f26c72efd9e917a28919801;
 
 } // verus!

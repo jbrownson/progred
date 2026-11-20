@@ -2,7 +2,7 @@ use super::*;
 use ::grap::logic::{read, value};
 
 #[test]
-fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
+fn booleans_are_one_byte_literals_and_the_constants_hold_them() {
     let library = library::<crate::Editor>();
     for expected in [true, false] {
         let extra = gid::new_cell_id();
@@ -25,16 +25,17 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
         } else {
             vocabulary::FALSE
         };
+        // The constant is a reference until it's evaluated; it holds the
+        // literal, named.
         assert_eq!(read(&cell.into()), None);
-        assert_eq!(read(library.definitions.value(cell).unwrap()), None);
+        assert_eq!(
+            read(library.definitions.value(cell).unwrap()),
+            Some(expected)
+        );
     }
-    assert_eq!(
-        read(&Value::record([(
-            vocabulary::BOOL,
-            gid::new_cell_id().into()
-        )])),
-        None
-    );
+    for bytes in [vec![], vec![2], vec![1, 1]] {
+        assert_eq!(read(&::grap::literal::value(vocabulary::BOOL, bytes)), None);
+    }
 }
 
 #[test]

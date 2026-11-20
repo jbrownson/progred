@@ -986,9 +986,12 @@ An empty `do` returns `missing final expression`. Ordinary `let` and `where`
 bindings may bind absents without short-circuiting; a structural binding mismatch
 returns a pattern-mismatch absent.
 
-The logic library uses open `{bool: true-cell}` / `{bool: false-cell}` records.
-The payload is compared by identity, never evaluated or compared by its name.
-Its `require` function takes a `condition`, returning `{}` for true and a
+A boolean is a literal of the bool kind, `{isa: bool, bytes}`, its one byte 1
+for true and 0 for false. The logic library draws it as `true` or `false` and
+keeps the constants `true` and `false`, which hold those literals, named: in a
+Grap slot, typing `true` offers the constant, by name, and `new true`, a
+boolean of its own. A pattern compares a cell as it is, so one matching a
+boolean holds the literal, not the constant. Its `require` function takes a `condition`, returning `{}` for true and a
 condition-not-met absent for false; a condition that isn't a boolean, or is
 absent, makes it "invalid arguments" as for any function. This is an ordinary
 guard used in `do`, not evaluator syntax or a configurable bind mechanism.

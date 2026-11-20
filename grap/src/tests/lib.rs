@@ -1580,10 +1580,13 @@ fn a_native_boolean_answers_as_its_record() {
     for value in [true, false] {
         let native = RuntimeValue::bool(value);
         assert_eq!(native.to_value(), logic::value(value));
-        assert_eq!(native.record_len(), Some(1));
+        assert_eq!(native.record_len(), Some(2));
+        assert_eq!(native.as_bool(), Some(value));
         assert_eq!(
-            native.field(logic::BOOL).and_then(|field| field.as_cell()),
-            Some(if value { logic::TRUE } else { logic::FALSE })
+            native
+                .field(vocabulary::BYTES)
+                .and_then(|bytes| bytes.as_blob().map(<[u8]>::to_vec)),
+            Some(vec![u8::from(value)])
         );
         assert_eq!(logic::read(&native.into_value()), Some(value));
     }

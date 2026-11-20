@@ -1040,15 +1040,15 @@ pub open spec fn not_a_number(number: Number, value: Value) -> Value {
     }
 }
 
-/// An answer as a value: `{isa: <type>, bytes}`, `{bool: true}` or `{bool:
-/// false}`, or `{isa: absent, reason}`.
+/// An answer as a value: `{isa: <type>, bytes}`, `{isa: bool, bytes: 1}` or
+/// `{isa: bool, bytes: 0}`, or `{isa: absent, reason}`.
 pub open spec fn answer_value(number: Number, answer: Answer) -> Value {
     match answer {
         Answer::Number(bytes) => Value::Record(
             map![ISA => Value::Cell(number_kind(number)), BYTES => Value::Blob(bytes)],
         ),
         Answer::Truth(truth) => Value::Record(
-            map![BOOL => Value::Cell(if truth { TRUE } else { FALSE })],
+            map![ISA => Value::Cell(BOOL), BYTES => Value::Blob(seq![if truth { 1u8 } else { 0u8 }])],
         ),
         Answer::Failure(reason) => absent(reason, Seq::empty()),
     }

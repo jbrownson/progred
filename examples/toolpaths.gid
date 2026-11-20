@@ -92,7 +92,6 @@
     "face_pair": 111895a6b630ea7972df149951c62b9b,
     "face_paths": 2fd754abf2b4f15b441b8b545af455be,
     "factor": e3eaeacd73376db4ec0b94ea9a4faee3,
-    "false": 8fcc0a2e5f26c72efd9e917a28919801,
     "feed_direction": 4f961bef2d597db99a7f3e7c2e211181,
     "field": 66bad5269b830181b840cf23a391b10e,
     "floor": d007814c5f6a6c38b025605b399473d4,
@@ -253,7 +252,6 @@
     "tree_mapping": 4ad3bf56ebbd64849bf8d218f46d7591,
     "tree_program": e4ee09094ff44e8dd415a05645f99e97,
     "tree_program_cursor": 0b8e1e3410cfd16c0b36e18be2fcb8a3,
-    "true": 04831f9b704935059231eb111770e62e,
     "u": c55bbadf3e61435c3aeab495079d1b19,
     "u0": 29eae588a452e24940f5eae3d9f07c78,
     "u1": b64d80018a2257079ca8b6b617d9a6d9,
@@ -1567,7 +1565,8 @@
                   cases: [
                     0x55: {
                       pattern: {
-                        bool: true,
+                        isa: bool,
+                        bytes: 0x01,
                       },
                       expression: {
                         reason: done,
@@ -1577,7 +1576,8 @@
                     },
                     0xaa: {
                       pattern: {
-                        bool: false,
+                        isa: bool,
+                        bytes: 0x00,
                       },
                       expression: {
                         expressions: [
@@ -1904,7 +1904,8 @@
                         cases: [
                           0x55: {
                             pattern: {
-                              bool: true,
+                              isa: bool,
+                              bytes: 0x01,
                             },
                             expression: {
                               reason: done,
@@ -1914,7 +1915,8 @@
                           },
                           0xaa: {
                             pattern: {
-                              bool: false,
+                              isa: bool,
+                              bytes: 0x00,
                             },
                             expression: {
                               expressions: [
@@ -3430,7 +3432,8 @@
         cases: [
           0x55: {
             pattern: {
-              bool: true,
+              isa: bool,
+              bytes: 0x01,
             },
             expression: {
               isa: f64,
@@ -3440,7 +3443,8 @@
           },
           0xaa: {
             pattern: {
-              bool: false,
+              isa: bool,
+              bytes: 0x00,
             },
             expression: {
               isa: f64,
@@ -3668,7 +3672,8 @@
                   cases: [
                     0x55: {
                       pattern: {
-                        bool: true,
+                        isa: bool,
+                        bytes: 0x01,
                       },
                       expression: {
                         reason: done,
@@ -3678,7 +3683,8 @@
                     },
                     0xaa: {
                       pattern: {
-                        bool: false,
+                        isa: bool,
+                        bytes: 0x00,
                       },
                       expression: {
                         expressions: [

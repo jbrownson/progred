@@ -514,8 +514,6 @@ fn the_reference_names_grap_cells() {
         (reference::U64, crate::u64::U64),
         (reference::NOT_U64, crate::u64::NOT_U64),
         (reference::BOOL, crate::logic::BOOL),
-        (reference::TRUE, crate::logic::TRUE),
-        (reference::FALSE, crate::logic::FALSE),
     ];
     for (reference, grap) in named {
         assert_eq!(CellId::from_u128(reference), grap);

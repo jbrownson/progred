@@ -184,7 +184,7 @@ impl Parser<'_> {
                         return Err("duplicate label in a record".to_string());
                     }
                 }
-                Ok(Value::record(literal(fields)))
+                Ok(literal(fields))
             }
             Some('[') => {
                 self.rest = &self.rest[1..];
@@ -537,10 +537,12 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
     }
 }
 
-/// Literals were once `{<kind>: bytes}`, `{f64: 0x…}`: a record written so
-/// reads as `{isa: <kind>, bytes}`, its other fields kept.
-fn literal(mut fields: Vec<(CellId, Value)>) -> Vec<(CellId, Value)> {
-    use crate::libraries::{color, png};
+/// Literals were once `{<kind>: bytes}`, `{f64: 0x…}`, and booleans `{bool:
+/// true}`: a record written so reads as `{isa: <kind>, bytes}`, its other
+/// fields kept. A boolean becomes a literal, not a reference to the constant,
+/// since a pattern compares a cell as it is.
+fn literal(mut fields: Vec<(CellId, Value)>) -> Value {
+    use crate::libraries::{color, logic, png};
     use ::grap::{isa::ISA, vocabulary::BYTES};
     const KINDS: [CellId; 7] = [
         ::grap::f64::F64,
@@ -555,16 +557,30 @@ fn literal(mut fields: Vec<(CellId, Value)>) -> Vec<(CellId, Value)> {
         .iter()
         .any(|(label, _)| *label == ISA || *label == BYTES)
     {
-        return fields;
+        return Value::record(fields);
     }
+    let truth = |value: &Value| match value.as_cell()? {
+        logic::vocabulary::TRUE => Some(true),
+        logic::vocabulary::FALSE => Some(false),
+        _ => None,
+    };
     if let Some(at) = fields
+        .iter()
+        .position(|(label, value)| *label == logic::vocabulary::BOOL && truth(value).is_some())
+    {
+        let (_, constant) = fields.remove(at);
+        fields.extend(::grap::literal::fields(
+            logic::vocabulary::BOOL,
+            vec![u8::from(truth(&constant) == Some(true))],
+        ));
+    } else if let Some(at) = fields
         .iter()
         .position(|(label, value)| KINDS.contains(label) && value.as_blob().is_some())
     {
         let (kind, bytes) = fields.remove(at);
         fields.extend([(ISA, Value::from(kind)), (BYTES, bytes)]);
     }
-    fields
+    Value::record(fields)
 }
 
 fn print_bytes(out: &mut String, bytes: &[u8]) {

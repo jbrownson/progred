@@ -51,7 +51,6 @@
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
-    "false": 8fcc0a2e5f26c72efd9e917a28919801,
     "fill": 1624dc973ec7790203eb8fd22c9d6d05,
     "finished": b19fe726e3c2eab7a5d81cda12cf44b7,
     "floor": d007814c5f6a6c38b025605b399473d4,
@@ -148,7 +147,6 @@
     "transform": 0c69b749e5d076609a6642a20b736fb4,
     "translate": b9c300206cc1c193cc801f4f058f2647,
     "tree_scene": 7e4d12b4f6c05a79ee734b4441972149,
-    "true": 04831f9b704935059231eb111770e62e,
     "trunk_length": 2d32fc785aae627f3f5c34f601e9f03c,
     "turn_left": 039dae8299938bd45e7bd27629aae539,
     "turn_right": dea4f4b45c15610e60582a12d967f7e8,
@@ -228,7 +226,8 @@
                 cases: [
                   0x55: {
                     pattern: {
-                      bool: true,
+                      isa: bool,
+                      bytes: 0x01,
                     },
                     expression: {
                       function: let,
@@ -529,7 +528,8 @@
                             cases: [
                               0x55: {
                                 pattern: {
-                                  bool: true,
+                                  isa: bool,
+                                  bytes: 0x01,
                                 },
                                 expression: {
                                   function: quote,
@@ -597,7 +597,8 @@
                   },
                   0xaa: {
                     pattern: {
-                      bool: false,
+                      isa: bool,
+                      bytes: 0x00,
                     },
                     expression: {
                       reason: finished,
@@ -963,7 +964,8 @@
                               cases: [
                                 0x55: {
                                   pattern: {
-                                    bool: true,
+                                    isa: bool,
+                                    bytes: 0x01,
                                   },
                                   expression: trunk_length,
                                   isa: case,
@@ -1084,7 +1086,8 @@
                               cases: [
                                 0x55: {
                                   pattern: {
-                                    bool: true,
+                                    isa: bool,
+                                    bytes: 0x01,
                                   },
                                   expression: {
                                     function: let,
@@ -1269,7 +1272,8 @@
                                     cases: [
                                       0x55: {
                                         pattern: {
-                                          bool: true,
+                                          isa: bool,
+                                          bytes: 0x01,
                                         },
                                         expression: {
                                           function: let,
@@ -1397,7 +1401,8 @@
                               cases: [
                                 0x55: {
                                   pattern: {
-                                    bool: true,
+                                    isa: bool,
+                                    bytes: 0x01,
                                   },
                                   expression: {
                                     function: quote,
@@ -1664,7 +1669,8 @@
                     cases: [
                       0x55: {
                         pattern: {
-                          bool: true,
+                          isa: bool,
+                          bytes: 0x01,
                         },
                         expression: {
                           function: let,
@@ -1774,7 +1780,8 @@
                       },
                       0xaa: {
                         pattern: {
-                          bool: false,
+                          isa: bool,
+                          bytes: 0x00,
                         },
                         expression: {
                           reason: finished,

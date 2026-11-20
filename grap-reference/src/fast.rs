@@ -28,7 +28,7 @@ use crate::evaluator::{
 use crate::evaluator::{view_definition, view_host};
 use crate::number::{
     FloatAnswer, binary_number, decode, encode, float_binary, float_unary, not_a_number,
-    number_bytes, number_kind, one_detail, width,
+    number_bytes, number_kind, one_detail, truth_value, width,
 };
 #[cfg(verus_only)]
 use crate::number::{float_answer, lemma_le_bytes_round_trip, lemma_le_round_trip, power256};
@@ -1815,18 +1815,7 @@ fn truth(answer: bool) -> (made: Runtime)
         means(made) == definition::answer_value(Number::U64, Answer::Truth(answer)),
         !(made is Closure),
 {
-    Runtime::Data(
-        exec_single(
-            BOOL,
-            ExecValue::Cell(
-                if answer {
-                    TRUE
-                } else {
-                    FALSE
-                },
-            ),
-        ),
-    )
+    Runtime::Data(truth_value(answer))
 }
 
 fn failure(reason: u128) -> (made: Runtime)

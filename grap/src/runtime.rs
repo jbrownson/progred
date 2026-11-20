@@ -177,8 +177,9 @@ impl RuntimeValue {
         }
     }
 
-    /// The bytes this holds as a literal of `kind`: read without building
-    /// the record.
+    /// The bytes this holds as a literal of `kind`, stored: read without
+    /// building the record. A value made natively stores none; the typed
+    /// readers, `as_f64` and the others, read those.
     pub fn literal(&self, kind: CellId) -> Option<&[u8]> {
         match &self.0 {
             RuntimeValueKind::Unboxed(unboxed) => crate::literal::of(unboxed.original()?, kind),
@@ -188,6 +189,16 @@ impl RuntimeValue {
                 runtime_field(fields, crate::vocabulary::BYTES)?.as_blob()
             }
             RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+        }
+    }
+
+    /// The boolean this value holds as a literal of the bool kind.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self.native() {
+            Some(Native::Bool(value)) => Some(*value),
+            _ => self
+                .literal(crate::logic::BOOL)
+                .and_then(crate::logic::decode),
         }
     }
 

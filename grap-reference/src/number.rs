@@ -148,18 +148,28 @@ fn answer_value(number: Number, answer: ExecAnswer) -> (made: ExecValue)
             BYTES,
             ExecValue::Blob(Rc::new(bytes)),
         ),
-        ExecAnswer::Truth(truth) => exec_single(
-            BOOL,
-            ExecValue::Cell(
-                if truth {
-                    TRUE
-                } else {
-                    FALSE
-                },
-            ),
-        ),
+        ExecAnswer::Truth(truth) => truth_value(truth),
         ExecAnswer::Failure(reason) => exec_bare_absent(reason),
     }
+}
+
+/// `{isa: bool, bytes}`, its one byte 1 for true and 0 for false: what any
+/// operation answering `truth` comes to.
+pub(crate) fn truth_value(truth: bool) -> (made: ExecValue)
+    ensures
+        forall|number: Number| view(made) == #[trigger] definition::answer_value(number, Answer::Truth(truth)),
+{
+    let byte: u8 = if truth {
+        1
+    } else {
+        0
+    };
+    let mut bytes = Vec::new();
+    bytes.push(byte);
+    proof {
+        assert(bytes@ =~= seq![byte]);
+    }
+    exec_pair(ISA, ExecValue::Cell(BOOL), BYTES, ExecValue::Blob(Rc::new(bytes)))
 }
 
 /// `[(label, why)]`, the details of an operand that isn't a number.

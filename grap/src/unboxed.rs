@@ -27,8 +27,8 @@ pub(crate) enum Native {
 }
 
 impl Native {
-    /// The convention a record follows, if any: a literal of a number's or
-    /// text's kind, or a boolean.
+    /// The literal a record is, if it's one of a kind Grap holds natively: a
+    /// number, text or a boolean.
     fn recognize(fields: &Record) -> Option<Self> {
         let bytes = |kind| crate::literal::of(fields, kind);
         match crate::isa::of(fields) {
@@ -38,9 +38,10 @@ impl Native {
             Some(crate::text::TEXT) => Some(Self::Text(
                 crate::text::decode(bytes(crate::text::TEXT)?)?.into(),
             )),
-            _ => Some(Self::Bool(crate::logic::decode(
-                fields.get(&crate::logic::BOOL)?,
-            )?)),
+            Some(crate::logic::BOOL) => Some(Self::Bool(crate::logic::decode(bytes(
+                crate::logic::BOOL,
+            )?)?)),
+            _ => None,
         }
     }
 
@@ -57,7 +58,7 @@ impl Native {
             Self::F32(number) => literal(crate::f32::F32, crate::f32::encode(*number)),
             Self::U64(number) => literal(crate::u64::U64, crate::u64::encode(*number)),
             Self::Text(text) => literal(crate::text::TEXT, crate::text::encode(text.as_ref())),
-            Self::Bool(value) => vec![(crate::logic::BOOL, crate::logic::encode(*value))],
+            Self::Bool(value) => literal(crate::logic::BOOL, crate::logic::encode(*value)),
         }
     }
 
