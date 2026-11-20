@@ -1450,7 +1450,7 @@
                   cases: [
                     {
                       isa: case,
-                      pattern: model,
+                      pattern: {isa: call, function: quote, expression: model},
                       expression: {
                         isa: call,
                         function: quote,
@@ -1465,7 +1465,7 @@
                     },
                     {
                       isa: case,
-                      pattern: stock,
+                      pattern: {isa: call, function: quote, expression: stock},
                       expression: {
                         isa: call,
                         function: quote,

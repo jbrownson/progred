@@ -1044,7 +1044,12 @@ not a request to try another case. There is no implicit match-subject binding.
 
 A `match`'s cases and a `let`/`where`'s bindings, each
 `{isa: binding, bind | pattern, value}`, are the form's own syntax, read where
-they're written and never evaluated, like `do`'s expressions. A clause list
+they're written, like `do`'s expressions. A pattern is an expression,
+evaluated in scope as its clause is reached, before matching: a cell in it is
+a reference, so a constant such as `true` stands for its value, and an
+identity, such as an option, is quoted to stand for itself, `"stock`. A record
+that isn't a form is data there as anywhere in Grap, so the cells and binders
+inside one stay as written. A clause list
 that isn't written in place, such as a reference to a cell holding one,
 answers invalid cases or invalid bindings, and a clause that doesn't say its
 kind is an invalid case or binding. A record in a pattern is a binder only
