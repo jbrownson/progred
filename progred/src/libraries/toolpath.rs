@@ -563,6 +563,7 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(cutter::names()),
         cutter::functions(functions()),
     )
+    .with_absents([INVALID_INPUT, OUTPUT_REQUIRED])
     .with_kinds(
         [
             kind::PATHS_VOLUME_PREVIEW,

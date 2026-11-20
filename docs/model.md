@@ -42,14 +42,21 @@ cell otherwise overrides the code too, since the call reads the definition
 first; one implemented nowhere isn't callable. An absent or non-callable result
 does not try another source. A library's own value lives in that same table under
 its identity, not in a separate metadata store: a library like a document's,
-`{isa: library, name, defs, functions, foreign functions, fields}`, the name it
-gives itself and the cells it defines, each list ordered by name: its kinds,
+`{isa: library, name, defs, functions, foreign functions, fields, data,
+absents}`, the name it gives itself and the cells it defines, each list
+ordered by name: what it says are its data (`Library::with_data`, and what
+`with_values` defines, such as a named color or `π`), the cells used as
+values, such as constants and the options a field picks from, among its data;
+what it says are its absents (`Library::with_absents`), the reasons its absents
+give, such as `division by zero`, among its absents; its kinds,
 each a def written from what it declares of it (`Library::with_kinds`: its
 name and the fields every record of it has; how it's drawn stays Rust's),
 among its defs, its lambdas among its functions, the stubs of
 the foreign functions it implements, `{isa: foreign function, name, params}`,
 the records a call names, among its foreign functions, and the rest of its
-vocabulary among its fields. Composing the loaded libraries writes
+vocabulary among its fields. What it doesn't say lands there too, so its
+fields still hold some that aren't: cells a layout program calls, kinds with
+no def yet, and a few used both as a key and a value. Composing the loaded libraries writes
 it, so it lists what each library ends up defining, and it's drawn as a
 document's library is, a cell another library defines reading by its name. An empty document can start as any loaded
 library, offered by its name, to look through; the Libraries menu opens one

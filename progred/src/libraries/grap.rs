@@ -841,6 +841,36 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(number_names),
         functions().merge(control_functions).merge(number_functions),
     )
+    // The reasons Grap's absents give: evaluation's, its control forms' and
+    // its numbers'.
+    .with_absents([
+        ::grap::absent::FUEL_EXHAUSTED,
+        ::grap::absent::DEPTH_EXHAUSTED,
+        memo::CYCLE,
+        memo::INPUTS_CHANGED,
+        memo::DIFFERENT_RUNTIME,
+        memo::CANCELLED,
+        ::grap::absent::MISSING_CELL,
+        ::grap::absent::MALFORMED_LAMBDA,
+        ::grap::absent::INVALID_PARAMETER,
+        ::grap::absent::NOT_CALLABLE,
+        ::grap::absent::MISSING_ARGUMENT,
+        ::grap::absent::MISSING_FIELD,
+        ::grap::absent::INVALID_ENVIRONMENT,
+        control::vocabulary::INVALID_CASES,
+        control::vocabulary::INVALID_CASE,
+        control::vocabulary::INVALID_BINDER,
+        control::vocabulary::INVALID_BINDINGS,
+        control::vocabulary::INVALID_BINDING,
+        control::vocabulary::INVALID_EXPRESSIONS,
+        control::vocabulary::PATTERN_MISMATCH,
+        control::vocabulary::MISSING_FINAL_EXPRESSION,
+        numbers::f32::NOT_F32,
+        numbers::f64::NOT_F64,
+        numbers::u64::NOT_U64,
+        numbers::u64::OVERFLOW,
+        numbers::u64::DIVISION_BY_ZERO,
+    ])
     // Grap's kinds, each with the fields every one of its records has.
     .with_kinds(
         [

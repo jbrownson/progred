@@ -818,6 +818,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions,
     )
+    .with_absents([NO_STATE, INVALID_INPUT, OUTPUT_REQUIRED])
     .with_kinds([(
         kind::VIEW_WITH_CONTROLS,
         vec![vocabulary::CONTROLS, vocabulary::VIEW],

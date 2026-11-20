@@ -384,4 +384,5 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions,
     )
+    .with_absents([INVALID_OUTPUT, OUTPUT_REQUIRED])
 }

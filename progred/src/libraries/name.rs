@@ -175,15 +175,27 @@ pub fn library_named<W: Host>(
 
 /// `libraries` with each one's own cell holding the library as a library,
 /// as a document's is: `{isa: library, name, defs, functions, foreign
-/// functions, fields}`, the name it gives itself and the cells it defines,
-/// each where it belongs: the kinds it defines, each a def, among its defs,
-/// its lambdas among its functions, the stubs of the
-/// foreign functions it implements among its foreign functions, and the rest
-/// among its fields, each list ordered by name, those without one last.
+/// functions, fields, data, absents}`, the name it gives itself and the cells
+/// it defines, each where it belongs: those it says are its data and its
+/// absents there, the kinds it defines, each a def, among its defs, its
+/// lambdas among its functions, the stubs of the foreign functions it
+/// implements among its foreign functions, and the rest among its fields,
+/// each list ordered by name, those without one last.
 pub(crate) fn described(libraries: Libraries) -> Libraries {
-    use crate::libraries::def::vocabulary::{DEF, DEFS, FIELDS, FOREIGN, FUNCTIONS, LIBRARY};
+    use crate::libraries::def::vocabulary::{
+        ABSENTS, DATA, DEF, DEFS, FIELDS, FOREIGN, FUNCTIONS, LIBRARY,
+    };
     let mut described = libraries.clone();
     for (id, definitions) in libraries.iter() {
+        let own = definitions.value(id).and_then(Value::as_record);
+        // What it says its data and its absents are, as its declaration does.
+        let declared = |list| -> Vec<CellId> {
+            own.and_then(|own| own.get(&list))
+                .and_then(Value::as_list)
+                .map(|cells| cells.values().filter_map(Value::as_cell).collect())
+                .unwrap_or_default()
+        };
+        let (data, absents) = (declared(DATA), declared(ABSENTS));
         let mut cells: Vec<_> = definitions
             .iter()
             .map(|(cell, _)| cell)
@@ -194,36 +206,38 @@ pub(crate) fn described(libraries: Libraries) -> Libraries {
             })
             .collect();
         cells.sort();
-        let (mut defs, mut functions, mut foreign, mut fields) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let mut lists: [Vec<Value>; 6] = Default::default();
+        let [defs, functions, foreign, fields, data_list, absents_list] = &mut lists;
         for (_, _, cell) in cells {
             let kind = definitions
                 .value(cell)
                 .and_then(Value::as_record)
                 .and_then(::grap::isa::of);
-            if kind == Some(DEF) {
-                defs.push(cell.into());
+            let list = if absents.contains(&cell) {
+                &mut *absents_list
+            } else if data.contains(&cell) {
+                &mut *data_list
+            } else if kind == Some(DEF) {
+                &mut *defs
             } else if definitions.implementation(cell).is_some() {
-                foreign.push(cell.into());
+                &mut *foreign
             } else if kind == Some(::grap::vocabulary::kind::LAMBDA) {
-                functions.push(cell.into());
+                &mut *functions
             } else {
-                fields.push(cell.into());
-            }
+                &mut *fields
+            };
+            list.push(cell.into());
         }
-        let name = definitions
-            .value(id)
-            .and_then(Value::as_record)
+        let name = own
             .and_then(|fields| fields.get(&vocabulary::NAME))
             .map(|name| (vocabulary::NAME, name.clone()));
         let value = ::grap::isa::record(
             LIBRARY,
-            name.into_iter().chain([
-                (DEFS, Value::list(defs)),
-                (FUNCTIONS, Value::list(functions)),
-                (FOREIGN, Value::list(foreign)),
-                (FIELDS, Value::list(fields)),
-            ]),
+            name.into_iter().chain(
+                [DEFS, FUNCTIONS, FOREIGN, FIELDS, DATA, ABSENTS]
+                    .into_iter()
+                    .zip(lists.map(Value::list)),
+            ),
         );
         let mut definitions = definitions.clone();
         definitions.insert(id, value);

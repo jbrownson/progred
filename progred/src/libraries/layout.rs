@@ -858,6 +858,41 @@ pub fn library<W: Host>() -> Library<W> {
                 .cacheable(),
         ),
     )
+    .with_absents([vocabulary::INVALID_PROGRAM, vocabulary::INVALID_DRAWING])
+    // What fields pick from: a text's face, a bracket's delimiters, an
+    // event's kind and a key's state.
+    .with_data([
+        vocabulary::NAME_FACE,
+        vocabulary::STRING_FACE,
+        vocabulary::DIM_FACE,
+        vocabulary::LABEL_FACE,
+        vocabulary::ID_FACE,
+        vocabulary::ACCENT_WASH_FACE,
+        vocabulary::INK_FACE,
+        vocabulary::PAREN,
+        vocabulary::SQUARE,
+        vocabulary::CURLY,
+        vocabulary::POINTER_DOWN,
+        vocabulary::POINTER_MOVE,
+        vocabulary::POINTER_UP,
+        vocabulary::POINTER_CANCEL,
+        vocabulary::TOUCH_START,
+        vocabulary::TOUCH_MOVE,
+        vocabulary::TOUCH_END,
+        vocabulary::TOUCH_CANCEL,
+        vocabulary::IME_COMMIT,
+        vocabulary::IME_DISABLED,
+        vocabulary::IME_ENABLED,
+        vocabulary::IME_PREEDIT,
+        vocabulary::PINCH,
+        vocabulary::SCROLL,
+        vocabulary::GESTURE,
+        vocabulary::NAVIGATE,
+        vocabulary::MODIFIERS_CHANGED,
+        vocabulary::HOVER_CHANGED,
+        vocabulary::UP,
+        vocabulary::DOWN,
+    ])
     .with_kinds({
         use vocabulary::{kind as k, *};
         [k::ROW, k::COL, k::FLOW, k::OVERLAY, k::ALTERNATIVES]

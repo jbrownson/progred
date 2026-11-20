@@ -134,8 +134,10 @@ projection}` ([`def.rs`](../progred/src/libraries/def.rs)). The def's
 projections compose. Where it declines, or the def has none, or the kind has
 no def, or the `def` library is switched off in the area, the record goes on. A def is edited as a record whose projection, a template, offers the
 def's own fields as its parts. A document's own defs and functions live in a
-library, `{isa: library, defs, functions}`, two lists, each holding only its
-kind of thing. Where things are looked for is fixed, not a search of the
+library, `{isa: library, name, defs, functions, foreign functions, fields,
+data, absents}`, each list holding only its kind of thing: data are cells used
+as values, such as constants and options, and absents the reasons its absents
+give. Where things are looked for is fixed, not a search of the
 document (`def::in_reach`): the root, and what the containers reached from it
 hold, through cells. The containers are named there, each with its field: a
 notebook's entries, a section's body, a row's or column's parts; a new kind of

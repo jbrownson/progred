@@ -55,6 +55,20 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_absents([
+        selection::vocabulary::NO_SELECTION,
+        site::vocabulary::NO_STATE,
+        path::vocabulary::INVALID_PATH,
+        crate::location::vocabulary::NOT_FOUND,
+    ])
+    // A selection's stages and a fold's states.
+    .with_data([
+        selection::vocabulary::EDGE,
+        selection::vocabulary::PENDING,
+        selection::vocabulary::LABEL,
+        site::vocabulary::FOLDED,
+        site::vocabulary::EXPANDED,
+    ])
     .with_kinds([
         (
             workspace::vocabulary::kind::ROW,

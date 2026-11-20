@@ -1081,6 +1081,14 @@ pub fn library<W: Host>() -> Library<W> {
         ),
         functions(),
     )
+    .with_absents([
+        vocabulary::INVALID_FIELD,
+        vocabulary::INVALID_SCENE,
+        vocabulary::INVALID_COLOR,
+        vocabulary::INVALID_BOUNDS,
+        vocabulary::INVALID_SIZE,
+        vocabulary::INVALID_MESH_DEPTH,
+    ])
     .with_kinds(
         BINARY
             .map(|(kind, _)| (kind, vec![vocabulary::LEFT, vocabulary::RIGHT]))

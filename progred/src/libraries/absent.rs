@@ -297,6 +297,11 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
+    .with_absents([
+        vocabulary::NO_ALTERNATIVE,
+        vocabulary::DECLINED,
+        vocabulary::INVALID_ARGUMENTS,
+    ])
     .with_kinds([(vocabulary::kind::ABSENT, vec![vocabulary::REASON])])
     .with_projections_for([(
         vocabulary::kind::ABSENT,

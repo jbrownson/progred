@@ -178,6 +178,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
+    .with_absents([INVALID])
 }
 
 #[cfg(test)]

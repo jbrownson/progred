@@ -38,7 +38,7 @@ pub mod vocabulary {
     pub const LIBRARY: CellId = CellId::from_u128(0x6a2a379c9d9553cedafcb3987e7891b7);
     /// A library's defs, each a kind's cell. A library lists its fields,
     /// those shared or with no def of their own, under `fields`, as a def
-    /// lists its own.
+    /// lists its own; and apart from them its `data` and its `absents`.
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
     /// A library's functions, each a cell holding one.
     pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);
@@ -46,6 +46,11 @@ pub mod vocabulary {
     /// names, `{isa: foreign function, name, params}`, whose code the host
     /// provides under that cell.
     pub const FOREIGN: CellId = CellId::from_u128(0x2ece5420c51790c43b6dc0b24eefee40);
+    /// A library's data: cells it defines to be used as values, such as
+    /// named constants and the options a field picks from.
+    pub const DATA: CellId = CellId::from_u128(0x454ccfb66b98dd257e6a0a73dbc91f00);
+    /// A library's absents: the reasons the absents it gives say why.
+    pub const ABSENTS: CellId = CellId::from_u128(0xba7bb9c6dec7bafe09c006e21f126220);
     /// What a place for a field offers, on the field's definition: a Grap
     /// expression evaluating to a list of the values that fit, or to a
     /// function of the record being filled (`value`) that returns one.
@@ -64,6 +69,8 @@ pub fn library<W: Host>() -> Library<W> {
             (DEFS, "defs"),
             (FUNCTIONS, "functions"),
             (FOREIGN, "foreign functions"),
+            (DATA, "data"),
+            (ABSENTS, "absents"),
             (OFFERS, "offers"),
         ],
         ::grap::ForeignFunctions::default(),
@@ -215,7 +222,7 @@ fn new_library() -> Completion {
 fn empty_library() -> Value {
     ::grap::isa::record(
         LIBRARY,
-        [DEFS, FUNCTIONS, FOREIGN, FIELDS].map(|list| (list, Value::list([]))),
+        [DEFS, FUNCTIONS, FOREIGN, FIELDS, DATA, ABSENTS].map(|list| (list, Value::list([]))),
     )
 }
 
@@ -297,10 +304,11 @@ pub(crate) fn document_functions<'a>(
 }
 
 /// A library as it's read and edited, a loaded one as a document's: its
-/// name, its defs, its functions, its foreign functions and its fields, each a list. A cell
-/// another library defines reads by its name, opening to its definition; one
-/// the document defines reads in place, where it's edited. A place in a list
-/// offers a new def, function or field, named as typed.
+/// name, its defs, its functions, its foreign functions, its fields, its data
+/// and its absents, each a list. A cell another library defines reads by its
+/// name, opening to its definition; one the document defines reads in place,
+/// where it's edited. A place in a list offers a new one of what it lists,
+/// named as typed.
 fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.kind()? == LIBRARY).then_some(())?;
     // A list whose entries read as above, and whose empty place offers what
@@ -320,7 +328,7 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
     crate::libraries::isa::form(
         input,
         crate::display::structure::Fields::default()
-            .leading([DEFS, FUNCTIONS, FOREIGN, FIELDS])
+            .leading([DEFS, FUNCTIONS, FOREIGN, FIELDS, DATA, ABSENTS])
             .child(move |key| match key {
                 DEFS => Some(listing(|typed| {
                     name::new_cell(
@@ -347,6 +355,12 @@ fn library_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                 ))),
                 FIELDS => Some(listing(|typed| {
                     name::new_cell(typed, Some("field".into()), vec![])
+                })),
+                DATA => Some(listing(|typed| {
+                    name::new_cell(typed, Some("datum".into()), vec![])
+                })),
+                ABSENTS => Some(listing(|typed| {
+                    name::new_cell(typed, Some("absent".into()), vec![])
                 })),
                 _ => None,
             }),

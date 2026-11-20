@@ -180,6 +180,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
+    .with_absents([vocabulary::NOT_PNG, vocabulary::INVALID_PNG])
     .with_projection(crate::display::runtime_partial(display))
 }
 

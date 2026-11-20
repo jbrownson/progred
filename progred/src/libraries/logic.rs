@@ -51,6 +51,8 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
+    .with_absents([vocabulary::NOT_BOOL, vocabulary::CONDITION_NOT_MET])
+    .with_data([vocabulary::TRUE, vocabulary::FALSE])
 }
 
 #[cfg(test)]

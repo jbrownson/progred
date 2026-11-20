@@ -243,6 +243,12 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
+    .with_absents([
+        vocabulary::NOT_LIST,
+        vocabulary::OUT_OF_BOUNDS,
+        vocabulary::INVALID_STEP,
+        vocabulary::FINISHED,
+    ])
 }
 
 #[cfg(test)]

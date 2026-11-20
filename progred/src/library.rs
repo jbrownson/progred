@@ -101,6 +101,33 @@ pub fn foreign_record(
     gid::Value::Record(fields)
 }
 
+/// Writes into the record of the library `id` the cells it says are its
+/// `data` and its `absents`, which its description lists as it declares
+/// them.
+fn declare(
+    definitions: &mut Definitions,
+    id: gid::CellId,
+    data: &[gid::CellId],
+    absents: &[gid::CellId],
+) {
+    use crate::libraries::def::vocabulary::{ABSENTS, DATA};
+    if data.is_empty() && absents.is_empty() {
+        return;
+    }
+    let mut record = definitions
+        .value(id)
+        .and_then(gid::Value::as_record)
+        .cloned()
+        .unwrap_or_default();
+    for (list, cells) in [(DATA, data), (ABSENTS, absents)] {
+        record.set(
+            list,
+            gid::Value::list(cells.iter().copied().map(gid::Value::from)),
+        );
+    }
+    definitions.insert(id, gid::Value::Record(record));
+}
+
 pub struct Library<World, Hover> {
     pub definitions: Definitions,
     pub projection: Option<Partial<World, Hover>>,
@@ -111,6 +138,12 @@ pub struct Library<World, Hover> {
     /// identify: a kind's for records of it, a function's for calls of it.
     pub provided: Vec<(gid::CellId, Partial<World, Hover>)>,
     pub completions: Option<CompletionProvider>,
+    /// The cells it defines to be used as values, which its description
+    /// lists as its data.
+    pub data: Vec<gid::CellId>,
+    /// The reasons the absents it gives say why, which its description
+    /// lists as its absents.
+    pub absents: Vec<gid::CellId>,
 }
 
 impl<World, Hover> Clone for Library<World, Hover> {
@@ -121,6 +154,8 @@ impl<World, Hover> Clone for Library<World, Hover> {
             fallback: self.fallback.clone(),
             provided: self.provided.clone(),
             completions: self.completions.clone(),
+            data: self.data.clone(),
+            absents: self.absents.clone(),
         }
     }
 }
@@ -139,17 +174,34 @@ impl<World, Hover> Library<World, Hover> {
             fallback: None,
             provided: Vec::new(),
             completions: None,
+            data: Vec::new(),
+            absents: Vec::new(),
         }
     }
 
-    /// Also defines each `(cell, value)` in `values`.
+    /// Also defines each `(cell, value)` in `values`, data to be used as
+    /// it's defined.
     pub fn with_values(
         mut self,
         values: impl IntoIterator<Item = (gid::CellId, gid::Value)>,
     ) -> Self {
         for (cell, value) in values {
             self.definitions.insert(cell, value);
+            self.data.push(cell);
         }
+        self
+    }
+
+    /// Says that `cells`, which it names, are data: used as values, as the
+    /// options a field picks from are.
+    pub fn with_data(mut self, cells: impl IntoIterator<Item = gid::CellId>) -> Self {
+        self.data.extend(cells);
+        self
+    }
+
+    /// Says that `cells`, which it names, are the reasons its absents give.
+    pub fn with_absents(mut self, cells: impl IntoIterator<Item = gid::CellId>) -> Self {
+        self.absents.extend(cells);
         self
     }
 
@@ -243,7 +295,9 @@ impl Libraries {
         let (libraries, mut projections, provided, completions) = unique.into_iter().fold(
             (Self::default(), Vec::new(), Vec::new(), Vec::new()),
             |(mut libraries, mut projections, mut provided, mut completions), (id, library)| {
-                libraries.insert(id, library.definitions);
+                let mut definitions = library.definitions;
+                declare(&mut definitions, id, &library.data, &library.absents);
+                libraries.insert(id, definitions);
                 projections.extend(library.projection.map(|projection| (id, projection)));
                 fallbacks.extend(library.fallback.map(|fallback| (id, fallback)));
                 provided.extend(
