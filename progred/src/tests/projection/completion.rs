@@ -113,12 +113,12 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
 
         let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
         driver.select(&name_path);
-        // The first letter typed writes the name. Named, the evaluation's cell
-        // then reads by its name, as one naming an existing thing does.
-        driver.type_text("a");
+        // Naming the lambda names the evaluation's cell too, which stays
+        // open, its name typed whole.
+        driver.type_text("area");
         assert_eq!(
             crate::occurrence::read(&driver.editor().sources(), &name_path),
-            Some(&text::value("a"))
+            Some(&text::value("area"))
         );
         assert!(
             doc.cells.value(cell).is_none(),

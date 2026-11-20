@@ -521,7 +521,8 @@ A program and its result is an evaluation, `{isa: evaluation, expression}`,
 which a notebook's entries hold; a document's functions are a library's. An
 evaluation's own cell keeps its parentheses, and what fills it is an
 expression slot, offering Grap's suggestions rather than the whole
-vocabulary. There was once a `grap` field marking a record's program, and a
+vocabulary. It's drawn open even once it's named, as naming the lambda it
+holds names it; elsewhere a named cell reads by its name. There was once a `grap` field marking a record's program, and a
 starting point making one rendered in a pane; the notebook and the library
 replaced them.
 

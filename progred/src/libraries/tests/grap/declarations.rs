@@ -32,12 +32,14 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
         if let Some(definition) = definition {
             cells.set_value(cell, definition);
         }
+        // An evaluation's own cell is drawn open, named or not; a
+        // reference elsewhere in an expression reads by its name.
         for (root, path, expression) in [
             (cell.into(), vec![], false),
             (
                 crate::libraries::grap::test_support::evaluation(cell.into()),
                 vec![Step::Key(EXPRESSION)],
-                true,
+                false,
             ),
             (grap::call(cell.into(), []), vec![Step::Key(FUNCTION)], true),
             (

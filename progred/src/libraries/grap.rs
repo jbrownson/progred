@@ -688,13 +688,10 @@ fn evaluation_display<W: Host>(
         |[expression]| {
             let steps = [Step::Key(EXPRESSION)];
             // The cell an evaluation keeps its expression in, as a new one
-            // does, keeps its parentheses, and what fills it is an
-            // expression, as a program's is; a named one reads by its name.
-            let kept = expression.as_ref().and_then(|expression| {
-                let cell = expression.as_cell()?;
-                input.env.name(cell).is_none().then_some(cell)
-            });
-            let shown = match kept {
+            // does, is its own, so it's drawn open, named or not: naming the
+            // lambda it holds names it too. It keeps its parentheses, and
+            // what fills it is an expression.
+            let shown = match expression.as_ref().and_then(|value| value.as_cell()) {
                 Some(_) => descend(
                     steps.clone(),
                     Some(crate::display::first(
