@@ -8,6 +8,8 @@
     "world": 05bcece72b133b42300b7629fd3f402d,
     "first": 9940ece27410c72a5308a544890ccc71,
     "second": f717b766d250a7b86c5eb842885c4417,
+    "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
   },
   "cells": {
     colors: {name: "colors"},
@@ -15,7 +17,7 @@
     planet: {name: "planet"},
     world: {
       planet: "Mars",
-      moons: {f64: 0x0000000000000040},
+      moons: {isa: f64, bytes: 0x0000000000000040},
       colors: ["red", "orange"],
     },
   },

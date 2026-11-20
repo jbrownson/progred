@@ -36,13 +36,15 @@ fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
             |input| crate::libraries::u64::representation().display(input),
         ),
     ] {
-        let number = RuntimeValue::record([
-            (field, Value::from(bytes).into()),
-            (extra, callback.clone()),
-        ]);
+        let literal = |bytes: Vec<u8>| {
+            ::grap::literal::fields(field, bytes)
+                .into_iter()
+                .map(|(key, value)| (key, RuntimeValue::from(value)))
+        };
+        let number = RuntimeValue::record(literal(bytes).chain([(extra, callback.clone())]));
         assert!(project(&projection_input(&NoEval, &number)).is_some());
         assert!(number.field(extra).unwrap().same_result(&callback));
-        let invalid = RuntimeValue::record([(field, Value::from(vec![0]).into())]);
+        let invalid = RuntimeValue::record(literal(vec![0]));
         assert!(project(&projection_input(&NoEval, &invalid)).is_none());
     }
     assert!(

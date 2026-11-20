@@ -167,7 +167,7 @@ pub(crate) fn tutorial_slots(
                 .any(|(_, level)| matches!(level, Level::Plain))
                 .then(|| {
                     crate::stack::load_selected(&crate::stack::PLAIN)
-                        .map(|stack| stack.projection.partial().clone())
+                        .map(|stack| stack.projection.partial())
                 })
                 .transpose()?;
             let plain_inside = plain.clone().map(|plain| {
@@ -179,7 +179,7 @@ pub(crate) fn tutorial_slots(
             // Whatever the libraries leave undrawn, a named cell still reads as
             // its name rather than inlining its definition.
             let full_inside = crate::display::compose_partials([
-                projection.partial().clone(),
+                projection.partial(),
                 crate::display::runtime_partial(named_reference),
             ]);
             // A slot is a pane of its own, so with the presentation library
@@ -190,7 +190,7 @@ pub(crate) fn tutorial_slots(
                 .then(|| {
                     crate::display::compose_partials([
                         crate::display::runtime_partial(crate::libraries::presentation::pane_entry),
-                        projection.partial().clone(),
+                        projection.partial(),
                     ])
                 });
             let captioned = slots.windows(2).any(|pair| pair[0].1 != pair[1].1);

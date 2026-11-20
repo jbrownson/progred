@@ -3,6 +3,7 @@
     "abs": 119eddd0f1404b34a6e8653279b69feb,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
     "axis_2": f82b802a154f47ab973d4a522fd3d034,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
     "cos": fc89c17ecb5147158f928fe4e89da1e3,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
@@ -44,7 +45,8 @@
                       axis: x,
                     },
                     right: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply,
                   },
@@ -57,7 +59,8 @@
                       axis: y,
                     },
                     right: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply,
                   },
@@ -73,7 +76,8 @@
                       axis: y,
                     },
                     right: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply,
                   },
@@ -86,7 +90,8 @@
                       axis: z,
                     },
                     right: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply,
                   },
@@ -104,7 +109,8 @@
                     axis: z,
                   },
                   right: {
-                    f32: 0xcdcccc3e,
+                    isa: f32,
+                    bytes: 0xcdcccc3e,
                   },
                   isa: multiply,
                 },
@@ -117,7 +123,8 @@
                     axis: x,
                   },
                   right: {
-                    f32: 0xcdcccc3e,
+                    isa: f32,
+                    bytes: 0xcdcccc3e,
                   },
                   isa: multiply,
                 },
@@ -130,7 +137,8 @@
           isa: abs,
         },
         right: {
-          f32: 0xcdcc4c3e,
+          isa: f32,
+          bytes: 0xcdcc4c3e,
         },
         isa: subtract,
       },
@@ -145,7 +153,8 @@
                     axis: x,
                   },
                   right: {
-                    f32: 0xcdcccc3e,
+                    isa: f32,
+                    bytes: 0xcdcccc3e,
                   },
                   isa: multiply,
                 },
@@ -158,7 +167,8 @@
                     axis: y,
                   },
                   right: {
-                    f32: 0xcdcccc3e,
+                    isa: f32,
+                    bytes: 0xcdcccc3e,
                   },
                   isa: multiply,
                 },
@@ -173,7 +183,8 @@
                   axis: z,
                 },
                 right: {
-                  f32: 0xcdcccc3e,
+                  isa: f32,
+                  bytes: 0xcdcccc3e,
                 },
                 isa: multiply,
               },
@@ -184,7 +195,8 @@
           isa: sqrt,
         },
         right: {
-          f32: 0x0000c841,
+          isa: f32,
+          bytes: 0x0000c841,
         },
         isa: subtract,
       },

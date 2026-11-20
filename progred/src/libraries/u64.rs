@@ -1,6 +1,6 @@
-//! u64 numbers: eight little-endian bytes under the u64 tag, drawn as their
-//! spelling. Grap holds them natively, with their encoding, and their arithmetic
-//! is Grap's numbers library's.
+//! u64 numbers: literals of the u64 kind holding eight little-endian bytes,
+//! drawn as their spelling. Grap holds them natively, with their encoding, and
+//! their arithmetic is Grap's numbers library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, number};
@@ -45,7 +45,7 @@ impl number::Scrubbable for u64 {
 pub(crate) fn representation() -> number::Representation<u64> {
     number::Representation {
         name: "u64",
-        tag: vocabulary::U64,
+        kind: vocabulary::U64,
         encode: value,
         runtime: RuntimeValue::u64,
         read: RuntimeValue::as_u64,

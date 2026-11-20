@@ -566,6 +566,22 @@ impl<World: 'static, Hover: 'static> Provided<World, Hover> {
     }
 }
 
+/// `partial`, drawing with `provided` as the projections cells provide in
+/// place of its input's: what it draws reads as the stack `provided` comes
+/// from draws it.
+#[cfg(any(test, target_arch = "wasm32"))]
+pub fn providing<World: 'static, Hover: 'static>(
+    provided: Provided<World, Hover>,
+    partial: Partial<World, Hover>,
+) -> Partial<World, Hover> {
+    runtime_partial(move |input| {
+        partial(&ProjectionInput {
+            provided: provided.clone(),
+            ..input.with_value(input.value)
+        })
+    })
+}
+
 /// A record drawn as its kind provides, when the record says what kind of
 /// thing it is and that kind provides a projection.
 pub fn by_kind<World: 'static, Hover: 'static>() -> Partial<World, Hover> {

@@ -93,6 +93,7 @@ pub(super) fn binders() -> Binders {
         .into_iter()
         .chain([
             (::grap::isa::ISA, "isa"),
+            (::grap::vocabulary::BYTES, "bytes"),
             (::grap::vocabulary::kind::CALL, "call"),
             (::grap::vocabulary::FUNCTION, "function"),
             (png::vocabulary::PNG, "png"),

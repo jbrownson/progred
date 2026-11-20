@@ -25,16 +25,25 @@ pub const ID: CellId = CellId::from_u128(0x9f968bf188764d69af06cc2fd3c10909);
 
 pub mod vocabulary {
     pub use ::grap::isa::ISA;
+    /// A literal's content, one blob: `{isa: f64, bytes: <8 bytes>}`.
+    pub use ::grap::vocabulary::BYTES;
 }
 
 // The convention itself lives in Grap, which tells its code from data by
-// it; this library remains its owner in vocabulary.
+// it, and holds its numbers and text as literals natively; this library
+// remains its owner in vocabulary.
+
+/// Whether `key` is one of a literal's own fields, its kind or its bytes,
+/// which its projection draws as one piece.
+pub(crate) fn literal_field(key: CellId) -> bool {
+    key == vocabulary::ISA || key == vocabulary::BYTES
+}
 
 pub fn library<W: Host>() -> Library<W> {
     name::named_library(
         ID,
         "isa",
-        [(vocabulary::ISA, "isa")],
+        [(vocabulary::ISA, "isa"), (vocabulary::BYTES, "bytes")],
         ::grap::ForeignFunctions::default(),
     )
     .with_projection(crate::display::runtime_partial(kind))

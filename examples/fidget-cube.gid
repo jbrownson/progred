@@ -7,6 +7,7 @@
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
@@ -226,21 +227,24 @@
         bindings: [
           0x17: {
             value: {
-              f32: 0x0000803f,
+              isa: f32,
+              bytes: 0x0000803f,
             },
             bind: size,
             isa: binding,
           },
           0x2e: {
             value: {
-              f32: 0xcdcccc3d,
+              isa: f32,
+              bytes: 0xcdcccc3d,
             },
             bind: chamfer,
             isa: binding,
           },
           0x45: {
             value: {
-              f32: 0x0000003f,
+              isa: f32,
+              bytes: 0x0000003f,
             },
             bind: control_depth,
             isa: binding,
@@ -248,7 +252,8 @@
           0x5d: {
             value: {
               right: {
-                f32: 0x00000040,
+                isa: f32,
+                bytes: 0x00000040,
               },
               function: f32_divide,
               left: size,
@@ -270,7 +275,8 @@
           0x8b: {
             value: {
               right: {
-                f32: 0x00008040,
+                isa: f32,
+                bytes: 0x00008040,
               },
               function: f32_divide,
               left: control_depth,
@@ -298,11 +304,13 @@
                 function: quote,
                 expression: {
                   left_2: {
-                    f32: 0x00000000,
+                    isa: f32,
+                    bytes: 0x00000000,
                   },
                   right_2: {
                     left_2: {
-                      f32: 0x0000803f,
+                      isa: f32,
+                      bytes: 0x0000803f,
                     },
                     right_2: {
                       operand: {
@@ -464,10 +472,12 @@
           ],
           body: {
             min_z: {
-              f32: 0x9a9919bf,
+              isa: f32,
+              bytes: 0x9a9919bf,
             },
             mesh_depth: {
-              u64: 0x0500000000000000,
+              isa: u64,
+              bytes: 0x0500000000000000,
             },
             function: preview_mesh,
             projection_value: {
@@ -483,7 +493,8 @@
                       isa: unquote_2,
                     },
                     color: {
-                      rgb: 0x60b6d0,
+                      isa: rgb,
+                      bytes: 0x60b6d0,
                     },
                   },
                 ],
@@ -492,22 +503,27 @@
               isa: call,
             },
             max_x: {
-              f32: 0x9a99193f,
+              isa: f32,
+              bytes: 0x9a99193f,
             },
             max_y: {
-              f32: 0x9a99193f,
+              isa: f32,
+              bytes: 0x9a99193f,
             },
             height: height,
             max_z: {
-              f32: 0x9a99193f,
+              isa: f32,
+              bytes: 0x9a99193f,
             },
             isa: call,
             min_y: {
-              f32: 0x9a9919bf,
+              isa: f32,
+              bytes: 0x9a9919bf,
             },
             width: width,
             min_x: {
-              f32: 0x9a9919bf,
+              isa: f32,
+              bytes: 0x9a9919bf,
             },
           },
           isa: lambda,

@@ -52,22 +52,24 @@ fn from_reference(value: &ExecValue) -> Value {
 /// them; the definition names float operations rather than defining them for
 /// that reason.
 fn canonical_nans(value: &Value) -> Value {
-    let canonical = |number: &Value, width: usize, nan: Vec<u8>| -> Option<Value> {
-        let bytes = number.as_blob()?;
-        let is_nan = match width {
-            8 => f64::from_le_bytes(bytes.try_into().ok()?).is_nan(),
-            _ => f32::from_le_bytes(bytes.try_into().ok()?).is_nan(),
+    let nan = |fields: &Record, bytes: &[u8]| -> Option<Value> {
+        let canonical = match crate::isa::of(fields)? {
+            crate::f64::F64 => f64::from_le_bytes(bytes.try_into().ok()?)
+                .is_nan()
+                .then(|| f64::NAN.to_le_bytes().to_vec()),
+            crate::f32::F32 => f32::from_le_bytes(bytes.try_into().ok()?)
+                .is_nan()
+                .then(|| f32::NAN.to_le_bytes().to_vec()),
+            _ => None,
         };
-        is_nan.then(|| Value::from(nan))
+        canonical.map(Value::from)
     };
     match value {
         Value::List(elements) => Value::list(elements.values().map(canonical_nans)),
         Value::Record(fields) => Value::record(fields.iter().map(|(field, value)| {
-            let replaced = match *field {
-                crate::f64::F64 => canonical(value, 8, f64::NAN.to_le_bytes().to_vec()),
-                crate::f32::F32 => canonical(value, 4, f32::NAN.to_le_bytes().to_vec()),
-                _ => None,
-            };
+            let replaced = (*field == vocabulary::BYTES)
+                .then(|| nan(fields, value.as_blob()?))
+                .flatten();
             (*field, replaced.unwrap_or_else(|| canonical_nans(value)))
         })),
         _ => value.clone(),

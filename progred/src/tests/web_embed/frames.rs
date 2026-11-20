@@ -197,7 +197,7 @@ fn peeling_switches_projections_off_and_names_last() {
         let frame = settle(editing_frame(&mut world), &world.sources());
         (world, frame)
     };
-    let bytes = [Step::Key(slot), Step::Key(f64::vocabulary::F64)];
+    let bytes = [Step::Key(slot), Step::Key(::grap::vocabulary::BYTES)];
     let shown = |frame: &Bench| frame.landmarks.landmark(&bytes).is_some();
     let glyphs = |frame: &Bench| {
         frame
@@ -218,12 +218,21 @@ fn peeling_switches_projections_off_and_names_last() {
         crate::libraries::name::of(&world.sources(), f64::vocabulary::F64),
         Some(crate::display::Name::Plain("f64"))
     );
-    // Only the key's label changes: its name gives way to its identity.
+    // Only the names change, the keys', the kind's and its def's, which the
+    // closed kind reads as: each gives way to its identity.
     let (_, unnamed) = peel(&[name::ID, text::ID], false);
     assert!(shown(&unnamed));
     assert_eq!(
         glyphs(&unnamed) - glyphs(&stored),
-        short_id(f64::vocabulary::F64).chars().count() - "f64".len()
+        [
+            (::grap::isa::ISA, "isa"),
+            (crate::libraries::def::vocabulary::DEF, "def"),
+            (f64::vocabulary::F64, "f64"),
+            (::grap::vocabulary::BYTES, "bytes"),
+        ]
+        .map(|(cell, name)| short_id(cell).chars().count() - name.len())
+        .iter()
+        .sum::<usize>()
     );
     assert!(crate::web_embed::peeled(Some(&page), "", None, false).is_err());
 }
@@ -350,7 +359,7 @@ fn swapping_libraries_keeps_the_document_and_selection() {
         Step::Follow,
         Step::Key(names["planet"]),
     ];
-    let bytes: Vec<Step> = [&planet[..], &[Step::Key(text::vocabulary::UTF8)]].concat();
+    let bytes: Vec<Step> = [&planet[..], &[Step::Key(::grap::vocabulary::BYTES)]].concat();
     driver.select(&planet);
     assert!(
         !driver.drawn(&bytes),

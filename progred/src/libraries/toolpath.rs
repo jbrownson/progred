@@ -109,10 +109,7 @@ fn cube_playback(progress: f64) -> playback::Settings {
             STOCK,
             Value::record([(
                 crate::libraries::fidget::vocabulary::COLOR,
-                Value::record([(
-                    crate::libraries::color::vocabulary::RGB,
-                    Value::from(vec![184_u8, 155, 109]),
-                )]),
+                crate::libraries::color::rgb([184, 155, 109]),
             )]),
         ),
     ]))

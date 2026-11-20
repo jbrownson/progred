@@ -60,7 +60,8 @@ The number operations are the library's: f64 and f32 arithmetic and
 comparisons, f64's `sin`, `cos`, `floor`, `ceil` and `is_finite`, and u64's
 arithmetic, which fails rather than wrapping. A call to one evaluates its
 operands in label order and reads each as a number of the operation's type, a
-record whose tag holds exactly that type's bytes, whatever else it holds. When
+record of that type's kind whose `bytes` are exactly that type's width,
+whatever else it holds. When
 one isn't, the call comes to "invalid arguments", naming where the call was
 written and carrying why under each label, by the rule Grap's
 `absent::caused_by_all` follows: an absent the same as one before it isn't

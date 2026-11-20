@@ -249,12 +249,10 @@ fn the_session_does_what_the_client_asks() {
         &client_request(&["screenshot"]),
     );
     let root = gid_text::parse(&reply).unwrap().0.root.unwrap();
-    let fields = root.as_record().unwrap();
     assert!(
-        fields
-            .get(&crate::libraries::png::vocabulary::PNG)
-            .is_some()
-            || fields.get(&::grap::absent::REASON) == Some(&SCREENSHOT_FAILED.into()),
+        crate::libraries::png::read(&root).is_some()
+            || root.as_record().unwrap().get(&::grap::absent::REASON)
+                == Some(&SCREENSHOT_FAILED.into()),
         "{reply}"
     );
 }

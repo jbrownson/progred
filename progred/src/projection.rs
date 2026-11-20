@@ -82,10 +82,11 @@ impl Projection {
         &self.provided
     }
 
-    /// The composed partials, without the entry.
+    /// The composed partials, without the entry, drawing with the
+    /// projections its cells provide wherever they're used.
     #[cfg(any(test, target_arch = "wasm32"))]
-    pub(crate) fn partial(&self) -> &Partial {
-        &self.partial
+    pub(crate) fn partial(&self) -> Partial {
+        crate::display::providing(self.provided.clone(), self.partial.clone())
     }
 
     /// `partial` tried before this projection's own partials, its entry and

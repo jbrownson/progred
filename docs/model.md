@@ -150,12 +150,14 @@ occurrence as it opens it, so Space closes it again. A closed cell reads as its
 name, after its value's kind, dim, where the value says one: `(def fraction
 …)`.
 
-Raw's lists and records start open. A cell starts closed where drawing it would
-draw its value again inside itself, a cycle, and where it sits inside another
-cell's value and holds cells itself, since opening it could open more in turn.
-The cells a view reaches directly open, so their projections get going, and so
-do cells holding no cells, which can't cascade. A cell whose whole value is
-another cell opens through to it.
+Raw's lists and records start open. A record's kind starts closed, reading as
+its name. Another cell starts closed where drawing it would draw its value
+again inside itself, a cycle, and where it sits inside another cell's value and
+holds cells itself, since opening it could open more in turn; a record's kind
+isn't one it holds, so a cell holding a number holds none. The cells a view
+reaches directly open, so their projections get going, and so do cells holding
+no cells, which can't cascade. A cell whose whole value is another cell opens
+through to it.
 
 An [occurrence path](../progred/src/occurrence.rs) says where its data is, so a
 selection, a site and a landmark are each a path in a view, with no location

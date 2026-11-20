@@ -45,6 +45,7 @@
     "y": 213e54dd15ac9c9750308f35a606f56f,
     "z": c93e6bb743a9d90f85f8cdea3aabf5c1,
     "evaluation": 549dd85073474d6296d773c8df9c0526,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
   },
   "cells": {
     sphere: {
@@ -75,10 +76,10 @@
     radius: {name: "radius"},
   },
   "root": {
-    first: {isa: evaluation, expression: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f64: 0x9a9999999999c93f}}},
-    second: {isa: evaluation, expression: {isa: call, function: sum_f32, left: {f32: 0xcdcccc3d}, right: {f32: 0xcdcc4c3e}}},
-    third: {isa: evaluation, expression: {isa: call, function: subtract_u64, left: {u64: 0x0200000000000000}, right: {u64: 0x0300000000000000}}},
-    fourth: {isa: evaluation, expression: {isa: call, function: sum, left: {f64: 0x9a9999999999b93f}, right: {f32: 0xcdcc4c3e}}},
+    first: {isa: evaluation, expression: {isa: call, function: sum, left: {isa: f64, bytes: 0x9a9999999999b93f}, right: {isa: f64, bytes: 0x9a9999999999c93f}}},
+    second: {isa: evaluation, expression: {isa: call, function: sum_f32, left: {isa: f32, bytes: 0xcdcccc3d}, right: {isa: f32, bytes: 0xcdcc4c3e}}},
+    third: {isa: evaluation, expression: {isa: call, function: subtract_u64, left: {isa: u64, bytes: 0x0200000000000000}, right: {isa: u64, bytes: 0x0300000000000000}}},
+    fourth: {isa: evaluation, expression: {isa: call, function: sum, left: {isa: f64, bytes: 0x9a9999999999b93f}, right: {isa: f32, bytes: 0xcdcc4c3e}}},
     fifth: {isa: evaluation, expression: {
       isa: call,
       function: preview_3d,
@@ -87,11 +88,11 @@
         function: quote,
         expression: {
           isa: difference,
-          shape_left: {isa: unquote_2, unquote: {isa: call, function: sphere, radius: {f32: 0x00000042}}},
+          shape_left: {isa: unquote_2, unquote: {isa: call, function: sphere, radius: {isa: f32, bytes: 0x00000042}}},
           shape_right: {
             isa: translate,
-            field: {isa: unquote_2, unquote: {isa: call, function: sphere, radius: {f32: 0x0000c041}}},
-            delta_x: {f32: 0x0000f041},
+            field: {isa: unquote_2, unquote: {isa: call, function: sphere, radius: {isa: f32, bytes: 0x0000c041}}},
+            delta_x: {isa: f32, bytes: 0x0000f041},
           },
         },
       },

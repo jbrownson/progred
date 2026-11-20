@@ -184,7 +184,7 @@ impl Parser<'_> {
                         return Err("duplicate label in a record".to_string());
                     }
                 }
-                Ok(Value::record(fields))
+                Ok(Value::record(literal(fields)))
             }
             Some('[') => {
                 self.rest = &self.rest[1..];
@@ -537,6 +537,36 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
     }
 }
 
+/// Literals were once `{<kind>: bytes}`, `{f64: 0x…}`: a record written so
+/// reads as `{isa: <kind>, bytes}`, its other fields kept.
+fn literal(mut fields: Vec<(CellId, Value)>) -> Vec<(CellId, Value)> {
+    use crate::libraries::{color, png};
+    use ::grap::{isa::ISA, vocabulary::BYTES};
+    const KINDS: [CellId; 7] = [
+        ::grap::f64::F64,
+        ::grap::f32::F32,
+        ::grap::u64::U64,
+        text::TEXT,
+        color::vocabulary::RGB,
+        color::vocabulary::RGBA,
+        png::vocabulary::PNG,
+    ];
+    if fields
+        .iter()
+        .any(|(label, _)| *label == ISA || *label == BYTES)
+    {
+        return fields;
+    }
+    if let Some(at) = fields
+        .iter()
+        .position(|(label, value)| KINDS.contains(label) && value.as_blob().is_some())
+    {
+        let (kind, bytes) = fields.remove(at);
+        fields.extend([(ISA, Value::from(kind)), (BYTES, bytes)]);
+    }
+    fields
+}
+
 fn print_bytes(out: &mut String, bytes: &[u8]) {
     out.push_str("0x");
     out.push_str(&gid::hex_string(bytes));
@@ -547,7 +577,7 @@ fn plain_text(value: &Value) -> Option<&str> {
     value
         .as_record()?
         .keys()
-        .all(|label| *label == text::UTF8)
+        .all(|label| *label == ::grap::isa::ISA || *label == ::grap::vocabulary::BYTES)
         .then_some(text)
 }
 

@@ -15,8 +15,8 @@ use std::rc::Rc;
 /// Raw's view of the value at `input`, GID's own kinds and nothing else: a
 /// blob reads as its hex, edited in place, a cell as its value followed
 /// between parentheses, and lists and records as their structure. Cells,
-/// lists and records fold; lists and records start open, and cells as
-/// [`cell_starts_closed`] says.
+/// lists and records fold; lists and records start open, a record's kind
+/// closed, and other cells as [`cell_starts_closed`] says.
 pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let value = input.value?;
     Some(match value.shape() {
@@ -106,10 +106,17 @@ fn cell_view<W: Host>(
         Some(kind) => crate::display::row(4.0, [kind, named(cell, Face::Name)]),
         None => named(cell, Face::Name),
     };
+    // A record's kind says what the record is, so it starts closed, as its
+    // name.
+    let kind_of_record = input
+        .env
+        .occurrence()
+        .and_then(|trail| trail.steps().next())
+        == Some(&crate::occurrence::Step::Key(::grap::isa::ISA));
     foldable(
         Delim::Paren,
         Some(name),
-        move |viewing| cell_starts_closed(viewing, cell, &value),
+        move |viewing| kind_of_record || cell_starts_closed(viewing, cell, &value),
         open,
     )
 }

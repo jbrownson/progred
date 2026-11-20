@@ -18,7 +18,7 @@ const LABELS: [CellId; 12] = [
     crate::f64::F64,
     crate::f32::F32,
     crate::u64::U64,
-    crate::text::UTF8,
+    crate::text::TEXT,
     crate::logic::BOOL,
     vocabulary::FUNCTION,
     vocabulary::PARAMS,

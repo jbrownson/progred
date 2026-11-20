@@ -177,31 +177,33 @@ impl RuntimeValue {
         }
     }
 
-    /// The bytes under `tag`, where this is a record whose `tag` field is a
-    /// blob, as a privileged convention's record is: read without building
+    /// The bytes this holds as a literal of `kind`: read without building
     /// the record.
-    fn tagged(&self, tag: CellId) -> Option<&[u8]> {
+    pub fn literal(&self, kind: CellId) -> Option<&[u8]> {
         match &self.0 {
-            RuntimeValueKind::Unboxed(unboxed) => unboxed.original()?.get(&tag)?.as_blob(),
-            RuntimeValueKind::Data(value) => value.as_record()?.get(&tag)?.as_blob(),
-            RuntimeValueKind::Record(fields) => runtime_field(fields, tag)?.as_blob(),
+            RuntimeValueKind::Unboxed(unboxed) => crate::literal::of(unboxed.original()?, kind),
+            RuntimeValueKind::Data(value) => crate::literal::bytes(value, kind),
+            RuntimeValueKind::Record(fields) => {
+                (runtime_field(fields, isa::ISA)?.as_cell()? == kind).then_some(())?;
+                runtime_field(fields, crate::vocabulary::BYTES)?.as_blob()
+            }
             RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
         }
     }
 
-    /// The f32 this value holds under the f32 convention.
+    /// The f32 this value holds as a literal of the f32 kind.
     pub fn as_f32(&self) -> Option<f32> {
         match self.native() {
             Some(Native::F32(number)) => Some(*number),
-            _ => self.tagged(crate::f32::F32).and_then(crate::f32::decode),
+            _ => self.literal(crate::f32::F32).and_then(crate::f32::decode),
         }
     }
 
-    /// The u64 this value holds under the u64 convention.
+    /// The u64 this value holds as a literal of the u64 kind.
     pub fn as_u64(&self) -> Option<u64> {
         match self.native() {
             Some(Native::U64(number)) => Some(*number),
-            _ => self.tagged(crate::u64::U64).and_then(crate::u64::decode),
+            _ => self.literal(crate::u64::U64).and_then(crate::u64::decode),
         }
     }
 
@@ -236,20 +238,22 @@ impl RuntimeValue {
         }))
     }
 
-    /// The f64 this value holds under the f64 convention.
+    /// The f64 this value holds as a literal of the f64 kind.
     pub fn as_f64(&self) -> Option<f64> {
         match self.native() {
             Some(Native::F64(number)) => Some(*number),
-            _ => self.tagged(crate::f64::F64).and_then(crate::f64::decode),
+            _ => self.literal(crate::f64::F64).and_then(crate::f64::decode),
         }
     }
 
-    /// The text this value holds under the text convention, borrowed
+    /// The text this value holds as a literal of the text kind, borrowed
     /// without materializing it.
     pub fn as_text(&self) -> Option<&str> {
         match self.native() {
             Some(Native::Text(text)) => Some(text.as_ref()),
-            _ => self.tagged(crate::text::UTF8).and_then(crate::text::decode),
+            _ => self
+                .literal(crate::text::TEXT)
+                .and_then(crate::text::decode),
         }
     }
 

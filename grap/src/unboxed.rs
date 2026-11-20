@@ -27,55 +27,43 @@ pub(crate) enum Native {
 }
 
 impl Native {
-    /// The convention a record follows, if any. A record following both
-    /// unboxes as its number; a reader of its text finds it in the source
-    /// record.
+    /// The convention a record follows, if any: a literal of a number's or
+    /// text's kind, or a boolean.
     fn recognize(fields: &Record) -> Option<Self> {
-        // One pass over the fields rather than a lookup per convention, in
-        // order of preference: f64, f32 and u64, then text, then a boolean.
-        fields
-            .iter()
-            .filter_map(|(label, value)| {
-                Some(match *label {
-                    crate::f64::F64 => (0, Self::F64(crate::f64::decode(value.as_blob()?)?)),
-                    crate::f32::F32 => (1, Self::F32(crate::f32::decode(value.as_blob()?)?)),
-                    crate::u64::U64 => (2, Self::U64(crate::u64::decode(value.as_blob()?)?)),
-                    crate::text::UTF8 => {
-                        (3, Self::Text(crate::text::decode(value.as_blob()?)?.into()))
-                    }
-                    crate::logic::BOOL => (4, Self::Bool(crate::logic::decode(value)?)),
-                    _ => return None,
-                })
-            })
-            .min_by_key(|(rank, _)| *rank)
-            .map(|(_, native)| native)
-    }
-
-    /// The label of the field holding the value in its record form.
-    fn label(&self) -> CellId {
-        match self {
-            Self::F64(_) => crate::f64::F64,
-            Self::F32(_) => crate::f32::F32,
-            Self::U64(_) => crate::u64::U64,
-            Self::Text(_) => crate::text::UTF8,
-            Self::Bool(_) => crate::logic::BOOL,
+        let bytes = |kind| crate::literal::of(fields, kind);
+        match crate::isa::of(fields) {
+            Some(crate::f64::F64) => Some(Self::F64(crate::f64::decode(bytes(crate::f64::F64)?)?)),
+            Some(crate::f32::F32) => Some(Self::F32(crate::f32::decode(bytes(crate::f32::F32)?)?)),
+            Some(crate::u64::U64) => Some(Self::U64(crate::u64::decode(bytes(crate::u64::U64)?)?)),
+            Some(crate::text::TEXT) => Some(Self::Text(
+                crate::text::decode(bytes(crate::text::TEXT)?)?.into(),
+            )),
+            _ => Some(Self::Bool(crate::logic::decode(
+                fields.get(&crate::logic::BOOL)?,
+            )?)),
         }
     }
 
-    /// That field's value.
-    fn encoded(&self) -> Value {
+    /// Its fields in its record form, in order.
+    fn fields(&self) -> Vec<(CellId, Value)> {
+        let literal = |kind, bytes: Vec<u8>| {
+            vec![
+                (crate::isa::ISA, Value::from(kind)),
+                (crate::vocabulary::BYTES, Value::from(bytes)),
+            ]
+        };
         match self {
-            Self::F64(number) => crate::f64::encode(*number),
-            Self::F32(number) => crate::f32::encode(*number),
-            Self::U64(number) => crate::u64::encode(*number),
-            Self::Text(text) => crate::text::encode(text.as_ref()),
-            Self::Bool(value) => crate::logic::encode(*value),
+            Self::F64(number) => literal(crate::f64::F64, crate::f64::encode(*number)),
+            Self::F32(number) => literal(crate::f32::F32, crate::f32::encode(*number)),
+            Self::U64(number) => literal(crate::u64::U64, crate::u64::encode(*number)),
+            Self::Text(text) => literal(crate::text::TEXT, crate::text::encode(text.as_ref())),
+            Self::Bool(value) => vec![(crate::logic::BOOL, crate::logic::encode(*value))],
         }
     }
 
     /// The record form of a value made natively.
     fn record(&self) -> Value {
-        Value::record([(self.label(), self.encoded())])
+        Value::record(self.fields())
     }
 
     fn same(&self, other: &Self) -> bool {
@@ -118,26 +106,38 @@ impl Unboxed {
     pub(crate) fn field(&self, label: CellId) -> Option<Value> {
         match &self.original {
             Some(original) => original.get(&label).cloned(),
-            None => (label == self.native.label()).then(|| self.native.encoded()),
+            None => self
+                .native
+                .fields()
+                .into_iter()
+                .find_map(|(key, value)| (key == label).then_some(value)),
         }
     }
 
     pub(crate) fn contains_field(&self, label: CellId) -> bool {
         match &self.original {
             Some(original) => original.get(&label).is_some(),
-            None => label == self.native.label(),
+            None => self.native.fields().iter().any(|(key, _)| *key == label),
         }
     }
 
     pub(crate) fn keys(&self) -> Vec<CellId> {
         match &self.original {
             Some(original) => original.keys().copied().collect(),
-            None => vec![self.native.label()],
+            None => self
+                .native
+                .fields()
+                .into_iter()
+                .map(|(key, _)| key)
+                .collect(),
         }
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.original.as_ref().map_or(1, Record::len)
+        match &self.original {
+            Some(original) => original.len(),
+            None => self.native.fields().len(),
+        }
     }
 
     /// Conservative equality for memo reuse: the same native value from the

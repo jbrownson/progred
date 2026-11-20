@@ -45,10 +45,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
                     (presentation::vocabulary::VALUE, f32::value(-1.0)),
                     (t::PROGRAM, program),
                     (t::LINE_RADIUS, f64::value(0.01)),
-                    (
-                        fidget::vocabulary::COLOR,
-                        Value::record([(color::vocabulary::RGB, vec![255, 128, 0].into())]),
-                    ),
+                    (fidget::vocabulary::COLOR, color::rgb([255, 128, 0])),
                     (layout_data::vocabulary::WIDTH, f64::value(32.0)),
                     (layout_data::vocabulary::HEIGHT, f64::value(32.0)),
                     (layout_data::vocabulary::FUEL, f64::value(fuel as f64)),

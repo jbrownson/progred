@@ -26,7 +26,7 @@ fn each_library_names_its_vocabulary() {
             ],
         ),
         (name::library(), &[(name::vocabulary::NAME, "name")]),
-        (text::library(), &[(text::vocabulary::UTF8, "utf8")]),
+        (text::library(), &[(text::vocabulary::TEXT, "text")]),
         (
             crate::libraries::grap::library(),
             &[

@@ -10,7 +10,7 @@ fn world(root: Value) -> crate::Editor {
 }
 
 fn projection(world: &crate::Editor, rule: Partial) -> Projection {
-    Projection::new([rule, world.stack.projection.partial.clone()])
+    world.stack.projection.preceded_by(rule)
 }
 
 fn stop<'a>(

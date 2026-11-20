@@ -125,7 +125,7 @@ Anthropic's computer-use tool: `screenshot`, `mouse_move`, `left_click`,
 Screenshots are saved as PNGs under `target/control/screenshots`. Each request
 is a GID document whose root calls the session's
 [`computer` library](../progred/src/control/computer.rs), and each reply a
-document whose root is the result: `done`, `{png: …}`, or an absent that says
+document whose root is the result: `done`, `{isa: png, bytes: …}`, or an absent that says
 why the action couldn't happen. The session writes the vocabulary's binders to
 `target/control/vocabulary.gid` for clients to spell requests with. Its first
 use is to see how an agent that knows nothing of the code copes with the

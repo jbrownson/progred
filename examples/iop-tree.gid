@@ -24,6 +24,7 @@
     "branch_points": 8ae688f06bec51bfbb2d207dfa9f6761,
     "branch_width": abe1635b2cd83f005071c5d7a6bbb40c,
     "branches": e303be811c2209c2f87bc861e22bc4d0,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "canvas_height": 274d0b51bc6c8033eb55de7d825eca01,
     "canvas_width": 957105218c1fd308ab76b51fd4e368cb,
@@ -200,10 +201,12 @@
             function: quote,
             expression: {
               blossom_index: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               segment_index: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
             },
             isa: call,
@@ -326,15 +329,18 @@
                         0x24: {
                           value: {
                             maximum: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             minimum: {
-                              f64: 0x0000000000000000,
+                              isa: f64,
+                              bytes: 0x0000000000000000,
                             },
                             function: random_between,
                             key: blossom_key,
                             index_2: {
-                              f64: 0x0000000000000000,
+                              isa: f64,
+                              bytes: 0x0000000000000000,
                             },
                             isa: call,
                           },
@@ -344,15 +350,18 @@
                         0x36: {
                           value: {
                             maximum: {
-                              f64: 0x0000000000002440,
+                              isa: f64,
+                              bytes: 0x0000000000002440,
                             },
                             minimum: {
-                              f64: 0x00000000000024c0,
+                              isa: f64,
+                              bytes: 0x00000000000024c0,
                             },
                             function: random_between,
                             key: blossom_key,
                             index_2: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             isa: call,
                           },
@@ -362,15 +371,18 @@
                         0x49: {
                           value: {
                             maximum: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             minimum: {
-                              f64: 0x0000000000000000,
+                              isa: f64,
+                              bytes: 0x0000000000000000,
                             },
                             function: random_between,
                             key: blossom_key,
                             index_2: {
-                              f64: 0x0000000000000040,
+                              isa: f64,
+                              bytes: 0x0000000000000040,
                             },
                             isa: call,
                           },
@@ -380,15 +392,18 @@
                         0x5b: {
                           value: {
                             maximum: {
-                              f64: 0x0000000000002440,
+                              isa: f64,
+                              bytes: 0x0000000000002440,
                             },
                             minimum: {
-                              f64: 0x00000000000024c0,
+                              isa: f64,
+                              bytes: 0x00000000000024c0,
                             },
                             function: random_between,
                             key: blossom_key,
                             index_2: {
-                              f64: 0x0000000000000840,
+                              isa: f64,
+                              bytes: 0x0000000000000840,
                             },
                             isa: call,
                           },
@@ -403,12 +418,14 @@
                               isa: call,
                             },
                             minimum: {
-                              f64: 0x0000000000000000,
+                              isa: f64,
+                              bytes: 0x0000000000000000,
                             },
                             function: random_between,
                             key: blossom_key,
                             index_2: {
-                              f64: 0x0000000000001040,
+                              isa: f64,
+                              bytes: 0x0000000000001040,
                             },
                             isa: call,
                           },
@@ -418,15 +435,18 @@
                         0x80: {
                           value: {
                             maximum: {
-                              f64: 0x0000000000001440,
+                              isa: f64,
+                              bytes: 0x0000000000001440,
                             },
                             minimum: {
-                              f64: 0x0000000000000040,
+                              isa: f64,
+                              bytes: 0x0000000000000040,
                             },
                             function: random_between,
                             key: blossom_key,
                             index_2: {
-                              f64: 0x0000000000001440,
+                              isa: f64,
+                              bytes: 0x0000000000001440,
                             },
                             isa: call,
                           },
@@ -487,7 +507,8 @@
                         0xdb: {
                           value: {
                             right: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             function: sum,
                             left: blossom_index,
@@ -535,12 +556,14 @@
                                   function: quote,
                                   expression: {
                                     blossom_index: {
-                                      f64: 0x0000000000000000,
+                                      isa: f64,
+                                      bytes: 0x0000000000000000,
                                     },
                                     segment_index: {
                                       unquote: {
                                         right: {
-                                          f64: 0x000000000000f03f,
+                                          isa: f64,
+                                          bytes: 0x000000000000f03f,
                                         },
                                         function: sum,
                                         left: segment_index,
@@ -622,16 +645,20 @@
           0x55: {
             value: [
               0x33: {
-                rgba: 0xf5ceea99,
+                isa: rgba,
+                bytes: 0xf5ceea99,
               },
               0x66: {
-                rgba: 0xe8d9e499,
+                isa: rgba,
+                bytes: 0xe8d9e499,
               },
               0x99: {
-                rgba: 0xf7c9f399,
+                isa: rgba,
+                bytes: 0xf7c9f399,
               },
               0xcc: {
-                rgba: 0xebb4cc99,
+                isa: rgba,
+                bytes: 0xebb4cc99,
               },
             ],
             bind: blossom_colors,
@@ -639,7 +666,8 @@
           },
           0xaa: {
             value: {
-              f64: 0x0000000000003040,
+              isa: f64,
+              bytes: 0x0000000000003040,
             },
             bind: blossoms_per_branch,
             isa: binding,
@@ -701,14 +729,16 @@
         bindings: [
           0x40: {
             value: {
-              f64: 0x0000000000004e40,
+              isa: f64,
+              bytes: 0x0000000000004e40,
             },
             bind: branch_length,
             isa: binding,
           },
           0x80: {
             value: {
-              f64: 0x0000000000405840,
+              isa: f64,
+              bytes: 0x0000000000405840,
             },
             bind: trunk_length,
             isa: binding,
@@ -721,19 +751,22 @@
                   frontier: [
                     0x80: [
                       0x2a: {
-                        f64: 0x0000000000000000,
+                        isa: f64,
+                        bytes: 0x0000000000000000,
                       },
                       0x55: {
                         unquote: {
                           right: {
-                            f64: 0x0000000000000040,
+                            isa: f64,
+                            bytes: 0x0000000000000040,
                           },
                           function: divide,
                           left: {
                             right: pi,
                             function: subtract,
                             left: {
-                              f64: 0x0000000000000000,
+                              isa: f64,
+                              bytes: 0x0000000000000000,
                             },
                             isa: call,
                           },
@@ -744,7 +777,8 @@
                       0x80: {
                         unquote: {
                           right: {
-                            f64: 0x0000000000000040,
+                            isa: f64,
+                            bytes: 0x0000000000000040,
                           },
                           function: divide,
                           left: canvas_width,
@@ -757,7 +791,8 @@
                         isa: unquote_2,
                       },
                       0xd5: {
-                        f64: 0x0000000000003e40,
+                        isa: f64,
+                        bytes: 0x0000000000003e40,
                       },
                       0xea: {
                         unquote: key,
@@ -821,7 +856,8 @@
                           0x20: {
                             value: {
                               index: {
-                                f64: 0x0000000000000000,
+                                isa: f64,
+                                bytes: 0x0000000000000000,
                               },
                               list: frontier,
                               function: list_at,
@@ -867,15 +903,18 @@
                           0x40: {
                             value: {
                               maximum: {
-                                f64: 0xcdccccccccccf43f,
+                                isa: f64,
+                                bytes: 0xcdccccccccccf43f,
                               },
                               minimum: {
-                                f64: 0x666666666666e63f,
+                                isa: f64,
+                                bytes: 0x666666666666e63f,
                               },
                               function: random_between,
                               key: branch_key,
                               index_2: {
-                                f64: 0x0000000000000000,
+                                isa: f64,
+                                bytes: 0x0000000000000000,
                               },
                               isa: call,
                             },
@@ -889,15 +928,18 @@
                               left: {
                                 value: depth,
                                 end: {
-                                  f64: 0x0000000000002840,
+                                  isa: f64,
+                                  bytes: 0x0000000000002840,
                                 },
                                 start: {
-                                  f64: 0x000000000000f03f,
+                                  isa: f64,
+                                  bytes: 0x000000000000f03f,
                                 },
                                 start_value: branch_length,
                                 function: tween,
                                 end_value: {
-                                  f64: 0x0000000000000840,
+                                  isa: f64,
+                                  bytes: 0x0000000000000840,
                                 },
                                 isa: call,
                               },
@@ -910,7 +952,8 @@
                             value: {
                               value: {
                                 right: {
-                                  f64: 0x0000000000000000,
+                                  isa: f64,
+                                  bytes: 0x0000000000000000,
                                 },
                                 function: equal,
                                 left: depth,
@@ -942,7 +985,8 @@
                           0x70: {
                             value: {
                               right: {
-                                f64: 0x0000000000000040,
+                                isa: f64,
+                                bytes: 0x0000000000000040,
                               },
                               function: divide,
                               left: branch_width,
@@ -1002,7 +1046,8 @@
                           0xb0: {
                             value: {
                               right: {
-                                f64: 0x000000000000f03f,
+                                isa: f64,
+                                bytes: 0x000000000000f03f,
                               },
                               function: sum,
                               left: depth,
@@ -1014,7 +1059,8 @@
                           0xc0: {
                             value: {
                               right: {
-                                f64: 0x666666666666e63f,
+                                isa: f64,
+                                bytes: 0x666666666666e63f,
                               },
                               function: multiply,
                               left: branch_width,
@@ -1027,7 +1073,8 @@
                             value: {
                               value: {
                                 right: {
-                                  f64: 0x0000000000001840,
+                                  isa: f64,
+                                  bytes: 0x0000000000001840,
                                 },
                                 function: less,
                                 left: depth,
@@ -1047,15 +1094,18 @@
                                       0x2a: {
                                         value: {
                                           maximum: {
-                                            f64: 0x9a9999999999a9bf,
+                                            isa: f64,
+                                            bytes: 0x9a9999999999a9bf,
                                           },
                                           minimum: {
-                                            f64: 0x333333333333c3bf,
+                                            isa: f64,
+                                            bytes: 0x333333333333c3bf,
                                           },
                                           function: random_between,
                                           key: branch_key,
                                           index_2: {
-                                            f64: 0x000000000000f03f,
+                                            isa: f64,
+                                            bytes: 0x000000000000f03f,
                                           },
                                           isa: call,
                                         },
@@ -1065,15 +1115,18 @@
                                       0x55: {
                                         value: {
                                           maximum: {
-                                            f64: 0x9a9999999999a93f,
+                                            isa: f64,
+                                            bytes: 0x9a9999999999a93f,
                                           },
                                           minimum: {
-                                            f64: 0x333333333333c33f,
+                                            isa: f64,
+                                            bytes: 0x333333333333c33f,
                                           },
                                           function: random_between,
                                           key: branch_key,
                                           index_2: {
-                                            f64: 0x0000000000000040,
+                                            isa: f64,
+                                            bytes: 0x0000000000000040,
                                           },
                                           isa: call,
                                         },
@@ -1143,7 +1196,8 @@
                                                     function: random_key,
                                                     key: branch_key,
                                                     index_2: {
-                                                      f64: 0x0000000000000000,
+                                                      isa: f64,
+                                                      bytes: 0x0000000000000000,
                                                     },
                                                     isa: call,
                                                   },
@@ -1176,7 +1230,8 @@
                                                     function: random_key,
                                                     key: branch_key,
                                                     index_2: {
-                                                      f64: 0x000000000000f03f,
+                                                      isa: f64,
+                                                      bytes: 0x000000000000f03f,
                                                     },
                                                     isa: call,
                                                   },
@@ -1203,7 +1258,8 @@
                                   expression: {
                                     value: {
                                       right: {
-                                        f64: 0x0000000000002840,
+                                        isa: f64,
+                                        bytes: 0x0000000000002840,
                                       },
                                       function: less,
                                       left: depth,
@@ -1223,15 +1279,18 @@
                                             0x40: {
                                               value: {
                                                 maximum: {
-                                                  f64: 0x9a9999999999a9bf,
+                                                  isa: f64,
+                                                  bytes: 0x9a9999999999a9bf,
                                                 },
                                                 minimum: {
-                                                  f64: 0x000000000000d03f,
+                                                  isa: f64,
+                                                  bytes: 0x000000000000d03f,
                                                 },
                                                 function: random_between,
                                                 key: branch_key,
                                                 index_2: {
-                                                  f64: 0x000000000000f03f,
+                                                  isa: f64,
+                                                  bytes: 0x000000000000f03f,
                                                 },
                                                 isa: call,
                                               },
@@ -1284,7 +1343,8 @@
                                                         function: random_key,
                                                         key: branch_key,
                                                         index_2: {
-                                                          f64: 0x0000000000000000,
+                                                          isa: f64,
+                                                          bytes: 0x0000000000000000,
                                                         },
                                                         isa: call,
                                                       },
@@ -1328,7 +1388,8 @@
                                 right: depth,
                                 function: less,
                                 left: {
-                                  f64: 0x0000000000001040,
+                                  isa: f64,
+                                  bytes: 0x0000000000001040,
                                 },
                                 isa: call,
                               },
@@ -1408,7 +1469,8 @@
                                   },
                                   function: fill,
                                   paint: {
-                                    rgb: 0x000000,
+                                    isa: rgb,
+                                    bytes: 0x000000,
                                   },
                                   isa: call,
                                   shape: {
@@ -1416,14 +1478,16 @@
                                     expression: {
                                       rect: {
                                         x: {
-                                          f64: 0x0000000000000000,
+                                          isa: f64,
+                                          bytes: 0x0000000000000000,
                                         },
                                         y: {
                                           unquote: {
                                             right: half_width,
                                             function: subtract,
                                             left: {
-                                              f64: 0x0000000000000000,
+                                              isa: f64,
+                                              bytes: 0x0000000000000000,
                                             },
                                             isa: call,
                                           },
@@ -1509,14 +1573,16 @@
           canvas_height: canvas_height,
           function: branches,
           key: {
-            u64: 0x0000000000000000,
+            isa: u64,
+            bytes: 0x0000000000000000,
           },
           canvas_width: canvas_width,
           isa: call,
         },
         function: blossoms,
         key: {
-          u64: 0x0100000000000000,
+          isa: u64,
+          bytes: 0x0100000000000000,
         },
         isa: call,
       },
@@ -1559,7 +1625,8 @@
             },
             0x40: {
               x: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               y: initial_y,
               function: move_to,
@@ -1570,7 +1637,8 @@
                 function: quote,
                 expression: {
                   x: {
-                    f64: 0x0000000000000000,
+                    isa: f64,
+                    bytes: 0x0000000000000000,
                   },
                   y: {
                     unquote: initial_y,
@@ -1641,15 +1709,18 @@
                             0x33: {
                               value: {
                                 maximum: {
-                                  f64: 0x0000000000002440,
+                                  isa: f64,
+                                  bytes: 0x0000000000002440,
                                 },
                                 minimum: {
-                                  f64: 0x0000000000000040,
+                                  isa: f64,
+                                  bytes: 0x0000000000000040,
                                 },
                                 function: random_between,
                                 key: step_key,
                                 index_2: {
-                                  f64: 0x0000000000000000,
+                                  isa: f64,
+                                  bytes: 0x0000000000000000,
                                 },
                                 isa: call,
                               },
@@ -1659,15 +1730,18 @@
                             0x66: {
                               value: {
                                 maximum: {
-                                  f64: 0x0000000000000840,
+                                  isa: f64,
+                                  bytes: 0x0000000000000840,
                                 },
                                 minimum: {
-                                  f64: 0x00000000000010c0,
+                                  isa: f64,
+                                  bytes: 0x00000000000010c0,
                                 },
                                 function: random_between,
                                 key: step_key,
                                 index_2: {
-                                  f64: 0x000000000000f03f,
+                                  isa: f64,
+                                  bytes: 0x000000000000f03f,
                                 },
                                 isa: call,
                               },
@@ -1742,7 +1816,8 @@
             },
             0xa0: {
               x: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               y: canvas_height,
               function: line_to,
@@ -1789,30 +1864,36 @@
             canvas_height: canvas_height,
             function: mountain,
             key: {
-              u64: 0x0000000000000000,
+              isa: u64,
+              bytes: 0x0000000000000000,
             },
             canvas_width: canvas_width,
             paint: {
-              rgb: 0x8bb2bb,
+              isa: rgb,
+              bytes: 0x8bb2bb,
             },
             isa: call,
             offset: {
-              f64: 0x0000000000406040,
+              isa: f64,
+              bytes: 0x0000000000406040,
             },
           },
           0xaa: {
             canvas_height: canvas_height,
             function: mountain,
             key: {
-              u64: 0x0100000000000000,
+              isa: u64,
+              bytes: 0x0100000000000000,
             },
             canvas_width: canvas_width,
             paint: {
-              rgb: 0x618087,
+              isa: rgb,
+              bytes: 0x618087,
             },
             isa: call,
             offset: {
-              f64: 0x0000000000004940,
+              isa: f64,
+              bytes: 0x0000000000004940,
             },
           },
         ],
@@ -1875,24 +1956,29 @@
               stops: [
                 0x55: {
                   paint: {
-                    rgb: 0xb4e0fe,
+                    isa: rgb,
+                    bytes: 0xb4e0fe,
                   },
                   gradient_offset: {
-                    f64: 0x0000000000000000,
+                    isa: f64,
+                    bytes: 0x0000000000000000,
                   },
                 },
                 0xaa: {
                   paint: {
-                    rgb: 0xd3f8ff,
+                    isa: rgb,
+                    bytes: 0xd3f8ff,
                   },
                   gradient_offset: {
-                    f64: 0x000000000000f03f,
+                    isa: f64,
+                    bytes: 0x000000000000f03f,
                   },
                 },
               ],
               gradient_end: {
                 x: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
                 y: {
                   unquote: canvas_height,
@@ -1901,10 +1987,12 @@
               },
               gradient_start: {
                 x: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
                 y: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
               },
             },
@@ -1917,10 +2005,12 @@
           expression: {
             rect: {
               x: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               y: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               height: {
                 unquote: canvas_height,
@@ -2071,10 +2161,12 @@
                 isa: unquote_2,
               },
               fuel: {
-                f64: 0x0000000080843e41,
+                isa: f64,
+                bytes: 0x0000000080843e41,
               },
               ascent: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               program: {
                 canvas_height: {

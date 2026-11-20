@@ -12,6 +12,9 @@ pub const EVALUATE: CellId = CellId::from_u128(0xacfc5e50881292518dab3cec77cf43e
 pub const EXPRESSION: CellId = CellId::from_u128(0xccc55b0eb63b9f564ea74436094d4014);
 /// The cell the host implements a foreign function under.
 pub const IMPLEMENTATION: CellId = CellId::from_u128(0x24e1165744a040d7a4a4ff7d46f3b03c);
+/// A literal's encoded bytes, which its kind reads: a number's, a text's, a
+/// color's or an image's (see [`crate::literal`]).
+pub const BYTES: CellId = CellId::from_u128(0xfe06bf0459d2598aa29b30302e3b29b8);
 
 /// The kinds of Grap's forms, as a record's `isa` names them.
 pub mod kind {

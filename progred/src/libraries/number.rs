@@ -5,7 +5,7 @@
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::selectable;
 use crate::libraries::representation::tagged;
-use crate::libraries::{Library, name};
+use crate::libraries::{Library, isa, name};
 use ::grap::RuntimeValue;
 use gid::{CellId, Value};
 use std::fmt::Display;
@@ -18,30 +18,32 @@ const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;
 const DECADE_STRETCH: f64 = 1.5;
 
-/// One number representation: its name and tag, and how it's encoded,
+/// One number representation: its name and kind, and how it's encoded,
 /// carried at runtime, and read back.
 #[derive(Clone, Copy)]
 pub(crate) struct Representation<N> {
     pub name: &'static str,
-    pub tag: CellId,
+    pub kind: CellId,
     pub encode: fn(N) -> Value,
     pub runtime: fn(N) -> RuntimeValue,
     pub read: fn(&RuntimeValue) -> Option<N>,
 }
 
 impl<N: Scrubbable + std::str::FromStr> Representation<N> {
-    /// The library of this representation, `id`: its tag's name, its numbers
-    /// drawn, and what's typed read as one.
+    /// The library of this representation, `id`: its kind, named and drawn,
+    /// and what's typed read as one.
     pub fn library<W: Host>(self, id: CellId) -> Library<W> {
         name::named_library(
             id,
             self.name,
-            [(self.tag, self.name)],
+            [(self.kind, self.name)],
             ::grap::ForeignFunctions::default(),
         )
-        .with_projection(crate::display::runtime_partial(move |input| {
-            self.display(input)
-        }))
+        .with_kinds([(self.kind, vec![isa::vocabulary::BYTES])])
+        .with_projections_for([(
+            self.kind,
+            crate::display::runtime_partial(move |input| self.display(input)),
+        )])
         .with_completions(move |request| {
             (request.scope == crate::display::CompletionScope::Literal
                 && request.kind == crate::display::CompletionKind::Value)
@@ -68,7 +70,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
             family: crate::display::TextFamily::SystemUi,
             placeholder: None,
         });
-        let line = tagged(input, digits, self.tag);
+        let line = tagged(input, digits, self.kind);
         let site = input.site();
         let line = selectable(line, &site);
         let line = if number.scrubbable() {
@@ -94,7 +96,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
         };
         Some(crate::display::structure::Fields::default().after(
             input,
-            |key| key == self.tag || key == name::vocabulary::NAME,
+            |key| isa::literal_field(key) || key == name::vocabulary::NAME,
             name::with_name(input, line),
         ))
     }
@@ -107,7 +109,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
             .map(|number| {
                 crate::libraries::completion::select(number.to_string(), (self.encode)(number))
                     .with_aliases([query])
-                    .with_detail(self.tag)
+                    .with_detail(self.kind)
             })
             .into_iter()
             .collect()

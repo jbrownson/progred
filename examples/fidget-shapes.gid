@@ -11,6 +11,7 @@
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
@@ -149,7 +150,8 @@
                 left_2: {
                   unquote: {
                     radius: {
-                      f32: 0x00008042,
+                      isa: f32,
+                      bytes: 0x00008042,
                     },
                     function: sphere,
                     isa: call,
@@ -160,7 +162,8 @@
                   field: {
                     unquote: {
                       radius: {
-                        f32: 0x0000c041,
+                        isa: f32,
+                        bytes: 0x0000c041,
                       },
                       function: sphere,
                       isa: call,
@@ -168,14 +171,16 @@
                     isa: unquote_2,
                   },
                   delta_x: {
-                    f32: 0x00004042,
+                    isa: f32,
+                    bytes: 0x00004042,
                   },
                   isa: translate,
                 },
                 isa: difference,
               },
               color: {
-                rgb: 0x5096dc,
+                isa: rgb,
+                bytes: 0x5096dc,
               },
             },
             0xaa: {
@@ -183,7 +188,8 @@
                 field: {
                   unquote: {
                     radius: {
-                      f32: 0x00006041,
+                      isa: f32,
+                      bytes: 0x00006041,
                     },
                     function: sphere,
                     isa: call,
@@ -191,12 +197,14 @@
                   isa: unquote_2,
                 },
                 delta_x: {
-                  f32: 0x00004042,
+                  isa: f32,
+                  bytes: 0x00004042,
                 },
                 isa: translate,
               },
               color: {
-                rgb: 0xf0ae50,
+                isa: rgb,
+                bytes: 0xf0ae50,
               },
             },
           ],
@@ -342,21 +350,24 @@
         bindings: [
           0x17: {
             value: {
-              f32: 0x0000803f,
+              isa: f32,
+              bytes: 0x0000803f,
             },
             bind: size,
             isa: binding,
           },
           0x2e: {
             value: {
-              f32: 0xcdcccc3d,
+              isa: f32,
+              bytes: 0xcdcccc3d,
             },
             bind: chamfer,
             isa: binding,
           },
           0x45: {
             value: {
-              f32: 0x0000003f,
+              isa: f32,
+              bytes: 0x0000003f,
             },
             bind: control_depth,
             isa: binding,
@@ -364,7 +375,8 @@
           0x5d: {
             value: {
               right: {
-                f32: 0x00000040,
+                isa: f32,
+                bytes: 0x00000040,
               },
               function: f32_divide,
               left: size,
@@ -386,7 +398,8 @@
           0x8b: {
             value: {
               right: {
-                f32: 0x00008040,
+                isa: f32,
+                bytes: 0x00008040,
               },
               function: f32_divide,
               left: control_depth,
@@ -414,11 +427,13 @@
                 function: quote,
                 expression: {
                   left_2: {
-                    f32: 0x00000000,
+                    isa: f32,
+                    bytes: 0x00000000,
                   },
                   right_2: {
                     left_2: {
-                      f32: 0x0000803f,
+                      isa: f32,
+                      bytes: 0x0000803f,
                     },
                     right_2: {
                       operand_2: {
@@ -567,11 +582,13 @@
           0xaa: {
             child: {
               baseline: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               function: row,
               gap: {
-                f64: 0x0000000000003040,
+                isa: f64,
+                bytes: 0x0000000000003040,
               },
               isa: call,
               children: {
@@ -659,7 +676,8 @@
                         axis: x,
                       },
                       right_2: {
-                        f32: 0xcdcccc3e,
+                        isa: f32,
+                        bytes: 0xcdcccc3e,
                       },
                       isa: multiply_2,
                     },
@@ -672,7 +690,8 @@
                         axis: y,
                       },
                       right_2: {
-                        f32: 0xcdcccc3e,
+                        isa: f32,
+                        bytes: 0xcdcccc3e,
                       },
                       isa: multiply_2,
                     },
@@ -688,7 +707,8 @@
                         axis: y,
                       },
                       right_2: {
-                        f32: 0xcdcccc3e,
+                        isa: f32,
+                        bytes: 0xcdcccc3e,
                       },
                       isa: multiply_2,
                     },
@@ -701,7 +721,8 @@
                         axis: z,
                       },
                       right_2: {
-                        f32: 0xcdcccc3e,
+                        isa: f32,
+                        bytes: 0xcdcccc3e,
                       },
                       isa: multiply_2,
                     },
@@ -719,7 +740,8 @@
                       axis: z,
                     },
                     right_2: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply_2,
                   },
@@ -732,7 +754,8 @@
                       axis: x,
                     },
                     right_2: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply_2,
                   },
@@ -745,7 +768,8 @@
             isa: abs_2,
           },
           right_2: {
-            f32: 0xcdcc4c3e,
+            isa: f32,
+            bytes: 0xcdcc4c3e,
           },
           isa: subtract_2,
         },
@@ -760,7 +784,8 @@
                       axis: x,
                     },
                     right_2: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply_2,
                   },
@@ -773,7 +798,8 @@
                       axis: y,
                     },
                     right_2: {
-                      f32: 0xcdcccc3e,
+                      isa: f32,
+                      bytes: 0xcdcccc3e,
                     },
                     isa: multiply_2,
                   },
@@ -788,7 +814,8 @@
                     axis: z,
                   },
                   right_2: {
-                    f32: 0xcdcccc3e,
+                    isa: f32,
+                    bytes: 0xcdcccc3e,
                   },
                   isa: multiply_2,
                 },
@@ -799,7 +826,8 @@
             isa: sqrt,
           },
           right_2: {
-            f32: 0x0000c841,
+            isa: f32,
+            bytes: 0x0000c841,
           },
           isa: subtract_2,
         },
@@ -869,10 +897,12 @@
       ],
       body: {
         min_z: {
-          f32: 0x9a9919bf,
+          isa: f32,
+          bytes: 0x9a9919bf,
         },
         mesh_depth: {
-          u64: 0x0500000000000000,
+          isa: u64,
+          bytes: 0x0500000000000000,
         },
         function: preview_mesh,
         projection_value: {
@@ -885,7 +915,8 @@
                   isa: unquote_2,
                 },
                 color: {
-                  rgb: 0x60b6d0,
+                  isa: rgb,
+                  bytes: 0x60b6d0,
                 },
               },
             ],
@@ -894,20 +925,25 @@
           isa: call,
         },
         max_x: {
-          f32: 0x9a99193f,
+          isa: f32,
+          bytes: 0x9a99193f,
         },
         max_y: {
-          f32: 0x9a99193f,
+          isa: f32,
+          bytes: 0x9a99193f,
         },
         max_z: {
-          f32: 0x9a99193f,
+          isa: f32,
+          bytes: 0x9a99193f,
         },
         isa: call,
         min_y: {
-          f32: 0x9a9919bf,
+          isa: f32,
+          bytes: 0x9a9919bf,
         },
         min_x: {
-          f32: 0x9a9919bf,
+          isa: f32,
+          bytes: 0x9a9919bf,
         },
       },
       isa: lambda,
@@ -1017,7 +1053,8 @@
                       axis: x,
                     },
                     right_2: {
-                      f32: 0x0000c841,
+                      isa: f32,
+                      bytes: 0x0000c841,
                     },
                     isa: divide_2,
                   },
@@ -1027,7 +1064,8 @@
               },
               right_2: {
                 left_2: {
-                  f32: 0x0000a040,
+                  isa: f32,
+                  bytes: 0x0000a040,
                 },
                 right_2: {
                   operand_2: {
@@ -1036,7 +1074,8 @@
                       axis: x,
                     },
                     right_2: {
-                      f32: 0x0000c841,
+                      isa: f32,
+                      bytes: 0x0000c841,
                     },
                     isa: divide_2,
                   },
@@ -1055,7 +1094,8 @@
                       axis: y,
                     },
                     right_2: {
-                      f32: 0x0000c841,
+                      isa: f32,
+                      bytes: 0x0000c841,
                     },
                     isa: divide_2,
                   },
@@ -1065,7 +1105,8 @@
               },
               right_2: {
                 left_2: {
-                  f32: 0x0000a040,
+                  isa: f32,
+                  bytes: 0x0000a040,
                 },
                 right_2: {
                   operand_2: {
@@ -1074,7 +1115,8 @@
                       axis: y,
                     },
                     right_2: {
-                      f32: 0x0000c841,
+                      isa: f32,
+                      bytes: 0x0000c841,
                     },
                     isa: divide_2,
                   },
@@ -1095,7 +1137,8 @@
                     axis: z,
                   },
                   right_2: {
-                    f32: 0x0000c841,
+                    isa: f32,
+                    bytes: 0x0000c841,
                   },
                   isa: divide_2,
                 },
@@ -1105,7 +1148,8 @@
             },
             right_2: {
               left_2: {
-                f32: 0x0000a040,
+                isa: f32,
+                bytes: 0x0000a040,
               },
               right_2: {
                 operand_2: {
@@ -1114,7 +1158,8 @@
                     axis: z,
                   },
                   right_2: {
-                    f32: 0x0000c841,
+                    isa: f32,
+                    bytes: 0x0000c841,
                   },
                   isa: divide_2,
                 },
@@ -1127,7 +1172,8 @@
           isa: sum_2,
         },
         right_2: {
-          f32: 0xcdcc3c41,
+          isa: f32,
+          bytes: 0xcdcc3c41,
         },
         isa: sum_2,
       },
@@ -1161,7 +1207,8 @@
                 isa: sqrt,
               },
               right_2: {
-                f32: 0x00003442,
+                isa: f32,
+                bytes: 0x00003442,
               },
               isa: subtract_2,
             },
@@ -1178,7 +1225,8 @@
         },
         right_2: {
           operand_2: {
-            f32: 0x00007041,
+            isa: f32,
+            bytes: 0x00007041,
           },
           isa: square_2,
         },

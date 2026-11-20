@@ -1,7 +1,7 @@
 //! The opaque CSS named colors, plus the separately specified transparent keyword.
 //! Values follow CSS Color 4 §6.1: <https://www.w3.org/TR/css-color-4/#named-colors>.
 
-use super::{Encoded, encoded_field};
+use super::Encoded;
 use crate::libraries::name;
 use gid::{CellId, Value};
 
@@ -18,15 +18,12 @@ pub(super) fn colors() -> impl Iterator<Item = (CellId, Value)> {
             let [_, red, green, blue] = color.rgb.to_be_bytes();
             (
                 color.id,
-                name::record(
-                    color.name,
-                    [encoded_field(Encoded::Rgb([red, green, blue]))],
-                ),
+                name::record(color.name, Encoded::Rgb([red, green, blue]).fields()),
             )
         })
         .chain([(
             TRANSPARENT,
-            name::record("transparent", [encoded_field(Encoded::Rgba([0; 4]))]),
+            name::record("transparent", Encoded::Rgba([0; 4]).fields()),
         )])
 }
 

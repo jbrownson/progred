@@ -114,6 +114,7 @@
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "binder": 81d57515ba3b44aab94e43d59a47fe9a,
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
   },
   "cells": {
   cloud_speed: {name: "speed"},
@@ -134,7 +135,7 @@
       items: {
         isa: call,
         function: sequence_range,
-        sequence_count: {f64: 0x0000000000000840}
+        sequence_count: {isa: f64, bytes: 0x0000000000000840}
       },
       action: {
         isa: lambda,
@@ -154,12 +155,12 @@
                 left: {
                   isa: call,
                   function: sum,
-                  left: {f64: 0x0000000000805640},
+                  left: {isa: f64, bytes: 0x0000000000805640},
                   right: {
                     isa: call,
                     function: multiply,
                     left: item,
-                    right: {f64: 0x0000000000c06740}
+                    right: {isa: f64, bytes: 0x0000000000c06740}
                   }
                 },
                 right: {
@@ -171,7 +172,7 @@
                     left: sun_time,
                     right: cloud_speed
                   },
-                  right: {f64: 0x0000000000004e40}
+                  right: {isa: f64, bytes: 0x0000000000004e40}
                 }
               }
             },
@@ -181,11 +182,11 @@
               subject: {
                 isa: call,
                 function: sum,
-                left: {f64: 0x0000000000005440},
+                left: {isa: f64, bytes: 0x0000000000005440},
                 right: {
                   isa: call,
                   function: multiply,
-                  left: {f64: 0x0000000000003240},
+                  left: {isa: f64, bytes: 0x0000000000003240},
                   right: {
                     isa: call,
                     function: sin,
@@ -193,7 +194,7 @@
                       isa: call,
                       function: multiply,
                       left: item,
-                      right: {f64: 0x3333333333330340}
+                      right: {isa: f64, bytes: 0x3333333333330340}
                     }
                   }
                 }
@@ -205,12 +206,12 @@
               subject: {
                 isa: call,
                 function: sum,
-                left: {f64: 0x0000000000003240},
+                left: {isa: f64, bytes: 0x0000000000003240},
                 right: {
                   isa: call,
                   function: multiply,
                   left: item,
-                  right: {f64: 0x0000000000000040}
+                  right: {isa: f64, bytes: 0x0000000000000040}
                 }
               }
             }
@@ -232,7 +233,7 @@
                         isa: call,
                         function: multiply,
                         left: cloud_radius,
-                        right: {f64: 0xcdccccccccccecbf}
+                        right: {isa: f64, bytes: 0xcdccccccccccecbf}
                       }
                     }},
                     y: {isa: unquote_2, unquote: {
@@ -243,14 +244,14 @@
                         isa: call,
                         function: multiply,
                         left: cloud_radius,
-                        right: {f64: 0x9a9999999999e93f}
+                        right: {isa: f64, bytes: 0x9a9999999999e93f}
                       }
                     }},
                     radius: {isa: unquote_2, unquote: {
                       isa: call,
                       function: multiply,
                       left: cloud_radius,
-                      right: {f64: 0x9a9999999999e93f}
+                      right: {isa: f64, bytes: 0x9a9999999999e93f}
                     }}
                   }
                 }},
@@ -269,7 +270,7 @@
                         isa: call,
                         function: multiply,
                         left: cloud_radius,
-                        right: {f64: 0x0000000000000000}
+                        right: {isa: f64, bytes: 0x0000000000000000}
                       }
                     }},
                     y: {isa: unquote_2, unquote: {
@@ -280,14 +281,14 @@
                         isa: call,
                         function: multiply,
                         left: cloud_radius,
-                        right: {f64: 0x666666666666f23f}
+                        right: {isa: f64, bytes: 0x666666666666f23f}
                       }
                     }},
                     radius: {isa: unquote_2, unquote: {
                       isa: call,
                       function: multiply,
                       left: cloud_radius,
-                      right: {f64: 0x666666666666f23f}
+                      right: {isa: f64, bytes: 0x666666666666f23f}
                     }}
                   }
                 }},
@@ -306,7 +307,7 @@
                         isa: call,
                         function: multiply,
                         left: cloud_radius,
-                        right: {f64: 0x000000000000f03f}
+                        right: {isa: f64, bytes: 0x000000000000f03f}
                       }
                     }},
                     y: {isa: unquote_2, unquote: {
@@ -317,14 +318,14 @@
                         isa: call,
                         function: multiply,
                         left: cloud_radius,
-                        right: {f64: 0xcdccccccccccec3f}
+                        right: {isa: f64, bytes: 0xcdccccccccccec3f}
                       }
                     }},
                     radius: {isa: unquote_2, unquote: {
                       isa: call,
                       function: multiply,
                       left: cloud_radius,
-                      right: {f64: 0xcdccccccccccec3f}
+                      right: {isa: f64, bytes: 0xcdccccccccccec3f}
                     }}
                   }
                 }},
@@ -378,25 +379,25 @@
                     isa: call,
                     function: multiply,
                     left: age,
-                    right: {f64: 0x0000000000001040}
+                    right: {isa: f64, bytes: 0x0000000000001040}
                   }
                 }},
                 y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x000000000000f03f}
+                    right: {isa: f64, bytes: 0x000000000000f03f}
                   }
                 }},
                 width: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: age,
-                  right: {f64: 0x0000000000002040}
+                  right: {isa: f64, bytes: 0x0000000000002040}
                 }},
                 height: {isa: unquote_2, unquote: tree_height}
               }
@@ -419,18 +420,18 @@
                     isa: call,
                     function: multiply,
                     left: age,
-                    right: {f64: 0x0000000000000840}
+                    right: {isa: f64, bytes: 0x0000000000000840}
                   }
                 },
                 y: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x000000000000e03f}
+                    right: {isa: f64, bytes: 0x000000000000e03f}
                   }
                 }
               },
@@ -445,18 +446,18 @@
                     isa: call,
                     function: multiply,
                     left: crown,
-                    right: {f64: 0x666666666666e6bf}
+                    right: {isa: f64, bytes: 0x666666666666e6bf}
                   }
                 },
                 y: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x48e17a14ae47e93f}
+                    right: {isa: f64, bytes: 0x48e17a14ae47e93f}
                   }
                 }
               },
@@ -471,18 +472,18 @@
                     isa: call,
                     function: multiply,
                     left: age,
-                    right: {f64: 0x0000000000000840}
+                    right: {isa: f64, bytes: 0x0000000000000840}
                   }
                 },
                 y: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x000000000000e03f}
+                    right: {isa: f64, bytes: 0x000000000000e03f}
                   }
                 }
               },
@@ -510,18 +511,18 @@
                     isa: call,
                     function: multiply,
                     left: age,
-                    right: {f64: 0x0000000000000840}
+                    right: {isa: f64, bytes: 0x0000000000000840}
                   }
                 },
                 y: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x713d0ad7a370e53f}
+                    right: {isa: f64, bytes: 0x713d0ad7a370e53f}
                   }
                 }
               },
@@ -536,18 +537,18 @@
                     isa: call,
                     function: multiply,
                     left: crown,
-                    right: {f64: 0x000000000000e83f}
+                    right: {isa: f64, bytes: 0x000000000000e83f}
                   }
                 },
                 y: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0xcdccccccccccec3f}
+                    right: {isa: f64, bytes: 0xcdccccccccccec3f}
                   }
                 }
               },
@@ -562,18 +563,18 @@
                     isa: call,
                     function: multiply,
                     left: age,
-                    right: {f64: 0x0000000000000840}
+                    right: {isa: f64, bytes: 0x0000000000000840}
                   }
                 },
                 y: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x713d0ad7a370e53f}
+                    right: {isa: f64, bytes: 0x713d0ad7a370e53f}
                   }
                 }
               },
@@ -598,25 +599,25 @@
                     isa: call,
                     function: multiply,
                     left: crown,
-                    right: {f64: 0x3d0ad7a3703de2bf}
+                    right: {isa: f64, bytes: 0x3d0ad7a3703de2bf}
                   }
                 }},
                 y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x713d0ad7a370ed3f}
+                    right: {isa: f64, bytes: 0x713d0ad7a370ed3f}
                   }
                 }},
                 radius: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: crown,
-                  right: {f64: 0xf6285c8fc2f5e83f}
+                  right: {isa: f64, bytes: 0xf6285c8fc2f5e83f}
                 }}
               }
             }},
@@ -635,25 +636,25 @@
                     isa: call,
                     function: multiply,
                     left: crown,
-                    right: {f64: 0xf6285c8fc2f5e03f}
+                    right: {isa: f64, bytes: 0xf6285c8fc2f5e03f}
                   }
                 }},
                 y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x000000000000f03f}
+                    right: {isa: f64, bytes: 0x000000000000f03f}
                   }
                 }},
                 radius: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: crown,
-                  right: {f64: 0x9a9999999999e93f}
+                  right: {isa: f64, bytes: 0x9a9999999999e93f}
                 }}
               }
             }},
@@ -668,12 +669,12 @@
                 y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0xb81e85eb51b8f23f}
+                    right: {isa: f64, bytes: 0xb81e85eb51b8f23f}
                   }
                 }},
                 radius: {isa: unquote_2, unquote: crown}
@@ -694,29 +695,29 @@
                     isa: call,
                     function: multiply,
                     left: crown,
-                    right: {f64: 0x295c8fc2f528ccbf}
+                    right: {isa: f64, bytes: 0x295c8fc2f528ccbf}
                   }
                 }},
                 y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
-                  left: {f64: 0x0000000000e06f40},
+                  left: {isa: f64, bytes: 0x0000000000e06f40},
                   right: {
                     isa: call,
                     function: multiply,
                     left: tree_height,
-                    right: {f64: 0x000000000000f43f}
+                    right: {isa: f64, bytes: 0x000000000000f43f}
                   }
                 }},
                 radius: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: crown,
-                  right: {f64: 0xb81e85eb51b8de3f}
+                  right: {isa: f64, bytes: 0xb81e85eb51b8de3f}
                 }}
               }
             }},
-            paint: {rgba: 0xffffff25}
+            paint: {isa: rgba, bytes: 0xffffff25}
           }
         ]
       },
@@ -730,16 +731,16 @@
             right: {
               isa: call,
               function: max,
-              left: {f64: 0x0000000000000000},
+              left: {isa: f64, bytes: 0x0000000000000000},
               right: {
                 isa: call,
                 function: min,
-                left: {f64: 0x000000000000f03f},
+                left: {isa: f64, bytes: 0x000000000000f03f},
                 right: {
                   isa: call,
                   function: multiply,
                   left: age,
-                  right: {f64: 0x9a9999999999f93f}
+                  right: {isa: f64, bytes: 0x9a9999999999f93f}
                 }
               }
             }
@@ -755,16 +756,16 @@
               isa: call,
               function: multiply,
               left: size,
-              right: {f64: 0xa4703d0ad7a3d03f}
+              right: {isa: f64, bytes: 0xa4703d0ad7a3d03f}
             },
             right: {
               isa: call,
               function: max,
-              left: {f64: 0x0000000000000000},
+              left: {isa: f64, bytes: 0x0000000000000000},
               right: {
                 isa: call,
                 function: min,
-                left: {f64: 0x000000000000f03f},
+                left: {isa: f64, bytes: 0x000000000000f03f},
                 right: {
                   isa: call,
                   function: multiply,
@@ -772,9 +773,9 @@
                     isa: call,
                     function: subtract,
                     left: age,
-                    right: {f64: 0x333333333333c33f}
+                    right: {isa: f64, bytes: 0x333333333333c33f}
                   },
-                  right: {f64: 0x000000000000f83f}
+                  right: {isa: f64, bytes: 0x000000000000f83f}
                 }
               }
             }
@@ -805,7 +806,7 @@
           tree_x: {
             isa: call,
             function: sum,
-            left: {f64: 0x0000000000804b40},
+            left: {isa: f64, bytes: 0x0000000000804b40},
             right: {
               isa: call,
               function: multiply,
@@ -816,21 +817,21 @@
                   isa: call,
                   function: sum,
                   left: item,
-                  right: {f64: 0x000000000000e03f}
+                  right: {isa: f64, bytes: 0x000000000000e03f}
                 },
                 right: count
               },
-              right: {f64: 0x0000000000d08140}
+              right: {isa: f64, bytes: 0x0000000000d08140}
             }
           },
           size: {
             isa: call,
             function: sum,
-            left: {f64: 0x0000000000c05c40},
+            left: {isa: f64, bytes: 0x0000000000c05c40},
             right: {
               isa: call,
               function: multiply,
-              left: {f64: 0x0000000000003c40},
+              left: {isa: f64, bytes: 0x0000000000003c40},
               right: {
                 isa: call,
                 function: sin,
@@ -838,7 +839,7 @@
                   isa: call,
                   function: multiply,
                   left: item,
-                  right: {f64: 0x3333333333330340}
+                  right: {isa: f64, bytes: 0x3333333333330340}
                 }
               }
             }
@@ -846,11 +847,11 @@
           age: {
             isa: call,
             function: max,
-            left: {f64: 0x0000000000000000},
+            left: {isa: f64, bytes: 0x0000000000000000},
             right: {
               isa: call,
               function: min,
-              left: {f64: 0x000000000000f03f},
+              left: {isa: f64, bytes: 0x000000000000f03f},
               right: {
                 isa: call,
                 function: subtract,
@@ -863,7 +864,7 @@
                     left: age,
                     right: rate
                   },
-                  right: {f64: 0xcdccccccccccf43f}
+                  right: {isa: f64, bytes: 0xcdccccccccccf43f}
                 },
                 right: {
                   isa: call,
@@ -874,7 +875,7 @@
                     left: item,
                     right: count
                   },
-                  right: {f64: 0xec51b81e85ebd13f}
+                  right: {isa: f64, bytes: 0xec51b81e85ebd13f}
                 }
               }
             }
@@ -894,10 +895,10 @@
       function: fill,
       shape: {
         rect: {
-          x: {f64: 0x0000000000000000},
-          y: {f64: 0x0000000000000000},
-          width: {f64: 0x0000000000408540},
-          height: {f64: 0x0000000000c07240}
+          x: {isa: f64, bytes: 0x0000000000000000},
+          y: {isa: f64, bytes: 0x0000000000000000},
+          width: {isa: f64, bytes: 0x0000000000408540},
+          height: {isa: f64, bytes: 0x0000000000c07240}
         }
       },
       paint: color
@@ -912,10 +913,10 @@
       function: fill,
       shape: {
         rect: {
-          x: {f64: 0x0000000000000000},
-          y: {f64: 0x0000000000e06f40},
-          width: {f64: 0x0000000000408540},
-          height: {f64: 0x0000000000804640}
+          x: {isa: f64, bytes: 0x0000000000000000},
+          y: {isa: f64, bytes: 0x0000000000e06f40},
+          width: {isa: f64, bytes: 0x0000000000408540},
+          height: {isa: f64, bytes: 0x0000000000804640}
         }
       },
       paint: color
@@ -936,19 +937,19 @@
           x: {isa: unquote_2, unquote: {
             isa: call,
             function: sum,
-            left: {f64: 0x0000000000804640},
+            left: {isa: f64, bytes: 0x0000000000804640},
             right: {
               isa: call,
               function: multiply,
-              left: {f64: 0x0000000000708240},
+              left: {isa: f64, bytes: 0x0000000000708240},
               right: {
                 isa: call,
                 function: max,
-                left: {f64: 0x0000000000000000},
+                left: {isa: f64, bytes: 0x0000000000000000},
                 right: {
                   isa: call,
                   function: min,
-                  left: {f64: 0x000000000000f03f},
+                  left: {isa: f64, bytes: 0x000000000000f03f},
                   right: sun_time
                 }
               }
@@ -957,11 +958,11 @@
           y: {isa: unquote_2, unquote: {
             isa: call,
             function: subtract,
-            left: {f64: 0x0000000000806640},
+            left: {isa: f64, bytes: 0x0000000000806640},
             right: {
               isa: call,
               function: multiply,
-              left: {f64: 0x0000000000806140},
+              left: {isa: f64, bytes: 0x0000000000806140},
               right: {
                 isa: call,
                 function: sin,
@@ -972,11 +973,11 @@
                   right: {
                     isa: call,
                     function: max,
-                    left: {f64: 0x0000000000000000},
+                    left: {isa: f64, bytes: 0x0000000000000000},
                     right: {
                       isa: call,
                       function: min,
-                      left: {f64: 0x000000000000f03f},
+                      left: {isa: f64, bytes: 0x000000000000f03f},
                       right: sun_time
                     }
                   }
@@ -984,7 +985,7 @@
               }
             }
           }},
-          radius: {f64: 0x0000000000003940}
+          radius: {isa: f64, bytes: 0x0000000000003940}
         }
       }},
       paint: color
@@ -1001,10 +1002,10 @@
       function: quote,
       expression: {
         isa: drawing,
-        width: {f64: 0x0000000000408540},
-        ascent: {f64: 0x0000000000000000},
-        descent: {f64: 0x0000000000c07240},
-        fuel: {f64: 0x00000000006a0841},
+        width: {isa: f64, bytes: 0x0000000000408540},
+        ascent: {isa: f64, bytes: 0x0000000000000000},
+        descent: {isa: f64, bytes: 0x0000000000c07240},
+        fuel: {isa: f64, bytes: 0x00000000006a0841},
         program: {
           isa: call,
           function: {isa: unquote_2, unquote: program}
@@ -1044,8 +1045,8 @@
       },
       presentation_value: {
       },
-      width: {f64: 0x0000000000408540},
-      height: {f64: 0x0000000000c07240}
+      width: {isa: f64, bytes: 0x0000000000408540},
+      height: {isa: f64, bytes: 0x0000000000c07240}
     }
   },
   sample: {
@@ -1061,7 +1062,7 @@
           isa: call,
           function: or_default,
           absent_value: controls_state,
-          default: {f64: 0xcdcccccccccce43f}
+          default: {isa: f64, bytes: 0xcdcccccccccce43f}
         },
         controls_on_change: controls_update
       }
@@ -1078,27 +1079,27 @@
           {
             isa: call,
             function: sky_draw,
-            color: {rgb: 0xeff8fa}
+            color: {isa: rgb, bytes: 0xeff8fa}
           },
           {
             isa: call,
             function: ground_draw,
-            color: {rgb: 0xdcecc6}
+            color: {isa: rgb, bytes: 0xdcecc6}
           },
           {
             isa: call,
             function: sun_draw,
             sun_time: controls_parameters,
-            color: {rgb: 0xf8c970}
+            color: {isa: rgb, bytes: 0xf8c970}
           },
           {
             isa: call,
             function: forest_view,
             age: controls_parameters,
-            count: {f64: 0x0000000000001c40},
-            rate: {f64: 0x000000000000f03f},
-            leaves: {rgb: 0x399b75},
-            trunk: {rgb: 0x986044}
+            count: {isa: f64, bytes: 0x0000000000001c40},
+            rate: {isa: f64, bytes: 0x000000000000f03f},
+            leaves: {isa: rgb, bytes: 0x399b75},
+            trunk: {isa: rgb, bytes: 0x986044}
           }
         ]
       }

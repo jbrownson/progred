@@ -51,8 +51,10 @@ rule.
 - **The two-namespace rule** — a bare token anywhere an identity can
   stand is a cell-id literal if it parses as one, else a binder.
 - **quoted text** — double-quoted, escapes `\"` `\\` `\n` `\t`.
-  In value position this is surface sugar for the built-in `text`
-  `{utf8: <blob>}` convention, not a core atom.
+  In value position this is surface sugar for a literal of the `text`
+  kind, `{isa: text, bytes: <blob>}`, not a core atom. A record in the
+  earlier form of a literal, `{f64: <blob>}`, loads as `{isa: f64, bytes:
+  <blob>}`.
 - **blob** — `0x` followed by an even number of hex digits;
   lowercase on write.
 - Punctuation: `{ } [ ] : ,`.
@@ -166,7 +168,7 @@ The printer is deterministic from (document, binder table):
   editable document, cell ids encoded as strings) — wanted once
   authoring lives inside the editor.
 - A cell-id atom in the data model itself.
-- Numeric convenience literals (an extension over tagged blobs).
+- Numeric convenience literals (an extension over literal kinds).
 - GID's native binary storage stack; it is designed from the model, not this notation.
 - Domain-specific binder-hint dispatch beyond the bootstrap simple-name
   convention.

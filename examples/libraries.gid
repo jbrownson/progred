@@ -55,17 +55,18 @@
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "binder": 81d57515ba3b44aab94e43d59a47fe9a,
     "evaluation": 549dd85073474d6296d773c8df9c0526,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
   },
   "cells": {
     over: {name: "over"}, under: {name: "under"},
-    degrees: {name: "degrees", offers: [{f64: 0x0000000000000000}, {f64: 0x0000000000804640}, {f64: 0x0000000000805640}, {f64: 0x0000000000806640}]},
+    degrees: {name: "degrees", offers: [{isa: f64, bytes: 0x0000000000000000}, {isa: f64, bytes: 0x0000000000804640}, {isa: f64, bytes: 0x0000000000805640}, {isa: f64, bytes: 0x0000000000806640}]},
 
     fraction: {isa: def, name: "fraction", fields: [over, under], projection: fraction_view},
     angle: {isa: def, name: "angle", fields: [degrees], projection: angle_view},
     p: {name: "p"}, q: {name: "q"}, a: {name: "a"}, b: {name: "b"}, c: {name: "c"}, d: {name: "d"},
     deg: {name: "deg"}, ray: {name: "ray"},
 
-    fraction_view: {isa: col_node, name: "fraction view", baseline: {f64: 0x000000000000f03f}, children: [
+    fraction_view: {isa: col_node, name: "fraction view", baseline: {isa: f64, bytes: 0x000000000000f03f}, children: [
       {isa: center_node, child: {isa: descend_node, step: {key: over}}},
       {isa: rule_node},
       {isa: center_node, child: {isa: descend_node, step: {key: under}}},
@@ -85,14 +86,14 @@
         under: {isa: unquote_2, unquote: {isa: call, function: multiply, left: b, right: d}},
       }},
     }},
-    half: {isa: fraction, over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000000040}},
-    quarter: {isa: fraction, over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000001040}},
+    half: {isa: fraction, over: {isa: f64, bytes: 0x000000000000f03f}, under: {isa: f64, bytes: 0x0000000000000040}},
+    quarter: {isa: fraction, over: {isa: f64, bytes: 0x000000000000f03f}, under: {isa: f64, bytes: 0x0000000000001040}},
 
     angle_view: {isa: lambda, name: "angle view", params: [value], body: {isa: call, function: selectable, child: {
       isa: call,
-      function: row, gap: {f64: 0x0000000000001040}, children: {isa: call, function: do, expressions: [
-        {isa: call, function: drawing, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
-          descent: {f64: 0x0000000000002040},
+      function: row, gap: {isa: f64, bytes: 0x0000000000001040}, children: {isa: call, function: do, expressions: [
+        {isa: call, function: drawing, width: {isa: f64, bytes: 0x0000000000003c40}, ascent: {isa: f64, bytes: 0x0000000000003440},
+          descent: {isa: f64, bytes: 0x0000000000002040},
           program: {isa: call, function: quote, expression: {isa: call, function: dial, value: {isa: unquote_2, unquote: value}}}},
         {isa: call, function: descend, step: {key: degrees}},
         {isa: call, function: text, content: "degrees"},
@@ -103,18 +104,18 @@
       function: where,
       bindings: [
         {isa: binding, pattern: {degrees: {isa: binder, bind: deg}}, subject: value},
-        {isa: binding, bind: ray, subject: {rect: {x: {f64: 0x0000000000000000}, y: {f64: 0x000000000000f0bf},
-          width: {f64: 0x0000000000002a40}, height: {f64: 0x0000000000000040}}}},
+        {isa: binding, bind: ray, subject: {rect: {x: {isa: f64, bytes: 0x0000000000000000}, y: {isa: f64, bytes: 0x000000000000f0bf},
+          width: {isa: f64, bytes: 0x0000000000002a40}, height: {isa: f64, bytes: 0x0000000000000040}}}},
       ],
       expression: {isa: call, function: all, expressions: [
-        {isa: call, function: fill, paint: {rgb: 0xdddddd}, shape: {circle: {x: {f64: 0x0000000000002c40},
-          y: {f64: 0x0000000000002c40}, radius: {f64: 0x0000000000002a40}}}},
-        {isa: call, function: fill, paint: {rgb: 0x999999}, shape: ray,
-          transform: [{translate: {x: {f64: 0x0000000000002c40}, y: {f64: 0x0000000000002c40}}}]},
-        {isa: call, function: fill, paint: {rgb: 0x444444}, shape: ray,
+        {isa: call, function: fill, paint: {isa: rgb, bytes: 0xdddddd}, shape: {circle: {x: {isa: f64, bytes: 0x0000000000002c40},
+          y: {isa: f64, bytes: 0x0000000000002c40}, radius: {isa: f64, bytes: 0x0000000000002a40}}}},
+        {isa: call, function: fill, paint: {isa: rgb, bytes: 0x999999}, shape: ray,
+          transform: [{translate: {x: {isa: f64, bytes: 0x0000000000002c40}, y: {isa: f64, bytes: 0x0000000000002c40}}}]},
+        {isa: call, function: fill, paint: {isa: rgb, bytes: 0x444444}, shape: ray,
           transform: {isa: call, function: quote, expression: [
-            {translate: {x: {f64: 0x0000000000002c40}, y: {f64: 0x0000000000002c40}}},
-            {rotate: {isa: unquote_2, unquote: {isa: call, function: multiply, left: deg, right: {f64: 0x399d52a246df91bf}}}},
+            {translate: {x: {isa: f64, bytes: 0x0000000000002c40}, y: {isa: f64, bytes: 0x0000000000002c40}}},
+            {rotate: {isa: unquote_2, unquote: {isa: call, function: multiply, left: deg, right: {isa: f64, bytes: 0x399d52a246df91bf}}}},
           ]}},
       ]},
     }},
@@ -125,7 +126,7 @@
       {isa: library, name: "Fractions and angles", defs: [fraction, angle], functions: [add_fractions, dial]},
       {isa: section, name: "Fractions", section_body: [half, quarter]},
       {isa: section, name: "Sum", section_body: {isa: evaluation, expression: {isa: call, function: add_fractions, p: half, q: quarter}}},
-      {isa: section, name: "Angles", section_body: [{isa: angle, degrees: {f64: 0x0000000000804640}}, {isa: angle, degrees: {f64: 0x0000000000005e40}}]},
+      {isa: section, name: "Angles", section_body: [{isa: angle, degrees: {isa: f64, bytes: 0x0000000000804640}}, {isa: angle, degrees: {isa: f64, bytes: 0x0000000000005e40}}]},
     ],
   },
 }

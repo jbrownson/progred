@@ -26,6 +26,7 @@
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "bottom_face": e05cb05bec16e656fd056d260441562f,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "case": 7ebb4ced7047479caafcd90b14499697,
     "cases": a9aadcb44755963498c743fa114f0f00,
@@ -327,14 +328,17 @@
                   setup_up: {
                     function: point,
                     y: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     x: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                     z: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                   },
                   isa: call,
@@ -354,14 +358,17 @@
                   setup_up: {
                     function: point,
                     y: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     x: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                     z: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                   },
                   isa: call,
@@ -381,14 +388,17 @@
                   setup_up: {
                     function: point,
                     y: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     x: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                     z: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                   },
                   isa: call,
@@ -408,14 +418,17 @@
                   setup_up: {
                     function: point,
                     y: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     x: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                     z: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                   },
                   isa: call,
@@ -435,14 +448,17 @@
                   setup_up: {
                     function: point,
                     y: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     x: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                     z: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                   },
                   isa: call,
@@ -526,14 +542,17 @@
                   setup_up: {
                     function: point,
                     y: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     x: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                     z: {
-                      f64: 0x000000000000f0bf,
+                      isa: f64,
+                      bytes: 0x000000000000f0bf,
                     },
                   },
                   isa: call,
@@ -624,7 +643,8 @@
           right: y,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -698,7 +718,8 @@
           0x40: {
             subject: {
               right: {
-                f64: 0x0000000000000040,
+                isa: f64,
+                bytes: 0x0000000000000040,
               },
               function: divide,
               left: tool_diameter,
@@ -874,7 +895,8 @@
           0xcc: {
             subject: {
               right: {
-                f64: 0x0000000000000040,
+                isa: f64,
+                bytes: 0x0000000000000040,
               },
               function: divide,
               left: tool_diameter,
@@ -891,7 +913,8 @@
       name: "ball tool",
       grap_value: {
         tool_length: {
-          f64: 0x295c8fc2f528cc3f,
+          isa: f64,
+          bytes: 0x295c8fc2f528cc3f,
         },
         function: ball_mill,
         cutter_diameter: tool_diameter,
@@ -915,14 +938,17 @@
               setup_up: {
                 function: point,
                 y: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
                 x: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
                 isa: call,
                 z: {
-                  f64: 0x000000000000f03f,
+                  isa: f64,
+                  bytes: 0x000000000000f03f,
                 },
               },
               isa: call,
@@ -947,7 +973,8 @@
           right: y,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -957,7 +984,8 @@
           right: z,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -975,7 +1003,8 @@
     },
     chamfer_stepover: {
       name: "chamfer stepover",
-      f64: 0x9a9999999999a93f,
+      isa: f64,
+      bytes: 0x9a9999999999a93f,
     },
     chamfer_strip: {
       name: "chamfer strip",
@@ -1024,14 +1053,16 @@
                       end: {
                         function: curve,
                         t: {
-                          f64: 0x000000000000f03f,
+                          isa: f64,
+                          bytes: 0x000000000000f03f,
                         },
                         isa: call,
                       },
                       start: {
                         function: curve,
                         t: {
-                          f64: 0x0000000000000000,
+                          isa: f64,
+                          bytes: 0x0000000000000000,
                         },
                         isa: call,
                       },
@@ -1111,7 +1142,8 @@
             function: crossing_passes,
             setup_up: setup_up,
             slope: {
-              f64: 0x000000000000f03f,
+              isa: f64,
+              bytes: 0x000000000000f03f,
             },
             isa: call,
             orientation: orientation,
@@ -1122,7 +1154,8 @@
             function: crossing_passes,
             setup_up: setup_up,
             slope: {
-              f64: 0x000000000000f0bf,
+              isa: f64,
+              bytes: 0x000000000000f0bf,
             },
             isa: call,
             orientation: orientation,
@@ -1179,14 +1212,16 @@
                         function: sum,
                         left: {
                           right: {
-                            f64: 0x0000000000000040,
+                            isa: f64,
+                            bytes: 0x0000000000000040,
                           },
                           function: divide,
                           left: {
                             right: slope,
                             function: subtract,
                             left: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             isa: call,
                           },
@@ -1213,10 +1248,12 @@
                       },
                       function: diagonal_groups,
                       spacing: {
-                        f64: 0xb81e85eb51b89e3f,
+                        isa: f64,
+                        bytes: 0xb81e85eb51b89e3f,
                       },
                       rows: {
-                        f64: 0x0000000000003540,
+                        isa: f64,
+                        bytes: 0x0000000000003540,
                       },
                       tool_axis: tool_axis,
                       isa: call,
@@ -1291,7 +1328,8 @@
                   isa: call,
                   factor: {
                     right: {
-                      f64: 0x0000000000000040,
+                      isa: f64,
+                      bytes: 0x0000000000000040,
                     },
                     function: divide,
                     left: width,
@@ -1304,7 +1342,8 @@
                   function: extend_stroke,
                   end_extension: {
                     right: {
-                      f64: 0x0000000000000040,
+                      isa: f64,
+                      bytes: 0x0000000000000040,
                     },
                     function: divide,
                     left: cutter_diameter,
@@ -1312,7 +1351,8 @@
                   },
                   start_extension: {
                     right: {
-                      f64: 0x0000000000000040,
+                      isa: f64,
+                      bytes: 0x0000000000000040,
                     },
                     function: divide,
                     left: cutter_diameter,
@@ -1475,7 +1515,8 @@
               right: rows,
               function: less,
               left: {
-                f64: 0x000000000000f0bf,
+                isa: f64,
+                bytes: 0x000000000000f0bf,
               },
               isa: call,
             },
@@ -1496,7 +1537,8 @@
               right: spacing,
               function: less,
               left: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               isa: call,
             },
@@ -1507,7 +1549,8 @@
             isa: call,
             children: {
               initial: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               step: {
                 params: [
@@ -1553,13 +1596,15 @@
                                     intercept: {
                                       right: {
                                         right: {
-                                          f64: 0x000000000000f03f,
+                                          isa: f64,
+                                          bytes: 0x000000000000f03f,
                                         },
                                         function: subtract,
                                         left: {
                                           right: {
                                             right: {
-                                              f64: 0x000000000000f03f,
+                                              isa: f64,
+                                              bytes: 0x000000000000f03f,
                                             },
                                             function: sum,
                                             left: rows,
@@ -1570,7 +1615,8 @@
                                             right: state,
                                             function: multiply,
                                             left: {
-                                              f64: 0x0000000000000040,
+                                              isa: f64,
+                                              bytes: 0x0000000000000040,
                                             },
                                             isa: call,
                                           },
@@ -1620,7 +1666,8 @@
                           },
                           0xaa: {
                             right: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             function: sum,
                             left: state,
@@ -1792,7 +1839,8 @@
               right: length,
               function: less,
               left: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               isa: call,
             },
@@ -1813,7 +1861,8 @@
               right: stepover,
               function: less,
               left: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
               isa: call,
             },
@@ -1837,7 +1886,8 @@
                   isa: call,
                   children: {
                     initial: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     step: {
                       params: [
@@ -1909,7 +1959,8 @@
                                 },
                                 0xaa: {
                                   right: {
-                                    f64: 0x000000000000f03f,
+                                    isa: f64,
+                                    bytes: 0x000000000000f03f,
                                   },
                                   function: sum,
                                   left: state,
@@ -1950,7 +2001,8 @@
                   },
                   function: max,
                   left: {
-                    f64: 0x000000000000f03f,
+                    isa: f64,
+                    bytes: 0x000000000000f03f,
                   },
                   isa: call,
                 },
@@ -2000,7 +2052,8 @@
                   right: start_extension,
                   function: subtract,
                   left: {
-                    f64: 0x0000000000000000,
+                    isa: f64,
+                    bytes: 0x0000000000000000,
                   },
                   isa: call,
                 },
@@ -2023,7 +2076,8 @@
                     vector: start,
                     isa: call,
                     factor: {
-                      f64: 0x000000000000f0bf,
+                      isa: f64,
+                      bytes: 0x000000000000f0bf,
                     },
                   },
                   function: point_sum,
@@ -2135,7 +2189,8 @@
                     x: nx,
                     isa: call,
                     z: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                   },
                   isa: call,
@@ -2146,7 +2201,8 @@
                           right: half_face,
                           function: multiply,
                           left: {
-                            f64: 0x0000000000000040,
+                            isa: f64,
+                            bytes: 0x0000000000000040,
                           },
                           isa: call,
                         },
@@ -2168,7 +2224,8 @@
                           right: half_face,
                           function: multiply,
                           left: {
-                            f64: 0x0000000000000040,
+                            isa: f64,
+                            bytes: 0x0000000000000040,
                           },
                           isa: call,
                         },
@@ -2192,7 +2249,8 @@
                               right: v,
                               function: subtract,
                               left: {
-                                f64: 0x000000000000f03f,
+                                isa: f64,
+                                bytes: 0x000000000000f03f,
                               },
                               isa: call,
                             },
@@ -2206,13 +2264,15 @@
                               right: u,
                               function: multiply,
                               left: {
-                                f64: 0x0000000000000040,
+                                isa: f64,
+                                bytes: 0x0000000000000040,
                               },
                               isa: call,
                             },
                             function: subtract,
                             left: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             isa: call,
                           },
@@ -2226,7 +2286,8 @@
                             right: control_depth,
                             function: multiply,
                             left: {
-                              f64: 0x0000000000000040,
+                              isa: f64,
+                              bytes: 0x0000000000000040,
                             },
                             isa: call,
                           },
@@ -2245,7 +2306,8 @@
                               right: u,
                               function: subtract,
                               left: {
-                                f64: 0x000000000000f03f,
+                                isa: f64,
+                                bytes: 0x000000000000f03f,
                               },
                               isa: call,
                             },
@@ -2259,13 +2321,15 @@
                               right: v,
                               function: multiply,
                               left: {
-                                f64: 0x0000000000000040,
+                                isa: f64,
+                                bytes: 0x0000000000000040,
                               },
                               isa: call,
                             },
                             function: subtract,
                             left: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             isa: call,
                           },
@@ -2279,7 +2343,8 @@
                             right: control_depth,
                             function: multiply,
                             left: {
-                              f64: 0x0000000000000040,
+                              isa: f64,
+                              bytes: 0x0000000000000040,
                             },
                             isa: call,
                           },
@@ -2469,11 +2534,13 @@
                           function: quote,
                           expression: {
                             left_2: {
-                              f32: 0x00000000,
+                              isa: f32,
+                              bytes: 0x00000000,
                             },
                             right_2: {
                               left_2: {
-                                f32: 0x0000803f,
+                                isa: f32,
+                                bytes: 0x0000803f,
                               },
                               right_2: {
                                 operand_2: {
@@ -2611,38 +2678,45 @@
                   y: {
                     right: {
                       right: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       function: hypot,
                       left: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       isa: call,
                     },
                     function: divide,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
                   x: {
-                    f64: 0x0000000000000000,
+                    isa: f64,
+                    bytes: 0x0000000000000000,
                   },
                   isa: call,
                   z: {
                     right: {
                       right: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       function: hypot,
                       left: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       isa: call,
                     },
                     function: divide,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
@@ -2663,7 +2737,8 @@
                     y: {
                       right: {
                         right: {
-                          f64: 0x0000000000000040,
+                          isa: f64,
+                          bytes: 0x0000000000000040,
                         },
                         function: divide,
                         left: chamfer,
@@ -2688,7 +2763,8 @@
                     z: {
                       right: {
                         right: {
-                          f64: 0x0000000000000040,
+                          isa: f64,
+                          bytes: 0x0000000000000040,
                         },
                         function: divide,
                         left: chamfer,
@@ -2710,44 +2786,52 @@
                     right: {
                       right: {
                         right: {
-                          f64: 0x000000000000f03f,
+                          isa: f64,
+                          bytes: 0x000000000000f03f,
                         },
                         function: hypot,
                         left: {
-                          f64: 0x000000000000f03f,
+                          isa: f64,
+                          bytes: 0x000000000000f03f,
                         },
                         isa: call,
                       },
                       function: divide,
                       left: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       isa: call,
                     },
                     function: subtract,
                     left: {
-                      f64: 0x0000000000000000,
+                      isa: f64,
+                      bytes: 0x0000000000000000,
                     },
                     isa: call,
                   },
                   x: {
-                    f64: 0x0000000000000000,
+                    isa: f64,
+                    bytes: 0x0000000000000000,
                   },
                   isa: call,
                   z: {
                     right: {
                       right: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       function: hypot,
                       left: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       isa: call,
                     },
                     function: divide,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
@@ -2758,11 +2842,13 @@
                 unquote: {
                   right: {
                     right: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     function: hypot,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
@@ -2787,14 +2873,16 @@
                       right: half_face,
                       function: multiply,
                       left: {
-                        f64: 0x0000000000000040,
+                        isa: f64,
+                        bytes: 0x0000000000000040,
                       },
                       isa: call,
                     },
                     function: multiply,
                     left: {
                       right: {
-                        f64: 0x000000000000e03f,
+                        isa: f64,
+                        bytes: 0x000000000000e03f,
                       },
                       function: subtract,
                       left: y,
@@ -2807,14 +2895,16 @@
                       right: half_face,
                       function: multiply,
                       left: {
-                        f64: 0x0000000000000040,
+                        isa: f64,
+                        bytes: 0x0000000000000040,
                       },
                       isa: call,
                     },
                     function: multiply,
                     left: {
                       right: {
-                        f64: 0x000000000000e03f,
+                        isa: f64,
+                        bytes: 0x000000000000e03f,
                       },
                       function: subtract,
                       left: x,
@@ -2831,7 +2921,8 @@
                             right: y,
                             function: subtract,
                             left: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             isa: call,
                           },
@@ -2845,7 +2936,8 @@
                             right: x,
                             function: subtract,
                             left: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             isa: call,
                           },
@@ -2860,7 +2952,8 @@
                         right: control_depth,
                         function: multiply,
                         left: {
-                          f64: 0x0000000000001040,
+                          isa: f64,
+                          bytes: 0x0000000000001040,
                         },
                         isa: call,
                       },
@@ -2882,21 +2975,24 @@
         bindings: [
           0x20: {
             subject: {
-              f64: 0x000000000000f03f,
+              isa: f64,
+              bytes: 0x000000000000f03f,
             },
             bind: size,
             isa: binding,
           },
           0x40: {
             subject: {
-              f64: 0x9a9999999999b93f,
+              isa: f64,
+              bytes: 0x9a9999999999b93f,
             },
             bind: chamfer,
             isa: binding,
           },
           0x60: {
             subject: {
-              f64: 0x000000000000e03f,
+              isa: f64,
+              bytes: 0x000000000000e03f,
             },
             bind: control_depth,
             isa: binding,
@@ -2904,7 +3000,8 @@
           0x80: {
             subject: {
               right: {
-                f64: 0x0000000000000040,
+                isa: f64,
+                bytes: 0x0000000000000040,
               },
               function: divide,
               left: size,
@@ -2926,7 +3023,8 @@
           0xc0: {
             subject: {
               right: {
-                f64: 0x0000000000001040,
+                isa: f64,
+                bytes: 0x0000000000001040,
               },
               function: divide,
               left: control_depth,
@@ -3002,7 +3100,8 @@
           right: z,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -3031,7 +3130,8 @@
           right: y,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -3039,7 +3139,8 @@
           right: x,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -3065,7 +3166,8 @@
           right: z,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -3182,7 +3284,8 @@
                   vector: offset,
                   isa: call,
                   factor: {
-                    f64: 0x000000000000f0bf,
+                    isa: f64,
+                    bytes: 0x000000000000f0bf,
                   },
                 },
                 function: point_sum,
@@ -3299,7 +3402,8 @@
       body: {
         subject: {
           right: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           function: less,
           left: {
@@ -3309,11 +3413,13 @@
               function: orientation,
               y: slope,
               x: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               isa: call,
               z: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
             },
             isa: call,
@@ -3327,7 +3433,8 @@
               bool: true,
             },
             expression: {
-              f64: 0x000000000000f0bf,
+              isa: f64,
+              bytes: 0x000000000000f0bf,
             },
             isa: case,
           },
@@ -3336,7 +3443,8 @@
               bool: false,
             },
             expression: {
-              f64: 0x000000000000f03f,
+              isa: f64,
+              bytes: 0x000000000000f03f,
             },
             isa: case,
           },
@@ -3362,7 +3470,8 @@
           right: y,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -3387,7 +3496,8 @@
           right: x,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -3490,14 +3600,16 @@
                 start: v0,
                 amount: {
                   right: {
-                    f64: 0x0000000000000040,
+                    isa: f64,
+                    bytes: 0x0000000000000040,
                   },
                   function: divide,
                   left: {
                     right: feed_direction,
                     function: subtract,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
@@ -3511,14 +3623,16 @@
                 start: u0,
                 amount: {
                   right: {
-                    f64: 0x0000000000000040,
+                    isa: f64,
+                    bytes: 0x0000000000000040,
                   },
                   function: divide,
                   left: {
                     right: feed_direction,
                     function: subtract,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
@@ -3530,12 +3644,14 @@
               tool_axis: tool_axis,
               isa: call,
               z: {
-                f64: 0x0000000000000000,
+                isa: f64,
+                bytes: 0x0000000000000000,
               },
             },
             0xaa: {
               initial: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               step: {
                 params: [
@@ -3586,7 +3702,8 @@
                               },
                               isa: call,
                               z: {
-                                f64: 0x0000000000000000,
+                                isa: f64,
+                                bytes: 0x0000000000000000,
                               },
                             },
                             isa: call,
@@ -3607,14 +3724,16 @@
                                   function: sum,
                                   left: {
                                     right: {
-                                      f64: 0x0000000000000040,
+                                      isa: f64,
+                                      bytes: 0x0000000000000040,
                                     },
                                     function: divide,
                                     left: {
                                       right: feed_direction,
                                       function: subtract,
                                       left: {
-                                        f64: 0x000000000000f03f,
+                                        isa: f64,
+                                        bytes: 0x000000000000f03f,
                                       },
                                       isa: call,
                                     },
@@ -3629,7 +3748,8 @@
                           },
                           0xaa: {
                             right: {
-                              f64: 0x000000000000f03f,
+                              isa: f64,
+                              bytes: 0x000000000000f03f,
                             },
                             function: sum,
                             left: state,
@@ -3658,12 +3778,14 @@
           0x2a: {
             subject: {
               right: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               function: min,
               left: {
                 right: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
                 function: max,
                 left: intercept,
@@ -3687,19 +3809,22 @@
           0x80: {
             subject: {
               right: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               function: min,
               left: {
                 right: {
-                  f64: 0x0000000000000000,
+                  isa: f64,
+                  bytes: 0x0000000000000000,
                 },
                 function: max,
                 left: {
                   right: intercept,
                   function: subtract,
                   left: {
-                    f64: 0x000000000000f03f,
+                    isa: f64,
+                    bytes: 0x000000000000f03f,
                   },
                   isa: call,
                 },
@@ -3749,7 +3874,8 @@
               },
               function: max,
               left: {
-                f64: 0x000000000000f03f,
+                isa: f64,
+                bytes: 0x000000000000f03f,
               },
               isa: call,
             },
@@ -3828,7 +3954,8 @@
       function: contour_chamfer,
       contact_height: {
         right: {
-          f64: 0x0000000000000040,
+          isa: f64,
+          bytes: 0x0000000000000040,
         },
         function: divide,
         left: cutting_length,
@@ -3845,7 +3972,8 @@
     },
     cutting_length: {
       name: "square cutting length",
-      f64: 0x295c8fc2f528cc3f,
+      isa: f64,
+      bytes: 0x295c8fc2f528cc3f,
     },
     square_side_offset: {
       name: "square side contact offset",
@@ -3864,7 +3992,8 @@
             right: contact_height,
             function: subtract,
             left: {
-              f64: 0x0000000000000000,
+              isa: f64,
+              bytes: 0x0000000000000000,
             },
             isa: call,
           },
@@ -3876,7 +4005,8 @@
           isa: call,
           factor: {
             right: {
-              f64: 0x0000000000000040,
+              isa: f64,
+              bytes: 0x0000000000000040,
             },
             function: divide,
             left: cutter_diameter,
@@ -3899,7 +4029,8 @@
                   profile_radius: {
                     unquote: {
                       right: {
-                        f64: 0x0000000000000040,
+                        isa: f64,
+                        bytes: 0x0000000000000040,
                       },
                       function: divide,
                       left: square_diameter,
@@ -3920,20 +4051,24 @@
               non_cutting: [
                 0x40: {
                   profile_radius: {
-                    f64: 0x000000000000b83f,
+                    isa: f64,
+                    bytes: 0x000000000000b83f,
                   },
                   axial: {
-                    f64: 0x666666666666d63f,
+                    isa: f64,
+                    bytes: 0x666666666666d63f,
                   },
                 },
                 0x80: {
                   profile_radius: {
-                    f64: 0x000000000000c03f,
+                    isa: f64,
+                    bytes: 0x000000000000c03f,
                   },
                 },
                 0xc0: {
                   axial: {
-                    f64: 0x333333333333e33f,
+                    isa: f64,
+                    bytes: 0x333333333333e33f,
                   },
                 },
               ],
@@ -3947,7 +4082,8 @@
     },
     square_diameter: {
       name: "square tool diameter",
-      f64: 0x000000000000c03f,
+      isa: f64,
+      bytes: 0x000000000000c03f,
     },
     start_extension: {
       name: "start extension",
@@ -4052,7 +4188,8 @@
           right: x,
           function: subtract,
           left: {
-            f64: 0x0000000000000000,
+            isa: f64,
+            bytes: 0x0000000000000000,
           },
           isa: call,
         },
@@ -4064,7 +4201,8 @@
     },
     tilt: {
       name: "tilt (degrees)",
-      f64: 0x0000000000804640,
+      isa: f64,
+      bytes: 0x0000000000804640,
     },
     angle: {
       name: "tilt (radians)",
@@ -4096,11 +4234,13 @@
                   right: {
                     right: {
                       right: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       function: hypot,
                       left: {
-                        f64: 0x000000000000f03f,
+                        isa: f64,
+                        bytes: 0x000000000000f03f,
                       },
                       isa: call,
                     },
@@ -4124,11 +4264,13 @@
                 right: {
                   right: {
                     right: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     function: hypot,
                     left: {
-                      f64: 0x000000000000f03f,
+                      isa: f64,
+                      bytes: 0x000000000000f03f,
                     },
                     isa: call,
                   },
@@ -4157,7 +4299,8 @@
                 subject: {
                   right: {
                     right: {
-                      f64: 0x0000000000806640,
+                      isa: f64,
+                      bytes: 0x0000000000806640,
                     },
                     function: divide,
                     left: pi,
@@ -4180,7 +4323,8 @@
     },
     tool_diameter: {
       name: "tool diameter",
-      f64: 0x000000000000c03f,
+      isa: f64,
+      bytes: 0x000000000000c03f,
     },
     tooled_groups: {
       name: "tool for path groups",
@@ -4314,7 +4458,8 @@
             },
             function: divide,
             left: {
-              f64: 0x000000000000f03f,
+              isa: f64,
+              bytes: 0x000000000000f03f,
             },
             isa: call,
           },
@@ -4437,7 +4582,8 @@
                             },
                             stock: {
                               color: {
-                                rgb: 0xb89b6d,
+                                isa: rgb,
+                                bytes: 0xb89b6d,
                               },
                             },
                           },
@@ -4449,13 +4595,16 @@
                     isa: call,
                   },
                   min_z: {
-                    f32: 0x9a9959bf,
+                    isa: f32,
+                    bytes: 0x9a9959bf,
                   },
                   fuel: {
-                    f64: 0x0000000060e34641,
+                    isa: f64,
+                    bytes: 0x0000000060e34641,
                   },
                   line_radius: {
-                    f64: 0x7b14ae47e17a743f,
+                    isa: f64,
+                    bytes: 0x7b14ae47e17a743f,
                   },
                   function: preview_paths_refined,
                   value: {
@@ -4490,7 +4639,8 @@
                             isa: unquote_2,
                           },
                           color: {
-                            rgb: 0x5f96b4,
+                            isa: rgb,
+                            bytes: 0x5f96b4,
                           },
                         },
                       ],
@@ -4499,26 +4649,32 @@
                     isa: call,
                   },
                   max_x: {
-                    f32: 0x9a99593f,
+                    isa: f32,
+                    bytes: 0x9a99593f,
                   },
                   max_y: {
-                    f32: 0x9a99593f,
+                    isa: f32,
+                    bytes: 0x9a99593f,
                   },
                   height: height,
                   color: {
-                    rgb: 0xf0ae50,
+                    isa: rgb,
+                    bytes: 0xf0ae50,
                   },
                   max_z: {
-                    f32: 0x9a99593f,
+                    isa: f32,
+                    bytes: 0x9a99593f,
                   },
                   isa: call,
                   min_y: {
-                    f32: 0x9a9959bf,
+                    isa: f32,
+                    bytes: 0x9a9959bf,
                   },
                   program: program_items,
                   width: width,
                   min_x: {
-                    f32: 0x9a9959bf,
+                    isa: f32,
+                    bytes: 0x9a9959bf,
                   },
                 },
                 isa: call,
@@ -4549,7 +4705,8 @@
                   },
                   0x66: {
                     subject: {
-                      f64: 0xfca9f1d24d62303f,
+                      isa: f64,
+                      bytes: 0xfca9f1d24d62303f,
                     },
                     pattern: {
                       bind: profile_tolerance,
@@ -4560,14 +4717,17 @@
                   0x99: {
                     subject: {
                       y: {
-                        f64: 0x000000000000e0bf,
+                        isa: f64,
+                        bytes: 0x000000000000e0bf,
                       },
                       x: {
-                        f64: 0x000000000000e0bf,
+                        isa: f64,
+                        bytes: 0x000000000000e0bf,
                       },
                       isa: point_2,
                       z: {
-                        f64: 0x000000000000e0bf,
+                        isa: f64,
+                        bytes: 0x000000000000e0bf,
                       },
                     },
                     pattern: {
@@ -4579,14 +4739,17 @@
                   0xcc: {
                     subject: {
                       y: {
-                        f64: 0x000000000000e03f,
+                        isa: f64,
+                        bytes: 0x000000000000e03f,
                       },
                       x: {
-                        f64: 0x000000000000e03f,
+                        isa: f64,
+                        bytes: 0x000000000000e03f,
                       },
                       isa: point_2,
                       z: {
-                        f64: 0x000000000000e03f,
+                        isa: f64,
+                        bytes: 0x000000000000e03f,
                       },
                     },
                     pattern: {
@@ -4655,7 +4818,8 @@
                   0xaa: {
                     subject: {
                       fuel: {
-                        f64: 0x00000000804f1241,
+                        isa: f64,
+                        bytes: 0x00000000804f1241,
                       },
                       control_key: {
                         function: quote,

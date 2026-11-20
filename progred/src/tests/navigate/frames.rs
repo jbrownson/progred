@@ -162,7 +162,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     root: Some(Value::record([(wrapper, siblings)])),
                     cells,
                 });
-                let ordinary = world.stack.projection.partial().clone();
+                let ordinary = world.stack.projection.partial();
                 world.stack.projection = Projection::new([
                     d::runtime_partial(move |input| {
                         input.value?.field(wrapper)?;
@@ -328,7 +328,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
                 ],
             ))
         }),
-        sample_projection().partial().clone(),
+        sample_projection().partial(),
     ]);
     let frame = editing_frame(&mut world);
     assert!(frame.navigate(&mut world, NavigationDirection::Right));
@@ -395,7 +395,7 @@ fn an_arrow_from_a_selection_on_nothing_drawn_selects_the_root() {
     });
     world.model.selection = Some(make_selection(vec![
         number,
-        Step::Key(f64::vocabulary::F64),
+        Step::Key(::grap::vocabulary::BYTES),
     ]));
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     assert!(!driver.drawn(&driver.selection()));
@@ -638,7 +638,7 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
     let mut world = crate::editor_of(root);
     world.stack.projection = Projection::new([
         d::test_support::list_column(8.0, None),
-        world.stack.projection.partial().clone(),
+        world.stack.projection.partial(),
     ]);
     let document = world.model.doc.clone();
     let mut driver = Driver::new(world, Driver::VIEWPORT);
@@ -743,7 +743,7 @@ fn a_leaf_s_own_stop_is_its_occurrence_s_only_stop() {
     let ordinary = sample_projection();
     world.stack.projection = Projection::new([
         d::runtime_partial(|input| crate::libraries::text::display(input)),
-        ordinary.partial().clone(),
+        ordinary.partial(),
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
     let frame = editing_frame(&mut world);

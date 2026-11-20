@@ -36,9 +36,9 @@ pub open spec fn view_answer(answer: ExecAnswer) -> Answer {
     }
 }
 
-pub(crate) fn tag(number: Number) -> (cell: u128)
+pub(crate) fn number_kind(number: Number) -> (cell: u128)
     ensures
-        cell == definition::tag(number),
+        cell == definition::number_kind(number),
 {
     match number {
         Number::F64 => F64,
@@ -105,11 +105,17 @@ pub(crate) fn number_bytes(number: Number, value: &ExecValue) -> (bytes: Option<
             proof {
                 lemma_view_record(*fields);
             }
-            match get(fields, tag(number)) {
-                Some(ExecValue::Blob(bytes)) => if bytes.len() == width(number) {
-                    Some(bytes.as_slice())
-                } else {
-                    None
+            match get(fields, ISA) {
+                Some(ExecValue::Cell(kind)) if *kind == number_kind(number) => match get(
+                    fields,
+                    BYTES,
+                ) {
+                    Some(ExecValue::Blob(bytes)) => if bytes.len() == width(number) {
+                        Some(bytes.as_slice())
+                    } else {
+                        None
+                    },
+                    _ => None,
                 },
                 _ => None,
             }
@@ -136,7 +142,12 @@ fn answer_value(number: Number, answer: ExecAnswer) -> (made: ExecValue)
         view(made) == definition::answer_value(number, view_answer(answer)),
 {
     match answer {
-        ExecAnswer::Number(bytes) => exec_single(tag(number), ExecValue::Blob(Rc::new(bytes))),
+        ExecAnswer::Number(bytes) => exec_pair(
+            ISA,
+            ExecValue::Cell(number_kind(number)),
+            BYTES,
+            ExecValue::Blob(Rc::new(bytes)),
+        ),
         ExecAnswer::Truth(truth) => exec_single(
             BOOL,
             ExecValue::Cell(

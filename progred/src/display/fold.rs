@@ -20,13 +20,16 @@ pub fn cell_starts_closed(viewing: &dyn Viewing, cell: CellId, value: &Value) ->
     viewing.inside(cell) || viewing.inside_a_cell() && holds_cells(value)
 }
 
-/// Whether a cell sits anywhere in `value`.
+/// Whether a cell sits anywhere in `value`, other than as a record's kind,
+/// which says what the record is: a number holds none.
 fn holds_cells(value: &Value) -> bool {
     match value {
         Value::Cell(_) => true,
         Value::Blob(_) => false,
         Value::List(list) => list.values().any(holds_cells),
-        Value::Record(record) => record.values().any(holds_cells),
+        Value::Record(record) => record
+            .iter()
+            .any(|(key, value)| *key != ::grap::isa::ISA && holds_cells(value)),
     }
 }
 

@@ -42,17 +42,18 @@
     "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "bytes": fe06bf0459d2598aa29b30302e3b29b8,
   },
   "cells": {
     x_param: {name: "x"},
     height_param: {name: "height"},
-    recipe: {isa: lambda, name: "tree", params: [x_param, height_param], body: {isa: call, function: all, expressions: [{isa: call, function: fill, paint: {rgb: 0x9a6849}, shape: {isa: call, function: quote, expression: {rect: {height: {isa: unquote_2, unquote: height_param}, width: {f64: 0x0000000000002040}, x: {isa: unquote_2, unquote: x_param}, y: {isa: unquote_2, unquote: {isa: call, function: subtract, left: {f64: 0x0000000000006440}, right: height_param}}}}}}, {isa: call, function: fill, paint: {rgb: 0x548b64}, shape: {isa: call, function: quote, expression: {circle: {radius: {f64: 0x0000000000003b40}, x: {isa: unquote_2, unquote: {isa: call, function: sum, left: x_param, right: {f64: 0x0000000000001040}}}, y: {isa: unquote_2, unquote: {isa: call, function: subtract, left: {f64: 0x0000000000006440}, right: {f64: 0x0000000000004e40}}}}}}}]}},
-    calls: {isa: call, function: all, expressions: [{isa: call, function: recipe, x_param: {f64: 0x0000000000004440}, height_param: {f64: 0x0000000000004e40}}, {isa: call, function: recipe, x_param: {f64: 0x0000000000006040}, height_param: {f64: 0x0000000000805640}}, {isa: call, function: recipe, x_param: {f64: 0x0000000000006b40}, height_param: {f64: 0x0000000000005240}}]},
+    recipe: {isa: lambda, name: "tree", params: [x_param, height_param], body: {isa: call, function: all, expressions: [{isa: call, function: fill, paint: {isa: rgb, bytes: 0x9a6849}, shape: {isa: call, function: quote, expression: {rect: {height: {isa: unquote_2, unquote: height_param}, width: {isa: f64, bytes: 0x0000000000002040}, x: {isa: unquote_2, unquote: x_param}, y: {isa: unquote_2, unquote: {isa: call, function: subtract, left: {isa: f64, bytes: 0x0000000000006440}, right: height_param}}}}}}, {isa: call, function: fill, paint: {isa: rgb, bytes: 0x548b64}, shape: {isa: call, function: quote, expression: {circle: {radius: {isa: f64, bytes: 0x0000000000003b40}, x: {isa: unquote_2, unquote: {isa: call, function: sum, left: x_param, right: {isa: f64, bytes: 0x0000000000001040}}}, y: {isa: unquote_2, unquote: {isa: call, function: subtract, left: {isa: f64, bytes: 0x0000000000006440}, right: {isa: f64, bytes: 0x0000000000004e40}}}}}}}]}},
+    calls: {isa: call, function: all, expressions: [{isa: call, function: recipe, x_param: {isa: f64, bytes: 0x0000000000004440}, height_param: {isa: f64, bytes: 0x0000000000004e40}}, {isa: call, function: recipe, x_param: {isa: f64, bytes: 0x0000000000006040}, height_param: {isa: f64, bytes: 0x0000000000805640}}, {isa: call, function: recipe, x_param: {isa: f64, bytes: 0x0000000000006b40}, height_param: {isa: f64, bytes: 0x0000000000005240}}]},
   },
   "root": {
     functions: [recipe],
     first: recipe,
     second: calls,
-    third: {isa: drawing, width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000006440}, fuel: {f64: 0x0000000000408f40}, program: calls},
+    third: {isa: drawing, width: {isa: f64, bytes: 0x0000000000807140}, ascent: {isa: f64, bytes: 0x0000000000000000}, descent: {isa: f64, bytes: 0x0000000000006440}, fuel: {isa: f64, bytes: 0x0000000000408f40}, program: calls},
   },
 }

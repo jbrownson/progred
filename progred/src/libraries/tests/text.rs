@@ -31,8 +31,8 @@ fn utf8_is_an_open_convention_over_bytes() {
 
 #[test]
 fn display_is_an_editable_line() {
-    let display = (library().projection.unwrap())(&projection_input(&NoEval, &value("hi").into()))
-        .expect("text projection");
+    let display =
+        super::display(&projection_input(&NoEval, &value("hi").into())).expect("text projection");
     assert!(matches!(
         crate::display::recording::record(&display),
         crate::display::recording::Recorded::Widget(_)

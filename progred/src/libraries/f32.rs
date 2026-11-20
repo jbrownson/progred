@@ -1,7 +1,7 @@
-//! f32 numbers, for libraries whose host boundary is single precision: four
-//! little-endian bytes under the f32 tag, drawn as their spelling. Grap holds
-//! them natively, with their encoding, and their arithmetic is Grap's numbers
-//! library's.
+//! f32 numbers, for libraries whose host boundary is single precision:
+//! literals of the f32 kind holding four little-endian bytes, drawn as their
+//! spelling. Grap holds them natively, with their encoding, and their
+//! arithmetic is Grap's numbers library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, number};
@@ -46,7 +46,7 @@ impl number::Scrubbable for f32 {
 pub(crate) fn representation() -> number::Representation<f32> {
     number::Representation {
         name: "f32",
-        tag: vocabulary::F32,
+        kind: vocabulary::F32,
         encode: value,
         runtime: RuntimeValue::f32,
         read: RuntimeValue::as_f32,

@@ -48,7 +48,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
     let mut driver = Driver::of(Value::record([(x, Value::record(number))]));
     // The number view leaves its own field undrawn, unlike the record view.
     assert!(driver.drawn(&[Step::Key(x), Step::Key(note)]));
-    assert!(!driver.drawn(&[Step::Key(x), Step::Key(f64::vocabulary::F64)]));
+    assert!(!driver.drawn(&[Step::Key(x), Step::Key(::grap::vocabulary::BYTES)]));
     // Drawn as one piece, the number takes no field from Enter, within it or
     // beside one of the others it has; a rawer view of it can add one.
     let before = driver.value(&[]);

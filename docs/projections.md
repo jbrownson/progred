@@ -90,16 +90,18 @@ kind's view redraws its records at once. A document's kinds contribute no
 completions or foreign functions, and other documents can't load them.
 
 Library labels are once-minted random `CellId`s. Their readable names are
-ordinary GID facts, not identifiers derived from names. Text is an open
-`{utf8: blob}` convention; f64 is an open `{f64: eight-byte-blob}` convention.
-A PNG image is an open `{png: blob}` convention holding the encoded file. Its
+ordinary GID facts, not identifiers derived from names. Text, numbers, colors
+and images are literals: records of a kind holding their encoding as one blob
+under `bytes`, `{isa: text, bytes}`, `{isa: f64, bytes: eight-byte-blob}`.
+Each kind's library declares it, `bytes` its one field, and draws its records
+as the kind's projection; Grap holds text and numbers unboxed. A PNG image,
+`{isa: png, bytes}`, holds the encoded file. Its
 projection decodes it each frame and draws the picture at one logical unit per
 pixel, shrunk to fit 480 units on its longer side. Bytes that don't decode, or
 whose RGBA pixels would exceed 64 MiB, decline to the ordinary record view.
 `png width` and `png height` read only the header.
-Additional fields do not invalidate a recognized facet, so a line projection
-still recognizes text or f64 and a more specific wrapper (for example a unit
-around f64) can defer to that facet.
+Additional fields beside a literal's kind and bytes, such as a name, are the
+value's too, and its projection draws them after it.
 
 ## Projection composition
 
@@ -370,7 +372,7 @@ what a projection draws of the record itself (`Fields::form`, `Fields::after`):
 a call's arguments after its function, a form's other fields after the form.
 Standard records use it with nothing set. Both share `record_braces` geometry.
 Patterns establish an explicit binder-projection scope. Ordinary container
-recursion then finds nested binders while text and numeric facets keep their
+recursion then finds nested binders while text and numbers keep their
 normal projections; no duplicate pattern-specific structural walk is needed.
 The scope does not leak to siblings outside the pattern.
 
@@ -430,7 +432,7 @@ definition, and renaming f64 renames the subscript. The label still selects
 the call's `function` field. A comparison's subscript identifies its operand
 representation, not its boolean result. Fidget's arithmetic is named the same
 way, with fidget's tag.
-Numeric facets explicitly include an optional stored name beside the number,
+Numbers explicitly include an optional stored name beside the number,
 separated by spacing rather than binding or record-field punctuation. The shared
 name decorator descends to the real `name` field with an unquoted text editor;
 the number retains its own editor and scrub target. The numeric target includes
@@ -440,7 +442,7 @@ the command modifier is held, a writable number's digits are outlined as a
 hovered value is, in the number's own color rather than the selection's, and
 the pointer over it is a left-right arrow, which a drag keeps until release.
 This is
-opt-in library composition, not automatic merging of every matching facet's projection.
+opt-in library composition, not automatic merging of every matching projection.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. With the name library
 off, Raw among those, every field is unnamed, so order is by identity.
@@ -450,7 +452,7 @@ The name slot is always present: a missing name uses Raw's ordinary empty
 picker, where what's typed reads as text. The expression uses the local
 shallow-reference projection. Other metadata does not block recognition and
 follows as a trailing record, and both editors retain their stored field paths. This is a named expression, not a
-`let` binding; the evaluator ignores its name. Named numeric facets remain
+`let` binding; the evaluator ignores its name. Named numbers remain
 independent of this Grap-specific wrapper.
 
 Within Grap's library, calls, lambdas, and value wrappers are tried in evaluator

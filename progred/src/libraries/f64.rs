@@ -1,6 +1,6 @@
-//! f64 numbers: eight little-endian bytes under the f64 tag, drawn as their
-//! spelling. Grap holds them natively, with their encoding, and their arithmetic
-//! is Grap's numbers library's.
+//! f64 numbers: literals of the f64 kind holding eight little-endian bytes,
+//! drawn as their spelling. Grap holds them natively, with their encoding, and
+//! their arithmetic is Grap's numbers library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, name, number};
@@ -50,7 +50,7 @@ impl number::Scrubbable for f64 {
 pub(crate) fn representation() -> number::Representation<f64> {
     number::Representation {
         name: "f64",
-        tag: vocabulary::F64,
+        kind: vocabulary::F64,
         encode: value,
         runtime: RuntimeValue::f64,
         read: RuntimeValue::as_f64,

@@ -20,6 +20,21 @@ fn unboxed(fields: gid::Record) -> RuntimeValue {
     ))
 }
 
+/// A literal of `kind` holding `bytes`, with `extra` fields beside.
+fn literal(
+    kind: CellId,
+    bytes: Vec<u8>,
+    extra: impl IntoIterator<Item = (CellId, Value)>,
+) -> gid::Record {
+    [
+        (isa::ISA, Value::from(kind)),
+        (vocabulary::BYTES, Value::from(bytes)),
+    ]
+    .into_iter()
+    .chain(extra)
+    .collect()
+}
+
 /// Text made natively, with no source record.
 fn native_text(text: &str) -> RuntimeValue {
     RuntimeValue::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::Text(
@@ -236,14 +251,16 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
     let closure = Evaluator::new(&host(vec![]), 100)
         .evaluate(&lambda([], f64::value(7.0)))
         .result;
-    let decorated_number = gid::Record::from_iter([
-        (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
-        (metadata, Value::from(vec![9])),
-    ]);
-    let decorated_text = gid::Record::from_iter([
-        (crate::text::UTF8, Value::from(b"three".to_vec())),
-        (metadata, Value::from(vec![9])),
-    ]);
+    let decorated_number = literal(
+        crate::f64::F64,
+        3.0_f64.to_le_bytes().to_vec(),
+        [(metadata, Value::from(vec![9]))],
+    );
+    let decorated_text = literal(
+        crate::text::TEXT,
+        b"three".to_vec(),
+        [(metadata, Value::from(vec![9]))],
+    );
     for value in [
         RuntimeValue::from(Value::record([(metadata, Value::record([]))])),
         RuntimeValue::record([(metadata, closure.clone())]),
@@ -273,7 +290,7 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         for key in [
             metadata,
             crate::f64::F64,
-            crate::text::UTF8,
+            crate::text::TEXT,
             vocabulary::LAMBDA,
             vocabulary::ENVIRONMENT,
         ] {
@@ -333,10 +350,10 @@ fn runtime_list_positions_preserve_stored_positions_and_generated_children() {
 }
 
 #[test]
-fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
+fn interpreting_an_unboxed_boolean_as_code_preserves_syntax_precedence() {
     let interpret = new_cell_id();
     let source = gid::Record::from_iter([
-        (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
+        (crate::logic::BOOL, crate::logic::encode(true)),
         (isa::ISA, Value::from(vocabulary::kind::VALUE_WRAPPER)),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);
@@ -370,10 +387,14 @@ fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
     ] {
         let blob = RuntimeValue::from(Value::from(bytes.clone()));
         assert_eq!(blob.as_blob(), Some(bytes.as_slice()));
-        let number = RuntimeValue::record([(crate::f64::F64, blob), (metadata, closure.clone())]);
+        let number = RuntimeValue::record([
+            (isa::ISA, Value::from(crate::f64::F64).into()),
+            (vocabulary::BYTES, blob),
+            (metadata, closure.clone()),
+        ]);
         assert_eq!(number.as_f64(), crate::f64::read(&number.to_value()));
         assert_eq!(number.as_blob(), None);
-        assert_eq!(number.record_len(), Some(2));
+        assert_eq!(number.record_len(), Some(3));
         assert!(number.field(metadata).unwrap().same_result(&closure));
         assert!(
             number.1.get().is_none(),
@@ -393,10 +414,11 @@ fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
 #[test]
 fn text_unboxes_on_entry_and_keeps_its_source_record() {
     let (metadata, parameter) = (new_cell_id(), new_cell_id());
-    let decorated = Value::record([
-        (crate::text::UTF8, Value::from(b"hello".to_vec())),
-        (metadata, Value::from(vec![9])),
-    ]);
+    let decorated = Value::Record(literal(
+        crate::text::TEXT,
+        b"hello".to_vec(),
+        [(metadata, Value::from(vec![9]))],
+    ));
     // A literal, and the same text passed through a closure's parameter,
     // unbox to native text and materialize as their exact source.
     let echo = lambda([parameter], Value::from(parameter));
@@ -416,7 +438,7 @@ fn text_unboxes_on_entry_and_keeps_its_source_record() {
         assert_eq!(result.into_value(), decorated);
     }
     // Bytes that aren't UTF-8 stay data.
-    let invalid = Value::record([(crate::text::UTF8, Value::from(vec![0xff]))]);
+    let invalid = Value::Record(literal(crate::text::TEXT, vec![0xff], []));
     let result = Evaluator::new(&host(vec![]), 100).evaluate(&invalid).result;
     assert!(matches!(&result.0, RuntimeValueKind::Data(_)));
     assert_eq!(result.as_text(), None);
@@ -427,38 +449,13 @@ fn text_unboxes_on_entry_and_keeps_its_source_record() {
     assert_eq!(native.to_value(), crate::text::value("hi"));
     assert_eq!(
         native
-            .field(crate::text::UTF8)
+            .field(vocabulary::BYTES)
             .map(|value| value.to_value()),
         Some(Value::from(b"hi".to_vec()))
     );
     assert!(native.same_result(&native_text("hi")));
     assert!(!native.same_result(&native_text("ho")));
     assert!(!native.same_result(&RuntimeValue::f64(1.0)));
-}
-
-#[test]
-fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
-    let interpret = new_cell_id();
-    let source = gid::Record::from_iter([
-        (crate::text::UTF8, Value::from(b"three".to_vec())),
-        (isa::ISA, Value::from(vocabulary::kind::VALUE_WRAPPER)),
-        (vocabulary::VALUE, f64::value(9.0)),
-    ]);
-    let value = unboxed(source);
-    assert_eq!(value.as_text(), Some("three"));
-    let receiver = host(vec![(
-        interpret,
-        TestDefinition::foreign(
-            interpret,
-            gid::Record::default(),
-            ForeignFunction::new(move |context, _, environment| {
-                context.eval_runtime_code(&value, environment)
-            }),
-        ),
-    )]);
-    let result = Evaluator::new(&receiver, 100).evaluate(&call(interpret.into(), []));
-    assert_eq!(result.halt, None);
-    assert_eq!(result.result.as_f64(), Some(9.0));
 }
 
 #[test]
@@ -469,25 +466,19 @@ fn runtime_text_inspection_matches_gid_without_materializing_containers() {
         .result;
     for bytes in [b"hello".to_vec(), vec![], vec![0xff]] {
         let blob = RuntimeValue::from(Value::from(bytes.clone()));
-        let text = RuntimeValue::record([(crate::text::UTF8, blob), (metadata, closure.clone())]);
+        let text = RuntimeValue::record([
+            (isa::ISA, Value::from(crate::text::TEXT).into()),
+            (vocabulary::BYTES, blob),
+            (metadata, closure.clone()),
+        ]);
         assert_eq!(text.as_text(), crate::text::read(&text.to_value()));
         assert!(
             text.1.get().is_none(),
             "inspection must not cache a GID view"
         );
-        let data = RuntimeValue::from(Value::record([(
-            crate::text::UTF8,
-            Value::from(bytes.clone()),
-        )]));
+        let data = RuntimeValue::from(Value::Record(literal(crate::text::TEXT, bytes.clone(), [])));
         assert_eq!(data.as_text(), std::str::from_utf8(&bytes).ok());
     }
-    // A number whose record also carries text answers as both.
-    let both = unboxed(gid::Record::from_iter([
-        (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
-        (crate::text::UTF8, Value::from(b"three".to_vec())),
-    ]));
-    assert_eq!(both.as_f64(), Some(3.0));
-    assert_eq!(both.as_text(), Some("three"));
     for other in [
         closure,
         RuntimeValue::list([]),
@@ -679,9 +670,8 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
             }),
         ),
     )]);
-    let number = (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec()));
     let closure = gid::Record::from_iter([
-        number,
+        (crate::logic::BOOL, crate::logic::encode(true)),
         (isa::ISA, Value::from(vocabulary::kind::CLOSURE)),
         (
             vocabulary::LAMBDA,
@@ -698,8 +688,10 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
     let overlay = ForeignFunctions::default();
     for record in [closure] {
         let unboxed = unboxed(record.clone());
-        assert_eq!(unboxed.as_f64(), Some(3.0));
-        // The number answers each call as its record form does.
+        assert!(
+            matches!(&unboxed.0, RuntimeValueKind::Unboxed(value) if matches!(value.native(), Native::Bool(true)))
+        );
+        // The boolean answers each call as its record form does.
         for function in [RuntimeValue::from(Value::Record(record)), unboxed] {
             let arguments = || [(argument, RuntimeValue::f64(8.0))];
             assert_eq!(

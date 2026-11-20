@@ -56,8 +56,9 @@ pub enum Halt {
 /// How deeply evaluations may nest, as Grap's `MAX_DEPTH` says.
 pub const MAX_DEPTH: usize = 256;
 
-/// A number type Grap holds natively: a record whose tag holds the number's
-/// little-endian bytes, `{f64: 8 bytes}`, `{f32: 4 bytes}` or `{u64: 8 bytes}`.
+/// A number type Grap holds natively: a record of the type's kind holding the
+/// number's little-endian bytes, `{isa: f64, bytes: 8 bytes}`, `{isa: f32,
+/// bytes: 4 bytes}` or `{isa: u64, bytes: 8 bytes}`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Number {
     F64,
@@ -980,8 +981,8 @@ pub open spec fn unary(operation: UnaryOperation, call: Option<Origin>, label: u
     }
 }
 
-/// The field a number of the type holds its bytes under.
-pub open spec fn tag(number: Number) -> u128 {
+/// The kind a number of the type is.
+pub open spec fn number_kind(number: Number) -> u128 {
     match number {
         Number::F64 => F64,
         Number::F32 => F32,
@@ -1006,13 +1007,15 @@ pub open spec fn not_reason(number: Number) -> u128 {
     }
 }
 
-/// The bytes of the `number` that `value` is: a record whose tag holds a blob
-/// of the type's width. Its other fields don't matter, and nor does its also
-/// being an absent.
+/// The bytes of the `number` that `value` is: a record of the type's kind
+/// whose `bytes` are a blob of the type's width. Its other fields don't
+/// matter.
 pub open spec fn number_bytes(number: Number, value: Value) -> Option<Seq<u8>> {
     match value {
-        Value::Record(fields) => if fields.contains_key(tag(number)) {
-            match fields[tag(number)] {
+        Value::Record(fields) => if fields.contains_key(ISA) && fields[ISA] == Value::Cell(
+            number_kind(number),
+        ) && fields.contains_key(BYTES) {
+            match fields[BYTES] {
                 Value::Blob(bytes) => if bytes.len() == width(number) {
                     Some(bytes)
                 } else {
@@ -1037,11 +1040,13 @@ pub open spec fn not_a_number(number: Number, value: Value) -> Value {
     }
 }
 
-/// An answer as a value: `{<type>: bytes}`, `{bool: true}` or `{bool:
+/// An answer as a value: `{isa: <type>, bytes}`, `{bool: true}` or `{bool:
 /// false}`, or `{isa: absent, reason}`.
 pub open spec fn answer_value(number: Number, answer: Answer) -> Value {
     match answer {
-        Answer::Number(bytes) => Value::Record(map![tag(number) => Value::Blob(bytes)]),
+        Answer::Number(bytes) => Value::Record(
+            map![ISA => Value::Cell(number_kind(number)), BYTES => Value::Blob(bytes)],
+        ),
         Answer::Truth(truth) => Value::Record(
             map![BOOL => Value::Cell(if truth { TRUE } else { FALSE })],
         ),

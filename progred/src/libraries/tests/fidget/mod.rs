@@ -50,11 +50,6 @@ fn sphere(radius: f32) -> Value {
     )
 }
 
-/// A record holding `content` under its one `tag`.
-fn tagged(tag: CellId, content: Value) -> Value {
-    Value::record([(tag, content)])
-}
-
 fn scene(objects: Value) -> Value {
     ::grap::isa::record(vocabulary::kind::SCENE, [(vocabulary::OBJECTS, objects)])
 }
@@ -64,7 +59,7 @@ fn colored(field: Value, rgb: [u8; 3]) -> Value {
         (vocabulary::FIELD, field),
         (
             vocabulary::COLOR,
-            tagged(color::vocabulary::RGB, rgb.to_vec().into()),
+            ::grap::literal::value(color::vocabulary::RGB, rgb.to_vec()),
         ),
     ])
 }
@@ -123,7 +118,7 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
                 (vocabulary::FIELD, f32::value(0.0)),
                 (
                     vocabulary::COLOR,
-                    tagged(color::vocabulary::RGBA, vec![255, 0, 0, 128].into()),
+                    ::grap::literal::value(color::vocabulary::RGBA, vec![255, 0, 0, 128]),
                 ),
             ])]),
             vocabulary::INVALID_COLOR,
@@ -133,7 +128,7 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
                 (vocabulary::FIELD, f32::value(0.0)),
                 (
                     vocabulary::COLOR,
-                    tagged(color::vocabulary::RGB, vec![255].into()),
+                    ::grap::literal::value(color::vocabulary::RGB, vec![255]),
                 ),
             ])]),
             vocabulary::INVALID_COLOR,
@@ -149,7 +144,7 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
         (vocabulary::FIELD, f32::value(0.0)),
         (
             vocabulary::COLOR,
-            tagged(color::vocabulary::RGBA, vec![1, 2, 3, 255].into()),
+            ::grap::literal::value(color::vocabulary::RGBA, vec![1, 2, 3, 255]),
         ),
     ])]));
     assert_eq!(scene_objects(&opaque).unwrap()[0].color, [1, 2, 3]);

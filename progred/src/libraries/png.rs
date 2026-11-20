@@ -1,5 +1,5 @@
-//! PNG images as an open record convention: `{png: bytes}` holds an encoded
-//! PNG, and the projection shows the picture.
+//! PNG images: a literal of the png kind, `{isa: png, bytes}`, holds an
+//! encoded PNG, and the projection shows the picture.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
@@ -31,7 +31,7 @@ const SHOWN: f64 = 480.0;
 
 #[cfg(any(test, feature = "control"))]
 pub fn value(bytes: Vec<u8>) -> Value {
-    Value::record([(vocabulary::PNG, Value::from(bytes))])
+    ::grap::literal::value(vocabulary::PNG, bytes)
 }
 
 /// Eight-bit straight-alpha RGBA pixels as a PNG.
@@ -48,7 +48,7 @@ pub fn encode(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, png::Enco
 }
 
 pub fn read(value: &Value) -> Option<&[u8]> {
-    value.as_record()?.get(&vocabulary::PNG)?.as_blob()
+    ::grap::literal::bytes(value, vocabulary::PNG)
 }
 
 fn reader(bytes: &[u8]) -> Option<png::Reader<std::io::Cursor<&[u8]>>> {
@@ -121,11 +121,10 @@ fn shown_size(width: u32, height: u32) -> Size {
 /// A PNG reads as its picture, then any other fields. Bytes that don't
 /// decode decline, so the record shows as ordinary data.
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let bytes = input.value?.field(vocabulary::PNG)?;
-    let image = decode(bytes.as_blob()?)?;
+    let image = decode(input.value?.literal(vocabulary::PNG)?)?;
     Some(crate::display::structure::Fields::default().after(
         input,
-        |key| key == vocabulary::PNG,
+        crate::libraries::isa::literal_field,
         crate::display::widget::image::image(shown_size(image.width, image.height), image),
     ))
 }
@@ -181,7 +180,11 @@ pub fn library<W: Host>() -> Library<W> {
         functions(),
     )
     .with_absents([vocabulary::NOT_PNG, vocabulary::INVALID_PNG])
-    .with_projection(crate::display::runtime_partial(display))
+    .with_kinds([(
+        vocabulary::PNG,
+        vec![crate::libraries::isa::vocabulary::BYTES],
+    )])
+    .with_projections_for([(vocabulary::PNG, crate::display::runtime_partial(display))])
 }
 
 #[cfg(test)]

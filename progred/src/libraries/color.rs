@@ -1,4 +1,6 @@
-//! Open sRGB RGB8 and RGBA8 conventions with an editable projected spelling.
+//! sRGB colors, literals of two kinds: `{isa: rgb, bytes: <3 bytes>}` and
+//! `{isa: rgba, bytes: <4 bytes>}`, drawn as a swatch and an editable hex
+//! spelling.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{
@@ -33,42 +35,39 @@ enum Encoded {
     Rgba([u8; 4]),
 }
 
-fn encoded_value(color: Encoded) -> Value {
-    Value::record([encoded_field(color)])
+impl Encoded {
+    /// Its fields as a literal.
+    fn fields(self) -> [(gid::CellId, Value); 2] {
+        match self {
+            Self::Rgb(bytes) => ::grap::literal::fields(vocabulary::RGB, bytes.to_vec()),
+            Self::Rgba(bytes) => ::grap::literal::fields(vocabulary::RGBA, bytes.to_vec()),
+        }
+    }
+
+    /// The color whose bytes `literal` gives for its kind, if it's one.
+    fn of(literal: impl Fn(gid::CellId) -> Option<Vec<u8>>) -> Option<Self> {
+        let rgba = || <[u8; 4]>::try_from(literal(vocabulary::RGBA)?).ok();
+        let rgb = || <[u8; 3]>::try_from(literal(vocabulary::RGB)?).ok();
+        rgba().map(Self::Rgba).or_else(|| rgb().map(Self::Rgb))
+    }
 }
 
-fn encoded_field(color: Encoded) -> (gid::CellId, Value) {
-    let (field, bytes): (_, &[u8]) = match &color {
-        Encoded::Rgb(bytes) => (vocabulary::RGB, bytes),
-        Encoded::Rgba(bytes) => (vocabulary::RGBA, bytes),
-    };
-    (field, Value::from(bytes.to_vec()))
+/// An opaque color, `{isa: rgb, bytes}`.
+#[cfg(any(test, feature = "cam-profile"))]
+pub fn rgb(bytes: [u8; 3]) -> Value {
+    encoded_value(Encoded::Rgb(bytes))
+}
+
+fn encoded_value(color: Encoded) -> Value {
+    Value::record(color.fields())
 }
 
 fn encoded(value: &Value) -> Option<Encoded> {
-    let fields = value.as_record()?;
-    encoded_bytes(
-        fields.get(&vocabulary::RGBA).and_then(Value::as_blob),
-        fields.get(&vocabulary::RGB).and_then(Value::as_blob),
-    )
+    Encoded::of(|kind| ::grap::literal::bytes(value, kind).map(<[u8]>::to_vec))
 }
 
 fn encoded_runtime(value: &RuntimeValue) -> Option<Encoded> {
-    let rgba = value.field(vocabulary::RGBA);
-    let rgb = value.field(vocabulary::RGB);
-    encoded_bytes(
-        rgba.as_ref().and_then(RuntimeValue::as_blob),
-        rgb.as_ref().and_then(RuntimeValue::as_blob),
-    )
-}
-
-fn encoded_bytes(rgba: Option<&[u8]>, rgb: Option<&[u8]>) -> Option<Encoded> {
-    rgba.and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
-        .map(Encoded::Rgba)
-        .or_else(|| {
-            rgb.and_then(|bytes| <[u8; 3]>::try_from(bytes).ok())
-                .map(Encoded::Rgb)
-        })
+    Encoded::of(|kind| value.literal(kind).map(<[u8]>::to_vec))
 }
 
 pub fn read(value: &Value) -> Option<Color> {
@@ -126,13 +125,10 @@ fn spelling(color: Encoded) -> String {
     }
 }
 
+/// `current` holding `color` instead, its other fields kept.
 fn replace_color(current: &Value, color: Encoded) -> Option<Value> {
-    let mut fields = current.as_record()?.clone();
-    fields.set(vocabulary::RGB, None);
-    fields.set(vocabulary::RGBA, None);
-    let (field, value) = encoded_field(color);
-    fields.set(field, value);
-    Some(Value::Record(fields))
+    current.as_record()?;
+    Some(super::keeping_fields(Some(current), encoded_value(color)))
 }
 
 fn picker_selection(hue: f64) -> Value {
@@ -337,18 +333,9 @@ fn swatch<W: Host>(color: Color) -> Layout<W> {
     }))
 }
 
-pub fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    match input.value {
-        Some(value) => present(input, value),
-        None => missing_picker(input),
-    }
-}
-
 /// A color as its swatch, any text name, and its hex spelling.
-fn present<W: Host>(
-    input: &ProjectionInput<'_, W, RuntimeValue>,
-    value: &RuntimeValue,
-) -> Option<Layout<W>> {
+fn present<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+    let value = input.value?;
     let encoded = encoded_runtime(value)?;
     let color = decoded_color(encoded);
     let initial_hue = hsva(encoded).hue;
@@ -381,7 +368,7 @@ fn present<W: Host>(
     let spelling = crate::display::line_edit(hex_editor(encoded));
     Some(crate::display::structure::Fields::default().after(
         input,
-        |key| key == vocabulary::RGB || key == vocabulary::RGBA || key == name::vocabulary::NAME,
+        |key| crate::libraries::isa::literal_field(key) || key == name::vocabulary::NAME,
         name::with_name(input, centered_row(4.0, [swatch, spelling])),
     ))
 }
@@ -410,7 +397,22 @@ pub fn library<W: Host>() -> Library<W> {
         ::grap::ForeignFunctions::default(),
     )
     .with_values(named::colors())
-    .with_projection(crate::display::runtime_partial(display))
+    .with_kinds([
+        (
+            vocabulary::RGB,
+            vec![crate::libraries::isa::vocabulary::BYTES],
+        ),
+        (
+            vocabulary::RGBA,
+            vec![crate::libraries::isa::vocabulary::BYTES],
+        ),
+    ])
+    .with_projections_for([
+        (vocabulary::RGB, crate::display::runtime_partial(present)),
+        (vocabulary::RGBA, crate::display::runtime_partial(present)),
+    ])
+    // A place a picker is opened on has no color yet, so no kind.
+    .with_projection(crate::display::runtime_partial(missing_picker))
     .with_completions(completions)
 }
 

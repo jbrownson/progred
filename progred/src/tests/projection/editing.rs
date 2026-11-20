@@ -26,13 +26,12 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
             Some(crate::display::line_edit(crate::display::LineEdit {
                 text: spelling.into(),
                 update: Rc::new(move |spelling: &str, _: Option<&Value>| {
-                    Some(Value::record([
-                        (
-                            text::vocabulary::UTF8,
-                            Value::from(spelling.as_bytes().to_vec()),
-                        ),
-                        (marker, Value::record([])),
-                    ]))
+                    Some(Value::record(
+                        text::value(spelling)
+                            .as_record()?
+                            .clone()
+                            .with(marker, Value::record([])),
+                    ))
                 }),
                 prefix: String::new(),
                 suffix: String::new(),
@@ -52,7 +51,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
         assert_eq!(text::read(&root), Some(expected));
         let fields = root.as_record().unwrap();
         assert!(fields.get(&marker).is_some());
-        assert_eq!(fields.len(), 2);
+        assert_eq!(fields.len(), 3);
     }
     let editor = driver.editor();
     let payload = editor.model.selection.as_ref().unwrap().payload();

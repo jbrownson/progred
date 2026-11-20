@@ -151,5 +151,5 @@ fn the_editor_shows_the_picture_and_the_record_around_it() {
 
     let broken = Driver::of(value(vec![1, 2, 3]));
     assert!(broken.images().is_empty());
-    assert!(broken.drawn(&[Step::Key(vocabulary::PNG)]));
+    assert!(broken.drawn(&[Step::Key(::grap::vocabulary::BYTES)]));
 }

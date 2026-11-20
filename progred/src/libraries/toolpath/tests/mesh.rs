@@ -362,10 +362,7 @@ fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
                 ),
                 (
                     fidget::vocabulary::COLOR,
-                    Value::record([(
-                        crate::libraries::color::vocabulary::RGB,
-                        vec![255, 128, 0].into(),
-                    )]),
+                    crate::libraries::color::rgb([255, 128, 0]),
                 ),
             ],
         ));

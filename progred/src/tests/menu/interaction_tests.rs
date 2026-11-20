@@ -323,9 +323,9 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
         .position(|menu| menu.label == "Projections")
         .unwrap();
     // A color draws as a swatch and its hex; only with the color library's
-    // projection off is it the stored record, whose `rgb` field is drawn.
-    let rgb = [gid::Step::Key(color::vocabulary::RGB)];
-    let stored = |driver: &Driver| driver.drawn(&rgb);
+    // projection off is it the stored record, whose `bytes` are drawn.
+    let bytes = [gid::Step::Key(::grap::vocabulary::BYTES)];
+    let stored = |driver: &Driver| driver.drawn(&bytes);
     assert!(driver.runner.editor.menu_toggles().checked(command));
     assert!(!stored(&driver));
     for on in [false, true] {

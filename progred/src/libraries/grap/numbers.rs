@@ -1,5 +1,5 @@
 //! Grap's arithmetic over the number representations: each one's operations
-//! as primitives Grap runs natively, named with their representation's tag
+//! as primitives Grap runs natively, named with their representation's kind
 //! as a subscript, and read infix; the argument labels
 //! of binary and unary operations, which list concatenation takes too; and
 //! conversions between them. The numbers themselves belong to f64, f32 and
@@ -112,10 +112,10 @@ pub(super) fn contribution<W: Host>() -> (
     )
 }
 
-/// An operation's name: its spelling, then its representation's `tag` as a
+/// An operation's name: its spelling, then its representation's `kind` as a
 /// subscript, telling apart the operators each representation has.
-fn operation_name(spelling: &str, tag: CellId) -> Value {
-    name::formatted([text::value(spelling), name::subscript(tag.into())])
+fn operation_name(spelling: &str, kind: CellId) -> Value {
+    name::formatted([text::value(spelling), name::subscript(kind.into())])
 }
 
 fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
@@ -296,7 +296,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
         operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
     ) -> Parts {
         let name = self.representation.name;
-        let tag = self.representation.tag;
+        let kind = self.representation.kind;
         operations.into_iter().fold(
             Parts {
                 names: vec![(self.not, text::value(format!("not {name}")))],
@@ -307,7 +307,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
                 if let Some(precedence) = precedence(spelling, &operation) {
                     parts.infix.push((cell, precedence));
                 }
-                parts.names.push((cell, operation_name(spelling, tag)));
+                parts.names.push((cell, operation_name(spelling, kind)));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
                 parts
             },

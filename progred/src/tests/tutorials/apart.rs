@@ -38,7 +38,7 @@ fn peel_forest(page: &str) {
         assert!(peel.drawn(&count), "drawn after peeling {depth}");
     }
     let mut bytes = count;
-    bytes.push(Step::Key(crate::libraries::f64::vocabulary::F64));
+    bytes.push(Step::Key(::grap::vocabulary::BYTES));
     assert!(peel.drawn(&bytes));
 }
 
@@ -195,9 +195,8 @@ fn bytes() {
         path.push(crate::occurrence::Step::Key(key));
         bytes.drawn(&path)
     };
-    let color = crate::libraries::color::vocabulary::RGBA;
-    let float = crate::libraries::f32::vocabulary::F32;
-    assert!(!record(&bytes, "fourth", color) && !record(&bytes, "fifth", float));
+    let held = ::grap::vocabulary::BYTES;
+    assert!(!record(&bytes, "fourth", held) && !record(&bytes, "fifth", held));
 
     // Give it only three bytes, and the text still reads, but the color and
     // the f32 decline and show the record instead.
@@ -209,7 +208,7 @@ fn bytes() {
         crate::libraries::text::read(&reading(&bytes, "third")),
         Some("Mar")
     );
-    assert!(record(&bytes, "fourth", color) && record(&bytes, "fifth", float));
+    assert!(record(&bytes, "fourth", held) && record(&bytes, "fifth", held));
 }
 
 #[test]

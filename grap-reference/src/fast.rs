@@ -28,7 +28,7 @@ use crate::evaluator::{
 use crate::evaluator::{view_definition, view_host};
 use crate::number::{
     FloatAnswer, binary_number, decode, encode, float_binary, float_unary, not_a_number,
-    number_bytes, one_detail, tag, width,
+    number_bytes, number_kind, one_detail, width,
 };
 #[cfg(verus_only)]
 use crate::number::{float_answer, lemma_le_bytes_round_trip, lemma_le_round_trip, power256};
@@ -147,10 +147,10 @@ pub enum Outcome {
 
 // What the structures mean.
 
-/// `{<type>: bytes}`, the record a number is.
+/// `{isa: <type>, bytes}`, the record a number is.
 pub open spec fn number_value(number: Number, bits: u64) -> Value {
     Value::Record(
-        map![definition::tag(number) => Value::Blob(definition::le_bytes(bits as nat, definition::width(number)))],
+        map![ISA => Value::Cell(definition::number_kind(number)), BYTES => Value::Blob(definition::le_bytes(bits as nat, definition::width(number)))],
     )
 }
 
@@ -1004,31 +1004,30 @@ fn exact_number(fields: &Rc<Vec<(u128, ExecValue)>>) -> (number: Option<(Number,
             None => true,
         },
 {
-    if fields.len() != 1 {
+    if fields.len() != 2 {
         return None;
     }
-    let number = if fields[0].0 == F64 {
-        Number::F64
-    } else if fields[0].0 == F32 {
-        Number::F32
-    } else if fields[0].0 == U64 {
-        Number::U64
-    } else {
-        return None;
+    let number = match get(fields, ISA) {
+        Some(ExecValue::Cell(kind)) => if *kind == F64 {
+            Number::F64
+        } else if *kind == F32 {
+            Number::F32
+        } else if *kind == U64 {
+            Number::U64
+        } else {
+            return None;
+        },
+        _ => return None,
     };
-    match &fields[0].1 {
-        ExecValue::Blob(bytes) => {
+    match get(fields, BYTES) {
+        Some(ExecValue::Blob(bytes)) => {
             if bytes.len() == width(number) {
                 let bits = decode(bytes.as_slice());
                 proof {
                     lemma_view_record(*fields);
                     lemma_le_round_trip(bytes@);
-                    assert(fields@ =~= Seq::<(u128, ExecValue)>::empty().push(fields@[0]));
-                    lemma_view_pairs_push(Seq::empty(), fields@[0]);
-                    assert(view_pairs(Seq::<(u128, ExecValue)>::empty()) =~= Seq::<
-                        (u128, Value),
-                    >::empty());
-                    assert(view_map(fields@) =~= map![definition::tag(number) => Value::Blob(definition::le_bytes(bits as nat, definition::width(number)))]);
+                    lemma_two_fields(fields@, ISA, BYTES);
+                    assert(view_map(fields@) =~= map![ISA => Value::Cell(definition::number_kind(number)), BYTES => Value::Blob(definition::le_bytes(bits as nat, definition::width(number)))]);
                 }
                 Some((number, bits))
             } else {
@@ -1039,6 +1038,23 @@ fn exact_number(fields: &Rc<Vec<(u128, ExecValue)>>) -> (number: Option<(Number,
     }
 }
 
+/// Two pairs naming two different cells name nothing else.
+proof fn lemma_two_fields(pairs: Seq<(u128, ExecValue)>, a: u128, b: u128)
+    requires
+        pairs.len() == 2,
+        a != b,
+        view_map(pairs).contains_key(a),
+        view_map(pairs).contains_key(b),
+    ensures
+        forall|cell: u128| #[trigger] view_map(pairs).contains_key(cell) <==> cell == a || cell == b,
+{
+    lemma_view_map_keys(pairs, a);
+    lemma_view_map_keys(pairs, b);
+    assert forall|cell: u128| #[trigger] view_map(pairs).contains_key(cell) implies cell == a
+        || cell == b by {
+        lemma_view_map_keys(pairs, cell);
+    }
+}
 
 /// A node of `kind`, lowered from `value` written at `at`, added to `code`.
 #[allow(unused_variables)]
@@ -1531,8 +1547,10 @@ fn materialize(value: &Runtime) -> (made: ExecValue)
 {
     match value {
         Runtime::Data(data) => copy(data),
-        Runtime::Number(number, bits) => exec_single(
-            tag(*number),
+        Runtime::Number(number, bits) => exec_pair(
+            ISA,
+            ExecValue::Cell(number_kind(*number)),
+            BYTES,
             ExecValue::Blob(Rc::new(encode(*bits, width(*number)))),
         ),
         Runtime::Closure(closure) => {

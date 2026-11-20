@@ -77,16 +77,13 @@ fn rgb_and_rgba_are_open_library_data() {
     );
 
     assert_eq!(
-        value(color).as_record().unwrap().get(&vocabulary::RGB),
-        Some(&Value::from(vec![0xb4, 0xe0, 0xfe])),
+        value(color),
+        ::grap::literal::value(vocabulary::RGB, vec![0xb4, 0xe0, 0xfe]),
     );
     assert_eq!(read(&enriched), Some(color));
     assert_eq!(
-        value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0x99))
-            .as_record()
-            .unwrap()
-            .get(&vocabulary::RGBA),
-        Some(&Value::from(vec![0xb4, 0xe0, 0xfe, 0x99])),
+        value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0x99)),
+        ::grap::literal::value(vocabulary::RGBA, vec![0xb4, 0xe0, 0xfe, 0x99]),
     );
 }
 
@@ -111,10 +108,9 @@ fn spelling_round_trips_through_the_line_conversion() {
         updated.as_record().unwrap().get(&extra),
         Some(&Value::from(b"metadata".to_vec())),
     );
-    assert_eq!(updated.as_record().unwrap().get(&vocabulary::RGB), None);
     assert_eq!(
-        updated.as_record().unwrap().get(&vocabulary::RGBA),
-        Some(&Value::from(vec![0xeb, 0xb4, 0xcc, 0x99])),
+        ::grap::literal::bytes(&updated, vocabulary::RGBA),
+        Some([0xeb, 0xb4, 0xcc, 0x99].as_slice()),
     );
     assert_eq!(
         update("b4e").as_ref().and_then(read),
@@ -130,7 +126,7 @@ fn spelling_round_trips_through_the_line_conversion() {
 #[test]
 fn projection_is_a_swatch_and_editable_spelling() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
-    let layout = display(&projection_input(&NoEval, &(&color).into())).expect("color projection");
+    let layout = present(&projection_input(&NoEval, &(&color).into())).expect("color projection");
     let Recorded::Row {
         alignment,
         children,
@@ -165,7 +161,7 @@ fn projection_is_a_swatch_and_editable_spelling() {
 fn a_read_only_color_draws_no_picker_for_a_picker_selection() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
     let selection = picker_selection(0.1);
-    let layout = display(&ProjectionInput {
+    let layout = present(&ProjectionInput {
         writable: false,
         selection: Some(&selection),
         ..projection_input(&NoEval, &(&color).into())
@@ -189,12 +185,9 @@ fn a_read_only_color_draws_no_picker_for_a_picker_selection() {
 
 #[test]
 fn a_named_color_projects_its_editable_name_and_hex() {
-    let color = name::record(
-        "rebeccapurple",
-        [(vocabulary::RGB, Value::from(vec![0x66, 0x33, 0x99]))],
-    );
+    let color = name::record("rebeccapurple", Encoded::Rgb([0x66, 0x33, 0x99]).fields());
     let layout =
-        display(&projection_input(&NoEval, &(&color).into())).expect("named color projection");
+        present(&projection_input(&NoEval, &(&color).into())).expect("named color projection");
     let Recorded::Row { children, .. } = layout.record() else {
         panic!("named color projection is one row")
     };
@@ -235,7 +228,7 @@ fn picker_mode_floats_point_controls_and_preserves_open_metadata() {
     let selection = picker_selection(0.1);
     // Its extra field would follow the color in a record of its own.
     let plain = value(Color::from_rgba8(0x66, 0x33, 0x99, 0xff));
-    let layout = display(&ProjectionInput {
+    let layout = present(&ProjectionInput {
         selection: Some(&selection),
         ..projection_input(&NoEval, &(&plain).into())
     })

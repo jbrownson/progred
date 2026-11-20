@@ -40,6 +40,7 @@ pub mod f32;
 pub mod f64;
 mod foreign;
 pub mod isa;
+pub mod literal;
 pub mod logic;
 mod lower;
 pub mod path;
