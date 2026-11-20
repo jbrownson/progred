@@ -215,11 +215,10 @@ fn try_map_sized<T, U>(
 }
 
 /// A case parsed once at prepare: its position is kept so a malformed
-/// case still declines at the moment selection reaches it. Its pattern is
-/// an expression, evaluated when the case is tried.
+/// case still declines at the moment selection reaches it.
 enum CompiledCase {
     Case {
-        pattern: Expression,
+        pattern: Value,
         expression: Expression,
     },
     Malformed,
@@ -241,7 +240,7 @@ fn match_prepare(call: &Expression) -> Stage {
                         case.field(::grap::vocabulary::EXPRESSION),
                     ) {
                         (Some(pattern), Some(expression)) => CompiledCase::Case {
-                            pattern,
+                            pattern: pattern.value().clone(),
                             expression,
                         },
                         _ => CompiledCase::Malformed,
@@ -261,44 +260,43 @@ fn match_prepare(call: &Expression) -> Stage {
             Err(missing) => return Ok(missing.clone()),
         };
         let value = context.eval(subject, environment)?;
-        // The first case that matches, or isn't a case, decides; each
-        // pattern is evaluated as its case is tried.
-        let mut mismatches = Vec::new();
-        for case in cases {
-            let CompiledCase::Case {
-                pattern,
-                expression,
-            } = case
-            else {
-                return Ok(::grap::absent::value(vocabulary::INVALID_CASE).into());
-            };
-            let pattern = context.eval(pattern.clone(), environment)?.into_value();
-            match destructure(&pattern, &value) {
-                Ok(Some(bindings)) => {
-                    return context
-                        .eval(expression.clone(), &environment.extended_runtime(bindings));
+        // The first case that matches, or isn't a case, decides.
+        cases
+            .iter()
+            .find_map(|case| match case {
+                CompiledCase::Case {
+                    pattern,
+                    expression,
+                } => match destructure(pattern, &value) {
+                    Ok(Some(bindings)) => Some(
+                        context.eval(expression.clone(), &environment.extended_runtime(bindings)),
+                    ),
+                    Ok(None) => None,
+                    Err(InvalidBinder) => {
+                        Some(Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into()))
+                    }
+                },
+                CompiledCase::Malformed => {
+                    Some(Ok(::grap::absent::value(vocabulary::INVALID_CASE).into()))
                 }
-                Ok(None) => mismatches.push(pattern_mismatch(&pattern)),
-                Err(InvalidBinder) => {
-                    return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
-                }
-            }
-        }
-        Ok(::grap::absent::from_causes(mismatches).into())
+            })
+            .unwrap_or_else(|| {
+                Ok(
+                    ::grap::absent::from_causes(cases.iter().filter_map(|case| match case {
+                        CompiledCase::Case { pattern, .. } => Some(pattern_mismatch(pattern)),
+                        CompiledCase::Malformed => None,
+                    }))
+                    .into(),
+                )
+            })
     })
 }
 
 /// A binding clause parsed once at prepare; a malformed clause keeps
 /// its position and reason so earlier bindings still evaluate first.
 enum CompiledBinding {
-    Bind {
-        binder: CellId,
-        value: Expression,
-    },
-    Pattern {
-        pattern: Expression,
-        value: Expression,
-    },
+    Bind { binder: CellId, value: Expression },
+    Pattern { pattern: Value, value: Expression },
     Malformed(CellId),
 }
 
@@ -321,9 +319,10 @@ fn bindings_prepare(call: &Expression) -> Stage {
                             Some(binder) => CompiledBinding::Bind { binder, value },
                             None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
                         },
-                        (Some(value), None, Some(pattern)) => {
-                            CompiledBinding::Pattern { pattern, value }
-                        }
+                        (Some(value), None, Some(pattern)) => CompiledBinding::Pattern {
+                            pattern: pattern.value().clone(),
+                            value,
+                        },
                         _ => CompiledBinding::Malformed(vocabulary::INVALID_BINDING),
                     }
                 })
@@ -353,10 +352,7 @@ fn bindings_prepare(call: &Expression) -> Stage {
             }
             CompiledBinding::Pattern { pattern, value } => {
                 let value = context.eval(value.clone(), &bound);
-                match context.eval(pattern.clone(), &bound) {
-                    Ok(pattern) => bind_pattern(&mut bound, &pattern.into_value(), value),
-                    Err(halt) => ControlFlow::Break(Err(halt)),
-                }
+                bind_pattern(&mut bound, pattern, value)
             }
         });
         match outcome {

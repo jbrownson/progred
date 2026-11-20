@@ -720,57 +720,22 @@ fn match_evaluates_its_subject_once_across_all_cases() {
     assert_eq!(SUBJECT_EVALUATIONS.load(Ordering::SeqCst), 1);
 }
 
-/// The call, its function, the subject, each pattern tried and the chosen
-/// arm burn; the cases' structure is read, not evaluated.
+/// The cases are read, never evaluated: the call, its function, the
+/// subject and the chosen arm burn.
 #[test]
-fn a_match_burns_its_subject_patterns_tried_and_arm() {
+fn a_match_burns_its_subject_and_arm_but_not_its_cases() {
     let expression = match_call(blob("subject"), [case_arm(blob("subject"), blob("result"))]);
 
-    let completed = evaluate_with_fuel(&expression, 6);
+    let completed = evaluate_with_fuel(&expression, 5);
     assert_eq!(completed.result.to_value(), blob("result"));
     assert_eq!(completed.remaining_fuel, 1);
 
-    let exhausted = evaluate_with_fuel(&expression, 5);
+    let exhausted = evaluate_with_fuel(&expression, 4);
     assert_eq!(
         exhausted.result.to_value(),
         grap::absent::value(grap::absent::FUEL_EXHAUSTED),
     );
     assert_eq!(exhausted.remaining_fuel, 0);
-}
-
-/// A pattern is evaluated, so a constant in it stands for its value, and an
-/// identity is quoted to stand for itself; data in it stays as written.
-#[test]
-fn patterns_are_evaluated_so_constants_read_as_values_and_quotes_as_cells() {
-    use crate::libraries::logic;
-    let logic = logic::library::<crate::Editor>();
-    let option = new_cell_id();
-    let quoted = |cell: CellId| {
-        grap::call(
-            Value::from(vocabulary::QUOTE),
-            [(grap::vocabulary::EXPRESSION, Value::from(cell))],
-        )
-    };
-    for (subject, pattern) in [
-        (
-            ::grap::logic::value(true),
-            Value::from(logic::vocabulary::TRUE),
-        ),
-        (quoted(option), quoted(option)),
-        (
-            Value::record([(option, Value::from(option))]),
-            Value::record([(option, Value::from(option))]),
-        ),
-    ] {
-        let expression = match_call(subject, [case_arm(pattern, blob("matched"))]);
-        let evaluation = crate::test_support::test_evaluate(
-            &expression,
-            |cell| logic.definitions.value(cell).cloned(),
-            &functions(),
-            100,
-        );
-        assert_eq!(evaluation.result.to_value(), blob("matched"));
-    }
 }
 
 #[test]
@@ -931,14 +896,14 @@ fn patterns_match_runtime_and_stored_subjects_alike() {
             );
             let run =
                 |fuel| crate::test_support::test_evaluate(&expression, |_| None, &functions, fuel);
-            // Control call (2), subject call (2), pattern (1), body (1).
-            let completed = run(7);
+            // Control call (2), subject call (2), body (1).
+            let completed = run(6);
             assert_eq!(
                 completed.result.to_value(),
                 crate::libraries::f64::value(7.0)
             );
             assert_eq!(completed.remaining_fuel, 1);
-            let exhausted = run(6);
+            let exhausted = run(5);
             assert_eq!(
                 exhausted.result.to_value(),
                 grap::absent::value(grap::absent::FUEL_EXHAUSTED),
@@ -991,7 +956,7 @@ fn patterns_report_mismatches_and_binder_errors_lazily() {
             let result =
                 crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
             assert_eq!(result.result.to_value(), expected);
-            assert_eq!(result.remaining_fuel, 16);
+            assert_eq!(result.remaining_fuel, 17);
         }
     }
 }

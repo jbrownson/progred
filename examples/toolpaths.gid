@@ -4532,11 +4532,7 @@
                     function: match,
                     cases: [
                       0x55: {
-                        pattern: {
-                          function: quote,
-                          expression: model,
-                          isa: call,
-                        },
+                        pattern: model,
                         expression: {
                           function: quote,
                           expression: {
@@ -4566,11 +4562,7 @@
                         isa: case,
                       },
                       0xaa: {
-                        pattern: {
-                          function: quote,
-                          expression: stock,
-                          isa: call,
-                        },
+                        pattern: stock,
                         expression: {
                           function: quote,
                           expression: {

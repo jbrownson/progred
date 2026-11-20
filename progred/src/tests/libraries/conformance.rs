@@ -109,9 +109,9 @@ fn a_do_sequence_burns_only_its_elements() {
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
-/// A match with no matching case still pays for its subject and each
-/// pattern tried, but no arm: call(1) + function(1) + subject(1) +
-/// pattern(1) = 4.
+/// A match with no matching case still pays for its subject; like do's
+/// expressions, its cases are read, never evaluated: call(1) +
+/// function(1) + subject(1) = 3.
 #[test]
 fn an_unmatched_subject_burns_everything_but_an_arm() {
     let expression = grap::call(
@@ -138,7 +138,7 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
         ),
     );
 
-    assert_eq!(evaluation.remaining_fuel, 6);
+    assert_eq!(evaluation.remaining_fuel, 7);
 }
 
 /// Quote walks its template without burning; only the unquote body
@@ -173,16 +173,18 @@ fn a_quote_burns_only_its_unquotes() {
 /// An enriched number — extra fields beside the f64 — answers record
 /// patterns exactly as its stored form would, however the
 /// implementation carries it: call(1) + function(1) + subject(1) +
-/// pattern(1) + arm(1) = 5.
+/// arm(1) = 4.
 #[test]
 fn an_enriched_number_matches_record_patterns_like_its_data() {
     let note = new_cell_id();
     let binder = new_cell_id();
-    let subject = Value::record(
-        ::grap::literal::fields(f64::vocabulary::F64, 1.0f64.to_le_bytes().to_vec())
-            .into_iter()
-            .chain([(note, blob("annotated"))]),
-    );
+    let subject = Value::record([
+        (
+            f64::vocabulary::F64,
+            Value::from(1.0f64.to_le_bytes().to_vec()),
+        ),
+        (note, blob("annotated")),
+    ]);
     let expression = grap::call(
         Value::from(control::vocabulary::MATCH),
         [
@@ -208,7 +210,7 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
     );
     let evaluation = evaluate(&expression, 10);
     assert_eq!(evaluation.result.to_value(), blob("annotated"));
-    assert_eq!(evaluation.remaining_fuel, 5);
+    assert_eq!(evaluation.remaining_fuel, 6);
 }
 
 #[test]
