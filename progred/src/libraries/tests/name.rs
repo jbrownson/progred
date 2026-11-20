@@ -116,7 +116,7 @@ fn a_formatted_name_spells_its_cells_and_subscripts() {
 }
 
 #[test]
-fn a_library_lists_its_data_and_its_absents_apart_from_its_fields() {
+fn a_library_lists_its_data_its_absents_and_its_loose_fields() {
     use crate::libraries::def::vocabulary::{ABSENTS, DATA, FIELDS};
     let libraries = crate::stack::load().libraries;
     let list = |library: gid::CellId, list| -> Vec<gid::CellId> {
@@ -137,14 +137,24 @@ fn a_library_lists_its_data_and_its_absents_apart_from_its_fields() {
         list(crate::libraries::logic::ID, DATA),
         [logic::FALSE, logic::TRUE]
     );
+    // Its fields are the loose ones: `require`'s parameter, `condition`,
+    // is the function's, and png's `image` its functions'.
     let fields = list(crate::libraries::logic::ID, FIELDS);
-    assert!(fields.contains(&logic::CONDITION));
+    assert!(!fields.contains(&logic::CONDITION));
     assert!(!fields.contains(&logic::TRUE) && !fields.contains(&logic::NOT_BOOL));
+    assert!(
+        !list(crate::libraries::png::ID, FIELDS)
+            .contains(&crate::libraries::png::vocabulary::IMAGE)
+    );
     // What a library defines with a value is its data, as a named color is.
     assert!(list(crate::libraries::color::ID, DATA).len() > 100);
     assert!(list(crate::libraries::f64::ID, DATA).contains(&crate::libraries::f64::vocabulary::PI));
-    // An absent's own fields stay fields; its reasons are absents.
+    // An absent's reason is its kind's field, not the library's; the
+    // reasons it gives are its absents, and fields no kind declares, such
+    // as an absent's causes, stay loose.
     use crate::libraries::absent::vocabulary as absent;
-    assert!(list(crate::libraries::absent::ID, FIELDS).contains(&absent::REASON));
+    let fields = list(crate::libraries::absent::ID, FIELDS);
+    assert!(!fields.contains(&absent::REASON));
+    assert!(fields.contains(&absent::CAUSES));
     assert!(list(crate::libraries::absent::ID, ABSENTS).contains(&absent::DECLINED));
 }

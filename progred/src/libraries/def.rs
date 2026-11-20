@@ -36,9 +36,10 @@ pub mod vocabulary {
     /// A library's kind: `{isa: library, defs, …}`, where a document's own
     /// defs live.
     pub const LIBRARY: CellId = CellId::from_u128(0x6a2a379c9d9553cedafcb3987e7891b7);
-    /// A library's defs, each a kind's cell. A library lists its fields,
-    /// those shared or with no def of their own, under `fields`, as a def
-    /// lists its own; and apart from them its `data` and its `absents`.
+    /// A library's defs, each a kind's cell. A library lists its loose
+    /// fields, those none of its kinds or functions declare, under `fields`,
+    /// as a def lists its own; and apart from them its `data` and its
+    /// `absents`.
     pub const DEFS: CellId = CellId::from_u128(0x9c1a4dd291087eef39ac1d4020380ed0);
     /// A library's functions, each a cell holding one.
     pub const FUNCTIONS: CellId = CellId::from_u128(0x6a6a803312ecf3a652470a7cd2a9abcf);

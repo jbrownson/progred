@@ -54,9 +54,11 @@ name and the fields every record of it has; how it's drawn stays Rust's),
 among its defs, its lambdas among its functions, the stubs of
 the foreign functions it implements, `{isa: foreign function, name, params}`,
 the records a call names, among its foreign functions, and the rest of its
-vocabulary among its fields. What it doesn't say lands there too, so its
-fields still hold some that aren't: cells a layout program calls, kinds with
-no def yet, and a few used both as a key and a value. Composing the loaded libraries writes
+vocabulary among its fields, but what its kinds and functions declare, their
+fields and parameters, which live where they're declared: a library's fields
+are its loose ones. What it doesn't say lands there too, so its fields still
+hold some that aren't: cells a layout program calls, kinds with no def yet,
+and a few used both as a key and a value. Composing the loaded libraries writes
 it, so it lists what each library ends up defining, and it's drawn as a
 document's library is, a cell another library defines reading by its name. An empty document can start as any loaded
 library, offered by its name, to look through; the Libraries menu opens one

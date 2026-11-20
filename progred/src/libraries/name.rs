@@ -180,7 +180,9 @@ pub fn library_named<W: Host>(
 /// absents there, the kinds it defines, each a def, among its defs, its
 /// lambdas among its functions, the stubs of the foreign functions it
 /// implements among its foreign functions, and the rest among its fields,
-/// each list ordered by name, those without one last.
+/// but those its kinds or functions declare, which live there, so its
+/// fields are its loose ones; each list ordered by name, those without one
+/// last.
 pub(crate) fn described(libraries: Libraries) -> Libraries {
     use crate::libraries::def::vocabulary::{
         ABSENTS, DATA, DEF, DEFS, FIELDS, FOREIGN, FUNCTIONS, LIBRARY,
@@ -196,6 +198,25 @@ pub(crate) fn described(libraries: Libraries) -> Libraries {
                 .unwrap_or_default()
         };
         let (data, absents) = (declared(DATA), declared(ABSENTS));
+        // What its kinds and functions declare, their fields and their
+        // parameters, lives where it's declared; its own fields are the loose
+        // ones.
+        let declared_by_its_own: std::collections::HashSet<CellId> = definitions
+            .iter()
+            .filter_map(|(_, value)| value.as_record())
+            .filter_map(|record| {
+                record
+                    .get(&FIELDS)
+                    .or(record.get(&::grap::vocabulary::PARAMS))
+            })
+            .filter_map(Value::as_list)
+            .flat_map(|cells| {
+                cells
+                    .values()
+                    .filter_map(Value::as_cell)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         let mut cells: Vec<_> = definitions
             .iter()
             .map(|(cell, _)| cell)
@@ -223,6 +244,8 @@ pub(crate) fn described(libraries: Libraries) -> Libraries {
                 &mut *foreign
             } else if kind == Some(::grap::vocabulary::kind::LAMBDA) {
                 &mut *functions
+            } else if declared_by_its_own.contains(&cell) {
+                continue;
             } else {
                 &mut *fields
             };
