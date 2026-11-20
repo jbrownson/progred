@@ -3,7 +3,7 @@
 //! their arithmetic is Grap's numbers library's.
 
 use crate::display::Host;
-use crate::libraries::{Library, name, number};
+use crate::libraries::{Library, number};
 use ::grap::RuntimeValue;
 use gid::CellId;
 
@@ -58,12 +58,10 @@ pub(crate) fn representation() -> number::Representation<f64> {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    representation().library(ID).with_values([(
+    representation().library(ID).with_constants([(
         vocabulary::PI,
-        name::record(
-            "π",
-            value(std::f64::consts::PI).as_record().unwrap().clone(),
-        ),
+        "π",
+        value(std::f64::consts::PI),
     )])
 }
 

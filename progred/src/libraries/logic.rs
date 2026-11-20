@@ -1,7 +1,7 @@
 //! Booleans: literals of the bool kind, `{isa: bool, bytes}`, one byte, 1
 //! for true and 0 for false. Grap holds them natively, as it does numbers;
 //! this library names the kind, draws it, keeps the constants `true` and
-//! `false` for documents to refer to by name, and adds `require`.
+//! `false`, which code refers to by name, and adds `require`.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
@@ -56,14 +56,10 @@ fn spelled(spelling: &str) -> Option<bool> {
     }
 }
 
-/// A boolean reads as its spelling, edited in place, after any name other
-/// than that spelling, as the constants' are, then any other fields.
+/// A boolean reads as its spelling, edited in place, after any name, then
+/// any other fields.
 fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let value = input.value?.as_bool()?;
-    let spelled_name = input
-        .value?
-        .field(name::vocabulary::NAME)
-        .is_some_and(|name| name.as_text() == Some(spelling(value)));
     let line = crate::display::line_edit(crate::display::LineEdit {
         text: spelling(value).into(),
         update: Rc::new(|spelling: &str, current: Option<&Value>| {
@@ -78,11 +74,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layo
     Some(crate::display::structure::Fields::default().after(
         input,
         |key| isa::literal_field(key) || key == name::vocabulary::NAME,
-        if spelled_name {
-            line
-        } else {
-            name::with_name(input, line)
-        },
+        name::with_name(input, line),
     ))
 }
 
@@ -131,16 +123,14 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
-    .with_values([true, false].map(|value| {
-        let constant = if value {
-            vocabulary::TRUE
-        } else {
-            vocabulary::FALSE
-        };
-        let literal = ::grap::logic::value(value);
-        let fields = literal.as_record().into_iter().flatten().cloned();
-        (constant, name::record(spelling(value), fields))
-    }))
+    .with_constants([
+        (vocabulary::TRUE, spelling(true), ::grap::logic::value(true)),
+        (
+            vocabulary::FALSE,
+            spelling(false),
+            ::grap::logic::value(false),
+        ),
+    ])
     .with_absents([vocabulary::NOT_BOOL, vocabulary::CONDITION_NOT_MET])
     .with_kinds([(vocabulary::BOOL, vec![isa::vocabulary::BYTES])])
     .with_projections_for([(vocabulary::BOOL, crate::display::runtime_partial(display))])

@@ -2,7 +2,6 @@
 //! Values follow CSS Color 4 §6.1: <https://www.w3.org/TR/css-color-4/#named-colors>.
 
 use super::Encoded;
-use crate::libraries::name;
 use gid::{CellId, Value};
 
 struct Named {
@@ -11,19 +10,21 @@ struct Named {
     rgb: u32,
 }
 
-pub(super) fn colors() -> impl Iterator<Item = (CellId, Value)> {
+pub(super) fn colors() -> impl Iterator<Item = (CellId, &'static str, Value)> {
     NAMED
         .iter()
         .map(|color| {
             let [_, red, green, blue] = color.rgb.to_be_bytes();
             (
                 color.id,
-                name::record(color.name, Encoded::Rgb([red, green, blue]).fields()),
+                color.name,
+                Value::record(Encoded::Rgb([red, green, blue]).fields()),
             )
         })
         .chain([(
             TRANSPARENT,
-            name::record("transparent", Encoded::Rgba([0; 4]).fields()),
+            "transparent",
+            Value::record(Encoded::Rgba([0; 4]).fields()),
         )])
 }
 

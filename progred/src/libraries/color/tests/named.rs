@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{color, name};
+use crate::libraries::color;
 use std::collections::BTreeSet;
 
 #[test]
@@ -17,8 +17,8 @@ fn the_css_palette_has_unique_durable_cells_and_expected_aliases() {
 
     let named = |wanted| {
         colors()
-            .find(|(_, value)| name::read(value) == Some(wanted))
-            .and_then(|(_, value)| color::read(&value))
+            .find(|(_, name, _)| *name == wanted)
+            .and_then(|(_, _, value)| color::read(&value))
     };
     assert_eq!(
         named("rebeccapurple"),

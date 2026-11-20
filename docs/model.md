@@ -44,8 +44,11 @@ does not try another source. A library's own value lives in that same table unde
 its identity, not in a separate metadata store: a library like a document's,
 `{isa: library, name, defs, functions, foreign functions, fields, data,
 absents}`, the name it gives itself and the cells it defines, each list
-ordered by name: what it says are its data (`Library::with_data`, and what
-`with_values` defines, such as a named color or `π`), the cells used as
+ordered by name: what it says are its data (`Library::with_data`, what
+`with_values` defines, and the constants `with_constants` defines, such as a
+named color or `π`, each Grap's value wrapper, `{isa: value wrapper, name,
+value}`, so the name is the cell's and evaluating it gives the value alone),
+the cells used as
 values, such as constants and the options a field picks from, among its data;
 what it says are its absents (`Library::with_absents`), the reasons its absents
 give, such as `division by zero`, among its absents; its kinds,

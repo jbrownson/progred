@@ -192,6 +192,32 @@ impl<World, Hover> Library<World, Hover> {
         self
     }
 
+    /// Also defines each `(cell, name, value)` in `constants`: `value`, named
+    /// `name`, as Grap's value wrapper holds it, `{isa: value wrapper, name,
+    /// value}`. The name is the cell's, and evaluating the cell gives the
+    /// value alone, as a literal would be, not one that says it's the
+    /// constant.
+    pub fn with_constants<'a>(
+        self,
+        constants: impl IntoIterator<Item = (gid::CellId, &'a str, gid::Value)>,
+    ) -> Self {
+        self.with_values(constants.into_iter().map(|(cell, name, value)| {
+            (
+                cell,
+                ::grap::isa::record(
+                    ::grap::vocabulary::kind::VALUE_WRAPPER,
+                    [
+                        (
+                            crate::libraries::name::vocabulary::NAME,
+                            ::grap::text::value(name),
+                        ),
+                        (::grap::vocabulary::VALUE, value),
+                    ],
+                ),
+            )
+        }))
+    }
+
     /// Says that `cells`, which it names, are data: used as values, as the
     /// options a field picks from are.
     pub fn with_data(mut self, cells: impl IntoIterator<Item = gid::CellId>) -> Self {

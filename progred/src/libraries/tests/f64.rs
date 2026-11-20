@@ -84,9 +84,16 @@ fn representation_is_library_data() {
 }
 
 #[test]
-fn pi_reads_as_its_number_and_its_name() {
+fn pi_is_named_and_evaluates_to_its_number_alone() {
     let library = library::<crate::Editor>();
     let pi = library.definitions.value(vocabulary::PI).unwrap();
-    assert_eq!(read(pi), Some(std::f64::consts::PI));
-    assert_eq!(name::read(pi), Some("π"));
+    assert_eq!(crate::libraries::name::read(pi), Some("π"));
+    let evaluated = crate::test_support::test_evaluate(
+        &vocabulary::PI.into(),
+        |id| library.definitions.value(id).cloned(),
+        &functions(),
+        10,
+    );
+    // The name is the cell's, not the number's.
+    assert_eq!(evaluated.result.to_value(), value(std::f64::consts::PI));
 }

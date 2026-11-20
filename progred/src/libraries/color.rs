@@ -396,7 +396,7 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
-    .with_values(named::colors())
+    .with_constants(named::colors())
     .with_kinds([
         (
             vocabulary::RGB,
