@@ -452,8 +452,10 @@ The name slot is always present: a missing name uses Raw's ordinary empty
 picker, where what's typed reads as text. The expression uses the local
 shallow-reference projection. Other metadata does not block recognition and
 follows as a trailing record, and both editors retain their stored field paths. This is a named expression, not a
-`let` binding; the evaluator ignores its name. Named numbers remain
-independent of this Grap-specific wrapper.
+`let` binding; the evaluator ignores its name. A library's constants, such as
+`π`, the named colors and `true`, are value wrappers too, so evaluating one
+gives the value alone, not one that says it's the constant. A named number in
+a document, `{name, isa: f64, bytes}`, stays a number that carries its name.
 
 Within Grap's library, calls, lambdas, and value wrappers are tried in evaluator
 precedence order. Each remains an ordinary partial: malformed contents decline
