@@ -76,7 +76,9 @@ fn lambda_with_unnamed_parameters() -> (Driver, [CellId; 3]) {
     );
     let driver = Driver::new(
         crate::test_editor(Document {
-            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            root: Some(crate::libraries::grap::test_support::evaluation(
+                function.into(),
+            )),
             cells,
         }),
         Driver::VIEWPORT,
@@ -85,7 +87,11 @@ fn lambda_with_unnamed_parameters() -> (Driver, [CellId; 3]) {
 }
 
 fn in_lambda(rest: &[Step]) -> Vec<Step> {
-    [&[Step::Key(vocabulary::GRAP), Step::Follow], rest].concat()
+    [
+        &[Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow],
+        rest,
+    ]
+    .concat()
 }
 
 #[test]
@@ -232,7 +238,9 @@ fn a_parameter_with_no_definition_is_a_hole_that_typing_a_name_defines() {
     );
     let mut driver = Driver::new(
         crate::test_editor(Document {
-            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            root: Some(crate::libraries::grap::test_support::evaluation(
+                function.into(),
+            )),
             cells,
         }),
         Driver::VIEWPORT,
@@ -281,7 +289,9 @@ fn many_parameters_flow_onto_further_lines() {
     );
     let mut driver = Driver::new(
         crate::test_editor(Document {
-            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            root: Some(crate::libraries::grap::test_support::evaluation(
+                function.into(),
+            )),
             cells,
         }),
         Driver::VIEWPORT,

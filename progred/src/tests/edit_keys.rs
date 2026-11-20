@@ -139,13 +139,14 @@ fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
     let shared = new_cell_id();
     let items = new_cell_id();
     let program = new_cell_id();
+    let holder = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(shared, f64::value(7.0));
     cells.set_value(program, f64::value(1.0));
     let doc = Document {
         root: Some(Value::record([
             (items, Value::list([shared.into(), shared.into()])),
-            (crate::libraries::grap::vocabulary::GRAP, program.into()),
+            (holder, program.into()),
         ])),
         cells,
     };
@@ -160,11 +161,7 @@ fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
             Stage::Pending,
             2,
         ),
-        (
-            vec![Step::Key(crate::libraries::grap::vocabulary::GRAP), follow],
-            Stage::Label,
-            0,
-        ),
+        (vec![Step::Key(holder), follow], Stage::Label, 0),
     ] {
         driver.select(&value);
         driver.press(NamedKey::Enter);

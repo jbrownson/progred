@@ -1279,12 +1279,18 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
     );
     let mut driver = crate::driver::Driver::new(
         crate::test_editor(Document {
-            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            root: Some(crate::libraries::grap::test_support::evaluation(
+                function.into(),
+            )),
             cells,
         }),
         crate::driver::Driver::VIEWPORT,
     );
-    let params = [Step::Key(vocabulary::GRAP), Step::Follow, Step::Key(PARAMS)];
+    let params = [
+        Step::Key(::grap::vocabulary::EXPRESSION),
+        Step::Follow,
+        Step::Key(PARAMS),
+    ];
     driver.select(&params);
     assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("x");
@@ -1329,12 +1335,18 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
     );
     let mut driver = crate::driver::Driver::new(
         crate::test_editor(Document {
-            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            root: Some(crate::libraries::grap::test_support::evaluation(
+                function.into(),
+            )),
             cells,
         }),
         crate::driver::Driver::VIEWPORT,
     );
-    let params = [Step::Key(vocabulary::GRAP), Step::Follow, Step::Key(PARAMS)];
+    let params = [
+        Step::Key(::grap::vocabulary::EXPRESSION),
+        Step::Follow,
+        Step::Key(PARAMS),
+    ];
     driver.select(&params);
     assert!(driver.keystroke(
         ui_events::keyboard::Key::Named(NamedKey::Enter),
@@ -1401,9 +1413,10 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
 fn a_new_lambda_starts_at_its_first_parameter() {
     use ::grap::vocabulary::{BODY, PARAMS};
     use ui_events::keyboard::NamedKey;
-    let mut driver =
-        crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
-    let program = [Step::Key(vocabulary::GRAP), Step::Follow];
+    let mut driver = crate::driver::Driver::of(crate::libraries::grap::test_support::evaluation(
+        new_cell_id().into(),
+    ));
+    let program = [Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
     driver.select(&program);
     driver.type_text("λ");
     driver.choose("lambda");
@@ -1457,9 +1470,10 @@ fn a_new_lambda_starts_at_its_first_parameter() {
 fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
     use ::grap::vocabulary::{BODY, PARAMS};
     use ui_events::keyboard::NamedKey;
-    let mut driver =
-        crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
-    let program = [Step::Key(vocabulary::GRAP), Step::Follow];
+    let mut driver = crate::driver::Driver::of(crate::libraries::grap::test_support::evaluation(
+        new_cell_id().into(),
+    ));
+    let program = [Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
     driver.select(&program);
     driver.choose("call");
     let function = [&program[..], &[Step::Key(FUNCTION)]].concat();
@@ -1587,27 +1601,4 @@ fn a_slot_offers_the_functions_libraries_in_reach_list_and_no_others() {
             .iter()
             .any(|entry| entry == "stray function")
     );
-}
-
-#[test]
-fn space_folds_a_record_a_projection_draws() {
-    // A record naming a program, drawn by Grap's projection of it.
-    let program = new_cell_id();
-    let mut cells = Cells::new();
-    cells.set_value(program, crate::libraries::f64::value(1.0));
-    let mut driver = crate::driver::Driver::new(
-        crate::test_editor(Document {
-            root: Some(Value::record([(vocabulary::GRAP, program.into())])),
-            cells,
-        }),
-        crate::driver::Driver::VIEWPORT,
-    );
-    let field = [Step::Key(vocabulary::GRAP)];
-    driver.select::<Step>(&[]);
-    assert!(driver.drawn(&field));
-    assert!(driver.keystroke(
-        ui_events::keyboard::Key::Character(" ".into()),
-        ui_events::keyboard::Modifiers::empty()
-    ));
-    assert!(!driver.drawn(&field));
 }

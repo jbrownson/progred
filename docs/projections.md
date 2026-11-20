@@ -515,12 +515,13 @@ another `evaluate` field can invoke that projection again with an ordinary fresh
 evaluation allowance. Ordinary call-shaped values elsewhere, including returned
 ones, remain editable data until explicitly evaluated.
 
-The separate `grap` field is ordinary library vocabulary saying its contents
-belong to the Grap domain. It requests no evaluation. The Grap library offers a
-root template (a document whose `grap` names a new program rendered in a pane),
-and draws the program `grap` names as an expression slot: the cell keeps its
-parentheses, and an empty program offers Grap's suggestions rather than the
-whole vocabulary.
+A program and its result is an evaluation, `{isa: evaluation, expression}`,
+which a notebook's entries hold; a document's functions are a library's. An
+evaluation's own cell keeps its parentheses, and what fills it is an
+expression slot, offering Grap's suggestions rather than the whole
+vocabulary. There was once a `grap` field marking a record's program, and a
+starting point making one rendered in a pane; the notebook and the library
+replaced them.
 
 A notebook, `{isa: notebook, entries}`
 ([`notebook.rs`](../progred/src/libraries/notebook.rs)), is a bunch of things:

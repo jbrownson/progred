@@ -122,8 +122,8 @@ children can be selected, copied, and folded, but have no document destination
 for edits. Selecting a result does not select its producing expression. A cell
 inside a result is still a cell, though, as in a missing-cell error or a quote's
 template: following it starts a location at its definition, which edits on the
-usual terms. So the missing-cell error a pane shows for a Grap starting point's
-unwritten program is a place to write it. Values copied out of cells stay
+usual terms. So the missing-cell error a pane shows for a cell with no
+definition yet is a place to write it. Values copied out of cells stay
 read-only; reaching the code that made one is source-linked hover's job.
 Computed output uses the same read-only ground as external definitions. Nested
 read-only occurrences do not stack washes; an explicit jump to writable source

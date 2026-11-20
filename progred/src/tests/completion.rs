@@ -89,10 +89,7 @@ fn label_offer_explicitly_opens_its_missing_value() {
 #[test]
 fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition() {
     let stack = crate::stack::load();
-    let templates = [
-        fidget::vocabulary::FIDGET.into(),
-        crate::libraries::grap::vocabulary::GRAP.into(),
-    ];
+    let templates = [fidget::vocabulary::FIDGET.into()];
     let offers: Vec<_> = root_completions(&stack)
         .into_iter()
         .filter(|offer| templates.contains(&offer.display))
@@ -104,10 +101,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
             .collect::<Vec<_>>(),
         templates
     );
-    for (offer, field) in offers.iter().zip([
-        fidget::vocabulary::FIDGET,
-        crate::libraries::grap::vocabulary::GRAP,
-    ]) {
+    for (offer, field) in offers.iter().zip([fidget::vocabulary::FIDGET]) {
         let annotations = Annotations::default();
         let world = crate::libraries::test_widgets::activate_completion(offer);
         let document = &world.model.doc;
@@ -182,7 +176,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
     );
     let offer = root_completions(&stack)
         .into_iter()
-        .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
+        .find(|offer| offer.display == fidget::vocabulary::FIDGET.into())
         .unwrap();
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
@@ -206,10 +200,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         [
             vec![Step::Key(field)],
             crate::test_examples::main_part(),
-            vec![
-                Step::Key(crate::libraries::grap::vocabulary::GRAP),
-                Step::Follow,
-            ],
+            vec![Step::Key(fidget::vocabulary::FIDGET), Step::Follow],
         ]
         .concat()
     );

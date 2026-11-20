@@ -132,6 +132,7 @@ fn viewport_runtime_output(
 }
 
 /// A render of `expression`, which a pane draws as its result.
+#[cfg(test)]
 pub fn render(expression: gid::Value) -> gid::Value {
     ::grap::isa::record(
         vocabulary::kind::RENDER,

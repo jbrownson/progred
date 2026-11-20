@@ -159,12 +159,6 @@ fn letters(index: usize) -> String {
 }
 
 pub mod vocabulary {
-    use gid::CellId;
-
-    /// Source whose contents belong to the Grap domain. This is an
-    /// ordinary field and requests no evaluation.
-    pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
-
     /// The kinds of the Grap library's own records, as their `isa` names
     /// them.
     pub mod kind {
@@ -370,20 +364,11 @@ pub(crate) fn grouped_expression_path<W: Host, V>(
     )
 }
 
-/// A record naming a Grap program: the program its `grap` field names is
-/// code, so an empty one offers Grap's suggestions. Its other fields, and
-/// code further in, keep their ordinary projections.
-fn program_display<W: Host>(
+/// A cell whose definition is code, as an evaluation's expression is: it
+/// keeps its parentheses, and what fills it is an expression.
+fn expression_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    input.value?.field(vocabulary::GRAP)?;
-    crate::display::structure::Fields::default()
-        .child(|key| (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program)))
-        .record(input)
-}
-
-/// The program's cell keeps its parentheses; what fills it is an expression.
-fn program<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     input.value?.as_cell()?;
     Some(selectable_bracket(
         Delim::Paren,
@@ -714,7 +699,7 @@ fn evaluation_display<W: Host>(
                     steps.clone(),
                     Some(crate::display::first(
                         input,
-                        crate::display::runtime_partial(program),
+                        crate::display::runtime_partial(expression_cell),
                     )),
                     None,
                 ),
@@ -817,7 +802,6 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::source::vocabulary::ROOT, "root source"),
             (::grap::source::vocabulary::CELL, "source cell"),
             (::grap::source::vocabulary::PATH, "source path"),
-            (vocabulary::GRAP, "grap"),
             (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
             (::grap::absent::DEPTH_EXHAUSTED, "nesting too deep"),
             (memo::CYCLE, "computation cycle"),
@@ -920,7 +904,6 @@ pub fn library<W: Host>() -> Library<W> {
         .chain(control)
         .chain(operators),
     )
-    .with_projection(crate::display::runtime_partial(program_display))
     .with_completions(completions)
 }
 
@@ -930,7 +913,7 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
     use crate::display::CompletionScope;
     (request.kind == CompletionKind::Value).then_some(())?;
     match request.scope {
-        CompletionScope::Start => Some(vec![new_program()]),
+        CompletionScope::Start => None,
         CompletionScope::Everything => request.value().is_none().then(|| vec![new_evaluation()]),
         CompletionScope::Literal => None,
     }
@@ -980,12 +963,6 @@ fn constructs() -> [Completion; 2] {
         )
         .with_detail(ID),
     ]
-}
-
-fn new_program() -> Completion {
-    crate::libraries::completion::starter(vocabulary::GRAP, |cell| {
-        crate::libraries::presentation::render(cell.into())
-    })
 }
 
 /// What an offer is, `call` or `function`, and where its function comes

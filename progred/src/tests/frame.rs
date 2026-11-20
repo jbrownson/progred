@@ -1636,13 +1636,13 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
 
 #[test]
 fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
-    use crate::libraries::{absent, grap::vocabulary::GRAP, presentation};
+    use crate::libraries::{absent, presentation};
     use puri::draw::{DrawCmd, Shape};
     let program = gid::new_cell_id();
     let doc = Document {
         root: Some(workspace::row([
             presentation::render(program.into()),
-            Value::record([(GRAP, program.into())]),
+            crate::libraries::grap::test_support::evaluation(program.into()),
         ])),
         cells: Cells::new(),
     };
@@ -1655,10 +1655,10 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
             .find(|(path, _)| path.last() == Some(&Occurs::Key(key)))
             .expect("drawn")
     };
-    // The program field in one pane, and the other's result naming it
-    // missing.
+    // The evaluation's expression in one pane, and the other's result
+    // naming it missing.
     let (field, missing) = (
-        drawn(&driver, GRAP),
+        drawn(&driver, ::grap::vocabulary::EXPRESSION),
         drawn(&driver, absent::vocabulary::CELL),
     );
     assert!(

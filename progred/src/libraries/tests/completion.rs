@@ -89,10 +89,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     assert_ne!(activated(&entries[0]).value, activated(&entries[0]).value);
     assert_eq!(calls.get(), 2);
 
-    for (display, field) in [
-        ("fidget", fidget::vocabulary::FIDGET),
-        ("grap", crate::libraries::grap::vocabulary::GRAP),
-    ] {
+    for (display, field) in [("fidget", fidget::vocabulary::FIDGET)] {
         let entry = completion_entries_with(
             &sources,
             &CompletionKind::Value,

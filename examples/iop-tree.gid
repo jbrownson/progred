@@ -59,10 +59,10 @@
     "frontier": 7c6d509824ee4861ccafb0a34f5adba6,
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "functions": 6a6a803312ecf3a652470a7cd2a9abcf,
     "gradient_end": abbfd273a978cb520a145eb65568f224,
     "gradient_offset": f348e826a277875d63e7a0197730f036,
     "gradient_start": c68a36ea81944cdbc8e7897ffda5a36c,
-    "grap": 315ca8459cfc64a210d518da1cad79b9,
     "half_width": be2613d7fe73e7f6c393a2f08cf2ae02,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
     "index": 15db24ee6ff0354d94c0628fc412d64f,
@@ -80,6 +80,7 @@
     "lerp": 432ad7a31ef129e353e251419e690ca1,
     "less": ed44dbf5b4cdf5c952e1ef00f219b655,
     "let": f4f93c70910c4d8a8eeb8e049cc64c14,
+    "library": 6a2a379c9d9553cedafcb3987e7891b7,
     "line_to": 2b1cebde44cbdadcd6de44facda4ee94,
     "linear_gradient": 7595f5eee03cd47be1f3fee10806d6a9,
     "list": 216008ae157998d3838112b96e584d11,
@@ -2104,7 +2105,8 @@
         isa: sized_value,
       },
       0xaa: {
-        grap: [
+        name: "Tree",
+        functions: [
           0x1c: tree_scene,
           0x38: sky,
           0x55: mountains,
@@ -2114,6 +2116,7 @@
           0xc7: blossoms,
           0xe3: tween,
         ],
+        isa: library,
       },
     ],
     isa: row,

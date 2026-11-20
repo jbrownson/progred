@@ -12,9 +12,7 @@ use crate::occurrence::Path;
 use crate::sample::sample_document;
 use crate::selection::payload as selection_payload;
 use crate::selection::pending_value;
-use crate::test_support::{
-    core_libraries, doc_of, make_selection, positions, root_completions, src,
-};
+use crate::test_support::{core_libraries, doc_of, make_selection, positions, src};
 use crate::test_values::key;
 use gid::{Cells, Document, new_cell_id};
 use kurbo::{Point, Rect};

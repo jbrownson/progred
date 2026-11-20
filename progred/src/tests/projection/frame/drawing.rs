@@ -7,21 +7,20 @@ use puri::handler::test_support::DispatchShorthands;
 #[test]
 fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     let mut context = BenchContext::new();
+    // A pane rendering a cell's result beside an evaluation of it.
+    let shared = gid::new_cell_id();
     let mut doc = Document {
-        root: Some(
-            root_completions(&context.stack)
-                .into_iter()
-                .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
-                .unwrap()
-                .test_value(),
-        ),
+        root: Some(crate::libraries::editor::workspace::row([
+            crate::libraries::presentation::render(shared.into()),
+            crate::libraries::grap::test_support::evaluation(shared.into()),
+        ])),
         cells: Cells::new(),
     };
     let cell = crate::test_support::value_at(
         doc.root.as_ref().unwrap(),
         &[
             crate::test_examples::main_part(),
-            vec![gid::Step::Key(crate::libraries::grap::vocabulary::GRAP)],
+            vec![gid::Step::Key(::grap::vocabulary::EXPRESSION)],
         ]
         .concat(),
     )

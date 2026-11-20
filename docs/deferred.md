@@ -327,9 +327,10 @@ what the kind required when it was written. Open beside it:
   toolpath's previews, tools and points, layout's stored nodes and programs,
   presentation's renders and the projected and sized values a pane
   presents, locations, and the views `with controls` returns say theirs too. Still told by their fields, each a question for the owner:
-  - `{grap: cell}` and `{fidget: [...]}`, which mark what a workspace's main
-    value holds so an empty one gets that library's offers; `{grap: cell}`
-    is to go, which needs another way for an empty main cell to get them.
+  - `{fidget: [...]}`, which marks what a workspace's main value holds so an
+    empty one gets Fidget's offers. Grap's `{grap: cell}` went on 20 November
+    2026, the notebook's evaluations and a library's functions doing its
+    work.
   - the color picker's records.
   - Tagged variants: drawing commands, shapes and path elements, a cutter
     section's `cutting` or `non-cutting`. These are values under one tag,
@@ -615,12 +616,11 @@ strings and numbers.
 
 A document's empty root offers the libraries' starting points, then Raw's
 offers. There should be one for every direction a person might want to go, each
-landing on something that works. Of today's three, Grap's new program and
-Fidget's new scene each lead somewhere awkward; Grap's opens with a missing-cell
-error in its pane until the program is written (that error's hole does take the
-program now). A notebook opens on the place for its first entry, with nothing
-in error; see [Notebook and REPL](#notebook-and-repl) for what it
-lacks.
+landing on something that works. Of today's, Fidget's new scene leads somewhere
+awkward. A notebook opens on the place for its first entry, with nothing in
+error, a program written there as an evaluation; see
+[Notebook and REPL](#notebook-and-repl) for what it lacks. A library opens on
+its name.
 
 ## Rows and columns
 

@@ -14,7 +14,7 @@ fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> Driver {
         crate::test_editor(Document {
             root: Some(workspace::row([
                 presentation::render(render),
-                Value::record([(crate::libraries::grap::vocabulary::GRAP, program.into())]),
+                crate::libraries::grap::test_support::evaluation(program.into()),
             ])),
             cells,
         }),
@@ -36,10 +36,7 @@ fn in_program(rest: &[Step]) -> occurrence::Path {
     occurrence::below(
         &crate::occurrence::of(&crate::test_examples::main_part()),
         &[
-            &[
-                Step::Key(crate::libraries::grap::vocabulary::GRAP),
-                Step::Follow,
-            ][..],
+            &[Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow][..],
             rest,
         ]
         .concat(),

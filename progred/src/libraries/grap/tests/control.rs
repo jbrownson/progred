@@ -1225,14 +1225,15 @@ fn malformed_let_data_returns_library_absents() {
 #[test]
 fn quote_and_unquote_are_offered_under_their_marks() {
     use crate::driver::Driver;
-    use crate::libraries::grap::vocabulary::GRAP;
     use crate::selection::Stage;
     use ::grap::vocabulary::{BODY, EXPRESSION};
     use gid::Step;
     use ui_events::keyboard::NamedKey;
 
-    let mut driver = Driver::of(Value::record([(GRAP, new_cell_id().into())]));
-    let program = vec![Step::Key(GRAP), Step::Follow];
+    let mut driver = Driver::of(crate::libraries::grap::test_support::evaluation(
+        new_cell_id().into(),
+    ));
+    let program = vec![Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
     driver.select(&program);
     driver.type_text("λ");
     driver.choose("lambda");

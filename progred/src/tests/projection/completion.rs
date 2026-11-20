@@ -33,12 +33,13 @@ fn a_plain_missing_name_is_typed_into_and_its_first_keystroke_writes_it() {
 
 #[test]
 fn a_grap_program_offers_grap_suggestions() {
-    use crate::libraries::grap::vocabulary::GRAP;
     let doc = Document {
-        root: Some(Value::record([(GRAP, new_cell_id().into())])),
+        root: Some(crate::libraries::grap::test_support::evaluation(
+            new_cell_id().into(),
+        )),
         cells: Cells::new(),
     };
-    let program = vec![Step::Key(GRAP), Step::Follow];
+    let program = vec![Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
     let offered = |query| {
         projected_completion_entries(
             &doc,
@@ -59,15 +60,16 @@ fn a_grap_program_offers_grap_suggestions() {
 
 #[test]
 fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
-    use crate::libraries::grap::vocabulary::GRAP;
     use grap::vocabulary::{BODY, PARAMS};
 
     let cell = new_cell_id();
     let doc = Document {
-        root: Some(Value::record([(GRAP, cell.into())])),
+        root: Some(crate::libraries::grap::test_support::evaluation(
+            cell.into(),
+        )),
         cells: Cells::new(),
     };
-    let path = vec![Step::Key(GRAP), Step::Follow];
+    let path = vec![Step::Key(::grap::vocabulary::EXPRESSION), Step::Follow];
     for query in ["lambda", "lambda", "λ"] {
         let pending =
             crate::selection::pending_with_query(&crate::test_document(), path.clone(), query);
@@ -111,10 +113,12 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
 
         let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
         driver.select(&name_path);
-        driver.type_text("area");
+        // The first letter typed writes the name. Named, the evaluation's cell
+        // then reads by its name, as one naming an existing thing does.
+        driver.type_text("a");
         assert_eq!(
             crate::occurrence::read(&driver.editor().sources(), &name_path),
-            Some(&text::value("area"))
+            Some(&text::value("a"))
         );
         assert!(
             doc.cells.value(cell).is_none(),
@@ -491,7 +495,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     assert_eq!(
         displays(""),
         [
-            "library", "notebook", "fidget", "grap", "cell", "list", "record", "\"\""
+            "library", "notebook", "fidget", "cell", "list", "record", "\"\""
         ]
     );
     // Each starting point names the library it comes from.
@@ -500,12 +504,12 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         &crate::selection::pending_with_query(&crate::test_document(), vec![], ""),
     )
     .into_iter()
-    .take(4)
+    .take(3)
     .map(|entry| entry.detail)
     .collect();
     assert_eq!(
         details,
-        ["def", "notebook", "fidget", "grap"].map(|library| Some(library.to_owned()))
+        ["def", "notebook", "fidget"].map(|library| Some(library.to_owned()))
     );
     // A starting point makes something new, and reads so, `new` before it;
     // a loaded library offered there is one already, and reads as a library.
@@ -516,7 +520,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     assert!(
         entries
             .iter()
-            .take(4)
+            .take(3)
             .all(|entry| entry.new && entry.kind.is_none())
     );
     let grap = entries
@@ -630,12 +634,7 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
                 crate::test_support::value_at(value, &crate::test_examples::main_part())
             })
             .and_then(Value::as_record)
-            .is_some_and(|fields| {
-                fields
-                    .get(&crate::libraries::grap::vocabulary::GRAP)
-                    .is_some()
-                    || fields.get(&fidget::vocabulary::FIDGET).is_some()
-            })
+            .is_some_and(|fields| fields.get(&fidget::vocabulary::FIDGET).is_some())
     };
     let empty = Document::default();
     let root_selection =
